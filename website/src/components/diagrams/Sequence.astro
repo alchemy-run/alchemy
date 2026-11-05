@@ -86,6 +86,7 @@ const VW = Math.max(W, ...extents.map((x) => x + 4)) - VX;
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`${VX} 0 ${VW} ${H}`} style={`max-width: ${Math.round(VW * 1.15)}px`} role="img" aria-label={caption ?? "Sequence"}>
     <defs>
       <marker id="alc-seq-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -150,5 +151,6 @@ const VW = Math.max(W, ...extents.map((x) => x + 4)) - VX;
       })
     }
   </svg>
+  </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>

@@ -49,7 +49,12 @@ import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import { isWorkflowLike, WorkflowResource, type WorkflowBinding } from "../Workflows/Workflow.ts";
+import {
+  isWorkflowLike,
+  isWorkflowResource,
+  WorkflowResource,
+  type WorkflowBinding,
+} from "../Workflows/Workflow.ts";
 import { asScriptNameOutput, makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
@@ -318,7 +323,10 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
  * run by `alchemy dev`, so the dev worker reaches it remotely.
  */
 const isLookedUpWorker = (binding: unknown): boolean =>
-  Output.isLookupExpr(binding) ||
+  // A looked-up Workflow binds like the `scriptName` form, which carries no
+  // flag; the dev runtime ignores it on `workflow` bindings, and adding it
+  // would make switching between the two forms plan an update.
+  (Output.isLookupExpr(binding) && !isWorkflowResource(binding)) ||
   (isWorkerEntrypoint(binding) &&
     binding.worker !== undefined &&
     Output.isLookupExpr(binding.worker));
@@ -611,6 +619,16 @@ const toBinding = (
       scriptName: binding.scriptName,
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
       storage: binding.storage,
+    };
+  } else if (isWorkflowResource(binding)) {
+    // `Workflow.lookup`: a Workflow another script hosts, bound by the class
+    // and script Cloudflare reported for it.
+    return {
+      type: "workflow",
+      name: bindingName,
+      workflowName: binding.workflowName,
+      className: binding.className,
+      scriptName: binding.scriptName,
     };
   } else if (isWorkflowLike(binding)) {
     return {

@@ -7,8 +7,6 @@ import DAG from "../../../components/DAG.astro";
 
 An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
-This chapter starts with what an aggregate is for and how to find one, then builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use. It ends with how to draw an aggregate's boundary.
-
 ## What an aggregate protects
 
 Every business has rules that must never be broken, not even for a moment. An account's balance never goes below zero. A username belongs to at most one customer. A transfer is either approved or expired, never both. DDD calls these **invariants**, and an aggregate is the thing that keeps one true.
@@ -288,6 +286,37 @@ ExpireTransfer: (s, _, { id }) =>
 ```
 
 The money itself still moves through the two accounts, each guarding its own balance. A [saga](/domain/saga) carries out the steps, and reports each outcome back to the `Transfer`, so there's one place that knows how every transfer ended.
+
+## Describe it
+
+An aggregate's last argument is its [annotations](/domain/annotations). When an [Api](/domain/api) lets clients read the aggregate, its read tools, CLI subcommand and OpenAPI operations show the `description` after the sentence that says what the call does.
+
+```typescript title="packages/domain/src/Customer/UsernameClaim.aggregate.ts"
+export class UsernameClaim extends Domain.Aggregate(
+  "UsernameClaim",
+  {
+    id: Username,
+    state: Schema.Union([
+      Schema.TaggedStruct("Free", {}),
+      Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+    ]),
+    initial: { _tag: "Free" },
+    commands: [ClaimUsername],
+    decide: {
+      ClaimUsername: (s, cmd) =>
+        s._tag === "Free"
+          ? [new UsernameClaimed({ customerId: cmd.customerId })]
+          : s.customerId === cmd.customerId
+            ? []
+            : new UsernameTaken(),
+    },
+    evolve: {
+      UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
+    },
+  },
+  { description: "Who holds a username. Each username has at most one holder." },
+) {}
+```
 
 ## Send it commands
 

@@ -88,6 +88,7 @@ const W = LABEL_W + PLOT_W + 12;
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Timeline"}>
     {
       laneBoxes.map((l, i) => (
@@ -165,6 +166,7 @@ const W = LABEL_W + PLOT_W + 12;
       </div>
     )
   }
+  </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>
 

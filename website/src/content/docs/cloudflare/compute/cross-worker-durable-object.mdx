@@ -6,6 +6,7 @@ sidebar:
 ---
 import Tree from "../../../../components/diagrams/Tree.astro";
 import Timeline from "../../../../components/diagrams/Timeline.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 A Durable Object is _hosted_ by exactly one Worker, but any
 number of **other** Workers can bind to the same DO. This is how
@@ -13,8 +14,7 @@ you share state across Workers: one Worker hosts the DO, every
 other Worker addresses it by `scriptName` and gets a typed RPC
 stub.
 
-By the end of this part you'll have two Workers, `WorkerA` and
-`WorkerB`, sharing a single `Counter` Durable Object. Writes
+Take two Workers, `WorkerA` and `WorkerB`, sharing a single `Counter` Durable Object. Writes
 through either Worker are visible from the other.
 
 <Tree
@@ -461,9 +461,7 @@ import WorkerALive, { WorkerA } from "./src/workerA.ts";
 
 ### Deploy the move
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 `WorkerA` references `WorkerB` through `Counter.from(WorkerB)`, so
 the engine deploys `WorkerB` first. Its deploy moves the

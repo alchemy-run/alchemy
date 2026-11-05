@@ -30,6 +30,7 @@ const { platform, columns, rows, caption } = Astro.props as Props;
 ---
 
 <figure class="alc-resp not-content" data-nosnippet>
+  <div class="alc-resp__panel">
   <div class="alc-resp__grid" style={`grid-template-columns: max-content repeat(${columns.length}, minmax(0, 1fr))`}>
     <div />
     {
@@ -53,12 +54,15 @@ const { platform, columns, rows, caption } = Astro.props as Props;
       ))
     }
   </div>
+  </div>
   {caption && <figcaption class="alc-resp__caption">{caption}</figcaption>}
 </figure>
 
 <style>
   .alc-resp {
     margin: 1.5rem 0;
+  }
+  .alc-resp__panel {
     background: var(--alc-bg-elev-1);
     border: 1px solid var(--alc-hairline-2);
     border-radius: var(--alc-radius);
@@ -115,9 +119,10 @@ const { platform, columns, rows, caption } = Astro.props as Props;
     color: var(--alc-fg-4);
   }
   .alc-resp__caption {
-    margin-top: 1rem;
+    margin-top: 0.625rem;
     text-align: center;
-    font-size: 0.875rem;
+    font-family: var(--alc-font-sans);
+    font-size: 13px;
     color: var(--alc-fg-3, var(--alc-fg-2));
   }
 </style>

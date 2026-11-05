@@ -2,14 +2,13 @@
 title: Neon
 description: Deploy a Better Auth Worker with a Neon project and the serverless database driver.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 This example provisions Neon and serves Better Auth from a Cloudflare Worker. The serverless driver uses WebSockets, so it needs neither Hyperdrive nor `pg`.
 
 ## Install
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless" />
 
 Configure Cloudflare and Neon through [Alchemy profiles](/environments/profiles), or supply `NEON_API_KEY` for Neon. You provide account credentials; the project resource creates the database, not the API key.
 
@@ -83,9 +82,7 @@ Keep the local `.alchemy` state directory protected and persistent so subsequent
 
 ## Deploy and verify
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The deployer must reach Neon with schema-changing permissions; migrations complete before the Worker is updated. Set `AUTH_ORIGIN` to the printed URL to check the endpoint:
 

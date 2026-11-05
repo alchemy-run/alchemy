@@ -2,8 +2,22 @@
 title: Workspaces and tokens
 description: How a Prisma workspace holds your projects and billing, how a service token decides where Alchemy deploys, and how apps get their own database connections.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything on Prisma's data platform belongs to a **workspace**: its projects, with their Postgres databases and Compute apps, its members, and its bill.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace · members, bill" },
+    { id: "proj", label: "my-app", type: "project", parent: "ws" },
+    { id: "db", label: "app", type: "Postgres", parent: "proj", tone: "accent", specs: [["app connects with", "its own connection string"]] },
+    { id: "api", label: "api", type: "Compute app", parent: "proj" },
+    { id: "proj2", label: "reports", type: "project", parent: "ws", side: true },
+    { id: "db2", label: "reports", type: "Postgres", parent: "proj2" },
+  ]}
+  scopes={[{ on: "ws", label: "service token: deploys" }]}
+  caption="The service token reaches the whole workspace and stays with Alchemy. An app reaches only its own database, with a connection string made for it."
+/>
 
 ## A service token decides the workspace
 

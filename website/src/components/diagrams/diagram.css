@@ -1,11 +1,13 @@
 /*
  * Shared look for the purpose-made diagrams in this directory (Sequence,
  * Timeline, WorldMap, Log, StateMachine, Records, BranchGraph, Tree, Fanout,
- * Queue, Zones, Boundaries).
+ * Queue, Zones, Boundaries, Shell).
  * Same panel, type and colours as DAG.astro, so every figure reads as one set.
  */
 .alc-fig {
   margin: 1.5rem 0;
+}
+.alc-fig__panel {
   background: var(--alc-bg-elev-1);
   border: 1px solid var(--alc-hairline-2);
   border-radius: var(--alc-radius);
@@ -19,7 +21,7 @@
   margin-inline: auto;
 }
 .alc-fig__caption {
-  margin-top: 0.75rem;
+  margin-top: 0.625rem;
   font-family: var(--alc-font-sans);
   font-size: 13px;
   color: var(--alc-fg-3);

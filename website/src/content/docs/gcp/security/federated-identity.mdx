@@ -13,6 +13,9 @@ account key or access key to create, store, or rotate.
 You write the binding the same way as on a native runtime. Federation is
 what Alchemy picks for you.
 
+[Identity Federation](/infrastructure-as-effects/identity-federation)
+covers how federation works across every cloud.
+
 ## Call GCP from a Lambda
 
 A Lambda runs as an IAM role. Bind a Pub/Sub topic to it like you would
@@ -122,6 +125,8 @@ At runtime the Machine asks its `/.fly/api` socket for a token addressed
 to the provider and sends it to Google STS, then trades the federated
 token for the service account's token. The socket answers only root,
 the default user in the images Alchemy builds.
+See [Fly federated identity](/fly/federated-identity) for the tokens
+themselves.
 
 ## Call AWS from Cloud Run
 
@@ -168,8 +173,9 @@ Cloud Run services, jobs, and worker pools, Cloud Functions, and Fly
 Services reach AWS this way.
 
 Runtimes without an identity the other cloud can trust still get a key:
-a Cloudflare Worker, a Fly Sprite, and a GKE pod calling AWS. The
-binding code is the same either way.
+a Cloudflare Worker, a Railway service, a Fly Sprite, and a GKE pod
+calling AWS. The key belongs to an identity that may do only what that
+one host needs. The binding code is the same either way.
 
 ## New grants take a few minutes
 

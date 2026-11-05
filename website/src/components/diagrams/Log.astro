@@ -58,6 +58,7 @@ const cx = (i: number) => PLOT_X + i * cellW;
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Log"}>
     <defs>
       <marker id="alc-log-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -115,5 +116,6 @@ const cx = (i: number) => PLOT_X + i * cellW;
     }
     {writer && <text x={W - 8} y={rows[0]!.top - 8} text-anchor="end" class="alc-fig__strong">{writer}</text>}
   </svg>
+  </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>
