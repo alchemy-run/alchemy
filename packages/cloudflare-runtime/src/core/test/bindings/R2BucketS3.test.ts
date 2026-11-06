@@ -207,6 +207,22 @@ layer(localRuntimeLayer)("R2 local S3 endpoint", (it) => {
     }),
   );
 
+  it.effect("pins a signed Content-Length on presigned PUTs", () =>
+    Effect.gen(function* () {
+      const { baseUrl, fetchText } = yield* startS3Worker;
+      const putUrl = yield* presign(baseUrl, "/bucket/presigned/sized.txt", "PUT", 900, {
+        "content-length": "5",
+      });
+      const tooLarge = yield* Effect.promise(() =>
+        fetch(putUrl, { method: "PUT", body: "hello world" }),
+      );
+      expect(tooLarge.status).toBe(403);
+      const ok = yield* Effect.promise(() => fetch(putUrl, { method: "PUT", body: "hello" }));
+      expect(ok.status).toBe(200);
+      expect(yield* fetchText("/read?key=presigned/sized.txt")).toBe("hello");
+    }),
+  );
+
   it.effect("addresses bucket ids containing reserved characters", () =>
     Effect.gen(function* () {
       const { baseUrl, fetchText } = yield* startS3Worker;
