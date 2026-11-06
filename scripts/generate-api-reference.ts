@@ -74,6 +74,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/infisical/src",
   },
   {
+    srcRoot: "packages/archil/src",
+    providerPrefix: "Archil",
+    sourceDisplayPrefix: "packages/archil/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",
@@ -142,6 +147,16 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/portless/src",
   },
   { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
+  {
+    srcRoot: "packages/rivet/src",
+    providerPrefix: "Rivet",
+    sourceDisplayPrefix: "packages/rivet/src",
+  },
+  {
+    srcRoot: "packages/effect-cluster/src",
+    providerPrefix: "Cluster",
+    sourceDisplayPrefix: "packages/effect-cluster/src",
+  },
 ];
 
 interface FileEntry {
