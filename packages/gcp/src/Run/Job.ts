@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -185,9 +186,9 @@ export type JobProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"
@@ -337,6 +338,35 @@ export type JobShape =
  *     };
  *   }).pipe(Effect.provide(GCP.Redis.ReadWriteRedisHttp)),
  * ) {}
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Running a Job

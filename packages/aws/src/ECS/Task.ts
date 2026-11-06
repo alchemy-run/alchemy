@@ -405,6 +405,35 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=worker"],
+ *       to: ["type=gha,scope=worker,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
