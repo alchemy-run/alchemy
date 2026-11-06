@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -86,16 +87,17 @@ export interface BundledImageSource {
    * Bundler configuration for the entrypoint. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
-   * `pure.packages`, or disable with `pure: false`.
+   * `pure.packages`, or disable with `pure: false`. `cache` configures the
+   * image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
 }
 
 /**
- * Build arguments and BuildKit secrets for an image built from the user's
- * own Dockerfile (`context` / `dockerfile`).
+ * Build arguments, BuildKit secrets and the layer cache for an image built
+ * from the user's own Dockerfile (`context` / `dockerfile`).
  */
-export interface DockerfileBuild {
+export interface DockerfileBuild extends BuildCacheOptions {
   /**
    * Docker build arguments (`--build-arg`), read by `ARG` instructions.
    * They are part of the image's content hash, so changing one rebuilds the
@@ -117,7 +119,7 @@ export interface DockerfileBuild {
 
 /** The `build` prop of a source built from the user's own Dockerfile. */
 export interface DockerfileBuildOptions {
-  /** Build arguments and BuildKit secrets for the Dockerfile build. */
+  /** Build arguments, BuildKit secrets and the layer cache for the Dockerfile build. */
   build?: DockerfileBuild;
 }
 
@@ -190,20 +192,25 @@ export const imageSourceKind = (source: ImageSourceLike): ImageSourceKind | unde
 
 /**
  * `build.args` or `build.secrets` set on an image that is not built from the
- * user's own Dockerfile: a `main` program or a pre-built `image`.
+ * user's own Dockerfile (a `main` program or a pre-built `image`), or
+ * `build.cache` set on a pre-built `image`, which is never built.
  */
 export class DockerfileBuildConflict extends Data.TaggedError("DockerfileBuildConflict")<{
   readonly id: string;
   readonly source: "main" | "image";
+  readonly option?: "cache";
 }> {
   override get message() {
-    return `'${this.id}': 'build.args' and 'build.secrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
+    return this.option === "cache"
+      ? `'${this.id}': 'build.cache' applies to an image Alchemy builds ('main' / 'context' / 'dockerfile'), not to a pre-built 'image'`
+      : `'${this.id}': 'build.args' and 'build.secrets' apply to an image built from your own Dockerfile ('context' / 'dockerfile'), not to '${this.source}'`;
   }
 }
 
 /**
  * Dies with {@link DockerfileBuildConflict} when `build.args` or
- * `build.secrets` are set alongside `main` or `image`.
+ * `build.secrets` are set alongside `main` or `image`, or `build.cache`
+ * alongside `image`.
  */
 export const validateDockerfileBuild = (
   id: string,
@@ -217,7 +224,9 @@ export const validateDockerfileBuild = (
           source: source.main !== undefined ? "main" : "image",
         }),
       )
-    : Effect.void;
+    : source.main === undefined && source.image !== undefined && source.build?.cache
+      ? Effect.die(new DockerfileBuildConflict({ id, source: "image", option: "cache" }))
+      : Effect.void;
 
 /**
  * Validate environment-source exclusivity. Dies (plan-time defect) on
@@ -601,6 +610,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       platform: options.platform,
       "build-arg": options.build?.args,
       secrets: options.build?.secrets,
+      ...imageBuildCacheOptions(options.build, options.imageUri, credentials),
     });
     yield* push(options.imageUri, credentials, options.platform);
     return options.imageUri;
@@ -666,11 +676,18 @@ export const makeContainerImageSource = Effect.gen(function* () {
         });
         envFrom = `alchemy-env-${id.toLowerCase()}:${codeHash}`;
         yield* session.note(`Building environment image for ${id}...`);
+        // The user's Dockerfile holds the expensive steps, so the layer
+        // cache applies to this stage rather than the bundle layered on top.
         yield* docker.image.build({
           context: env.context,
           file: env.dockerfile,
           tag: envFrom,
           platform,
+          ...imageBuildCacheOptions(
+            source.build,
+            imageUri,
+            source.build?.cache ? yield* target.credentials : undefined,
+          ),
         });
       }
       const finalDockerfile =
@@ -695,6 +712,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
         imageUri,
         context: contextDir,
         platform,
+        build: envFrom === undefined ? { cache: source.build?.cache } : undefined,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryUri, codeHash };

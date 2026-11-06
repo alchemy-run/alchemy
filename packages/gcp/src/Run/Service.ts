@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -349,9 +350,10 @@ export type ServiceProps = PlatformProps & {
   /**
    * Bundler configuration for `main`. `install` lists packages
    * `npm install`ed into an unbundled Node program image (see
-   * {@link extraFiles}); Next.js needs `next`.
+   * {@link extraFiles}); Next.js needs `next`. `cache` configures the image
+   * build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & { install?: PackageInstall };
+  build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
   /**
    * Host files or directories baked into the image next to `main`
    * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on
@@ -602,6 +604,35 @@ export type ServiceShape = Main<ServiceServices>;
  *     };
  *   }).pipe(Effect.provide(AWS.SQS.SendMessageHttp)),
  * ) {}
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Updating a Service
