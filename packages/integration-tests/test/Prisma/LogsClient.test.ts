@@ -43,6 +43,17 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
     }).pipe(provideEnv),
   );
 
+  it.effect("leaves Authorization off log requests when the credentials have no token", () =>
+    Effect.gen(function* () {
+      const deploymentLog = yield* getDeploymentLogsRequest("deployment-1");
+      const buildLog = yield* getBuildLogsRequest("build-1");
+      expect(deploymentLog.headers).toEqual({});
+      expect(buildLog.headers).toEqual({ Accept: "application/x-ndjson" });
+    }).pipe(
+      Effect.provideService(Credentials, Effect.succeed({ apiBaseUrl: "https://api.prisma.test" })),
+    ),
+  );
+
   it.effect("rejects path-confusing resource IDs before building a URL", () =>
     Effect.gen(function* () {
       const deploymentLog = yield* getDeploymentLogsRequest("deployment-1/../../projects").pipe(
