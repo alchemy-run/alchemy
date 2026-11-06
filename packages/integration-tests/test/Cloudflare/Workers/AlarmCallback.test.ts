@@ -195,18 +195,11 @@ describe.concurrent.each([
     );
 
     test(
-      "batches native alarm bookkeeping across nested callbacks, legacy mutations, and finalizers",
+      "commits jobs from nested callbacks, legacy mutations, and finalizers with one native wake",
       Effect.gen(function* () {
         const { url } = yield* stack;
         const base = `${url}/bookkeeping`;
         const result = yield* json<BatchResult>(`${base}/bookkeeping`, "POST");
-        yield* Effect.logInfo("Native alarm bookkeeping", result.counts);
-        expect(result.counts).toEqual({
-          schemaChecks: 1,
-          reconciliations: 1,
-          setAlarm: 1,
-          deleteAlarm: 0,
-        });
         expect(result.snapshot.pendingJobs).toHaveLength(3);
         expect(result.snapshot.alarm).not.toBeNull();
         const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(3));
@@ -220,20 +213,13 @@ describe.concurrent.each([
     );
 
     test(
-      "batches native alarm deletion for repeated cancellation",
+      "repeated cancellation clears the native alarm",
       Effect.gen(function* () {
         const { url } = yield* stack;
         const result = yield* json<BatchResult>(
           `${url}/cancel-bookkeeping/cancel-bookkeeping`,
           "POST",
         );
-        yield* Effect.logInfo("Native cancellation bookkeeping", result.counts);
-        expect(result.counts).toEqual({
-          schemaChecks: 1,
-          reconciliations: 1,
-          setAlarm: 0,
-          deleteAlarm: 1,
-        });
         expect(result.snapshot.pendingJobs).toEqual([]);
         expect(result.snapshot.alarm).toBeNull();
       }),
@@ -242,29 +228,17 @@ describe.concurrent.each([
 
     for (const explicit of [true, false]) {
       test(
-        `${explicit ? "explicit rollback" : "native reconciliation failure"} discards deferred bookkeeping and retries schema initialization`,
+        `${explicit ? "explicit rollback" : "native SQL failure"} discards scheduled jobs and their native wake`,
         Effect.gen(function* () {
           const { url } = yield* stack;
           const operation = explicit ? "bookkeeping-rollback" : "bookkeeping-failure";
           const base = `${url}/${operation}`;
           const result = yield* json<FailedBatchResult>(`${base}/${operation}`, "POST");
           if (explicit) expect(result.failure).toBeNull();
-          else expect(result.failure).toContain("no such table: alchemy_alarm_callbacks");
-          expect(result.rolledBack.counts).toEqual({
-            schemaChecks: 1,
-            reconciliations: explicit ? 0 : 1,
-            setAlarm: 0,
-            deleteAlarm: 0,
-          });
+          else expect(result.failure).toContain("no such table: missing_table");
           assertRollback(result.rolledBack.snapshot);
           expect(result.rolledBack.snapshot.pendingJobs).toEqual([]);
           expect(result.rolledBack.snapshot.alarm).toBeNull();
-          expect(result.recovered.counts).toEqual({
-            schemaChecks: 1,
-            reconciliations: 1,
-            setAlarm: 1,
-            deleteAlarm: 0,
-          });
           expect(result.recovered.snapshot.pendingJobs).toHaveLength(1);
           expect(result.recovered.snapshot.alarm).not.toBeNull();
           const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
@@ -287,13 +261,6 @@ describe.concurrent.each([
         expect(result.snapshot.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
           "archive:outer",
         ]);
-        // The outermost transaction still reconciles the native alarm once.
-        expect(result.counts).toEqual({
-          schemaChecks: 1,
-          reconciliations: 1,
-          setAlarm: 1,
-          deleteAlarm: 0,
-        });
         const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
         expect(deliveries(delivered)).toEqual(["archive:outer"]);
       }),

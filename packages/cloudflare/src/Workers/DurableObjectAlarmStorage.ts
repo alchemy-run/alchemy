@@ -2,7 +2,6 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 
 const SCHEMA_VERSION = 2;
 
@@ -14,14 +13,6 @@ export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
 }> {}
 
 export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
-  Effect.gen(function* () {
-    const transaction = (yield* ActiveStorageTransactions).get(storage);
-    if (transaction?.alarms.tablesEnsured) return;
-    yield* initializeAlarmTables(storage);
-    if (transaction !== undefined) transaction.alarms.tablesEnsured = true;
-  });
-
-const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
   Effect.sync(() => {
     const hasVersion =
       storage.sql
@@ -86,28 +77,10 @@ const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
     });
   });
 
-// Both schedulers share the Durable Object's single native alarm.
+// Both schedulers share the Durable Object's single native alarm. Inside a
+// transaction, workerd defers the native wake to commit and rolls it back
+// with the transaction.
 export const reconcileDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
-  Effect.gen(function* () {
-    const transaction = (yield* ActiveStorageTransactions).get(storage);
-    if (transaction !== undefined) {
-      transaction.alarms.dirty = true;
-    } else {
-      yield* reconcileAlarm(storage);
-    }
-  });
-
-// Flush before commit or an explicit alarm operation, never after rollback.
-export const flushDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
-  Effect.gen(function* () {
-    const transaction = (yield* ActiveStorageTransactions).get(storage);
-    if (transaction?.alarms.dirty && !transaction.rolledBack) {
-      yield* reconcileAlarm(storage);
-      transaction.alarms.dirty = false;
-    }
-  });
-
-const reconcileAlarm = (storage: cf.DurableObjectStorage) =>
   Effect.gen(function* () {
     const next = yield* Effect.sync(
       () =>
