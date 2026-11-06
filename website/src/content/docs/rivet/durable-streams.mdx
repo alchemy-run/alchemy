@@ -112,13 +112,13 @@ It reconnects on its own when the connection drops, from the last offset it saw,
 
 ## Choose a format
 
-A stream's wire format is a Layer, provided where the client is built:
+A stream's wire format is a Layer, provided where the client is built.
 
-| Layer | Content type | Messages |
-|---|---|---|
-| `StreamFormat.Json` | `application/json` | one JSON value each, readable in Rivet's dashboard |
-| `StreamFormat.Ndjson` | `application/x-ndjson` | one JSON value per line, on a byte stream |
-| `StreamFormat.SchemaBinary()` | `application/octet-stream` | Effect's compact binary codec, on a byte stream |
+`StreamFormat.Json` sends each message as one JSON value, as `application/json`. Rivet's dashboard can read it.
+
+`StreamFormat.Ndjson` writes one JSON value per line on a byte stream, as `application/x-ndjson`.
+
+`StreamFormat.SchemaBinary()` writes Effect's compact binary codec on a byte stream, as `application/octet-stream`.
 
 A program only bundles the formats it provides. A stream whose format differs from the rest of the runtime's takes its own Layer as `format`:
 

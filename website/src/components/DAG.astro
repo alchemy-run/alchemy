@@ -76,7 +76,7 @@ export interface EdgeIn {
 /**
  * A labelled border drawn around nodes, like an account or a region. Nest one
  * inside another with `parent`. An edge may point at a group's `id`, and ends
- * at its border. Lay grouped diagrams out on the grid (`col`/`row`), leaving a
+ * at its border, or start at one, and leave from it. Lay grouped diagrams out on the grid (`col`/`row`), leaving a
  * free row or column where a border needs the room.
  */
 export interface GroupIn {
@@ -399,11 +399,27 @@ const groupEdge = (e: EdgeIn, box: Box): Edge => {
   return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
 };
 
+// An edge out of a group leaves its border: up or down into a node above or
+// below it, otherwise across from its side.
+const fromGroupEdge = (e: EdgeIn, box: Box): Edge => {
+  const b = positions.get(e.to)!;
+  const x = b.x + NODE_W / 2;
+  if (x > box.x && x < box.x + box.w && (b.y + b.h < box.y || b.y > box.y + box.h)) {
+    const [y1, y2] = b.y < box.y ? [box.y, b.y + b.h + TIP] : [box.y + box.h, b.y - TIP];
+    return { d: `M ${x} ${y1} L ${x} ${y2}`, midX: x + 8, midY: (y1 + y2) / 2 + 2, label: e.label, dashed: e.dashed, beside: true };
+  }
+  const y = b.y + b.h / 2;
+  const [x1, x2] = b.x > box.x ? [box.x + box.w, b.x - TIP] : [box.x, b.x + NODE_W + TIP];
+  return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
+};
+
 const buildEdges = (): Edge[] =>
   edges.map((e) => {
     // A node wins over a group with the same id.
     const box = positions.has(e.to) ? undefined : boxes.get(e.to);
     if (box) return groupEdge(e, box);
+    const fromBox = positions.has(e.from) ? undefined : boxes.get(e.from);
+    if (fromBox) return fromGroupEdge(e, fromBox);
     if (grid) return gridEdge(e);
     const a = positions.get(e.from)!;
     const b = positions.get(e.to)!;

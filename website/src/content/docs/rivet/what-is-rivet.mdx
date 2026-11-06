@@ -3,29 +3,34 @@ title: What is Rivet?
 description: The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
 ---
 
-import Boundaries from "../../../components/diagrams/Boundaries.astro";
+import DAG from "../../../components/DAG.astro";
 
 [Rivet](https://rivet.dev) is an open-source platform for stateful programs called **Actors**. An Actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet's **control plane** keeps every Actor's data and routes calls to it by name, and a **pool** of nodes runs the Actors' code.
 
 Take one small app: chat rooms. Each room is an Actor, and an API calls a room by its name. The API sends every call to the control plane's **gateway**, with a token. The control plane finds the room, starting it on a node in its pool if it's asleep, and the room answers from its own data. The nodes connect out to the control plane and take no traffic from anywhere else.
 
-<Boundaries
+<DAG
   nodes={[
-    { id: "api", label: "Api", type: "Worker or Lambda", col: 0, row: 0 },
-    { id: "gateway", label: "Gateway", type: "HTTPS", col: 0, row: 1, tone: "accent" },
-    { id: "engine", label: "Engine", type: "data and routing", col: 1, row: 1 },
-    { id: "kitchen", label: "kitchen", type: "Room", col: 0, row: 2 },
-    { id: "lobby", label: "lobby", type: "Room", col: 1, row: 2 },
+    { id: "api", label: "Api", type: "Worker or Lambda", col: 0, row: 1 },
+    { id: "gateway", label: "Gateway", type: "HTTPS", col: 1, row: 1, tone: "accent" },
+    { id: "pool", label: "Default", type: "pool config", col: 2, row: 1 },
+    { id: "data", label: "Room data", type: "key-value, SQLite", col: 3, row: 1 },
+    { id: "lobby", label: "lobby", type: "Room", col: 1, row: 3 },
+    { id: "kitchen", label: "kitchen", type: "Room", col: 2, row: 3 },
+    { id: "garden", label: "garden", type: "Room", col: 3, row: 3 },
   ]}
-  zones={[
-    { id: "cp", label: "Control plane", nodes: ["gateway", "engine"], labelAt: "right" },
-    { id: "pool", label: "Pool Default", nodes: ["lobby", "kitchen"], labelAt: "right" },
+  groups={[
+    { id: "cp", label: "Control plane", nodes: ["gateway"] },
+    { id: "ns", label: "Namespace dev", parent: "cp", nodes: ["pool", "data"], dashed: true },
+    { id: "nodes", label: "Default's nodes, on any cloud", nodes: [] },
+    { id: "node1", label: "node 1", parent: "nodes", nodes: ["lobby", "kitchen"] },
+    { id: "node2", label: "node 2", parent: "nodes", nodes: ["garden"] },
   ]}
-  links={[
+  edges={[
     { from: "api", to: "gateway", label: "join() + token" },
-    { from: "lobby", to: "engine", label: "connects out" },
+    { from: "nodes", to: "pool", label: "connect out" },
   ]}
-  caption="Callers only know the gateway. Nodes connect out to the control plane, which knows which node runs each room."
+  caption="The control plane keeps the stage's pools and every room's data in its namespace. A pool's nodes connect out to it, and the gateway hands each call to the node running that room, over that connection."
 />
 
 ## Durable Objects: a class and its instances
