@@ -232,7 +232,7 @@ test(
   { tags: ["unit"] },
 );
 
-describe("a relative URL", () => {
+describe("a relative URL", { tags: ["unit"] }, () => {
   const urlOf = (url: string, origin = "https://dev-alice.api.myapp.localhost") =>
     resolveAgainst(HttpClientRequest.get(url), origin).url;
 
