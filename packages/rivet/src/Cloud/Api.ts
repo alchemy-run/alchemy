@@ -20,6 +20,16 @@ export class RivetCloudApiError extends Data.TaggedError("RivetCloud.ApiError")<
   readonly cause?: unknown;
 }> {}
 
+/** The Rivet Cloud API found nothing at the path. */
+export class RivetCloudNotFound extends Data.TaggedError("RivetCloud.NotFound")<{
+  readonly message: string;
+}> {}
+
+/** The Rivet Cloud API refused a change that conflicts with the current state. */
+export class RivetCloudConflict extends Data.TaggedError("RivetCloud.Conflict")<{
+  readonly message: string;
+}> {}
+
 /** A Rivet Cloud cluster, as the Cloud API reports it. */
 export const ClusterInfo = Schema.Struct({
   cluster: Schema.String,
@@ -38,24 +48,31 @@ const ErrorBody = Schema.Struct({
   error_description: Schema.optional(Schema.String),
 });
 
-const send = Effect.fn("RivetCloud.send")(function* <A>(
-  method: "GET" | "POST",
+type Method = "GET" | "POST" | "PUT" | "DELETE";
+
+interface RequestOptions {
+  readonly token?: Redacted.Redacted<string>;
+  readonly body?: unknown;
+}
+
+/** Send a request and fail on any status outside 2xx with the API's error. */
+const request = Effect.fn("RivetCloud.request")(function* (
+  method: Method,
   path: string,
-  schema: Schema.ConstraintDecoder<A, never>,
-  options: { readonly token?: Redacted.Redacted<string>; readonly body?: unknown } = {},
+  options: RequestOptions = {},
 ) {
   const client = yield* HttpClient.HttpClient;
-  let request = HttpClientRequest.make(method)(`${CLOUD_API_URL}${path}`).pipe(
+  let req = HttpClientRequest.make(method)(`${CLOUD_API_URL}${path}`).pipe(
     HttpClientRequest.acceptJson,
   );
   if (options.token !== undefined) {
-    request = HttpClientRequest.bearerToken(request, Redacted.value(options.token));
+    req = HttpClientRequest.bearerToken(req, Redacted.value(options.token));
   }
   if (options.body !== undefined) {
-    request = HttpClientRequest.bodyJsonUnsafe(request, options.body);
+    req = HttpClientRequest.bodyJsonUnsafe(req, options.body);
   }
   const response = yield* client
-    .execute(request)
+    .execute(req)
     .pipe(
       Effect.mapError(
         (cause) =>
@@ -67,22 +84,38 @@ const send = Effect.fn("RivetCloud.send")(function* <A>(
     const body = yield* Schema.decodeEffect(Schema.fromJsonString(ErrorBody))(text).pipe(
       Effect.orElseSucceed(() => ({ error: undefined, error_description: undefined })),
     );
-    return yield* new RivetCloudApiError({
-      message: `${method} ${path} returned HTTP ${response.status}: ${text.slice(0, 300)}`,
-      status: response.status,
-      error: body.error,
-    });
+    const message = `${method} ${path} returned HTTP ${response.status}: ${text.slice(0, 300)}`;
+    if (response.status === 404) return yield* new RivetCloudNotFound({ message });
+    if (response.status === 409) return yield* new RivetCloudConflict({ message });
+    return yield* new RivetCloudApiError({ message, status: response.status, error: body.error });
   }
-  return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
-    Effect.mapError(
-      (cause) =>
-        new RivetCloudApiError({
-          message: `${method} ${path} returned an unexpected body`,
-          cause,
-        }),
+  return response;
+});
+
+/** Send a request and decode its JSON body. */
+const send = <A>(
+  method: Method,
+  path: string,
+  schema: Schema.ConstraintDecoder<A, never>,
+  options: RequestOptions = {},
+) =>
+  request(method, path, options).pipe(
+    Effect.flatMap((response) =>
+      HttpClientResponse.schemaBodyJson(schema)(response).pipe(
+        Effect.mapError(
+          (cause) =>
+            new RivetCloudApiError({
+              message: `${method} ${path} returned an unexpected body`,
+              cause,
+            }),
+        ),
+      ),
     ),
   );
-});
+
+/** Send a request whose response body, if any, says nothing more. */
+const sendVoid = (method: Method, path: string, options: RequestOptions = {}) =>
+  request(method, path, options).pipe(Effect.asVoid);
 
 const get = <A>(
   token: Redacted.Redacted<string>,
@@ -141,7 +174,9 @@ export const awaitDeviceSignIn = (device: DeviceCode) =>
   }).pipe(
     Effect.retry({
       schedule: Schedule.spaced(Duration.seconds(Math.max(device.interval, 1))),
-      while: (e) => e.error === "authorization_pending" || e.error === "slow_down",
+      while: (e) =>
+        e._tag === "RivetCloud.ApiError" &&
+        (e.error === "authorization_pending" || e.error === "slow_down"),
     }),
     Effect.timeoutOrElse({
       duration: Duration.seconds(Math.min(device.expires_in, 600)),
@@ -158,6 +193,150 @@ export const refreshDeviceSession = (refreshToken: Redacted.Redacted<string>) =>
 
 /** End a device sign-in session, best effort. */
 export const endDeviceSession = (refreshToken: Redacted.Redacted<string>) =>
-  send("POST", "/api/auth/device/logout", Schema.Unknown, {
+  sendVoid("POST", "/api/auth/device/logout", {
     body: { refresh_token: Redacted.value(refreshToken) },
   }).pipe(Effect.ignore);
+
+/** A region of a cluster. */
+const Region = Schema.Struct({
+  region: Schema.String,
+  status: Schema.Struct({ state: Schema.String }),
+});
+
+/** The regions a cluster runs in. */
+export const listRegions = (token: Redacted.Redacted<string>, cluster: string) =>
+  get(
+    token,
+    `/v2/clusters/${encodeURIComponent(cluster)}/regions`,
+    Schema.Struct({ items: Schema.Array(Region) }),
+  ).pipe(Effect.map((list) => list.items));
+
+/** Where a rollout or a resource stands. */
+const Status = Schema.Struct({
+  state: Schema.String,
+  message: Schema.NullOr(Schema.String),
+  fault: Schema.NullOr(Schema.String),
+  action_needed: Schema.Boolean,
+  replicas: Schema.NullOr(
+    Schema.Struct({ desired: Schema.Number, ready: Schema.Number, updated: Schema.Number }),
+  ),
+});
+
+/** A build: a Docker image uploaded for runner pools to boot. */
+export const BuildInfo = Schema.Struct({
+  build_id: Schema.String,
+  image: Schema.String,
+  status: Schema.String,
+  failure: Schema.NullOr(
+    Schema.Struct({ fault: Schema.String, code: Schema.String, message: Schema.String }),
+  ),
+});
+export type BuildInfo = typeof BuildInfo.Type;
+
+const buildsPath = (cluster: string) => `/v2/clusters/${encodeURIComponent(cluster)}/builds`;
+
+/** Every build on the cluster. */
+export const listBuilds = (token: Redacted.Redacted<string>, cluster: string) =>
+  get(token, buildsPath(cluster), Schema.Struct({ items: Schema.Array(BuildInfo) })).pipe(
+    Effect.map((list) => list.items),
+  );
+
+/** Register a build; its image tarball goes to `upload_url`. */
+export const createBuild = (
+  token: Redacted.Redacted<string>,
+  cluster: string,
+  body: { readonly image: string; readonly content_length: number; readonly content_md5: string },
+) =>
+  send(
+    "POST",
+    buildsPath(cluster),
+    Schema.Struct({ build_id: Schema.String, upload_url: Schema.String }),
+    { token, body },
+  );
+
+/** Upload a build's image tarball: one PUT, with its MD5. */
+export const uploadBuild = Effect.fn("RivetCloud.uploadBuild")(function* (
+  url: string,
+  tarball: Uint8Array,
+  md5: string,
+) {
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client
+    .execute(
+      HttpClientRequest.put(url).pipe(
+        HttpClientRequest.setHeader("Content-MD5", md5),
+        HttpClientRequest.bodyUint8Array(tarball, "application/x-tar"),
+      ),
+    )
+    .pipe(
+      Effect.mapError(
+        (cause) =>
+          new RivetCloudApiError({ message: `Build upload failed: ${cause.message}`, cause }),
+      ),
+    );
+  if (response.status < 200 || response.status >= 300) {
+    const text = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
+    return yield* new RivetCloudApiError({
+      message: `Build upload returned HTTP ${response.status}: ${text.slice(0, 300)}`,
+      status: response.status,
+    });
+  }
+});
+
+/** Ask Rivet to verify an uploaded build and prepare it. */
+export const completeBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
+  sendVoid("POST", `${buildsPath(cluster)}/${encodeURIComponent(build)}/complete`, { token });
+
+/** One build and where it is in its lifecycle. */
+export const getBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
+  get(token, `${buildsPath(cluster)}/${encodeURIComponent(build)}`, BuildInfo);
+
+/** Delete a build; refused while a pool runs it or can roll back to it. */
+export const deleteBuild = (token: Redacted.Redacted<string>, cluster: string, build: string) =>
+  sendVoid("DELETE", `${buildsPath(cluster)}/${encodeURIComponent(build)}`, { token });
+
+/** A runner pool: nodes Rivet runs, booted from a build. */
+export const RunnerPoolInfo = Schema.Struct({
+  pool: Schema.String,
+  region: Schema.String,
+  build_id: Schema.NullOr(Schema.String),
+  machine_type: Schema.NullOr(Schema.String),
+  node_count: Schema.Number,
+  cidr_allowlist: Schema.Array(Schema.String),
+  endpoints: Schema.Struct({ public: Schema.NullOr(Schema.String) }),
+  status: Status,
+});
+export type RunnerPoolInfo = typeof RunnerPoolInfo.Type;
+
+const runnerPoolPath = (cluster: string, region: string, pool: string) =>
+  `/v2/clusters/${encodeURIComponent(cluster)}/regions/${encodeURIComponent(region)}/runner-pools/${encodeURIComponent(pool)}`;
+
+/** One runner pool. */
+export const getRunnerPool = (
+  token: Redacted.Redacted<string>,
+  cluster: string,
+  region: string,
+  pool: string,
+) => get(token, runnerPoolPath(cluster, region, pool), RunnerPoolInfo);
+
+/** Roll a runner pool out to a build, creating it when it does not exist. */
+export const putRunnerPool = (
+  token: Redacted.Redacted<string>,
+  cluster: string,
+  region: string,
+  pool: string,
+  body: {
+    readonly build_id: string;
+    readonly cidr_allowlist: ReadonlyArray<string>;
+    readonly machine_type?: string | undefined;
+    readonly node_count?: number | undefined;
+  },
+) => send("PUT", runnerPoolPath(cluster, region, pool), RunnerPoolInfo, { token, body });
+
+/** Request a runner pool's removal. */
+export const deleteRunnerPool = (
+  token: Redacted.Redacted<string>,
+  cluster: string,
+  region: string,
+  pool: string,
+) => sendVoid("DELETE", runnerPoolPath(cluster, region, pool), { token });

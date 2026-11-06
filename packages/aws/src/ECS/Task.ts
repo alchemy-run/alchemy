@@ -745,7 +745,8 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       options: {
         "awslogs-group": logGroupName,
         "awslogs-region": region,
-        "awslogs-stream-prefix": family,
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
+        "awslogs-stream-prefix": family.slice(0, 200),
       },
     },
     ...props.container,

@@ -65,6 +65,11 @@ export interface ClusterShape {
   readonly token: Input<Redacted.Redacted<string>>;
   /** The namespace this app's pools and actors live in. */
   readonly namespace: Input<string>;
+  /**
+   * The Rivet Cloud cluster this control plane is, when Rivet Cloud runs it.
+   * `RivetCloud.Pool` runs nodes only on one.
+   */
+  readonly rivetCloudCluster?: Input<string> | undefined;
 }
 
 /**

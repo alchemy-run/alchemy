@@ -10,6 +10,10 @@ import {
   ClusterProvider as RivetCloudClusterProvider,
 } from "./Cloud/Cluster.ts";
 import { CredentialsLive as RivetCloudCredentials } from "./Cloud/CredentialsLive.ts";
+import {
+  RunnerPool as RivetCloudRunnerPool,
+  RunnerPoolProvider as RivetCloudRunnerPoolProvider,
+} from "./Cloud/RunnerPool.ts";
 import { DurableObjectProvider, DurableObjectResource } from "./DurableObject.ts";
 import { Namespace, NamespaceProvider } from "./Namespace.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
@@ -32,7 +36,14 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([DurableObjectResource, Namespace, Pool, Random, RivetCloudCluster]),
+    Provider.collection([
+      DurableObjectResource,
+      Namespace,
+      Pool,
+      Random,
+      RivetCloudCluster,
+      RivetCloudRunnerPool,
+    ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -41,6 +52,7 @@ export const providers = () =>
         PoolProvider(),
         RandomProvider(),
         RivetCloudClusterProvider(),
+        RivetCloudRunnerPoolProvider(),
       ),
     ),
     Layer.provide(FetchHttpClient.layer),

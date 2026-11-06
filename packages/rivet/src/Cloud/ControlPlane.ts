@@ -44,6 +44,11 @@ export const ControlPlane = (id: string, props: ControlPlaneProps = {}) =>
         endpoint: cluster.endpoint,
         token: cluster.adminToken,
       });
-      return { endpoint: cluster.endpoint, token: cluster.adminToken, namespace: namespace.name };
+      return {
+        endpoint: cluster.endpoint,
+        token: cluster.adminToken,
+        namespace: namespace.name,
+        rivetCloudCluster: cluster.name,
+      };
     }),
   );
