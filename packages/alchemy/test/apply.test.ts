@@ -1749,6 +1749,51 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
       }),
     );
 
+    // #3103: A binds B only by B's `name`, which the update keeps, so
+    // planning resolves that reference to its value and it orders nothing.
+    // B still references A's changing `string`. That is not a cycle: B must
+    // wait for A's update instead of starting against A's previous output.
+    test.provider("an update orders peers linked back only by a stable attribute", (stack) =>
+      Effect.gen(function* () {
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* BindingTarget("A", { name: "a", string: `a-${version}` });
+            const B = yield* BindingTarget("B", { name: "b", string: `b-${version}` });
+            yield* A.bind("FromB", { env: { PEER: B.name } });
+            yield* B.bind("FromA", { env: { PEER: A.string } });
+            return { A, B };
+          });
+
+        yield* stack.deploy(program("v1"));
+
+        const plan = yield* stack.plan(program("v2"));
+        expect([...plan.cycleMembers]).toEqual([]);
+
+        let aUpdated = false;
+        const bSawAUpdated: boolean[] = [];
+        const output = yield* program("v2").pipe(
+          stack.deploy,
+          hook({
+            update: (id) =>
+              id === "A"
+                ? // Give B every chance to run first if nothing orders it.
+                  Effect.sleep("50 millis").pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        aUpdated = true;
+                      }),
+                    ),
+                  )
+                : Effect.sync(() => void bSawAUpdated.push(aUpdated)),
+          }),
+        );
+
+        expect(bSawAUpdated).toEqual([true]);
+        expect(output.A.env).toEqual({ PEER: "b" });
+        expect(output.B.env).toEqual({ PEER: "a-v2" });
+      }),
+    );
+
     describe("from replacing state", () => {
       test.provider("replacing noop recovery creates downstream resources", (stack) =>
         Effect.gen(function* () {

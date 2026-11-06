@@ -62,6 +62,7 @@ import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
   type DurableObjectLike,
+  hostNamespaceOf,
   isDurableObjectLike,
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
@@ -617,6 +618,7 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+      hostNamespace: hostNamespaceOf(binding.scriptName, binding.className ?? binding.name),
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
       storage: binding.storage,
     };
