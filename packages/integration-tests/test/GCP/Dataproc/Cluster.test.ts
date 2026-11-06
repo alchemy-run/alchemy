@@ -3,6 +3,7 @@ import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -47,23 +48,39 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 90_000 },
 );
 
+// The cluster's VMs run as their own service account: the project's default
+// compute account may lack the storage access Dataproc's staging and temp
+// buckets need.
+const cluster = Effect.fn(function* (props: {
+  clusterName?: string;
+  labels: Record<string, string>;
+}) {
+  const { project } = yield* GcpEnvironment.current;
+  const workers = yield* GCP.IAM.ServiceAccount("SparkWorkers", {});
+  const role = yield* GCP.IAM.Member("SparkWorkersRole", {
+    kind: "project",
+    name: project,
+    role: "roles/dataproc.worker",
+    member: Output.interpolate`serviceAccount:${workers.email}`,
+  });
+  return yield* GCP.Dataproc.Cluster("Spark", {
+    ...props,
+    region: "us-central1",
+    clusterType: "SINGLE_NODE",
+    masterMachineType: "e2-standard-2",
+    masterBootDiskSizeGb: 30,
+    // Grant the worker role before Dataproc starts any VM.
+    serviceAccount: Output.all(workers.email, role.role).pipe(Output.map(([email]) => email)),
+  });
+});
+
 test.provider.skipIf(!runLifecycle)(
   "create, update, and delete a dataproc cluster",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.Dataproc.Cluster("Spark", {
-            region: "us-central1",
-            clusterType: "SINGLE_NODE",
-            masterMachineType: "e2-standard-2",
-            masterBootDiskSizeGb: 30,
-            labels: { env: "test" },
-          });
-        }),
-      );
+      const created = yield* stack.deploy(cluster({ labels: { env: "test" } }));
       yield* expectFound(
         GCP.Dataproc.Cluster.lookup({ clusterName: created.clusterName, region: created.region }),
         created,
@@ -86,16 +103,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.status?.state).toEqual("RUNNING");
 
       const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* GCP.Dataproc.Cluster("Spark", {
-            clusterName: created.clusterName,
-            region: "us-central1",
-            clusterType: "SINGLE_NODE",
-            masterMachineType: "e2-standard-2",
-            masterBootDiskSizeGb: 30,
-            labels: { env: "prod", role: "spark" },
-          });
-        }),
+        cluster({ clusterName: created.clusterName, labels: { env: "prod", role: "spark" } }),
       );
 
       expect(updated.name).toEqual(created.name);

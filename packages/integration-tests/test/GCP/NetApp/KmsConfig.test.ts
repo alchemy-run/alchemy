@@ -7,12 +7,13 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "../lookup.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const runLifecycle = !process.env.FAST;
+const runLifecycle = entitled && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   netapp.getProjectsLocationsKmsConfigs({ name }).pipe(
@@ -38,7 +39,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/kmsConfigs/alchemy-netapp-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       const page = yield* netapp.listProjectsLocationsKmsConfigs({
         parent: `projects/${project}/locations/-`,

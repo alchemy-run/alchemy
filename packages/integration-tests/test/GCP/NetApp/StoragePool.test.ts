@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "../lookup.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -36,7 +37,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/storagePools/alchemy-netapp-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       const page = yield* netapp.listProjectsLocationsStoragePools({
         parent: `projects/${project}/locations/-`,
@@ -51,7 +52,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!entitled)(
   "create, update, and delete a storage pool",
   (stack) =>
     Effect.gen(function* () {
