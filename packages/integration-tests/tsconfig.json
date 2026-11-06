@@ -101,6 +101,7 @@
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
     { "path": "../turso/tsconfig.json" },
+    { "path": "../daytona/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },
     { "path": "../prisma/tsconfig.json" },

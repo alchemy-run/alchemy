@@ -37,6 +37,7 @@ export GH_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 export GITHUB_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 
 export HCLOUD_TOKEN=alchemy-fake-local-hetzner-token
+export DAYTONA_API_KEY=alchemy-fake-local-daytona-key
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 

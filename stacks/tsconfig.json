@@ -22,6 +22,7 @@
     { "path": "../packages/prisma/tsconfig.json" },
     { "path": "../packages/railway/tsconfig.json" },
     { "path": "../packages/stripe/tsconfig.json" },
-    { "path": "../packages/turso/tsconfig.json" }
+    { "path": "../packages/turso/tsconfig.json" },
+    { "path": "../packages/daytona/tsconfig.json" }
   ]
 }
