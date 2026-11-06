@@ -721,57 +721,6 @@ export const phasedTargetProvider = () =>
     }),
   );
 
-// PeerTarget - embeds a whole peer in its props and reports a `revision`
-// that changes on every reconcile, like a Cloudflare Worker's `versionId`.
-// Its diff, like the Worker's, only depends on the peer's name.
-
-export type PeerTargetProps = {
-  name: string;
-  peer?: { name: string; revision?: number };
-};
-
-export interface PeerTarget extends Resource<
-  "Test.PeerTarget",
-  PeerTargetProps,
-  {
-    name: string;
-    revision: number;
-    peerName: string | undefined;
-  }
-> {}
-
-export const PeerTarget = Resource<PeerTarget>("Test.PeerTarget");
-
-export const peerTargetProvider = () =>
-  Provider.effect(
-    PeerTarget,
-    Effect.gen(function* () {
-      let revision = 0;
-      return {
-        list: () => Effect.succeed([]),
-        diff: Effect.fn(function* ({ news, olds }) {
-          if (!isResolved(news)) return undefined;
-          const n = news as PeerTargetProps;
-          const o = (olds ?? {}) as Partial<PeerTargetProps>;
-          if (n.name !== o.name || n.peer?.name !== o.peer?.name) {
-            return { action: "update" } as const;
-          }
-          return { action: "noop" } as const;
-        }),
-        precreate: Effect.fn(function* ({ news }) {
-          return { name: news.name, revision: ++revision, peerName: undefined };
-        }),
-        reconcile: Effect.fn(function* ({ id, news, olds }) {
-          const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
-          const hook = olds === undefined ? hooks?.create : hooks?.update;
-          if (hook) yield* hook(id, { string: news.name });
-          return { name: news.name, revision: ++revision, peerName: news.peer?.name };
-        }),
-        delete: Effect.fn(function* () {}),
-      };
-    }),
-  );
-
 // NoPrecreateBindingTarget - like BindingTarget but without precreate,
 // used to test cycle detection for resources that cannot break cycles.
 
@@ -1565,7 +1514,6 @@ export const TestLayers = () =>
     kindStablesResourceProvider(),
     overrideStablesResourceProvider(),
     phasedTargetProvider(),
-    peerTargetProvider(),
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),
     deleteFirstResourceProvider(),

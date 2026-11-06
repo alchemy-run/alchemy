@@ -316,6 +316,25 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   if (resource.Props?.isExternal === true) {
     Object.assign(resource, { env });
   }
+  // A Worker bound in `env` is now a service binding, which records the
+  // target's `workerName`. Leaving the Worker in props as well makes it a
+  // prop dependency on the target's whole output, whose `versionId` changes
+  // on every upload. Two Workers that bind each other this way (one through
+  // `Worker.ref`) form a cycle through props instead of bindings, and the
+  // first deploy re-uploads both until it gives up (#3112). The upload and
+  // `alchemy dev` both skip `env` keys a binding covers, so drop these.
+  const serviceKeys = Object.keys(env).filter((key) => {
+    const value = env[key];
+    return isWorker(value) || (isWorkerEntrypoint(value) && value.worker !== undefined);
+  });
+  if (serviceKeys.length > 0 && resource.Props?.env) {
+    const kept = Object.fromEntries(
+      Object.entries(resource.Props.env as Record<string, unknown>).filter(
+        ([key]) => !serviceKeys.includes(key),
+      ),
+    );
+    resource.Props = { ...resource.Props, env: kept } as typeof resource.Props;
+  }
 });
 
 /**
