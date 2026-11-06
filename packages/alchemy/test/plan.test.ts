@@ -4174,6 +4174,60 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
       expect(plan.resources.Shared!.downstream).toContain("Compute");
     }),
   );
+
+  // #3112: two resources that reference each other, one through a ref,
+  // deadlocked the plan.
+  describe("a ref that closes a cycle (#3112)", () => {
+    test(
+      "props cycle: plan finishes and plans noops",
+      Effect.gen(function* () {
+        yield* seed({
+          Api: row("Api", { string: "api", stringArray: ["auth"] }, {}, []),
+          Auth: row("Auth", { string: "auth", stringArray: ["api"] }, {}, []),
+        });
+        const plan = yield* Effect.gen(function* () {
+          const api = yield* TestResource.ref("Api");
+          const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
+          yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+        }).pipe(makePlan, Effect.timeout("5 seconds"));
+        expect(plan.resources.Api!.action).toBe("noop");
+        expect(plan.resources.Auth!.action).toBe("noop");
+      }),
+    );
+
+    test(
+      "binding cycle: plan finishes and plans noops",
+      Effect.gen(function* () {
+        const host = (fqn: string, sid: string, env: Record<string, string>) =>
+          ({
+            instanceId,
+            providerVersion: 0,
+            logicalId: fqn,
+            fqn,
+            namespace: undefined,
+            resourceType: "Test.BindingTarget",
+            status: "created",
+            props: { name: fqn },
+            attr: { name: fqn, string: "", env, replaceString: undefined },
+            bindings: [{ sid, data: { env } }],
+            downstream: [],
+          }) as ResourceState;
+        yield* seed({
+          Api: host("Api", "Auth", { AUTH: "Auth" }),
+          Auth: host("Auth", "Api", { API: "Api" }),
+        });
+        const plan = yield* Effect.gen(function* () {
+          const apiRef = yield* BindingTarget.ref("Api");
+          const auth = yield* BindingTarget("Auth", { name: "Auth" });
+          yield* auth.bind("Api", { env: { API: apiRef.name } });
+          const api = yield* BindingTarget("Api", { name: "Api" });
+          yield* api.bind("Auth", { env: { AUTH: auth.name } });
+        }).pipe(makePlan, Effect.timeout("5 seconds"));
+        expect(plan.resources.Api!.action).toBe("noop");
+        expect(plan.resources.Auth!.action).toBe("noop");
+      }),
+    );
+  });
 });
 
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {

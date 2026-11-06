@@ -1299,6 +1299,43 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
     }),
   );
 
+  // #3112: Auth reads Api through a ref, Api reads Auth directly. The ref
+  // closes a cycle through props, which deadlocked the plan once both
+  // existed.
+  test.provider("a ref that closes a props cycle redeploys and then plans noops", (stack) =>
+    Effect.gen(function* () {
+      const cycle = (version: string) =>
+        Effect.gen(function* () {
+          const apiRef = yield* TestResource.ref("Api");
+          const auth = yield* TestResource("Auth", {
+            string: `auth-${version}`,
+            stringArray: [apiRef.string],
+          });
+          const api = yield* TestResource("Api", {
+            string: "api",
+            stringArray: [auth.string],
+          });
+          return { auth, api };
+        });
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Api", { string: "api" });
+        }),
+      );
+      const first = yield* stack.deploy(cycle("v1")).pipe(Effect.timeout("10 seconds"));
+      expect(first.auth.stringArray).toEqual(["api"]);
+      expect(first.api.stringArray).toEqual(["auth-v1"]);
+
+      const second = yield* stack.deploy(cycle("v2")).pipe(Effect.timeout("10 seconds"));
+      expect(second.api.stringArray).toEqual(["auth-v2"]);
+
+      const plan = yield* stack.plan(cycle("v2")).pipe(Effect.timeout("10 seconds"));
+      expect(plan.resources.Auth!.action).toBe("noop");
+      expect(plan.resources.Api!.action).toBe("noop");
+    }),
+  );
+
   test.provider(
     "a resource's ref to itself reads its persisted state without waiting on itself",
     (stack) =>

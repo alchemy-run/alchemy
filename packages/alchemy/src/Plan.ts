@@ -1095,7 +1095,19 @@ const makePlan = <A>(
           // A ref bound to a declared resource resolves like a direct
           // reference: unknown while that resource is being created.
           const target = Output.refTarget(expr);
-          if (target !== undefined) {
+          if (target !== undefined && inputCycleMembers.has(target.FQN)) {
+            // The ref closes a cycle through props (only a ref can: a
+            // direct reference needs the declaration first). Resolving the
+            // target would wait on its own props, which wait on this ref
+            // (#3112), so read the target's settled attributes from state;
+            // unknown until it has settled, and Apply resolves it against
+            // the cycle's outputs.
+            const { row } = yield* getPersistedRow(target);
+            return row !== undefined &&
+              (row.status === "created" || row.status === "updated" || row.status === "replaced")
+              ? row.attr
+              : expr;
+          } else if (target !== undefined) {
             return yield* resolveResource(
               Output.of(target as any) as Output.ResourceExpr<any, any>,
             );
