@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
@@ -121,8 +122,11 @@ export interface JobProps {
    * Mutable — but Cloudflare may reject changing the destination
    * *provider/domain* of an existing job; in that case change a
    * replacement-triggering prop instead.
+   *
+   * Pass it `Redacted` when it embeds credentials, so plans and outputs
+   * never show them.
    */
-  destinationConf: string;
+  destinationConf: string | Redacted.Redacted<string>;
   /**
    * Optional human readable job name (not unique). If omitted, a unique
    * name will be generated.
@@ -191,10 +195,10 @@ export interface JobAttributes {
   /** Dataset the job pushes. */
   dataset: Dataset;
   /**
-   * Destination URI. Note Cloudflare redacts embedded secrets (e.g. the
-   * R2 `secret-access-key`) when echoing this back.
+   * Destination URI. Redacted because Cloudflare echoes it back in full,
+   * embedded credentials (e.g. the R2 `secret-access-key`) included.
    */
-  destinationConf: string;
+  destinationConf: Redacted.Redacted<string>;
   /** Whether the job is enabled. */
   enabled: boolean;
   /** Job kind (`""` for Logpush, `"edge"` for Edge Log Delivery). */
@@ -226,7 +230,9 @@ export type Job = Resource<TypeId, JobProps, JobAttributes, never, Providers>;
  *
  * const job = yield* Cloudflare.Logpush.Job("worker-logs", {
  *   dataset: "workers_trace_events",
- *   destinationConf: Output.interpolate`r2://${bucket.bucketName}/{DATE}?account-id=${accountId}&access-key-id=${r2AccessKeyId}&secret-access-key=${r2SecretAccessKey}`,
+ *   destinationConf: Output.interpolate`r2://${bucket.bucketName}/{DATE}?account-id=${accountId}&access-key-id=${r2AccessKeyId}&secret-access-key=${r2SecretAccessKey}`.pipe(
+ *     Output.map(Redacted.make),
+ *   ),
  *   enabled: true,
  * });
  * ```
@@ -299,6 +305,12 @@ export const JobProvider = () =>
         oZone !== nZone
       ) {
         return { action: "replace" } as const;
+      }
+      // State written by earlier versions holds `destinationConf` as a plain
+      // string. Reconcile to re-read it as `Redacted`; without other changes
+      // this issues no PUT.
+      if (output?.destinationConf !== undefined && !Redacted.isRedacted(output.destinationConf)) {
+        return { action: "update" } as const;
       }
     }),
 
@@ -382,7 +394,7 @@ export const JobProvider = () =>
         zoneId: (news.zoneId as string | undefined) ?? undefined,
       };
       const name = yield* createJobName(id, news.name);
-      const destinationConf = news.destinationConf as string;
+      const destinationConf = revealDestination(news.destinationConf);
       const body = buildMutableBody(news, name, destinationConf);
 
       // 1. Observe — by cached id first, falling back to a list scan by
@@ -413,9 +425,8 @@ export const JobProvider = () =>
 
       // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
       //    full desired body when anything differs. `destination_conf`
-      //    and `filter` are compared against `olds` because Cloudflare
-      //    redacts embedded secrets (destination) or omits the field
-      //    entirely (filter) in get/list responses.
+      //    and `filter` are compared against `olds`; Cloudflare omits
+      //    `filter` entirely in get/list responses.
       if (!justCreated && needsUpdate(body, news, olds, observed)) {
         observed = yield* updateJob(scope, jobId, body);
       }
@@ -426,8 +437,11 @@ export const JobProvider = () =>
           message: "Cloudflare returned a Logpush job without id/dataset/destination",
         });
       }
-      // Prefer the desired destination — the observed echo redacts secrets.
-      return { ...attrs, destinationConf, name: attrs.name || name };
+      return {
+        ...attrs,
+        destinationConf: Redacted.make(destinationConf),
+        name: attrs.name || name,
+      };
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -499,6 +513,9 @@ interface JobMutableBody {
   ownershipChallenge: string | undefined;
 }
 
+const revealDestination = (value: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
 const buildMutableBody = (
   news: JobProps,
   name: string,
@@ -541,8 +558,8 @@ const asNumber = (v: "0" | number | null | undefined): number | undefined =>
 
 /**
  * Decide whether a PUT is needed. Observable fields are diffed against the
- * live job; write-only/redacted fields (`destination_conf`, `filter`,
- * `ownership_challenge`) fall back to a `news` vs `olds` comparison —
+ * live job; `destination_conf`, `filter` and `ownership_challenge` fall
+ * back to a `news` vs `olds` comparison —
  * `olds === undefined` (adoption) forces a PUT so the job converges to the
  * declared destination/filter.
  */
@@ -553,7 +570,7 @@ const needsUpdate = (
   observed: logpush.GetJobResponse,
 ): boolean => {
   if (olds === undefined) return true;
-  if ((news.destinationConf as string) !== (olds.destinationConf as string)) {
+  if (revealDestination(news.destinationConf) !== revealDestination(olds.destinationConf)) {
     return true;
   }
   if (news.filter !== olds.filter) return true;
@@ -629,7 +646,7 @@ const toAttributes = (
     zoneId: scope.zoneId,
     name: observed.name ?? "",
     dataset: observed.dataset,
-    destinationConf: observed.destinationConf,
+    destinationConf: Redacted.make(observed.destinationConf),
     enabled: observed.enabled ?? false,
     kind: observed.kind ?? "",
     errorMessage: undef(observed.errorMessage),
