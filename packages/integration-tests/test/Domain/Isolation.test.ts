@@ -20,7 +20,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open],
-  decide: () => ({ Open: ({ owner }) => [new Opened({ owner })] }),
+  decide: { Open: (_, { owner }) => [new Opened({ owner })] },
   evolve: { Opened: (_, { owner }) => ({ owner }) },
 }) {}
 class Owners extends Domain.View("Owners", {

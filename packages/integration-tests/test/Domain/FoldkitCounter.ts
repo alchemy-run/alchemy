@@ -31,11 +31,11 @@ export class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment, Reset],
-  decide: (counter) => ({
-    Increment: ({ amount }) =>
+  decide: {
+    Increment: (_, { amount }) =>
       amount > 10 ? new Limit({ amount }) : [Incremented.make({ amount })],
-    Reset: () => [Incremented.make({ amount: -counter.total })],
-  }),
+    Reset: (counter) => [Incremented.make({ amount: -counter.total })],
+  },
   evolve: { Incremented: (state, { amount }) => ({ total: state.total + amount }) },
   reply: { Increment: (state) => ({ total: state.total }) },
 }) {}

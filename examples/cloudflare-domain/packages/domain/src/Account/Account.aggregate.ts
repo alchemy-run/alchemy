@@ -94,13 +94,13 @@ export class Account extends Domain.Aggregate("Account", {
     RefundTransfer,
     RecordSettlement,
   ],
-  decide: (account, { now }) => ({
-    OpenAccount: (cmd) =>
+  decide: {
+    OpenAccount: (account, cmd) =>
       account._tag !== "Unopened"
         ? new AlreadyOpen()
         : [new AccountOpened({ customerId: cmd.customerId, owner: cmd.owner })],
 
-    ChangeOwner: Effect.fn(function* (cmd) {
+    ChangeOwner: Effect.fn(function* (account, cmd) {
       if (account._tag !== "Open") return yield* new NotOpen();
       const actor = yield* CurrentActor;
       if (actor._tag !== "Agent") return yield* new NotPermitted();
@@ -109,12 +109,12 @@ export class Account extends Domain.Aggregate("Account", {
       ];
     }),
 
-    DepositMoney: Effect.fn(function* (cmd) {
+    DepositMoney: Effect.fn(function* (account, cmd) {
       const o = yield* authorized(account);
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     }),
 
-    WithdrawMoney: Effect.fn(function* (cmd) {
+    WithdrawMoney: Effect.fn(function* (account, cmd, { now }) {
       // Recorded on this command's decide span; nothing else from it is.
       yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
       const o = yield* authorized(account);
@@ -127,19 +127,19 @@ export class Account extends Domain.Aggregate("Account", {
       return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: o.balance - cmd.amount })];
     }),
 
-    FreezeAccount: Effect.fn(function* (cmd) {
+    FreezeAccount: Effect.fn(function* (account, cmd) {
       const o = yield* authorized(account);
       const actor = yield* CurrentActor;
       return o.frozen ? [] : [new AccountFrozen({ reason: cmd.reason, by: actor })];
     }),
 
-    CloseAccount: Effect.fn(function* () {
+    CloseAccount: Effect.fn(function* (account) {
       const o = yield* authorized(account);
       if (o.balance !== 0) return yield* new BalanceNotZero({ balance: o.balance });
       return [new AccountClosed()];
     }),
 
-    DebitTransfer: (cmd) => {
+    DebitTransfer: (account, cmd) => {
       const o = openFor(account, cmd.requestedBy);
       if (o._tag !== "Open") return o;
       if (o.frozen) return new Frozen({ reason: o.frozen });
@@ -154,7 +154,7 @@ export class Account extends Domain.Aggregate("Account", {
       ];
     },
 
-    CreditTransfer: (cmd) =>
+    CreditTransfer: (account, cmd) =>
       account._tag !== "Open"
         ? new NotOpen()
         : [
@@ -165,7 +165,7 @@ export class Account extends Domain.Aggregate("Account", {
             }),
           ],
 
-    RefundTransfer: (cmd) =>
+    RefundTransfer: (account, cmd) =>
       account._tag === "Open"
         ? [
             new TransferRefunded({
@@ -176,7 +176,7 @@ export class Account extends Domain.Aggregate("Account", {
           ]
         : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
 
-    RecordSettlement: (cmd) =>
+    RecordSettlement: (account, cmd) =>
       account._tag === "Open"
         ? [
             new SettlementReceived({
@@ -186,7 +186,7 @@ export class Account extends Domain.Aggregate("Account", {
             }),
           ]
         : [new SettlementOnClosedAccount({ settlementId: cmd.settlementId, amount: cmd.amount })],
-  }),
+  },
 
   evolve: {
     AccountOpened: (_, e) => ({

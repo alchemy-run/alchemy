@@ -149,31 +149,31 @@ type State = typeof State.Type;
 +  return account;
 +});
 // ...
-  decide: (account) => ({
-    OpenAccount: (cmd) =>
+  decide: {
+    OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
--    DepositMoney: (cmd) =>
+-    DepositMoney: (account, cmd) =>
 -      account._tag !== "Open"
 -        ? new NotOpen()
 -        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
--    WithdrawMoney: (cmd) =>
+-    WithdrawMoney: (account, cmd) =>
 -      account._tag !== "Open"
 -        ? new NotOpen()
 -        : cmd.amount > account.balance
 -          ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
 -          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
-+    DepositMoney: Effect.fn(function* (cmd) {
++    DepositMoney: Effect.fn(function* (account, cmd) {
 +      const open = yield* owned(account);
 +      return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: open.balance + cmd.amount })];
 +    }),
-+    WithdrawMoney: Effect.fn(function* (cmd) {
++    WithdrawMoney: Effect.fn(function* (account, cmd) {
 +      const open = yield* owned(account);
 +      if (cmd.amount > open.balance) {
 +        return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
 +      }
 +      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: open.balance - cmd.amount })];
 +    }),
-  }),
+  },
   evolve: {
 ```
 
@@ -227,21 +227,20 @@ import { CustomerId } from "./Customer.id.ts";
 export class Customer extends Domain.Aggregate("Customer", {
   // ...
   commands: [RegisterCustomer],
--  decide: (customer) => ({
-+  decide: (customer, { id }) => ({
--    RegisterCustomer: (cmd) =>
+  decide: {
+-    RegisterCustomer: (customer, cmd) =>
 -      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
-+    RegisterCustomer: Effect.fn(function* (cmd) {
++    RegisterCustomer: Effect.fn(function* (customer, cmd, { id }) {
 +      const actor = yield* CurrentActor;
 +      if (actor.customerId !== id) return yield* new NotYou();
 +      if (customer.name !== null) return yield* new AlreadyRegistered();
 +      return [new CustomerRegistered({ name: cmd.name })];
 +    }),
-  }),
+  },
   evolve: {
 ```
 
-The second argument to `decide` holds the id of the customer being registered, so a customer can register only themselves.
+The handler's third argument holds the id of the customer being registered, so a customer can register only themselves.
 
 ## Guard reads of the summary
 

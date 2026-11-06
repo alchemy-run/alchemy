@@ -65,8 +65,8 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
-  decide: (wallet) => ({
-    Deposit: (cmd) =>
+  decide: {
+    Deposit: (wallet, cmd) =>
       cmd.amount > 100
         ? new OverLimit({ limit: 100 })
         : [
@@ -76,7 +76,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
               note: cmd.note,
             }),
           ],
-  }),
+  },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   reply: { Deposit: (s) => ({ balance: s.balance }) },
 }) {}
@@ -451,7 +451,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Rename],
-          decide: () => ({ Rename: () => [] }),
+          decide: { Rename: () => [] },
           evolve: {},
         }) {}
         class Renames extends Domain.Model("Renames", { aggregates: [Names] }) {}
@@ -486,7 +486,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Clash],
-          decide: () => ({ deposit: () => [] }),
+          decide: { deposit: () => [] },
           evolve: { Deposited: (s) => s },
         }) {}
         class Clashes extends Domain.Model("Clashes", { aggregates: [Wallet, Clashing] }) {}
@@ -506,7 +506,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Reserved],
-          decide: () => ({ Reserved: () => [] }),
+          decide: { Reserved: () => [] },
           evolve: {},
         }) {}
         class Reserves extends Domain.Model("Reserves", { aggregates: [Reserving] }) {}
@@ -538,7 +538,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({ balance: Schema.Int }),
           initial: { balance: 0 },
           commands: [Withdraw],
-          decide: () => ({ Withdraw: () => [] }),
+          decide: { Withdraw: () => [] },
           evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
         }) {}
         class Total extends Domain.View(

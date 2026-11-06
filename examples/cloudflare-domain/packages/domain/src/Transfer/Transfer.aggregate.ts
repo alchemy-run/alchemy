@@ -41,9 +41,9 @@ export class Transfer extends Domain.Aggregate("Transfer", {
   ]),
   initial: { _tag: "New" },
   commands: [RequestTransfer, ApproveTransfer, ExpireTransfer, CompleteTransfer, FailTransfer],
-  decide: (transfer, { id }) => ({
+  decide: {
     // Records who asked, so TransferExecution debits the source on their behalf.
-    RequestTransfer: Effect.fn(function* (cmd) {
+    RequestTransfer: Effect.fn(function* (transfer, cmd, { id }) {
       if (transfer._tag !== "New") return yield* new AlreadyRequested();
       if (cmd.from === cmd.to) return yield* new SameAccount();
       const requestedBy = yield* CurrentActor;
@@ -58,7 +58,7 @@ export class Transfer extends Domain.Aggregate("Transfer", {
         }),
       ];
     }),
-    ApproveTransfer: Effect.fn(function* (_) {
+    ApproveTransfer: Effect.fn(function* (transfer, _, { id }) {
       const approvedBy = yield* CurrentActor;
       if (approvedBy._tag !== "Agent") return yield* new NotPermitted();
       if (transfer._tag !== "AwaitingApproval") return yield* new NotAwaitingApproval();
@@ -73,17 +73,17 @@ export class Transfer extends Domain.Aggregate("Transfer", {
         }),
       ];
     }),
-    ExpireTransfer: (_) =>
+    ExpireTransfer: (transfer, _, { id }) =>
       transfer._tag === "AwaitingApproval"
         ? [new TransferFailed({ transferId: id, reason: "not approved in time" })]
         : [],
-    CompleteTransfer: (_) =>
+    CompleteTransfer: (transfer, _, { id }) =>
       transfer._tag === "Pending" ? [new TransferCompleted({ transferId: id })] : [],
-    FailTransfer: (cmd) =>
+    FailTransfer: (transfer, cmd, { id }) =>
       transfer._tag === "Pending"
         ? [new TransferFailed({ transferId: id, reason: cmd.reason })]
         : [],
-  }),
+  },
   evolve: {
     TransferRequested: (_, e) => ({
       _tag: e.needsApproval ? ("AwaitingApproval" as const) : ("Pending" as const),

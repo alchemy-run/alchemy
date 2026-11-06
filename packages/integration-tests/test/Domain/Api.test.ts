@@ -46,16 +46,17 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number, closed: Schema.Boolean }),
   initial: { balance: 0, closed: false },
   commands: [Deposit, Withdraw, Close],
-  decide: (account) => ({
-    Deposit: ({ amount }) => (account.closed ? new AccountClosed() : [new Deposited({ amount })]),
-    Withdraw: ({ amount }) =>
+  decide: {
+    Deposit: (account, { amount }) =>
+      account.closed ? new AccountClosed() : [new Deposited({ amount })],
+    Withdraw: (account, { amount }) =>
       account.closed
         ? new AccountClosed()
         : amount > account.balance
           ? new InsufficientFunds({ balance: account.balance, requested: amount })
           : [new Withdrawn({ amount })],
-    Close: () => (account.closed ? [] : [new Closed()]),
-  }),
+    Close: (account) => (account.closed ? [] : [new Closed()]),
+  },
   evolve: {
     Deposited: (s, e) => ({ ...s, balance: s.balance + e.amount }),
     Withdrawn: (s, e) => ({ ...s, balance: s.balance - e.amount }),
@@ -220,8 +221,8 @@ class Vault extends Domain.Aggregate("Vault", {
   state: Schema.Struct({ items: Schema.Array(Schema.String) }),
   initial: { items: [] },
   commands: [Store],
-  decide: () => ({
-    Store: ({ item }) =>
+  decide: {
+    Store: (_, { item }) =>
       item === "ice"
         ? new Frozen({ until: "spring" })
         : item === "gold"
@@ -229,7 +230,7 @@ class Vault extends Domain.Aggregate("Vault", {
           : item === "keys"
             ? new NotOwner()
             : [new Stored({ item })],
-  }),
+  },
   evolve: { Stored: (s, e) => ({ items: [...s.items, e.item] }) },
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
@@ -313,11 +314,11 @@ class Note extends Domain.Aggregate("Note", {
   state: Schema.Struct({ text: Schema.String, by: Schema.NullOr(Schema.String) }),
   initial: { text: "", by: null },
   commands: [Write],
-  decide: () => ({
-    Write: Effect.fn(function* (cmd) {
+  decide: {
+    Write: Effect.fn(function* (_, cmd) {
       return [new Written({ text: cmd.text, by: yield* Author })];
     }),
-  }),
+  },
   evolve: { Written: (_, e) => ({ text: e.text, by: e.by }) },
   reply: { Write: (s) => ({ by: s.by ?? "" }) },
 }) {}

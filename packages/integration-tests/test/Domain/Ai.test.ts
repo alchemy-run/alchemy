@@ -51,12 +51,12 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
-  decide: (wallet) => ({
-    Deposit: (cmd) =>
+  decide: {
+    Deposit: (wallet, cmd) =>
       cmd.amount > 100
         ? new OverLimit({ limit: 100 })
         : [new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount })],
-  }),
+  },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   reply: { Deposit: (s) => ({ balance: s.balance }) },
 }) {}
@@ -223,7 +223,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Withdraw],
-      decide: () => ({ Withdraw: () => [] }),
+      decide: { Withdraw: () => [] },
       evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
     }) {}
     class Total extends Domain.View(

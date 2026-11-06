@@ -78,19 +78,19 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number, capped: Schema.Boolean }),
   initial: { total: 0, capped: false },
   commands: [Increment, Cap, ResetCounter, Remind],
-  decide: (counter) => ({
+  decide: {
     ResetCounter: Effect.fn(function* () {
       const operator = yield* Operator;
       if (operator === "guest") return yield* new NotAnOperator();
       return [new WasReset({ by: operator })];
     }),
-    Increment: (cmd) =>
+    Increment: (counter, cmd) =>
       cmd.by > 10
         ? new TooBig({ max: 10 })
         : [new Incremented({ by: cmd.by, total: counter.total + cmd.by })],
-    Cap: () => (counter.capped ? [] : [new Capped()]),
-    Remind: () => (counter.capped ? [new Reminded()] : []),
-  }),
+    Cap: (counter) => (counter.capped ? [] : [new Capped()]),
+    Remind: (counter) => (counter.capped ? [new Reminded()] : []),
+  },
   evolve: {
     Incremented: (s, e) => ({ ...s, total: e.total }),
     Capped: (s) => ({ ...s, capped: true }),
@@ -147,7 +147,7 @@ class Move extends Domain.Aggregate("Move", {
   state: Schema.Struct({}),
   initial: {},
   commands: [MakeMove],
-  decide: () => ({ MakeMove: ({ from, to, amount }) => [new Moved({ from, to, amount })] }),
+  decide: { MakeMove: (_, { from, to, amount }) => [new Moved({ from, to, amount })] },
   evolve: { Moved: (s) => s },
 }) {}
 
@@ -930,7 +930,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({}),
       initial: {},
       commands: [SetKey],
-      decide: () => ({ SetKey: ({ secret }) => [new Keyed({ secret })] }),
+      decide: { SetKey: (_, { secret }) => [new Keyed({ secret })] },
       evolve: { Keyed: (s) => s },
     }) {}
     class Locks extends Domain.Model("Locks", { aggregates: [Lock] }) {}
@@ -1136,10 +1136,10 @@ class Door extends Domain.Aggregate("Door", {
   state: Schema.Struct({}),
   initial: {},
   commands: [RequestCode, RecordOutcome],
-  decide: () => ({
-    RequestCode: ({ code }) => [new CodeRequested({ code })],
-    RecordOutcome: ({ outcome }) => [new CodeOutcome({ outcome })],
-  }),
+  decide: {
+    RequestCode: (_, { code }) => [new CodeRequested({ code })],
+    RecordOutcome: (_, { outcome }) => [new CodeOutcome({ outcome })],
+  },
   evolve: { CodeRequested: (s) => s, CodeOutcome: (s) => s },
 }) {}
 class SetCodeOnLock extends Domain.Policy("SetCodeOnLock", {

@@ -20,7 +20,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Number }),
   initial: { total: 0 },
   commands: [Increment],
-  decide: () => ({ Increment: ({ by }) => [new Incremented({ by })] }),
+  decide: { Increment: (_, { by }) => [new Incremented({ by })] },
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
 }) {}
 

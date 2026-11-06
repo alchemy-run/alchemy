@@ -18,7 +18,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  decide: () => ({ Deposit: (cmd) => [new Deposited({ amount: cmd.amount })] }),
+  decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
@@ -33,7 +33,7 @@ class Payment extends Domain.Aggregate("Payment", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Send],
-  decide: () => ({ Send: ({ to, amount }) => [new Sent({ to, amount })] }),
+  decide: { Send: (_, { to, amount }) => [new Sent({ to, amount })] },
   evolve: { Sent: (s) => s },
 }) {}
 
@@ -108,7 +108,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ entries: Schema.Number }),
   initial: { entries: "none" } as unknown as { entries: number },
   commands: [],
-  decide: () => ({}),
+  decide: {},
   evolve: {},
 }) {}
 class AlsoBroken extends Domain.Model("AlsoBroken", {
@@ -177,7 +177,7 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
         state: Schema.Struct({}),
         initial: {},
         commands: [OpenAccount],
-        decide: () => ({ OpenAccount: () => [new Opened()] }),
+        decide: { OpenAccount: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.ref("a-1").id).toBe("a-1");
@@ -193,10 +193,10 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
           // @ts-expect-error OpenForCustomer's target must be this aggregate's id schema
           OpenForCustomer,
         ],
-        decide: () => ({
+        decide: {
           OpenAccount: () => [new Opened()],
           OpenForCustomer: () => [new Opened()],
-        }),
+        },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.aggregateName).toBe("Account");
@@ -209,7 +209,7 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
         initial: {},
         // @ts-expect-error OpenAny's target must be this aggregate's id schema
         commands: [OpenAny],
-        decide: () => ({ OpenAny: () => [new Opened()] }),
+        decide: { OpenAny: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.aggregateName).toBe("Account");

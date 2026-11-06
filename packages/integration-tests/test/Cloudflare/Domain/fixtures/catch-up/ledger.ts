@@ -12,7 +12,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
-  decide: () => ({ Deposit: (cmd) => [new Deposited({ amount: cmd.amount })] }),
+  decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
@@ -74,7 +74,7 @@ export class Journal extends Domain.Aggregate("Journal", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Note],
-  decide: () => ({ Note: (cmd) => [new Noted({ note: cmd.note })] }),
+  decide: { Note: (_, cmd) => [new Noted({ note: cmd.note })] },
   evolve: { Noted: (s) => s },
 }) {}
 

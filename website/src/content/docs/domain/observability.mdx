@@ -83,14 +83,14 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 Nothing from a command, an event or a query's input is recorded unless a handler asks for it. Every handler runs inside the engine's span for it, already named (`Domain.decide Account.WithdrawMoney`, `Domain.query AccountLedger`, `Domain.projection Ledger`), so plain Effect annotates that span:
 
 ```typescript title="packages/domain/src/Account/Account.aggregate.ts"
-decide: (account, { now }) => ({
-  WithdrawMoney: Effect.fn(function* (cmd) {
+decide: {
+  WithdrawMoney: Effect.fn(function* (account, cmd, { now }) {
     // Recorded on this command's decide span; nothing else from it is.
     yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
     const o = yield* authorized(account);
     // ...
   }),
-}),
+},
 ```
 
 An effectful `decide`, a query's handler, a view's `validate`, a policy, a saga step, a projection and an external system's operation all work the same way. Use a plain `Effect.fn`: naming it would add a span of its own, nested under the engine's.
