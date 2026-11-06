@@ -2931,7 +2931,9 @@ export const ServiceProvider = () =>
           output?.repositoryName ??
           (yield* createPhysicalName({
             id: `${id}-repo`,
-            maxLength: 256,
+            // ECS caps an image reference at 255 characters: the registry host,
+            // this name and a 64-character tag must all fit.
+            maxLength: 128,
             lowercase: true,
           }));
         const logGroupName =
