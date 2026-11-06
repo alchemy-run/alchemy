@@ -2491,7 +2491,7 @@ export const destroy = (stack: {
  * Whether any `env` value a Platform's Init captured differs from the
  * persisted props. An unresolved value counts as changed.
  */
-const capturedEnvChanged = (
+export const capturedEnvChanged = (
   resource: ResourceLike,
   olds: { env?: Record<string, unknown> } | undefined,
   news: { env?: Record<string, unknown> } | undefined,

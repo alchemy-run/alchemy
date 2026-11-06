@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -173,5 +174,86 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
+  },
+);
+
+const cycleApiScript = (version: string) => `import { WorkerEntrypoint } from "cloudflare:workers";
+export class Api extends WorkerEntrypoint {
+  async greet(name) {
+    return "hello " + name + " from api ${version}";
+  }
+}
+export default {
+  async fetch(request, env) {
+    const auth = await env.AUTH.fetch(request);
+    return new Response("api ${version} sees: " + (await auth.text()));
+  },
+};`;
+
+const cycleAuthScript = `export default {
+  async fetch(request, env) {
+    try {
+      return new Response(await env.API.greet("auth"));
+    } catch (err) {
+      return new Response("auth failed: " + err.message, { status: 500 });
+    }
+  },
+};`;
+
+/**
+ * Auth binds an entrypoint on Api through `Worker.ref("Api")` while Api
+ * binds Auth directly, so the ref closes a cycle through the Workers'
+ * props. Once both existed, every later plan deadlocked at "Computing
+ * plan" (#3112). The redeploy is the step that hung; the plan after it
+ * must find nothing to change.
+ */
+test.provider(
+  "two Workers that reference each other through a Worker ref redeploy and plan noops",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (version: string) =>
+        Effect.gen(function* () {
+          const auth = yield* Cloudflare.Worker("ref-cycle-auth", {
+            script: cycleAuthScript,
+            workersDev: true,
+            env: {
+              API: Cloudflare.WorkerEntrypoint(
+                yield* Cloudflare.Worker.ref("ref-cycle-api"),
+                "Api",
+              ),
+            },
+          });
+          const api = yield* Cloudflare.Worker("ref-cycle-api", {
+            script: cycleApiScript(version),
+            workersDev: true,
+            env: { AUTH: auth },
+          });
+          return { auth, api };
+        });
+
+      const first = yield* stack.deploy(program("v1"));
+      yield* expectUrlContains(first.api.url!, "api v1 sees: hello auth from api v1", {
+        label: "cycle api v1",
+      });
+
+      const second = yield* stack.deploy(program("v2")).pipe(Effect.timeout("60 seconds"));
+      yield* expectUrlContains(second.api.url!, "api v2 sees: hello auth from api v2", {
+        label: "cycle api v2",
+      });
+      yield* expectUrlContains(second.auth.url!, "hello auth from api v2", {
+        label: "cycle auth v2",
+      });
+
+      const plan = yield* stack.plan(program("v2")).pipe(Effect.timeout("1 minute"));
+      expect(plan.resources["ref-cycle-auth"]!.action).toBe("noop");
+      expect(plan.resources["ref-cycle-api"]!.action).toBe("noop");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
   },
 );

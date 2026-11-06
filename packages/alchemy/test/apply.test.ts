@@ -58,6 +58,7 @@ import {
   OptionalProps,
   optionalPropsReceived,
   type ModalResourceProps,
+  PeerTarget,
   PhasedTarget,
   ProbeBinding,
   StaticStablesResource,
@@ -1302,6 +1303,35 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
   // #3112: Auth reads Api through a ref, Api reads Auth directly. The ref
   // closes a cycle through props, which deadlocked the plan once both
   // existed.
+  // #3112: each Worker in the cycle embeds the other's whole output, which
+  // carries a fresh `versionId` after every upload. Convergence compared raw
+  // props, so each reconcile dirtied the peer and the first deploy uploaded
+  // both Workers hundreds of times.
+  test.provider(
+    "a props cycle whose outputs change on every reconcile converges once the provider sees no change",
+    (stack) =>
+      Effect.gen(function* () {
+        const reconciles: string[] = [];
+        const count = (id: string) =>
+          Effect.sync(() => {
+            reconciles.push(id);
+          });
+        const output = yield* Effect.gen(function* () {
+          const apiRef = yield* PeerTarget.ref("Api");
+          const auth = yield* PeerTarget("Auth", { name: "auth", peer: apiRef as any });
+          const api = yield* PeerTarget("Api", { name: "api", peer: auth as any });
+          return { auth, api };
+        }).pipe(stack.deploy, hook({ create: count, update: count }), Effect.timeout("10 seconds"));
+
+        expect(output.auth.peerName).toEqual("api");
+        expect(output.api.peerName).toEqual("auth");
+        // One create each, plus at most one update each once the peer's
+        // real name replaces the precreate stub's.
+        expect(reconciles.filter((id) => id === "Auth").length).toBeLessThanOrEqual(2);
+        expect(reconciles.filter((id) => id === "Api").length).toBeLessThanOrEqual(2);
+      }),
+  );
+
   test.provider("a ref that closes a props cycle redeploys and then plans noops", (stack) =>
     Effect.gen(function* () {
       const cycle = (version: string) =>

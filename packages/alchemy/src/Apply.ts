@@ -37,7 +37,13 @@ import { captureEmit, type ApplyEvent, type ApplyStatus } from "./Events.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
-import { type ActionApply, type Apply, type Delete, type Plan } from "./Plan.ts";
+import {
+  type ActionApply,
+  type Apply,
+  capturedEnvChanged,
+  type Delete,
+  type Plan,
+} from "./Plan.ts";
 import {
   type DeleteInProgress,
   type ProviderService,
@@ -73,6 +79,7 @@ import {
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { LogAnnotation } from "./Util/LogAnnotation.ts";
 import { hashInput } from "./Util/sha256.ts";
+import { asEffect } from "./Util/types.ts";
 
 export type AppliedPlan<P extends Plan> = {
   [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined
@@ -1800,11 +1807,43 @@ const converge = Effect.fn(function* (
 
       if (!propsChanged && !bindingsChanged) continue;
 
-      anyUpdated = true;
-
       const logicalId = node.resource.LogicalId;
       const namespace = node.resource.Namespace;
       const instanceId = tracker[fqn].instanceId;
+
+      // Raw props can differ in values the provider ignores: a cycle peer
+      // embedded whole carries attributes that change on every reconcile
+      // (a Worker's `versionId`), so reconciling one peer would always
+      // dirty the other and the loop would never settle (#3112). Ask the
+      // provider, as the plan does: a `noop` diff is authoritative, apart
+      // from the Init-captured env values the engine compares itself.
+      const diff = node.provider.diff
+        ? yield* asEffect(
+            node.provider.diff({
+              id: logicalId,
+              fqn,
+              olds: oldProps,
+              instanceId,
+              output: tracker[fqn].output,
+              news: newProps,
+              oldBindings,
+              newBindings,
+            }),
+          ).pipe(provideLifecycleScope({ logicalId, fqn, instanceId, type: node.resource.Type }))
+        : undefined;
+      if (diff?.action === "noop" && !capturedEnvChanged(node.resource, oldProps, newProps)) {
+        // Record what the provider just judged equivalent, so the next pass
+        // compares against it instead of asking again.
+        track(tracker, outputs, fqn, {
+          output: tracker[fqn].output,
+          props: newProps,
+          bindings: newBindings,
+          instanceId,
+        });
+        continue;
+      }
+
+      anyUpdated = true;
 
       const scopedSession = resourceSession(reportEvent, fqn, logicalId);
 
