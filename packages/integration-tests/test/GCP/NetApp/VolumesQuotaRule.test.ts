@@ -6,6 +6,7 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -87,6 +88,14 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.VolumesQuotaRule.lookup({
+          quotaRuleId: created.quotaRuleId,
+          location: created.location,
+          volume: created.volume,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/quotaRules/");

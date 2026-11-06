@@ -7,7 +7,9 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
@@ -245,6 +247,17 @@ const getByNamespaced = (name: string) =>
     .getNamespacedTagKeys({ name })
     .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
 
+// A namespaced name holds the project id, so a parent given by project
+// number is searched by listing its keys.
+const findUnderParent = (parent: string, shortName: string) =>
+  resourcemanager.listTagKeys.items({ parent }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tagKeys ?? [])),
+    Stream.filter((key) => key.shortName === shortName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
+
 const observe = (resourceName: string | undefined, namespacedName: string) =>
   Effect.gen(function* () {
     if (resourceName !== undefined && resourceName.length > 0) {
@@ -372,7 +385,9 @@ export const TagKeyProvider = () =>
       const env = yield* GcpEnvironment.current;
       const parent = lookupParent ?? defaultParent(env.project);
       const namespaced = namespacedLookup(parent, shortName);
-      const existing = yield* observe(undefined, namespaced);
+      const existing =
+        (yield* observe(undefined, namespaced)) ??
+        (/^projects\/\d+$/.test(parent) ? yield* findUnderParent(parent, shortName) : undefined);
       if (existing === undefined) return undefined;
       return toAttrs(existing);
     }, inLookupProject),

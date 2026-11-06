@@ -5,6 +5,7 @@ import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -43,6 +44,21 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { glossary, category };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.GlossariesCategory.lookup({
+          categoryId: created.category.categoryId,
+          glossary: created.category.glossary,
+          location: created.category.location,
+        }),
+        created.category,
+      );
+      yield* expectFound(
+        GCP.Dataplex.Glossary.lookup({
+          glossaryId: created.glossary.glossaryId,
+          location: created.glossary.location,
+        }),
+        created.glossary,
       );
 
       expect(created.category.name).toContain("/categories/");

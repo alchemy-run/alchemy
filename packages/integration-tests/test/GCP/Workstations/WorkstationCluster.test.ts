@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -113,6 +114,21 @@ test.provider.skipIf(!runLifecycle)(
             });
           return { cluster, config, workstation };
         }),
+      );
+      yield* expectFound(
+        GCP.Workstations.WorkstationCluster.lookup({
+          workstationClusterId: created.cluster.workstationClusterId,
+          location: created.cluster.location,
+        }),
+        created.cluster,
+      );
+      yield* expectFound(
+        GCP.Workstations.WorkstationClustersWorkstationConfig.lookup({
+          workstationConfigId: created.config.workstationConfigId,
+          workstationCluster: created.config.workstationCluster,
+          location: created.config.location,
+        }),
+        created.config,
       );
 
       expect(created.cluster.name).toContain("/workstationClusters/");

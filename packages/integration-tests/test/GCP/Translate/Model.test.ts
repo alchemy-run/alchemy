@@ -5,6 +5,7 @@ import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentParent, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -126,6 +127,10 @@ test.provider.skipIf(!runModelLifecycle)(
             displayName: "enes",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Translate.Model.lookup({ location: model.location, modelId: model.modelId }),
+        model,
       );
       expect(model.name).toContain("/models/");
       expect(model.location).toEqual(location);

@@ -6,6 +6,7 @@ import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -92,6 +93,14 @@ test.provider.skipIf(!runLinkLifecycle)(
           });
           return { github, source };
         }),
+      );
+      yield* expectFound(
+        GCP.DeveloperConnect.ConnectionsGitRepositoryLink.lookup({
+          gitRepositoryLinkId: created.source.gitRepositoryLinkId,
+          connection: created.source.connection,
+          location: created.source.location,
+        }),
+        created.source,
       );
 
       expect(created.source.gitRepositoryLinkId).toEqual(expect.any(String));

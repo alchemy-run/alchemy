@@ -383,7 +383,7 @@ export const DataStoresControlProvider = () =>
       const name = parent ? resourceName(parent, controlId) : "";
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, parent);
     }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
@@ -395,7 +395,7 @@ export const DataStoresControlProvider = () =>
       const name = output?.name ?? (parent ? resourceName(parent, controlId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, parent ?? output?.dataStore);
       // No labels field: without prior state it may not be ours.
       return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),

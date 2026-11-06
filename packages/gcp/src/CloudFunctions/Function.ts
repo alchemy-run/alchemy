@@ -15,7 +15,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
@@ -875,7 +880,13 @@ export const FunctionProvider = () =>
       const name = resourceName(env.project, location, functionId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project, env.region);
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccountEmail === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccountEmail);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
     }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {

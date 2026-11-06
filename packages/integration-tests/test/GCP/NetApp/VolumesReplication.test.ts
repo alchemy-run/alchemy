@@ -6,6 +6,7 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -104,6 +105,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { sourcePool, destPool, volume, replication };
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.VolumesReplication.lookup({
+          replicationId: created.replication.replicationId,
+          location: created.replication.location,
+          volume: created.replication.volume,
+        }),
+        created.replication,
       );
 
       expect(created.replication.name).toContain("/replications/");

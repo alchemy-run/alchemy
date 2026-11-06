@@ -6,6 +6,7 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -90,6 +91,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { pool, volume, snapshot };
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.VolumesSnapshot.lookup({
+          snapshotId: created.snapshot.snapshotId,
+          location: created.snapshot.location,
+          volume: created.snapshot.volume,
+        }),
+        created.snapshot,
       );
 
       expect(created.snapshot.name).toContain("/snapshots/");

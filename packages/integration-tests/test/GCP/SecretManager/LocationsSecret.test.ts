@@ -6,6 +6,7 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -59,6 +60,13 @@ test.provider(
             annotations: { owner: "payments" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SecretManager.LocationsSecret.lookup({
+          secretId: created.secretId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/locations/us-central1/secrets/");

@@ -6,6 +6,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.ServiceConnectionMap.lookup({
+          serviceConnectionMapId: created.serviceConnectionMapId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/serviceConnectionMaps/");

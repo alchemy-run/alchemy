@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -72,6 +73,15 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { environment, keystore, alias };
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.EnvironmentsKeystoresAlias.lookup({
+          aliasId: created.alias.aliasId,
+          organization: created.alias.organizationId,
+          environment: created.alias.environmentId,
+          keystore: created.alias.keystoreId,
+        }),
+        created.alias,
       );
 
       expect(created.alias.aliasId).toEqual(expect.any(String));

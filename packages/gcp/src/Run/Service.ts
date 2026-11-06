@@ -17,7 +17,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createGcpHostRuntimeContext,
   RPC_METHODS_ENV,
@@ -1284,7 +1289,13 @@ export const ServiceProvider = () =>
       if (existing === undefined || existing.deleteTime !== undefined) {
         return undefined;
       }
-      return toAttrs(existing, env.project, env.region);
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
     }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
