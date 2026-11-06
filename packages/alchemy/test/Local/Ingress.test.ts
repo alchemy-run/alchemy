@@ -63,6 +63,25 @@ describe("Ingress.attach", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(services), Effect.scoped),
   );
 
+  it.live("two stacks' routes for the same fqn are independent", () =>
+    Effect.gen(function* () {
+      const shop = { ...target, stack: "shop", fqn: "Shared" };
+      const blog = { ...target, stack: "blog", fqn: "Shared" };
+      const shopScope = yield* Scope.make();
+      const shopOrigin = yield* Ingress.attach(forwarder, shop, yield* makeListener("shop")).pipe(
+        Scope.provide(shopScope),
+      );
+      const blogOrigin = yield* Ingress.attach(forwarder, blog, yield* makeListener("blog"));
+      expect((yield* getRouted(shopOrigin)).body).toMatch(/^shop /);
+      expect((yield* getRouted(blogOrigin)).body).toMatch(/^blog /);
+
+      // Removing one stack's route leaves the other's.
+      yield* Scope.close(shopScope, Exit.void);
+      expect((yield* getRouted(shopOrigin)).status).toBe(502);
+      expect((yield* getRouted(blogOrigin)).body).toMatch(/^blog /);
+    }).pipe(Effect.provide(services), Effect.scoped),
+  );
+
   it.live("builds each module's Layer once per process", () =>
     Effect.gen(function* () {
       const listener = yield* makeListener("api");

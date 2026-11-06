@@ -59,9 +59,10 @@ export interface Target {
    */
   readonly stage: string;
   /**
-   * The resource's fully-qualified name, unique within the stack. Key
-   * anything a router keeps across restarts by this, never by `id`, which
-   * two resources in different namespaces can share.
+   * The resource's fully-qualified name, unique within the stack and stage.
+   * Key anything a router keeps by `stack`, `stage` and `fqn` together:
+   * one router serves every stack in the process, and two resources in
+   * different namespaces can share an `id`.
    */
   readonly fqn: string;
   /** The resource's logical id within its namespace. */
@@ -86,10 +87,13 @@ export class IngressError extends Data.TaggedError("IngressError")<{
  * can't be made, so the resource never advertises an origin that isn't
  * routed.
  *
- * - Attaching the same `fqn` and `listener` again changes nothing.
- * - Attaching an `fqn` to a new listener replaces its route.
+ * A target is its `stack`, `stage` and `fqn` together: one router serves
+ * every stack in the process.
+ *
+ * - Attaching the same target and `listener` again changes nothing.
+ * - Attaching a target to a new listener replaces its route.
  * - Closing the `Scope` removes the route this call added, unless a later
- *   attach for the same `fqn` took it over. It removes nothing else.
+ *   attach for the same target took it over. It removes nothing else.
  */
 export class Router extends Context.Service<
   Router,
