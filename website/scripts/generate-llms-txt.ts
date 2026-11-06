@@ -564,6 +564,38 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Archil — start here",
+    intro:
+      "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
+    pages: { slugs: ["archil/index", "archil/what-is-archil", "archil/setup"] },
+  },
+  {
+    heading: "Archil — Tutorial",
+    pages: { directory: "archil/tutorial" },
+  },
+  {
+    heading: "Archil — Accounts & access",
+    pages: {
+      slugs: [
+        "archil/organization-and-keys",
+        "archil/security/credentials",
+        "archil/security/network",
+      ],
+    },
+  },
+  {
+    heading: "Archil — Compute",
+    pages: { directory: "archil/compute" },
+  },
+  {
+    heading: "Archil — Frontend",
+    pages: { directory: "archil/frontend" },
+  },
+  {
+    heading: "Archil — Storage",
+    pages: { directory: "archil/storage" },
+  },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",

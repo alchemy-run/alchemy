@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@alchemy.run/acme": "workspace:*",
+    "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
@@ -37,6 +38,7 @@
     "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/archil": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
