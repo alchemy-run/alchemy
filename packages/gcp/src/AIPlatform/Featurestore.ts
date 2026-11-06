@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -96,8 +97,31 @@ export type Featurestore = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeaturestoreLookup
 >;
+
+/**
+ * Props for {@link Featurestore.lookup}: find a featurestore this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FeaturestoreLookup {
+  /**
+   * Featurestore id. Valid characters `[a-z0-9_]`, must start with a
+   * letter, max 60.
+   */
+  featurestoreId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Store (legacy) — a container for Entity Types and
@@ -119,6 +143,19 @@ export type Featurestore = Resource<
  * ```typescript
  * const store = yield* GCP.AIPlatform.Featurestore("Features", {
  *   onlineServingConfig: { fixedNodeCount: 1 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing featurestore
+ * `Featurestore.lookup` references a featurestore Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * featurestore.
+ *
+ * **Example:** Reference an existing featurestore
+ * ```typescript
+ * const featurestore = GCP.AIPlatform.Featurestore.lookup({
+ *   featurestoreId: "my-featurestore",
  * });
  * ```
  *
@@ -262,6 +299,15 @@ export const FeaturestoreProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featurestoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featurestoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -134,8 +135,34 @@ export type Repository = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 >;
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RepositoryLookup {
+  /**
+   * Repository id (the `{repository}` segment of
+   * `projects/{project}/locations/{location}/repositories/{repository}`).
+   * Must be 2-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  repositoryId: string;
+  /**
+   * Artifact Registry location (`us-central1`, `us`, `europe`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Artifact Registry repository for Docker images, language packages, or
@@ -159,6 +186,19 @@ export type Repository = Resource<
  *   description: "container images",
  *   labels: { env: "prod" },
  *   dockerConfig: { immutableTags: true },
+ * });
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repository.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repository = GCP.ArtifactRegistry.Repository.lookup({
+ *   repositoryId: "my-repository",
  * });
  * ```
  *
@@ -337,6 +377,15 @@ export const RepositoryProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ repositoryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, repositoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

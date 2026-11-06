@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -282,8 +283,33 @@ export type Cluster = Resource<
     httpPorts: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id unique within the project. Must start with a lowercase
+   * letter, contain only lowercase letters, numbers, and hyphens, and not
+   * end with a hyphen (up to 51 characters).
+   */
+  clusterName: string;
+  /**
+   * Dataproc region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc cluster of Compute Engine VMs.
@@ -326,6 +352,16 @@ export type Cluster = Resource<
  *   workerMachineType: "e2-standard-2",
  *   workerBootDiskSizeGb: 30,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Dataproc.Cluster.lookup({ clusterName: "my-cluster" });
  * ```
  *
  * @resource
@@ -873,6 +909,14 @@ export const ClusterProvider = () =>
           previousRegion === nextRegion && previousName !== undefined && nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ clusterName, region }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeRegion(region, env.region);
+      const existing = yield* getById(env.project, location, clusterName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubInstanceFailed,
@@ -119,8 +120,31 @@ export type PluginsInstance = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PluginsInstanceLookup
 >;
+
+/**
+ * Props for {@link PluginsInstance.lookup}: find a plugins instance this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PluginsInstanceLookup {
+  /**
+   * Plugin instance id (the `{instance}` segment).
+   */
+  pluginInstanceId: string;
+  /**
+   * Parent plugin resource name
+   * `projects/{project}/locations/{location}/plugins/{plugin}`.
+   */
+  plugin: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API Hub plugin instance — a configured running copy of a plugin.
@@ -149,6 +173,20 @@ export type PluginsInstance = Resource<
  *   plugin: plugin.name,
  *   pluginInstanceId: "orders-collector",
  *   actions: [{ actionId: "sync-metadata" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing plugins instance
+ * `PluginsInstance.lookup` references a plugins instance Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * plugins instance.
+ *
+ * **Example:** Reference an existing plugins instance
+ * ```typescript
+ * const pluginsInstance = GCP.ApiHub.PluginsInstance.lookup({
+ *   pluginInstanceId: "my-plugin-instance",
+ *   plugin: "my-plugin",
  * });
  * ```
  *
@@ -286,6 +324,15 @@ export const PluginsInstanceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ pluginInstanceId, plugin: lookupPlugin }) {
+      const env = yield* GcpEnvironment.current;
+      const plugin = lookupPlugin ?? "";
+      const name = plugin.length > 0 ? resourceName(plugin, pluginInstanceId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
