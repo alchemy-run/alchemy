@@ -2941,7 +2941,9 @@ export const LiveWorkerProvider = () =>
        * Reconcile a *Preview Worker*: create/update a first-class Preview of
        * the parent script and upload this Worker's code + bindings as a
        * Preview deployment. Isolated same-Worker Durable Object classes
-       * get their own namespace per Preview.
+       * get their own namespace per Preview, which the Preview reports in
+       * `durableObjectNamespaces` so a class's container application
+       * attaches to it.
        */
       const putWorkerPreview = Effect.fn(function* (
         id: string,
@@ -3164,6 +3166,18 @@ export const LiveWorkerProvider = () =>
           }
         }
 
+        // A container-backed class carries its images as the parent's does,
+        // without the parent's application name: the Preview's namespace gets
+        // its own application, attached through `durableObjectNamespaces`.
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
+        );
+        const containers = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, images }) => ({ className, images }),
+        );
+
         const compatibility = getCompatibility(news);
         const annotations =
           preview.message !== undefined || preview.tag !== undefined
@@ -3188,6 +3202,9 @@ export const LiveWorkerProvider = () =>
             cacheOptions: news.cache ?? getCacheBinding(bindings),
             annotations,
             migrations,
+            containers: containers.length > 0 ? containers : undefined,
+            limits: news.limits,
+            placement: news.placement,
             exports: nonEmptyExports(
               yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
             ),
@@ -3195,6 +3212,16 @@ export const LiveWorkerProvider = () =>
           },
           files: bundle.files,
         });
+
+        const durableObjectNamespaces =
+          classNames.length > 0
+            ? yield* getPreviewDurableObjectNamespaces(
+                accountId,
+                parentName,
+                deployment.previewId ?? previewResource.id,
+                classNames,
+              )
+            : {};
 
         const refreshed = yield* workers
           .getPreview({ accountId, workerId: parentName, previewId: previewResource.id })
@@ -3214,7 +3241,7 @@ export const LiveWorkerProvider = () =>
           urls,
           domain: undefined,
           tags: undefined,
-          durableObjectNamespaces: {},
+          durableObjectNamespaces,
           accountId,
           routes: [],
           crons: [],
@@ -4742,8 +4769,13 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
+          // Previews deployed by older releases recorded no namespaces, so
+          // their classes' container applications never attached. Plan one
+          // update so reconcile records them.
+          const previewNamespacesMissing = newIsPreview && !doNamespacesStable;
           if (
             legacyWorkerId ||
+            previewNamespacesMissing ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -5699,6 +5731,42 @@ const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: stri
           : [],
       ),
     ),
+  );
+
+/**
+ * The namespace Cloudflare provisioned for each of a Preview's own Durable
+ * Object classes, by class. A Preview's namespaces name the parent Worker as
+ * their `script`, like the parent's own, and carry the Preview's id. They can
+ * appear in the listing shortly after the Preview deployment that creates
+ * them, so a missing class is retried before it fails.
+ */
+const getPreviewDurableObjectNamespaces = (
+  accountId: string,
+  parentName: string,
+  previewId: string,
+  classNames: readonly string[],
+) =>
+  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((namespaces) => {
+      const byClass: Record<string, string> = {};
+      for (const ns of namespaces) {
+        if (ns.id && ns.class && ns.script === parentName && ns.preview?.id === previewId) {
+          byClass[ns.class] = ns.id;
+        }
+      }
+      const missing = classNames.filter((className) => !byClass[className]);
+      return missing.length > 0
+        ? Effect.fail(new MissingDurableObjects({ scriptName: parentName, expected: missing }))
+        : Effect.succeed(
+            Object.fromEntries(classNames.map((className) => [className, byClass[className]!])),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "MissingDurableObjects",
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+    }),
   );
 
 type ObservedDurableObjectNamespace = {
