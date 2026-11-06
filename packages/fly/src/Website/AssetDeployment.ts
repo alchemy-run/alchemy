@@ -95,7 +95,7 @@ const scopeOf = (bucket: Bucket) =>
       endpoint === undefined
     ) {
       return yield* new TigrisCredentialsMissing({
-        name: bucketName ?? bucket.LogicalId,
+        resourceName: bucketName ?? bucket.LogicalId,
       });
     }
     return { bucketName, accessKeyId, secretAccessKey, endpoint, region };
@@ -131,14 +131,14 @@ const walkFiles = Effect.fn(function* (root: string) {
   const path = yield* Path.Path;
   if (!(yield* fs.exists(root))) return [] as string[];
   const names = yield* fs.readDirectory(root, { recursive: true });
-  const files = yield* Effect.all(
-    names.map((name) =>
+  const files = yield* Effect.forEach(
+    names,
+    (name) =>
       Effect.gen(function* () {
         const full = path.join(root, name);
         const stat = yield* fs.stat(full);
         return stat.type === "File" ? name.replaceAll("\\", "/") : undefined;
       }),
-    ),
     { concurrency: "unbounded" },
   );
   return files
@@ -213,8 +213,9 @@ export const AssetDeploymentProvider = () =>
           : path.resolve(initialCwd, news.sourcePath);
         const files = yield* walkFiles(root);
         const observed = yield* listObserved(scope, prefix);
-        const prepared = yield* Effect.all(
-          files.map((relative) =>
+        const prepared = yield* Effect.forEach(
+          files,
+          (relative) =>
             Effect.gen(function* () {
               const body = yield* fs.readFile(path.join(root, relative));
               const key = prefix.length > 0 ? `${prefix}/${relative}` : relative;
@@ -222,7 +223,6 @@ export const AssetDeploymentProvider = () =>
               const cacheControl = cacheControlOf(relative);
               return { relative, key, body, contentType, cacheControl };
             }),
-          ),
           { concurrency: "unbounded" },
         );
         const version = yield* Effect.sync(() => {
@@ -258,10 +258,9 @@ export const AssetDeploymentProvider = () =>
         );
 
         if (news.purge ?? true) {
-          yield* Effect.all(
-            [...observed.keys()]
-              .filter((key) => !desired.has(key))
-              .map((key) => deleteObject(scope, key)),
+          yield* Effect.forEach(
+            [...observed.keys()].filter((key) => !desired.has(key)),
+            (key) => deleteObject(scope, key),
             { concurrency: s3Concurrency },
           );
         }
@@ -283,10 +282,9 @@ export const AssetDeploymentProvider = () =>
           if (!(olds.purge ?? true)) return;
           const scope = yield* scopeOf(olds.bucket);
           const observed = yield* listObserved(scope, output.prefix);
-          yield* Effect.all(
-            [...observed.keys()].map((key) => deleteObject(scope, key)),
-            { concurrency: s3Concurrency },
-          );
+          yield* Effect.forEach([...observed.keys()], (key) => deleteObject(scope, key), {
+            concurrency: s3Concurrency,
+          });
         },
         Effect.catchTag("NoSuchBucket", () => Effect.void),
       ),

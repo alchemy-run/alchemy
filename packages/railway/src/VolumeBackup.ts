@@ -278,7 +278,7 @@ export const VolumeBackup: typeof VolumeBackupResource = Object.assign(
 );
 
 export class VolumeBackupNotCreated extends Data.TaggedError("Railway.VolumeBackupNotCreated")<{
-  name: string;
+  resourceName: string;
   volumeInstanceId: string;
 }> {}
 
@@ -426,7 +426,7 @@ const getByInstanceId = (volumeInstanceId: string) =>
     Effect.map((instance): CloudInstance | undefined =>
       isGoneInstance(instance) ? undefined : instance,
     ),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -802,7 +802,7 @@ export const VolumeBackupProvider = () =>
       if (current === undefined) {
         const ready = yield* waitUntilReady(volumeInstanceId);
         if (ready === undefined || isGoneInstance(ready)) {
-          return yield* new VolumeBackupNotCreated({ name, volumeInstanceId });
+          return yield* new VolumeBackupNotCreated({ resourceName: name, volumeInstanceId });
         }
         const previousIds = new Set(existing.map((backup) => backup.id));
         const created = yield* volumeInstanceBackupCreate(volumeInstanceId, name);
@@ -813,7 +813,7 @@ export const VolumeBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VolumeBackupNotCreated({ name, volumeInstanceId });
+        return yield* new VolumeBackupNotCreated({ resourceName: name, volumeInstanceId });
       }
 
       if (props.lock === true && current.expiresAt != null) {

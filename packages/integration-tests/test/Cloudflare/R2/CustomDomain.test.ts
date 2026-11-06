@@ -1,19 +1,20 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { stageSuffix } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), state: Cloudflare.state() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = process.env.CLOUDFLARE_TEST_R2_DOMAIN_ZONE_NAME ?? "alchemy-test-2.us";
-const suffix = process.env.PULL_REQUEST ?? process.env.USER;
+const suffix = stageSuffix();
 // A custom-domain hostname maps one-to-one to a bucket at the Cloudflare zone
 // level, so it is a *global* resource. These suites run concurrently
 // (`sequence.concurrent`), so every test must claim a hostname no other test

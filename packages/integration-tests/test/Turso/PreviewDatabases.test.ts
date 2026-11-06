@@ -1,11 +1,11 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { defaultStage } from "@alchemy.run/test/Core";
 import * as Turso from "@alchemy.run/turso";
 import { organization } from "@alchemy.run/turso/Credentials";
 import * as Hrana from "@alchemy.run/turso/Hrana";
 import * as turso from "@distilled.cloud/turso/turso";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
-import { defaultStage } from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 
 // The Preview databases guide, with per-developer stage names: `<stage>-staging`

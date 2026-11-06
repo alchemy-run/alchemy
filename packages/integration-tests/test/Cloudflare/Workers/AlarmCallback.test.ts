@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -108,8 +108,8 @@ const assertRollback = (snapshot: Snapshot) => {
 };
 
 describe.concurrent.each([
-  { dev: true, stage: "alarm-callback-local" },
-  { dev: false, stage: "alarm-callback-live" },
+  { dev: true, stage: `${Test.defaultStage()}-alarm-callback-local` },
+  { dev: false, stage: `${Test.defaultStage()}-alarm-callback-live` },
 ])(
   "makeCallback (dev: $dev)",
   ({ dev, stage }) => {

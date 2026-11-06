@@ -53,8 +53,18 @@ export interface UsagePlan extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UsagePlanLookup
 > {}
+
+/**
+ * Props for {@link UsagePlan.lookup}: find a usage plan this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UsagePlanLookup {
+  /** The id of the existing usage plan. */
+  usagePlanId: string;
+}
 
 /**
  * Usage plan for API stages, throttling, and quotas.
@@ -81,6 +91,22 @@ export interface UsagePlan extends Resource<
  * yield* ApiGateway.UsagePlanKey("PartnerLink", {
  *   usagePlanId: plan.id,
  *   keyId: key.id,
+ * });
+ * ```
+ *
+ * ### Looking up an existing usage plan
+ * `UsagePlan.lookup` references a usage plan Alchemy doesn't manage (created in the
+ * console or by another stack), found by `usagePlanId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a key to an existing usage plan
+ * ```typescript
+ * const gold = AWS.ApiGateway.UsagePlan.lookup({ usagePlanId: "abc123" });
+ *
+ * yield* AWS.ApiGateway.UsagePlanKey("Partner", {
+ *   usagePlanId: gold.id,
+ *   keyId: key.id,
+ *   keyType: "API_KEY",
  * });
  * ```
  */
@@ -253,11 +279,26 @@ export const UsagePlanProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ usagePlanId }) {
+          const p = yield* ag
+            .getUsagePlan({ usagePlanId })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!p?.id) return undefined;
+          return {
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            apiStages: p.apiStages,
+            throttle: p.throttle,
+            quota: p.quota,
+            tags: tagRecord(p.tags),
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           const p = yield* ag
             .getUsagePlan({ usagePlanId: output.id })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!p?.id) return undefined;
           return {
             id: p.id,
@@ -304,7 +345,7 @@ export const UsagePlanProvider = () =>
           let observed = output?.id
             ? yield* ag
                 .getUsagePlan({ usagePlanId: output.id })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create the usage plan if missing.

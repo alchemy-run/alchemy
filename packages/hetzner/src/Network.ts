@@ -19,11 +19,13 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
 export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type NetworkSubnetType = "cloud" | "server" | "vswitch";
@@ -318,7 +320,7 @@ const cidrContains = (outer: string, inner: string): boolean => {
 const getById = (id: number) =>
   Hetzner.networks.getNetwork({ id }).pipe(
     Effect.map(({ network }) => network),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -491,15 +493,25 @@ export const NetworkProvider = () =>
         news.ipRange !== output.ipRange &&
         !cidrContains(news.ipRange, output.ipRange)
       ) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createNetworkName(id, olds?.name ?? output?.name);
       const observed = yield* observe(output?.networkId, name, id);
       if (observed === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.networkId,
+          foundId: observed.id,
+          claimedName: olds?.name,
+          foundName: observed.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(observed);
       return (yield* hasAlchemyLabels(id, tagRecord(observed.labels))) ? attrs : Unowned(attrs);
     }),
@@ -561,7 +573,7 @@ export const NetworkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkNotCreated({ name });
+        return yield* new NetworkNotCreated({ resourceName: name });
       }
 
       // Sync each mutable aspect from observed cloud state, not `olds`.

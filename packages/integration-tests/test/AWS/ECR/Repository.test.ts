@@ -3,12 +3,13 @@ import { Repository } from "@alchemy.run/aws/ECR/Repository";
 import type { PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -157,4 +158,55 @@ test.provider(
       yield* assertRepositoryDeleted(repo.repositoryName);
     }),
   { tags: ["provider:aws", "provider:aws:ecr", "provider:aws:iam", "live"], timeout: 120_000 },
+);
+
+// #2688: `read` must observe the live lifecycle policy and tags, not carry
+// the persisted ones.
+test.provider(
+  "drift detects and repairs out-of-band lifecycle policy and tags",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const policy = (count: number) =>
+        JSON.stringify({
+          rules: [
+            {
+              rulePriority: 1,
+              selection: { tagStatus: "any", countType: "imageCountMoreThan", countNumber: count },
+              action: { type: "expire" },
+            },
+          ],
+        });
+      const repo = yield* stack.deploy(
+        Repository("DriftRepo", {
+          lifecyclePolicyText: policy(10),
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftRepo"))?.action).toBe("unchanged");
+
+      yield* ecr.putLifecyclePolicy({
+        repositoryName: repo.repositoryName,
+        lifecyclePolicyText: policy(99),
+      });
+      yield* ecr.tagResource({
+        resourceArn: repo.repositoryArn,
+        tags: [{ Key: "team", Value: "out-of-band" }],
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftRepo", "drifted");
+      expect(drifted?.attr?.lifecyclePolicyText).toContain("99");
+      expect(drifted?.attr?.tags?.team).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftRepo?.action).toBe("repaired");
+      expect((yield* driftOf(stack, "DriftRepo"))?.action).toBe("unchanged");
+      const lifecycle = yield* ecr.getLifecyclePolicy({ repositoryName: repo.repositoryName });
+      expect(lifecycle.lifecyclePolicyText).toContain('"countNumber":10');
+
+      yield* stack.destroy();
+      yield* assertRepositoryDeleted(repo.repositoryName);
+    }),
+  { tags: ["provider:aws", "provider:aws:ecr", "live"], timeout: 120_000 },
 );

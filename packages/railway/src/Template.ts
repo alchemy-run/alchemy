@@ -342,7 +342,7 @@ const readProject = Query.fn((id: string) => projectFields(Railway.project({ id 
 const getProject = (projectId: string) =>
   readProject(projectId).pipe(
     Effect.map((project) => (isGoneProject(project) ? undefined : project)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const readTemplateById = Query.fn((id: string) => templateFields(Railway.template({ id })));
@@ -369,7 +369,7 @@ const findPublished = (needle: string) =>
     Stream.take(1),
     Stream.runHead,
     Effect.flatMap((option) =>
-      option._tag === "Some" ? getTemplateByCode(option.value.code) : Effect.succeed(undefined),
+      option._tag === "Some" ? getTemplateByCode(option.value.code) : Effect.undefined,
     ),
   );
 
@@ -403,7 +403,7 @@ const readSourceForProject = Query.fn((projectId: string) =>
 const sourceForProject = (projectId: string) =>
   readSourceForProject(projectId).pipe(
     Effect.map((value) => value ?? undefined),
-    Effect.catchTag("RailwayForbidden", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayForbidden", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -417,7 +417,7 @@ const readService = Query.fn((id: string) => serviceFields(Railway.service({ id 
 const hydrateService = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const hydrateServices = (services: readonly CloudService[]) =>
@@ -658,7 +658,7 @@ export const TemplateProvider = () =>
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
           const live = yield* readProject(project.projectId).pipe(
-            Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("RailwayNotFound", () => Effect.undefined),
           );
           if (live === undefined || live.deletedAt != null) {
             return [] as Template["Attributes"][];
@@ -732,7 +732,7 @@ export const TemplateProvider = () =>
       if (current === undefined && !providedProject) {
         const name = yield* createRailwayName(id);
         const created = yield* createProject({ name, workspaceId }).pipe(
-          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
+          Effect.catchTag("RailwayValidationError", () => Effect.undefined),
         );
         current = created;
         ownsProject = true;

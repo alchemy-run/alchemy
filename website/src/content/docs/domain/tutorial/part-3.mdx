@@ -57,8 +57,8 @@ export class Customer extends Domain.Aggregate("Customer", {
   initial: { name: null },
   commands: [RegisterCustomer],
   decide: {
-    RegisterCustomer: (s, cmd) =>
-      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+    RegisterCustomer: (customer, cmd) =>
+      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
   },
   evolve: {
     CustomerRegistered: (_, e) => ({ name: e.name }),
@@ -165,10 +165,10 @@ import { Account } from "../src/Account.aggregate.ts";
 import { AccountSummary } from "../src/AccountSummary.view.ts";
 -import { Bank } from "../src/Bank.model.ts";
 +import { Bank, BankHandlers } from "../src/Bank.model.ts";
-import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
 // ...
-import { WithdrawMoney } from "../src/WithdrawMoney.command.ts";
+import { MoneyWithdrawn, WithdrawMoney } from "../src/WithdrawMoney.command.ts";
 
 -const story = Story.make(Bank);
 +const story = Story.make(Bank, { layer: BankHandlers });
@@ -211,7 +211,7 @@ The policy runs for real. The registration's events, the account the policy open
 bun vitest run
 ```
 
-Three aggregates and views are now connected by a policy, and each step can be checked in a story.
+Two aggregates and two views are now connected by a policy, and each step can be checked in a story.
 
 :::note
 Next, let customers reach the bank through an [Api](/domain/tutorial/part-4). Policies can also call external systems: see [Policy](/domain/policy#call-an-external-system).

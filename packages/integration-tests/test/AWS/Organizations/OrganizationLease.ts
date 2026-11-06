@@ -1,6 +1,6 @@
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as organizations from "@distilled.cloud/aws/organizations";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

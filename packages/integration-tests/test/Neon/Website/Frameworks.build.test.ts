@@ -1,8 +1,8 @@
 import { providers } from "@alchemy.run/neon/Providers";
 import { stageWebsiteArtifact } from "@alchemy.run/neon/Website/Artifact";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Command from "alchemy/Command";
-import * as Test from "alchemy/Test/Alchemy";
 import { Server } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";

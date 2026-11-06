@@ -1,14 +1,14 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as dataflow from "@distilled.cloud/gcp/dataflow_v1b3";
 import * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DataPipelinesBindingsHost, { BindBatch } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -43,7 +43,7 @@ const expectedProjectRoles = [
 ];
 
 // RunPipeline must run before StopPipeline archives the pipeline.
-describe.skipIf(!dockerAvailable)(
+describe(
   "DataPipelines Bindings",
   {
     sequential: true,

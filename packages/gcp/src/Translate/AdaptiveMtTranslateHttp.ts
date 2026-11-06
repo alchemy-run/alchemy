@@ -18,7 +18,7 @@ export const AdaptiveMtTranslateHttp = Layer.effect(
     withBody: (name, request) => ({
       parent: locationParentOf(name),
       body: {
-        ...(request?.body ?? {}),
+        ...request?.body,
         dataset: name,
       },
     }),

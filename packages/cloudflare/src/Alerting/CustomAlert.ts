@@ -1,6 +1,7 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
@@ -18,6 +19,13 @@ import {
   policyEqualsObserved,
 } from "./internal.ts";
 import type { NotificationPolicyMechanisms } from "./NotificationPolicy.ts";
+
+export class CustomAlertUnexpectedResponse extends Data.TaggedError(
+  "CustomAlertUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Alerting.CustomAlert" as const;
 type TypeId = typeof TypeId;
@@ -275,9 +283,9 @@ export const CustomAlertProvider = () =>
       if (!observed) {
         const created = yield* alerting.createPolicy({ accountId, ...desired });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the created custom alert"),
-          );
+          return yield* new CustomAlertUnexpectedResponse({
+            message: "Cloudflare did not return an id for the created custom alert",
+          });
         }
         const fresh = yield* observePolicy(accountId, created.id);
         return toAttributes(fresh ?? { id: created.id, name }, accountId);

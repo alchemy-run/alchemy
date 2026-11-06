@@ -115,8 +115,27 @@ export type DevicePostureIntegration = Resource<
   DevicePostureIntegrationProps,
   DevicePostureIntegrationAttributes,
   never,
-  Providers
+  Providers,
+  DevicePostureIntegrationLookup
 >;
+
+/**
+ * Props for {@link DevicePostureIntegration.lookup}: find a posture
+ * integration this stack doesn't manage, by its id or its name.
+ */
+export type DevicePostureIntegrationLookup =
+  | {
+      /**
+       * The id of the existing integration.
+       */
+      integrationId: string;
+    }
+  | {
+      /**
+       * The name of the existing integration.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust **device posture integration** — a service-to-
@@ -158,6 +177,21 @@ export type DevicePostureIntegration = Resource<
  *
  * **Example:** Reference the integration from a posture rule
  * ```typescript
+ * yield* Cloudflare.Devices.DevicePostureRule("FalconScore", {
+ *   type: "crowdstrike_s2s",
+ *   input: { connectionId: falcon.integrationId, os: "windows" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing integration
+ * `DevicePostureIntegration.lookup` references an integration Alchemy
+ * doesn't manage (created in the dashboard or by another stack), found by
+ * `integrationId` or `name`. It is read during plan/deploy and never
+ * created, updated or deleted. Its credentials are never read.
+ *
+ * **Example:** Check an existing CrowdStrike connection
+ * ```typescript
+ * const falcon = Cloudflare.Devices.DevicePostureIntegration.lookup({ name: "falcon" });
  * yield* Cloudflare.Devices.DevicePostureRule("FalconScore", {
  *   type: "crowdstrike_s2s",
  *   input: { connectionId: falcon.integrationId, os: "windows" },
@@ -210,6 +244,14 @@ export const DevicePostureIntegrationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "integrationId" in props
+          ? yield* observeIntegration(accountId, props.integrationId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -303,7 +345,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getDevicePostureIntegration({ accountId, integrationId })
-    .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DevicePostureIntegrationNotFound", () => Effect.undefined));
 
 /**
  * Find an integration by exact name.

@@ -566,6 +566,29 @@ describe(
       }),
     );
 
+    // A first chunk holding several elements must reach the body whole, not
+    // just the element peeked to pick the encoding.
+    it.effect("roundtrips every element of a multi-element jsonl stream", () =>
+      Effect.gen(function* () {
+        const stream = Stream.fromIterable([{ a: 1 }, { a: 2 }, { a: 3 }]);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "jsonl");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual([{ a: 1 }, { a: 2 }, { a: 3 }]);
+      }),
+    );
+
+    it.effect("roundtrips every element of a multi-element bytes stream", () =>
+      Effect.gen(function* () {
+        const data = [new Uint8Array([1]), new Uint8Array([2]), new Uint8Array([3])];
+        const stream = Stream.fromIterable(data);
+        const envelope = yield* toRpcStream(stream);
+        const decoded = fromRpcReadableStream(envelope.body, "bytes");
+        const chunks = yield* Stream.runCollect(decoded);
+        expect(chunks).toEqual(data);
+      }),
+    );
+
     it.effect("selects bytes encoding for Uint8Array data", () =>
       Effect.gen(function* () {
         const data = new Uint8Array([1, 2, 3]);

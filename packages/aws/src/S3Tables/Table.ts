@@ -6,7 +6,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
-import type { TableBucketArn } from "./TableBucket.ts";
 
 /**
  * A field in an Apache Iceberg table schema.
@@ -33,7 +32,7 @@ export interface TableProps {
    * ARN of the table bucket that owns the table. Changing it replaces the
    * table.
    */
-  tableBucket: TableBucketArn | string;
+  tableBucket: string;
   /**
    * Name of the namespace that owns the table. Changing it replaces the
    * table.
@@ -80,8 +79,22 @@ export interface Table extends Resource<
     createdAt: Date;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TableLookup {
+  /** The table bucket holding the table. */
+  tableBucketArn: string;
+  /** The namespace the table belongs to. */
+  namespace: string;
+  /** The name of the existing table. */
+  name: string;
+}
 
 /**
  * A fully-managed Apache Iceberg table within an S3 Tables {@link Namespace}.
@@ -109,6 +122,16 @@ export interface Table extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableBucketArn`, `namespace` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const orders = AWS.S3Tables.Table.lookup({ tableBucketArn, namespace: "sales", name: "orders" });
  * ```
  *
  * @resource
@@ -150,6 +173,23 @@ export const TableProvider = () =>
     // Tables are scoped to a parent namespace; the engine drives lifecycle
     // from state rather than ambient enumeration.
     list: () => Effect.succeed([]),
+    lookup: Effect.fn(function* ({ tableBucketArn, namespace, name }) {
+      return yield* s3tables.getTable({ tableBucketARN: tableBucketArn, namespace, name }).pipe(
+        Effect.map((t): Table["Attributes"] => ({
+          tableArn: t.tableARN,
+          name: t.name,
+          namespace: t.namespace[0] ?? namespace,
+          tableBucketArn,
+          versionToken: t.versionToken,
+          metadataLocation: t.metadataLocation,
+          warehouseLocation: t.warehouseLocation,
+          format: t.format,
+          type: t.type,
+          createdAt: t.createdAt,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const tableBucketArn = output?.tableBucketArn ?? olds?.tableBucket;
       const namespace = output?.namespace ?? olds?.namespace;
@@ -170,7 +210,7 @@ export const TableProvider = () =>
           type: t.type,
           createdAt: t.createdAt,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -204,7 +244,7 @@ export const TableProvider = () =>
         .getTable({ tableBucketARN: tableBucketArn, namespace, name })
         .pipe(
           Effect.map((t) => t),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       // Ensure — create if missing, tolerating a concurrent create.

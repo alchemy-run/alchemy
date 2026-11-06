@@ -1,11 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as organizations from "@distilled.cloud/cloudflare/organizations";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -27,8 +28,8 @@ const probeEntitlement = organizations.listOrganizations({ pageSize: 1 }).pipe(
 );
 
 // Deterministic names — the same on every run (never Date.now()/random).
-const ORG_NAME_CRUD = "alchemy-org-crud";
-const ORG_NAME_CRUD_RENAMED = "alchemy-org-crud-renamed";
+const ORG_NAME_CRUD = testName("alchemy-org-crud");
+const ORG_NAME_CRUD_RENAMED = testName("alchemy-org-crud-renamed");
 
 const PROFILE = {
   businessName: "Alchemy Test Co",

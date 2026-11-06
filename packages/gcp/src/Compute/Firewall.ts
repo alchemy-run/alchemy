@@ -388,7 +388,7 @@ const toAttrs = (firewall: compute.Firewall, project: string) => ({
 const getByName = (project: string, firewall: string) =>
   compute
     .getFirewalls({ project, firewall })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const insertBody = (
   firewallName: string,
@@ -516,7 +516,7 @@ export const FirewallProvider = () =>
             times: 8,
             schedule: backoff,
           }),
-          Effect.catchTag("GCP.Compute.FirewallNotResolved", () => Effect.succeed(undefined)),
+          Effect.catchTag("GCP.Compute.FirewallNotResolved", () => Effect.undefined),
         );
       }
 

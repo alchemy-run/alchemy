@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -188,3 +189,107 @@ export const assertVpcDeleted = Effect.fn(function* (vpcId: string) {
     Effect.catchTag("InvalidVpcID.NotFound", () => Effect.void),
   );
 });
+
+// #2688: the VPC networking providers had no `read`, so drift skipped them.
+// Every one must read a fresh deploy as `unchanged` and report out-of-band
+// changes to the settings it manages.
+test.provider(
+  "drift detects and repairs out-of-band networking changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const net = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vpc = yield* Vpc("DriftVpc", {
+            cidrBlock: "10.42.0.0/16",
+            enableDnsSupport: true,
+            enableDnsHostnames: true,
+          });
+          const subnet = yield* AWS.EC2.Subnet("DriftSubnet", {
+            vpcId: vpc.vpcId,
+            cidrBlock: "10.42.1.0/24",
+            mapPublicIpOnLaunch: true,
+          });
+          const igw = yield* AWS.EC2.InternetGateway("DriftIgw", { vpcId: vpc.vpcId });
+          const routeTable = yield* AWS.EC2.RouteTable("DriftRouteTable", {
+            vpcId: vpc.vpcId,
+            tags: { team: "declared" },
+          });
+          yield* AWS.EC2.Route("DriftRoute", {
+            routeTableId: routeTable.routeTableId,
+            destinationCidrBlock: "0.0.0.0/0",
+            gatewayId: igw.internetGatewayId,
+          });
+          const association = yield* AWS.EC2.RouteTableAssociation("DriftAssociation", {
+            routeTableId: routeTable.routeTableId,
+            subnetId: subnet.subnetId,
+          });
+          const sg = yield* AWS.EC2.SecurityGroup("DriftSg", {
+            vpcId: vpc.vpcId,
+            description: "drift",
+            tags: { team: "declared" },
+          });
+          return { vpc, subnet, igw, routeTable, association, sg };
+        }),
+      );
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+
+      yield* EC2.modifyVpcAttribute({
+        VpcId: net.vpc.vpcId,
+        EnableDnsHostnames: { Value: false },
+      });
+      yield* EC2.modifySubnetAttribute({
+        SubnetId: net.subnet.subnetId,
+        MapPublicIpOnLaunch: { Value: false },
+      });
+      yield* EC2.createTags({
+        Resources: [net.routeTable.routeTableId, net.sg.groupId],
+        Tags: [{ Key: "team", Value: "out-of-band" }],
+      });
+      yield* EC2.deleteRoute({
+        RouteTableId: net.routeTable.routeTableId,
+        DestinationCidrBlock: "0.0.0.0/0",
+      });
+
+      expect((yield* waitForDrift(stack, "DriftVpc", "drifted"))?.attr?.enableDnsHostnames).toBe(
+        false,
+      );
+      expect(
+        (yield* waitForDrift(stack, "DriftSubnet", "drifted"))?.attr?.mapPublicIpOnLaunch,
+      ).toBe(false);
+      expect((yield* waitForDrift(stack, "DriftRouteTable", "drifted"))?.attr?.tags?.team).toBe(
+        "out-of-band",
+      );
+      expect((yield* waitForDrift(stack, "DriftSg", "drifted"))?.attr?.tags?.team).toBe(
+        "out-of-band",
+      );
+      expect((yield* waitForDrift(stack, "DriftRoute", "missing"))?.action).toBe("missing");
+
+      yield* repairDrift(stack);
+      const after = yield* driftActions(stack).pipe(
+        Effect.repeat({ until: allUnchanged, schedule: Schedule.spaced("2 seconds"), times: 15 }),
+      );
+      expect(allUnchanged(after)).toBe(true);
+      yield* expectVpcAttribute({
+        VpcId: net.vpc.vpcId,
+        Attribute: "enableDnsHostnames",
+        Value: true,
+      });
+      const subnet = yield* EC2.describeSubnets({ SubnetIds: [net.subnet.subnetId] });
+      expect(subnet.Subnets?.[0]?.MapPublicIpOnLaunch).toBe(true);
+      const routes = yield* EC2.describeRouteTables({
+        RouteTableIds: [net.routeTable.routeTableId],
+      });
+      expect(
+        routes.RouteTables?.[0]?.Routes?.find((r) => r.DestinationCidrBlock === "0.0.0.0/0")
+          ?.GatewayId,
+      ).toBe(net.igw.internetGatewayId);
+
+      yield* stack.destroy();
+      yield* assertVpcDeleted(net.vpc.vpcId);
+    }).pipe(logLevel),
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 420_000 },
+);

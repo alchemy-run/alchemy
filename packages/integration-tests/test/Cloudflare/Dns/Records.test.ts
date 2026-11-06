@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -16,15 +17,15 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic per-test record names — disjoint from other suites and the
 // same on every run.
-const NAME_A = `alchemy-dnsrecords-a.${zoneName}`;
-const NAME_B = `alchemy-dnsrecords-b.${zoneName}`;
-const NAME_C = `alchemy-dnsrecords-c.${zoneName}`;
-const NAME_BOUND = `alchemy-dnsrecords-bound.${zoneName}`;
-const NAME_FOREIGN = `alchemy-dnsrecords-foreign.${zoneName}`;
-const NAME_TYPED = `alchemy-dnsrecords-typed.${zoneName}`;
+const NAME_A = `${testName("alchemy-dnsrecords-a")}.${zoneName}`;
+const NAME_B = `${testName("alchemy-dnsrecords-b")}.${zoneName}`;
+const NAME_C = `${testName("alchemy-dnsrecords-c")}.${zoneName}`;
+const NAME_BOUND = `${testName("alchemy-dnsrecords-bound")}.${zoneName}`;
+const NAME_FOREIGN = `${testName("alchemy-dnsrecords-foreign")}.${zoneName}`;
+const NAME_TYPED = `${testName("alchemy-dnsrecords-typed")}.${zoneName}`;
 
-const TARGET_1 = `target-1.${zoneName}`;
-const TARGET_2 = `target-2.${zoneName}`;
+const TARGET_1 = `${testName("target-1")}.${zoneName}`;
+const TARGET_2 = `${testName("target-2")}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

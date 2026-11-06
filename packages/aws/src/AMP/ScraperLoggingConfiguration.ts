@@ -83,7 +83,7 @@ export const ScraperLoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         return yield* amp
           .describeScraperLoggingConfiguration({ scraperId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (config: amp.DescribeScraperLoggingConfigurationResponse) => ({

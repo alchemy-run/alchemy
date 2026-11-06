@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { PublicRepository } from "@alchemy.run/aws/ECRPublic";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import { Region } from "@distilled.cloud/aws/Region";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

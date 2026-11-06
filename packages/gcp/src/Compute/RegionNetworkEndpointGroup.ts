@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -499,7 +499,7 @@ const getByName = (project: string, region: string, networkEndpointGroup: string
       region,
       networkEndpointGroup,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireGroup = (project: string, region: string, networkEndpointGroupName: string) =>
   getByName(project, region, networkEndpointGroupName).pipe(
@@ -648,7 +648,7 @@ export const RegionNetworkEndpointGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const networkEndpointGroupName = yield* toName(
         id,
@@ -660,7 +660,9 @@ export const RegionNetworkEndpointGroupProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "networkEndpointGroupName");
     }),
 
     list: () =>

@@ -3,17 +3,18 @@ import { Subnet } from "@alchemy.run/aws/EC2/Subnet";
 import { Cluster } from "@alchemy.run/aws/ECS/Cluster";
 import { Service, ServiceDidNotStabilize } from "@alchemy.run/aws/ECS/Service";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -216,6 +217,41 @@ test.provider(
       expect(tagMap.env).toBe("test");
       expect(tagMap.keep).toBeUndefined();
 
+      // #2688: `read` must observe the service's deployment settings and the
+      // cluster's tags, or out-of-band changes read as `unchanged`.
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      yield* ecs.updateService({
+        cluster: updated.clusterArn,
+        service: updated.serviceName,
+        deploymentConfiguration: {
+          minimumHealthyPercent: 100,
+          maximumPercent: 200,
+          deploymentCircuitBreaker: { enable: false, rollback: false },
+        },
+      });
+      yield* ecs.tagResource({
+        resourceArn: updated.clusterArn,
+        tags: [{ key: "team", value: "out-of-band" }],
+      });
+      expect(
+        (yield* waitForDrift(stack, "InPlaceService", "drifted"))?.attr?.configuration
+          ?.deploymentConfiguration?.deploymentCircuitBreaker?.enable,
+      ).toBe(false);
+      expect((yield* waitForDrift(stack, "InPlaceCluster", "drifted"))?.attr?.tags?.team).toBe(
+        "out-of-band",
+      );
+      yield* repairDrift(stack);
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      const repairedService = yield* ecs.describeServices({
+        cluster: updated.clusterArn,
+        services: [updated.serviceName],
+      });
+      expect(
+        repairedService.services?.[0]?.deploymentConfiguration?.deploymentCircuitBreaker?.enable,
+      ).toBe(true);
+
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
 
@@ -224,7 +260,7 @@ test.provider(
       const after = yield* ecs.describeClusters({ clusters: ["alchemy-test-ecs-service-inplace"] });
       expect((after.clusters ?? []).some((c) => c.status === "ACTIVE")).toBe(false);
     }),
-  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 240_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:ecs", "live"], timeout: 420_000 },
 );
 
 test.provider(

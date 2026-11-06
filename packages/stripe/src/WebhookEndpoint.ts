@@ -212,7 +212,7 @@ const isMissingWebhookEndpoint = isMissingStripeResource;
 const getById = (webhookEndpoint: string) =>
   GetWebhookEndpoint({
     webhook_endpoint: webhookEndpoint,
-  }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchIf(isMissingWebhookEndpoint, () => Effect.undefined));
 
 const listAllWebhookEndpoints = Effect.fn(function* () {
   const endpoints: StripeWebhookEndpoint[] = [];

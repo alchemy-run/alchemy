@@ -1,6 +1,6 @@
 import { stateStoreScope } from "@alchemy.run/cloudflare/Alchemist/StateStore";
 import { expect, it } from "@alchemy.run/test";
-import { providerContext } from "alchemy/Alchemist/routes/state";
+import * as Alchemist from "alchemy/Alchemist";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -93,7 +93,7 @@ const resolveStateStoreScope = (target: { readonly profile?: string; readonly en
     );
     if (cloudflare === undefined) return yield* Effect.die(new Error("no cloudflare provider"));
     return yield* stateStoreScope(undefined).pipe(
-      Effect.provide(yield* providerContext(cloudflare, target)),
+      Effect.provide(yield* Alchemist.State.providerContext(cloudflare, target)),
     );
   });
 

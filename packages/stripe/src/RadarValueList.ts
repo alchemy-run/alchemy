@@ -200,7 +200,7 @@ const isMissingValueList = isMissingStripeResource;
 
 const getById = (valueList: string) =>
   GetRadarValueList({ value_list: valueList }).pipe(
-    Effect.catchIf(isMissingValueList, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingValueList, () => Effect.undefined),
   );
 
 const findByAlias = (alias: string) =>
@@ -301,13 +301,16 @@ export const RadarValueListProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output }) {
+    read: Effect.fn(function* ({ id, output, previous }) {
       const existing = yield* observe({
         id: output?.id,
         logicalId: id,
         alias: output?.alias,
       });
       if (existing === undefined) return undefined;
+      // A create-first replacement finds the list it is replacing under the
+      // same logical id: that is not the replacement.
+      if (output === undefined && existing.id === previous?.id) return undefined;
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),

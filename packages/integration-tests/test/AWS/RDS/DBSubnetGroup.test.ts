@@ -2,10 +2,12 @@ import * as AWS from "@alchemy.run/aws";
 import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as RDS from "@distilled.cloud/aws/rds";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -95,9 +97,25 @@ test.provider(
           return yield* DBSubnetGroup("ListDBSubnetGroup", {
             description: "Alchemy list() test subnet group",
             subnetIds,
+            tags: { team: "declared" },
           });
         }),
       );
+
+      // #2688: `read` must observe the live tags, not carry the persisted
+      // ones.
+      expect((yield* driftOf(stack, "ListDBSubnetGroup"))?.action).toBe("unchanged");
+      yield* RDS.addTagsToResource({
+        ResourceName: group.dbSubnetGroupArn!,
+        Tags: [{ Key: "team", Value: "out-of-band" }],
+      });
+      expect((yield* waitForDrift(stack, "ListDBSubnetGroup", "drifted"))?.attr?.tags?.team).toBe(
+        "out-of-band",
+      );
+      yield* repairDrift(stack);
+      expect((yield* driftOf(stack, "ListDBSubnetGroup"))?.action).toBe("unchanged");
+      const tags = yield* RDS.listTagsForResource({ ResourceName: group.dbSubnetGroupArn! });
+      expect(tags.TagList?.find((t) => t.Key === "team")?.Value).toBe("declared");
 
       const provider = yield* Provider.findProvider(DBSubnetGroup);
       const all = yield* provider.list();

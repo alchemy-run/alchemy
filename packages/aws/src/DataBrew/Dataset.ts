@@ -162,8 +162,18 @@ export interface Dataset extends Resource<
     datasetArn: string;
   },
   {},
-  Providers
+  Providers,
+  DatasetLookup
 > {}
+
+/**
+ * Props for {@link Dataset.lookup}: find a dataset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatasetLookup {
+  /** The name of the existing dataset. */
+  datasetName: string;
+}
 
 /**
  * An AWS Glue DataBrew dataset — a pointer to source data (S3 file/prefix,
@@ -209,6 +219,16 @@ export interface Dataset extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datasetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dataset
+ * ```typescript
+ * const existing = AWS.DataBrew.Dataset.lookup({ datasetName: "..." });
  * ```
  *
  * @resource
@@ -320,7 +340,7 @@ export const DatasetProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeDataset({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const buildDefinition = (props: DatasetProps) => ({
@@ -344,6 +364,15 @@ export const DatasetProvider = () =>
                 datasetArn: d.ResourceArn ?? databrewArn(region, accountId, "dataset", d.Name),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ datasetName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const dataset = yield* observe(name);
+          if (dataset === undefined) return undefined;
+          const arn = dataset.ResourceArn ?? databrewArn(region, accountId, "dataset", name);
+          const attrs = { datasetName: name, datasetArn: arn };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -406,7 +435,7 @@ export const DatasetProvider = () =>
           // A ConflictException surfaces briefly after an associated project
           // or job is deleted (eventual consistency) — retry bounded.
           yield* retryWhileConflict(databrew.deleteDataset({ Name: output.datasetName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

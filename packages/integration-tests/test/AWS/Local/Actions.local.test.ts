@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
@@ -37,7 +38,6 @@ import * as Alchemy from "alchemy";
  * absence). Requires Docker (floci runs as a container).
  */
 import { Action } from "alchemy/Action";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

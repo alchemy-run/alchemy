@@ -34,7 +34,7 @@ export const makeJobHttpBinding = <I extends { name?: string }, A, E>(options: {
       return Effect.fn(`${options.tag}(${job.LogicalId})`)(function* (request?: Omit<I, "name">) {
         const jobName = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: jobName,
         } as I);
       });

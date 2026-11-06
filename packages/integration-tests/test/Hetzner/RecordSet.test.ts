@@ -1,9 +1,9 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as zones from "@distilled.cloud/hetzner/zones";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -11,8 +11,6 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (zoneId: number, name: string, type: string) =>
   zoneRrsets
@@ -42,7 +40,7 @@ const waitUntilZoneGone = (zoneId: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a record set",
   (stack) =>
     Effect.gen(function* () {
@@ -155,7 +153,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when name changes",
   (stack) =>
     Effect.gen(function* () {
@@ -230,7 +228,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed record set",
   (stack) =>
     Effect.gen(function* () {

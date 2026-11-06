@@ -59,14 +59,17 @@
     "typecheck:cloudflare-packages": "pnpm ensure:built && pnpm -r --filter @alchemy.run/cloudflare-runtime --filter @alchemy.run/frontend-frameworks run typecheck",
     "validate:publish-packages": "node scripts/validate-publish-packages.ts",
     "prepare:hooks": "husky",
-    "prepare:patch": "effect-tsgo patch --oxlint --no-typescript",
+    "prepare:patch": "effect-tsgo patch --oxlint --tsrs --no-typescript --skip-missing",
     "prepare": "pnpm prepare:hooks && pnpm prepare:patch && pnpm ensure:built",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint -c oxlint.config.ts"
+    "lint": "oxlint -c oxlint.config.ts && pnpm lint:tests",
+    "lint:tests": "oxlint -c oxlint.tests.config.ts packages/alchemy/test packages/integration-tests/test packages/better-auth/test"
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",
+    "@alchemy.run/scripts": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/tsgo": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -74,7 +77,6 @@
     "husky": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
-    "oxlint-tsgolint": "catalog:",
     "rolldown": "catalog:",
     "tsrs": "catalog:",
     "typescript": "catalog:"

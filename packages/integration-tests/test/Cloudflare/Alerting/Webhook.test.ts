@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -64,19 +65,19 @@ test.provider(
         Effect.gen(function* () {
           const worker = yield* Receiver();
           return yield* Cloudflare.Alerting.NotificationWebhook("AlertWebhook", {
-            name: "alchemy-test-alerting-webhook-renamed",
+            name: testName("alchemy-test-alerting-webhook-renamed"),
             url: worker.url.as<string>(),
           });
         }),
       );
       expect(renamed.webhookId).toEqual(webhook.webhookId);
-      expect(renamed.name).toEqual("alchemy-test-alerting-webhook-renamed");
+      expect(renamed.name).toEqual(testName("alchemy-test-alerting-webhook-renamed"));
 
       const afterRename = yield* alerting.getDestinationWebhook({
         accountId,
         webhookId: webhook.webhookId,
       });
-      expect(afterRename.name).toEqual("alchemy-test-alerting-webhook-renamed");
+      expect(afterRename.name).toEqual(testName("alchemy-test-alerting-webhook-renamed"));
 
       yield* stack.destroy();
 

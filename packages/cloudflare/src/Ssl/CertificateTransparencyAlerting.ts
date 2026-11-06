@@ -98,9 +98,7 @@ export const isCertificateTransparencyAlerting = (
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 const observe = (zoneId: string) =>
-  zones
-    .getCtAlerting({ zoneId })
-    .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+  zones.getCtAlerting({ zoneId }).pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
 
 const recipients = (
   observed: zones.GetCtAlertingResponse | zones.PatchCtAlertingResponse,

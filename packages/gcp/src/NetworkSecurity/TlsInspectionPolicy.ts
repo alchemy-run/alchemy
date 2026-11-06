@@ -190,13 +190,13 @@ export const TlsInspectionPolicy = Resource<TlsInspectionPolicy>(
 export class TlsInspectionPolicyNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TlsInspectionPolicyStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const caPoolName = (project: string, location: string, caPool: string) => {
@@ -236,12 +236,14 @@ const toAttrs = (policy: networksecurity.TlsInspectionPolicy, project: string, r
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsTlsInspectionPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((policy) =>
-      policy ? Effect.succeed(policy) : Effect.fail(new TlsInspectionPolicyNotResolved({ name })),
+      policy
+        ? Effect.succeed(policy)
+        : Effect.fail(new TlsInspectionPolicyNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyNotResolved",
@@ -255,7 +257,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((policy) =>
       policy === undefined
         ? Effect.void
-        : Effect.fail(new TlsInspectionPolicyStillExists({ name })),
+        : Effect.fail(new TlsInspectionPolicyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.TlsInspectionPolicyStillExists",
@@ -366,7 +368,7 @@ export const TlsInspectionPolicyProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -375,7 +377,7 @@ export const TlsInspectionPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TlsInspectionPolicyNotResolved({ name });
+        return yield* new TlsInspectionPolicyNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -442,7 +444,7 @@ export const TlsInspectionPolicyProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

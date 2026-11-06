@@ -1,14 +1,15 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -35,32 +36,23 @@ const repoName = (repo: GitHub.Repository) =>
 
 const getRuleset = (repo: string, rulesetId: number) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () => octokit.rest.repos.getRepoRuleset({ owner, repo, ruleset_id: rulesetId }),
-      catch: (error) => error as Error & { status?: number },
-    }).pipe(
-      Effect.map(({ data }) => data),
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
+    return yield* gh(Repos.getRepoRuleset({ owner, repo, ruleset_id: rulesetId })).pipe(
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
   });
 
 const getRulesets = (repo: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+    return yield* gh(
+      Stream.runCollect(
+        Repos.getRepoRulesets.items({
           owner,
           repo,
           includes_parents: false,
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
   });
 
 test.provider(
@@ -285,9 +277,8 @@ test.provider(
       yield* stack.destroy();
       const repo = fixtureNames[4]!;
       yield* stack.deploy(repository(repo));
-      const octokit = yield* Octokit;
-      const existing = yield* Effect.tryPromise(() =>
-        octokit.rest.repos.createRepoRuleset({
+      const existing = yield* gh(
+        Repos.createRepoRuleset({
           owner,
           repo,
           name: "adopted protection",
@@ -297,9 +288,7 @@ test.provider(
         }),
       );
       yield* Effect.addFinalizer(() =>
-        Effect.tryPromise(() =>
-          octokit.rest.repos.deleteRepoRuleset({ owner, repo, ruleset_id: existing.data.id }),
-        ).pipe(Effect.ignore),
+        gh(Repos.deleteRepoRuleset({ owner, repo, ruleset_id: existing.id })).pipe(Effect.ignore),
       );
 
       const deploy = (enabled: boolean) =>
@@ -321,8 +310,8 @@ test.provider(
       expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
 
       const adopted = yield* deploy(true);
-      expect(adopted.rulesetId).toBe(existing.data.id);
-      const observed = yield* getRuleset(repo, existing.data.id);
+      expect(adopted.rulesetId).toBe(existing.id);
+      const observed = yield* getRuleset(repo, existing.id);
       expect(observed?.target).toBe("branch");
       expect(observed?.conditions?.ref_name).toEqual({
         include: ["~DEFAULT_BRANCH"],
@@ -332,7 +321,7 @@ test.provider(
         "deletion",
         "non_fast_forward",
       ]);
-      expect((yield* getRulesets(repo)).map((ruleset) => ruleset.id)).toEqual([existing.data.id]);
+      expect((yield* getRulesets(repo)).map((ruleset) => ruleset.id)).toEqual([existing.id]);
 
       yield* stack.deploy(repository(repo));
       expect(yield* getRulesets(repo)).toEqual([]);
@@ -359,43 +348,11 @@ test.provider(
           }).pipe(destroy());
         }),
       );
-      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Ruleset);
       // list() enumerates /user/repos; confine it to this suite's fixture.
-      const listed = yield* provider.list().pipe(
-        Effect.provideService(
-          GitHubCredentials,
-          Effect.succeed({
-            ...credentials,
-            octokit: (override) => {
-              const octokit = credentials.octokit(override);
-              octokit.hook.before("request", (options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === "/user/repos") {
-                  url.pathname = `/orgs/${owner}/repos`;
-                  options.url = url.toString();
-                }
-                if (
-                  url.origin !== "https://api.github.com" ||
-                  (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !== `/repos/${owner}/${repo}/rulesets`)
-                ) {
-                  throw new Error(`Unsafe Ruleset list request: ${url}`);
-                }
-              });
-              octokit.hook.after("request", (response, options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (response.data as Array<{ name: string }>).filter(
-                    (repository) => repository.name === repo,
-                  );
-                }
-              });
-              return octokit;
-            },
-          }),
-        ),
-      );
+      const listed = yield* provider
+        .list()
+        .pipe(scopedToOwner(owner, { repository: repo, path: "rulesets" }));
       const found = listed.find((ruleset) => ruleset.rulesetId === created.rulesetId);
       expect(found?.name).toBe("listed tag protection");
       expect(found?.nodeId).toBe(created.nodeId);

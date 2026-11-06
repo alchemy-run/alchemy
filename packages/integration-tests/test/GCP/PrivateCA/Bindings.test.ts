@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import PrivateCaBindingsHost, { Pool, Root } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -31,7 +31,7 @@ const expectPoolGrants = Effect.gen(function* () {
   expect(roles).toEqual(["roles/privateca.auditor", "roles/privateca.poolReader"]);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "PrivateCA Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:privateca", "provider:gcp:run", "live"],

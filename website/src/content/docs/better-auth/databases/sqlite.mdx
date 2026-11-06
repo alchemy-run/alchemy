@@ -2,14 +2,13 @@
 title: SQLite
 description: Run Better Auth in a local Bun server with a persistent SQLite file.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 `SQLite` uses Bun's built-in `bun:sqlite` driver, not a cloud database. This example runs a local Bun server through `Command.Dev`; a Worker, including one started by `alchemy dev`, must use [D1](/better-auth/databases/cloudflare-d1) instead.
 
 ## Install
 
-```sh
-bun add @effect/platform-bun @alchemy.run/better-auth better-auth@^1.7.5 kysely
-```
+<PackageManagers add="@effect/platform-bun @alchemy.run/better-auth better-auth@^1.7.5 kysely" />
 
 Bun supplies the driver, while `kysely` supports the SQL adapter and schema migration. A standard Node.js Lambda cannot load `bun:sqlite`.
 
@@ -103,9 +102,7 @@ The stack generates a stable signing secret and passes it to the child process a
 
 ## Start locally
 
-```sh
-bunx alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 The server asks the OS for an available port and prints its URL, which Alchemy exposes as the stack output. `Command.Dev` runs only during development; `alchemy deploy` does not publish this local server.
 

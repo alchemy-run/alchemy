@@ -1,4 +1,5 @@
 import type { Server, ServerOptions } from "@prisma/dev";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -9,6 +10,13 @@ import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type { DatabaseDev } from "../Database.ts";
+
+export class PrismaDevDatabaseInvalidProps extends Data.TaggedError(
+  "PrismaDevDatabaseInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PrismaDevDatabaseAttrs {
   directConnectionString: Redacted.Redacted<string>;
@@ -30,11 +38,24 @@ const servers = new Map<string, PrismaDevDatabaseEntry>();
 const startMutex = Semaphore.makeUnsafe(1);
 const MIGRATION_OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
+export class PrismaDevDatabaseError extends Data.TaggedError("PrismaDevDatabaseError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const toError = (message: string) => (cause: unknown) =>
-  cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
+  new PrismaDevDatabaseError({
+    message: cause instanceof Error ? cause.message : `${message}: ${String(cause)}`,
+    cause,
+  });
+
+// A literal specifier makes bundlers follow `@prisma/dev` (and its runtime
+// tarballs) into every Worker that imports a Prisma Database. It is only ever
+// loaded at deploy time, by the local provider.
+const PRISMA_DEV = "@prisma/dev";
 
 const importPrismaDev = Effect.tryPromise({
-  try: () => import("@prisma/dev"),
+  try: (): Promise<typeof import("@prisma/dev")> => import(PRISMA_DEV),
   catch: toError("Failed to load @prisma/dev"),
 });
 
@@ -129,9 +150,9 @@ const collectMigrationOutput = <E>(
       const bytes = state.bytes + chunk.byteLength;
       return bytes > MIGRATION_OUTPUT_LIMIT_BYTES
         ? Effect.fail(
-            new Error(
-              `Local Prisma migration ${label} exceeded the ${MIGRATION_OUTPUT_LIMIT_BYTES} byte safety limit. Reduce migration verbosity.`,
-            ),
+            new PrismaDevDatabaseError({
+              message: `Local Prisma migration ${label} exceeded the ${MIGRATION_OUTPUT_LIMIT_BYTES} byte safety limit. Reduce migration verbosity.`,
+            }),
           )
         : Effect.succeed({ chunks: [...state.chunks, chunk], bytes });
     },
@@ -235,21 +256,17 @@ const runMigration = Effect.fn(function* (
     }).pipe(Effect.timeoutOption(Duration.seconds(timeoutSeconds))),
   );
   if (Option.isNone(resultOption)) {
-    return yield* Effect.fail(
-      new Error(
-        `Local Prisma migration command timed out after ${timeoutSeconds} seconds and was terminated.`,
-      ),
-    );
+    return yield* new PrismaDevDatabaseError({
+      message: `Local Prisma migration command timed out after ${timeoutSeconds} seconds and was terminated.`,
+    });
   }
   const [exitCode, rawStdout, rawStderr] = resultOption.value;
   const stdout = redactMigrationOutput(rawStdout, attrs);
   const stderr = redactMigrationOutput(rawStderr, attrs);
   if (exitCode !== 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Local Prisma migration command failed with exit code ${exitCode}${stderr ? `\n${stderr}` : ""}`,
-      ),
-    );
+    return yield* new PrismaDevDatabaseError({
+      message: `Local Prisma migration command failed with exit code ${exitCode}${stderr ? `\n${stderr}` : ""}`,
+    });
   }
   if (stdout) yield* Effect.logDebug("Local Prisma migration output", stdout);
   if (stderr) yield* Effect.logDebug("Local Prisma migration stderr", stderr);
@@ -269,13 +286,15 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
   }
   const config: DatabaseDev = dev ?? {};
   if (config.provider !== undefined && config.provider !== "@prisma/dev") {
-    return yield* Effect.fail(
-      new Error(`Unsupported Prisma local database provider ${config.provider}`),
-    );
+    return yield* new PrismaDevDatabaseInvalidProps({
+      message: `Unsupported Prisma local database provider ${String(config.provider)}`,
+    });
   }
   const migrateTimeoutSeconds = config.migrateTimeoutSeconds ?? 900;
   if (!Number.isFinite(migrateTimeoutSeconds) || migrateTimeoutSeconds <= 0) {
-    return yield* Effect.fail(new Error("migrateTimeoutSeconds must be a positive finite number."));
+    return yield* new PrismaDevDatabaseInvalidProps({
+      message: "migrateTimeoutSeconds must be a positive finite number.",
+    });
   }
 
   const options = optionsFrom(databaseId, config);
@@ -315,7 +334,7 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
           ),
         );
       }
-      return yield* Effect.fail(attrsResult.failure);
+      return yield* attrsResult.failure;
     }
     const attrs = attrsResult.success;
     entry = {
@@ -328,9 +347,9 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
   }
 
   if (entry.attrs === undefined) {
-    return yield* Effect.fail(
-      new Error(`Local Prisma database ${databaseId} has no usable endpoints.`),
-    );
+    return yield* new PrismaDevDatabaseError({
+      message: `Local Prisma database ${databaseId} has no usable endpoints.`,
+    });
   }
   const attrs = entry.attrs;
 

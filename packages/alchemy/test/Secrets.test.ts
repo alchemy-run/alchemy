@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@alchemy.run/test";
+import * as TestCore from "@alchemy.run/test/Core";
 import * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -19,7 +20,6 @@ import {
   type SecretProviders,
   type StackSecrets,
 } from "@/index.ts";
-import * as TestCore from "@/Test/Core.ts";
 import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
 
 const files = (contents: Record<string, string>) =>

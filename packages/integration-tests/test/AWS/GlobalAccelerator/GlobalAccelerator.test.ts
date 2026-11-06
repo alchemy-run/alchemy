@@ -2,8 +2,8 @@ import * as AWS from "@alchemy.run/aws";
 import { Accelerator, EndpointGroup, Listener } from "@alchemy.run/aws/GlobalAccelerator";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ga from "@distilled.cloud/aws/global-accelerator";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

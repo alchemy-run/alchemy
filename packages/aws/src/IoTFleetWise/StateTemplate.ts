@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -16,6 +17,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class StateTemplateUnexpectedResponse extends Data.TaggedError(
+  "StateTemplateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface StateTemplateProps {
   /**
@@ -71,8 +79,18 @@ export interface StateTemplate extends Resource<
     stateTemplateProperties: string[];
   },
   never,
-  Providers
+  Providers,
+  StateTemplateLookup
 > {}
+
+/**
+ * Props for {@link StateTemplate.lookup}: find a state template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StateTemplateLookup {
+  /** The state template name of the existing state template. */
+  stateTemplateName: string;
+}
 
 /**
  * An AWS IoT FleetWise state template — a definition of which signals'
@@ -106,6 +124,16 @@ export interface StateTemplate extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing state template
+ * `StateTemplate.lookup` references a state template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `stateTemplateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing state template
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.StateTemplate.lookup({ stateTemplateName: "my-state-template" });
+ * ```
+ *
  * @resource
  */
 export const StateTemplate = Resource<StateTemplate>("AWS.IoTFleetWise.StateTemplate");
@@ -122,15 +150,15 @@ export const StateTemplateProvider = () =>
       const readTemplate = Effect.fn(function* (identifier: string) {
         return yield* iotfleetwise.getStateTemplate({ identifier }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
       const toAttrs = Effect.fn(function* (template: iotfleetwise.GetStateTemplateResponse) {
         if (template.name === undefined || template.arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`StateTemplate '${template.name}' is missing its ARN`),
-          );
+          return yield* new StateTemplateUnexpectedResponse({
+            message: `StateTemplate '${template.name}' is missing its ARN`,
+          });
         }
         return {
           stateTemplateName: template.name,
@@ -153,6 +181,13 @@ export const StateTemplateProvider = () =>
           if (olds.signalCatalogArn !== news.signalCatalogArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ stateTemplateName: name }) {
+          const found = yield* readTemplate(name);
+          if (found?.arn === undefined) return undefined;
+          const attrs = yield* toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -191,7 +226,11 @@ export const StateTemplateProvider = () =>
             observed = yield* readTemplate(name).pipe(
               Effect.flatMap((template) =>
                 template === undefined
-                  ? Effect.fail(new Error(`StateTemplate '${name}' not found`))
+                  ? Effect.fail(
+                      new StateTemplateUnexpectedResponse({
+                        message: `StateTemplate '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(template),
               ),
               retryObservation,
@@ -236,7 +275,11 @@ export const StateTemplateProvider = () =>
             observed = yield* readTemplate(name).pipe(
               Effect.flatMap((template) =>
                 template === undefined
-                  ? Effect.fail(new Error(`StateTemplate '${name}' not found`))
+                  ? Effect.fail(
+                      new StateTemplateUnexpectedResponse({
+                        message: `StateTemplate '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(template),
               ),
               retryObservation,

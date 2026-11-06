@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -106,6 +106,30 @@ describe.concurrent(
           OUTPUT_STR: "output-str",
           SECRET_STR: "shh",
           SECRET_JSON: { token: "abc", scopes: ["read", "write"] },
+        });
+      }).pipe(logLevel),
+    );
+
+    test(
+      "effect worker reads env strings that parse as JSON as strings (#2847)",
+      Effect.gen(function* () {
+        const { effectUrl } = yield* stack;
+
+        const body = yield* expectUrlContains(`${effectUrl}/json-strings`, '"PLAIN"', {
+          timeout: "60 seconds",
+          label: "effect env-worker /json-strings",
+        });
+        const strings = {
+          JSON_FALSE: "false",
+          JSON_NUM: "42",
+          JSON_NULL: "null",
+          JSON_OBJ: '{"a":1}',
+          PLAIN: "my-queue",
+        };
+        expect(JSON.parse(body)).toEqual({
+          init: { ...strings, JSON_FALSE_BOOL: false },
+          runtime: { ...strings, JSON_FALSE_BOOL: false },
+          env: strings,
         });
       }).pipe(logLevel),
     );

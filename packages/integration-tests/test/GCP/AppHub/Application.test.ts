@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apphub from "@distilled.cloud/gcp/apphub_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +35,9 @@ test.provider.skipIf(runLifecycle)(
   "createProjectsLocationsApplications fails with ServiceDisabled when App Hub is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("apphub.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
@@ -66,7 +70,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

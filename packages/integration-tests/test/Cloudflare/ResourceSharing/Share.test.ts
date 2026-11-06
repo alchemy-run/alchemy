@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -166,7 +167,6 @@ test.provider(
         );
         const deployed = yield* stack.deploy(
           Cloudflare.ResourceSharing.Share("ListShare", {
-            name: "alchemy-list-share",
             recipients: [{ accountId: recipientAccountId }],
             resources: [{ resourceType: "gateway-policy", resourceId: policy.ruleId }],
           }),
@@ -222,26 +222,26 @@ test.provider.skipIf(!recipientAccountId)(
 
       const share = yield* stack.deploy(
         Cloudflare.ResourceSharing.Share("Share", {
-          name: "alchemy-resource-share",
+          name: testName("alchemy-resource-share"),
           recipients: [{ accountId: recipient }],
           resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),
       );
       expect(share.shareId).toBeTruthy();
       expect(share.accountId).toEqual(accountId);
-      expect(share.name).toEqual("alchemy-resource-share");
+      expect(share.name).toEqual(testName("alchemy-resource-share"));
       expect(share.status).toEqual("active");
       expect(share.kind).toEqual("sent");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getShare(accountId, share.shareId);
-      expect(live.name).toEqual("alchemy-resource-share");
+      expect(live.name).toEqual(testName("alchemy-resource-share"));
 
       // Rename in place — same shareId; also converge resources to
       // include policy B (delta add through the resource sub-API).
       const renamed = yield* stack.deploy(
         Cloudflare.ResourceSharing.Share("Share", {
-          name: "alchemy-resource-share-v2",
+          name: testName("alchemy-resource-share-v2"),
           recipients: [{ accountId: recipient }],
           resources: [
             { resourceType: "gateway-policy", resourceId: policyA.ruleId },
@@ -250,7 +250,7 @@ test.provider.skipIf(!recipientAccountId)(
         }),
       );
       expect(renamed.shareId).toEqual(share.shareId);
-      expect(renamed.name).toEqual("alchemy-resource-share-v2");
+      expect(renamed.name).toEqual(testName("alchemy-resource-share-v2"));
 
       const resources = yield* resourceSharing.listResources({
         accountId,
@@ -265,7 +265,7 @@ test.provider.skipIf(!recipientAccountId)(
       // Drop policy B again — delta remove through the resource sub-API.
       const reduced = yield* stack.deploy(
         Cloudflare.ResourceSharing.Share("Share", {
-          name: "alchemy-resource-share-v2",
+          name: testName("alchemy-resource-share-v2"),
           recipients: [{ accountId: recipient }],
           resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),
@@ -315,7 +315,6 @@ test.provider.skipIf(!recipientAccountId)(
 
       const share = yield* stack.deploy(
         Cloudflare.ResourceSharing.Share("ChildShare", {
-          name: "alchemy-child-share",
           recipients: [{ accountId: recipient }],
           resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
         }),

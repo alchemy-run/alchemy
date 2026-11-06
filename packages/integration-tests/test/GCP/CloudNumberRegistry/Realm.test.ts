@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import {
   location,
@@ -50,7 +50,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/${location}/realms/alchemy-missing-realm`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

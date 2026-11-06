@@ -1,17 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Issues from "@distilled.cloud/github/issues";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface ListIssueCommentsRequest extends EndpointParameters<
-  RestEndpointMethodTypes["issues"]["listComments"]["parameters"]
+export interface ListIssueCommentsRequest extends Omit<
+  Issues.ListCommentsRequest,
+  "owner" | "repo"
 > {}
 
-export type ListIssueCommentsResponse =
-  RestEndpointMethodTypes["issues"]["listComments"]["response"]["data"];
+export type ListIssueCommentsResponse = Issues.ListCommentsResponse;
 
 /**
  * List one page of the comments on an issue or pull request
@@ -39,7 +37,7 @@ export interface ListIssueComments extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListIssueCommentsRequest,
-    ) => Effect.Effect<ListIssueCommentsResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<ListIssueCommentsResponse, Issues.ListCommentsError, RuntimeContext>
   >
 > {}
 

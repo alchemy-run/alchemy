@@ -65,8 +65,18 @@ export interface CostCategory extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CostCategoryLookup
 > {}
+
+/**
+ * Props for {@link CostCategory.lookup}: find a cost category this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CostCategoryLookup {
+  /** The ARN of the existing cost category. */
+  costCategoryArn: string;
+}
 
 /**
  * A Cost Explorer cost category — rule-based groupings that map your AWS
@@ -115,6 +125,16 @@ export interface CostCategory extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cost category
+ * `CostCategory.lookup` references a cost category Alchemy doesn't manage (created in the
+ * console or by another stack), found by `costCategoryArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cost category
+ * ```typescript
+ * const existing = AWS.CostExplorer.CostCategory.lookup({ costCategoryArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const CostCategory = Resource<CostCategory>("AWS.CostExplorer.CostCategory");
@@ -136,7 +156,7 @@ export const CostCategoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.CostCategory),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Fallback observation when no ARN is cached: scan currently-effective
@@ -153,7 +173,7 @@ export const CostCategoryProvider = () =>
             const reference = Array.from(chunk)[0];
             return reference?.CostCategoryArn !== undefined
               ? getByArn(reference.CostCategoryArn)
-              : Effect.succeed(undefined);
+              : Effect.undefined;
           }),
         );
 
@@ -194,6 +214,12 @@ export const CostCategoryProvider = () =>
               { concurrency: 10 },
             );
           }),
+        lookup: Effect.fn(function* ({ costCategoryArn }) {
+          const live = yield* getByArn(costCategoryArn);
+          if (live === undefined) return undefined;
+          const attrs = yield* toAttrs(live);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const live = output?.costCategoryArn
             ? yield* getByArn(output.costCategoryArn)

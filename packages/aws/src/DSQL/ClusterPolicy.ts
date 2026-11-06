@@ -123,7 +123,7 @@ export const ClusterPolicyProvider = () =>
       const readPolicy = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getClusterPolicy({ identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (clusterId: string, policy: string, policyVersion: string) => ({

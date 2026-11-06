@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -53,27 +54,27 @@ test.provider(
 
       const created = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferTsig("TestTsig", {
-          name: "alchemy-dnszt-tsig-test.",
+          name: `${testName("alchemy-dnszt-tsig-test")}.`,
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_A),
         }),
       );
       expect(created.tsigId).toBeDefined();
       expect(created.accountId).toEqual(accountId);
-      expect(created.name).toEqual("alchemy-dnszt-tsig-test.");
+      expect(created.name).toEqual(`${testName("alchemy-dnszt-tsig-test")}.`);
       expect(created.algo).toEqual("hmac-sha512.");
       // The secret is never persisted in attributes.
       expect("secret" in created).toBe(false);
 
       // Out-of-band verify via the SDK.
       const live = yield* getTsig(accountId, created.tsigId);
-      expect(live.name).toEqual("alchemy-dnszt-tsig-test.");
+      expect(live.name).toEqual(`${testName("alchemy-dnszt-tsig-test")}.`);
       expect(live.secret).toEqual(SECRET_A);
 
       // Rotate the secret in place — same physical TSIG.
       const rotated = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferTsig("TestTsig", {
-          name: "alchemy-dnszt-tsig-test.",
+          name: `${testName("alchemy-dnszt-tsig-test")}.`,
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_B),
         }),
@@ -107,7 +108,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferTsig("ListTsig", {
-          name: "alchemy-dnszt-tsig-list.",
           algo: "hmac-sha512.",
           secret: Redacted.make(SECRET_A),
         }),

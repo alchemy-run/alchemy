@@ -1,14 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -39,7 +40,7 @@ test.provider(
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("FlagApp", {
-            name: "alchemy-test-flagship-flags",
+            name: testName("alchemy-test-flagship-flags"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("Flag", {
             appId: app.appId,
@@ -73,7 +74,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("FlagApp", {
-            name: "alchemy-test-flagship-flags",
+            name: testName("alchemy-test-flagship-flags"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("Flag", {
             appId: app.appId,
@@ -122,7 +123,7 @@ test.provider(
       const noop = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("FlagApp", {
-            name: "alchemy-test-flagship-flags",
+            name: testName("alchemy-test-flagship-flags"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("Flag", {
             appId: app.appId,
@@ -163,7 +164,7 @@ test.provider(
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("ReplaceApp", {
-            name: "alchemy-test-flagship-replace",
+            name: testName("alchemy-test-flagship-replace"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("ReplaceFlag", {
             appId: app.appId,
@@ -181,7 +182,7 @@ test.provider(
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("ReplaceApp", {
-            name: "alchemy-test-flagship-replace",
+            name: testName("alchemy-test-flagship-replace"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("ReplaceFlag", {
             appId: app.appId,
@@ -214,7 +215,7 @@ test.provider(
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("HealApp", {
-            name: "alchemy-test-flagship-heal-flag",
+            name: testName("alchemy-test-flagship-heal-flag"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("HealFlag", {
             appId: app.appId,
@@ -238,7 +239,7 @@ test.provider(
       const healed = yield* stack.deploy(
         Effect.gen(function* () {
           const app = yield* Cloudflare.Flagship.App("HealApp", {
-            name: "alchemy-test-flagship-heal-flag",
+            name: testName("alchemy-test-flagship-heal-flag"),
           });
           const flag = yield* Cloudflare.Flagship.Flag("HealFlag", {
             appId: app.appId,
@@ -276,9 +277,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const app = yield* Cloudflare.Flagship.App("ListApp", {
-            name: "alchemy-test-flagship-list",
-          });
+          const app = yield* Cloudflare.Flagship.App("ListApp", {});
           const flag = yield* Cloudflare.Flagship.Flag("ListFlag", {
             appId: app.appId,
             key: "alchemy-test-flag-list",

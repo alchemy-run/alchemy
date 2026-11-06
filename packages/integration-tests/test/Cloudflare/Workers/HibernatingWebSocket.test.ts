@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -74,8 +74,8 @@ const Stats = Schema.Struct({
 const timestamp = "2026-01-02T03:04:05.000Z";
 
 describe.concurrent.each([
-  { dev: true, stage: "native-websocket-local" },
-  { dev: false, stage: "native-websocket-live" },
+  { dev: true, stage: `${Test.defaultStage()}-native-websocket-local` },
+  { dev: false, stage: `${Test.defaultStage()}-native-websocket-live` },
 ])(
   "Native WebSocket attachments (dev: $dev)",
   ({ dev, stage }) => {

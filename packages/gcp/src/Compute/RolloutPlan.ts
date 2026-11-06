@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -228,7 +228,7 @@ const toAttrs = (plan: compute.RolloutPlan, project: string): RolloutPlan["Attri
 const getByName = (project: string, rolloutPlan: string) =>
   compute
     .getRolloutPlans({ project, rolloutPlan })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPlanGone = (project: string, rolloutPlanName: string) =>
   getByName(project, rolloutPlanName).pipe(
@@ -286,14 +286,16 @@ export const RolloutPlanProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const rolloutPlanName = yield* toName(id, olds?.rolloutPlanName, output?.rolloutPlanName);
       const existing = yield* getByName(env.project, rolloutPlanName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "rolloutPlanName");
     }),
 
     list: () =>
@@ -328,7 +330,7 @@ export const RolloutPlanProvider = () =>
             project: env.project,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -363,7 +365,7 @@ export const RolloutPlanProvider = () =>
           rolloutPlan: output.rolloutPlanName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

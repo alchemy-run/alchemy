@@ -3,8 +3,8 @@ import { AuthOAuthProvider } from "@alchemy.run/neon/AuthOAuthProvider";
 import { Project } from "@alchemy.run/neon/Project";
 import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 

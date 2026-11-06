@@ -243,7 +243,7 @@ const toAttrs = (snapshot: compute.Snapshot, project: string) => ({
 const getByName = (project: string, region: string, snapshot: string) =>
   compute
     .getRegionSnapshots({ project, region, snapshot })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitSnapshotReady = (project: string, region: string, snapshotName: string) =>
   getByName(project, region, snapshotName).pipe(
@@ -414,7 +414,7 @@ export const RegionSnapshotProvider = () =>
               guestFlush: news.guestFlush,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -468,7 +468,7 @@ export const RegionSnapshotProvider = () =>
           snapshot: output.snapshotName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

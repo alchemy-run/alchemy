@@ -117,7 +117,7 @@ export type CustomClass = Resource<
 export const CustomClass = Resource<CustomClass>("GCP.Speech.CustomClass");
 
 export class CustomClassNotResolved extends Data.TaggedError("GCP.Speech.CustomClassNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const customClassNameOf = (project: string, location: string, customClassId: string) =>
@@ -205,7 +205,7 @@ export const CustomClassProvider = () =>
 
       if (current === undefined) {
         return yield* new CustomClassNotResolved({
-          name: name || customClassNameOf(env.project, location, customClassId),
+          resourceName: name || customClassNameOf(env.project, location, customClassId),
         });
       }
 

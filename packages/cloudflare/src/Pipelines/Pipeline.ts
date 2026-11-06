@@ -319,7 +319,7 @@ const pipelineName = (id: string, name: string | undefined) =>
 const getPipeline = (accountId: string, pipelineId: string) =>
   pipelines.getV1Pipeline({ accountId, pipelineId }).pipe(
     Effect.map((p): ObservedPipeline | undefined => p),
-    Effect.catchTag("PipelineNotExists", () => Effect.succeed(undefined)),
+    Effect.catchTag("PipelineNotExists", () => Effect.undefined),
   );
 
 /**

@@ -13,6 +13,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readDirectoryTags, sameStringSet } from "./internal.ts";
 
+export class DirectoryUnexpectedResponse extends Data.TaggedError("DirectoryUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /** The kind of managed directory to launch. */
 export type DirectoryFlavor = "SimpleAD" | "MicrosoftAD";
 
@@ -113,8 +118,23 @@ export interface Directory extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DirectoryLookup
 > {}
+
+/**
+ * Props for {@link Directory.lookup}: find a directory this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DirectoryLookup =
+  | {
+      /** The id of the existing directory. */
+      directoryId: string;
+    }
+  | {
+      /** The fully qualified name of the existing directory. */
+      name: string;
+    };
 
 /**
  * An AWS Directory Service managed directory — either Simple AD (Samba) or
@@ -157,6 +177,17 @@ export interface Directory extends Resource<
  * const dns = directory.dnsIpAddrs;
  * ```
  *
+ * ### Looking up an existing directory
+ * `Directory.lookup` references a directory Alchemy doesn't manage (created in the
+ * console or by another stack), found by `directoryId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing directory
+ * ```typescript
+ * const corp = AWS.DirectoryService.Directory.lookup({ name: "corp.example.com" });
+ * const directoryId = corp.directoryId;
+ * ```
+ *
  * @resource
  */
 export const Directory = Resource<Directory>("AWS.DirectoryService.Directory");
@@ -197,7 +228,7 @@ export const DirectoryProvider = () =>
       const getById = Effect.fn(function* (directoryId: string) {
         const response = yield* ds
           .describeDirectories({ DirectoryIds: [directoryId] })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.DirectoryDescriptions?.[0];
       });
 
@@ -269,9 +300,9 @@ export const DirectoryProvider = () =>
 
       const toAttrs = Effect.fn(function* (directory: ds.DirectoryDescription) {
         if (!directory.DirectoryId || !directory.Name) {
-          return yield* Effect.fail(
-            new Error(`directory '${directory.DirectoryId}' is missing its id or name`),
-          );
+          return yield* new DirectoryUnexpectedResponse({
+            message: `directory '${directory.DirectoryId}' is missing its id or name`,
+          });
         }
         const { accountId, region } = yield* AWSEnvironment.current;
         return {
@@ -330,6 +361,13 @@ export const DirectoryProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const directory = yield* observe(
+            "directoryId" in props ? props.directoryId : undefined,
+            "name" in props ? props.name : undefined,
+          );
+          return directory === undefined ? undefined : yield* toAttrs(directory);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const directory = yield* observe(output?.directoryId, olds?.name);
           if (directory === undefined) return undefined;
@@ -381,9 +419,9 @@ export const DirectoryProvider = () =>
                     Tags: tagList,
                   });
             if (created.DirectoryId === undefined) {
-              return yield* Effect.fail(
-                new Error(`Create${type} for '${props.name}' returned no DirectoryId`),
-              );
+              return yield* new DirectoryUnexpectedResponse({
+                message: `Create${type} for '${props.name}' returned no DirectoryId`,
+              });
             }
             directoryId = created.DirectoryId;
           }

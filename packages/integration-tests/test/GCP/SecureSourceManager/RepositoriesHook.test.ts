@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ssm from "@distilled.cloud/gcp/securesourcemanager_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { currentProject, logLevel, missingRepoOf, runLifecycle } from "./common.ts";

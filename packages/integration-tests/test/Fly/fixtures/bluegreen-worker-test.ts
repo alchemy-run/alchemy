@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import * as Fly from "@alchemy.run/fly";
 import { expect } from "@alchemy.run/test";
+import type { ScratchStack } from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Output from "alchemy/Output";
-import type { ScratchStack } from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -376,7 +376,10 @@ export const assertOrder = (
     (event) => event.machine === machine && (worker === undefined || event.worker === worker),
   );
   expect(selected.findIndex((event) => event.event === first)).toBeGreaterThanOrEqual(0);
-  expect(selected.findIndex((event) => event.event === second)).toBeGreaterThan(
+  // The last `second`: a Machine whose first process dies while booting
+  // logs its shutdown events once before the process Fly restarts in
+  // place, and that boot is not the stop under test.
+  expect(selected.findLastIndex((event) => event.event === second)).toBeGreaterThan(
     selected.findIndex((event) => event.event === first),
   );
 };

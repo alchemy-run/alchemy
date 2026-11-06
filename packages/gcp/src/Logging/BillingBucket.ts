@@ -176,11 +176,11 @@ export const BillingBucket = Resource<BillingBucket>("GCP.Logging.BillingBucket"
 export class BillingBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BillingBucketFailed extends Data.TaggedError("GCP.Logging.BillingBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -259,7 +259,7 @@ const toAttrs = (bucket: logging.LogBucket, billingAccountId: string, location: 
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -270,16 +270,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new BillingBucketNotResolved({ name });
+      return yield* new BillingBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new BillingBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new BillingBucketNotResolved({ name });
+      return yield* new BillingBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -293,7 +293,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new BillingBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new BillingBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BillingBucketNotResolved",
@@ -417,7 +419,7 @@ export const BillingBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BillingBucketNotResolved({ name });
+        return yield* new BillingBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

@@ -78,7 +78,7 @@ export const GroupMembershipProvider = () =>
         .getGroup({
           GroupName: output.groupName,
         })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       if (!response?.Group?.GroupName) {
         return undefined;
       }
@@ -98,7 +98,7 @@ export const GroupMembershipProvider = () =>
       // in a single call.
       const response = yield* iam
         .getGroup({ GroupName: groupName })
-        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       const observedUsers = (response?.Users ?? [])
         .map((user) => user.UserName)
         .filter((userName): userName is string => typeof userName === "string");
@@ -153,7 +153,7 @@ export const GroupMembershipProvider = () =>
                 .filter((userName): userName is string => typeof userName === "string"),
             })),
             // The group may be deleted between listGroups and getGroup.
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

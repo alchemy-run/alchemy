@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
@@ -55,7 +55,6 @@ test.provider.skipIf(!entitled)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Dlp.Profile("ListResource", {
-            name: "alchemy-test-dlp-list",
             description: "list coverage",
             entries: [
               {

@@ -1,12 +1,17 @@
 import * as AWS from "@alchemy.run/aws";
 import { AutoScalingConfiguration, Service } from "@alchemy.run/aws/AppRunner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as sts from "@distilled.cloud/aws/sts";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+
+// App Runner closed to new customers on 2026-04-30; accounts that weren't
+// already customers get "Account <id> can't create new App Runner services".
+// Set AWS_TEST_APPRUNNER_SERVICES=1 on an account that can still create them.
+const appRunnerServices = !!process.env.AWS_TEST_APPRUNNER_SERVICES;
 import {
   awaitLogGroups,
   deleteLogGroups,
@@ -70,7 +75,7 @@ const assertConfigGone = (name: string) =>
 // always destroys what it created. The source is a public ECR gallery
 // image (ECR_PUBLIC), which needs no access role, no local Docker build,
 // and no private repository.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
   "create a public-ECR service with custom scaling, verify it serves, destroy, verify gone",
   (stack) =>
     Effect.gen(function* () {
@@ -146,7 +151,7 @@ test.provider.skipIf(!!process.env.FAST)(
 // auto-created log groups in place. Uses the same public ECR gallery image
 // as the lifecycle test above (no access role, no Docker build) since all
 // this needs is a real service that has logged something.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
   "retainLogGroups keeps the auto-created log groups after the service is destroyed",
   (stack) =>
     Effect.gen(function* () {

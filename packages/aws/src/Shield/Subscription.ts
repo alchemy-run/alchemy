@@ -2,8 +2,16 @@ import * as shield from "@distilled.cloud/aws/shield";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class ShieldSubscriptionUnexpectedResponse extends Data.TaggedError(
+  "ShieldSubscriptionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Whether the Shield Advanced subscription renews automatically. */
 export type SubscriptionAutoRenew = "ENABLED" | "DISABLED";
@@ -72,7 +80,7 @@ export { SubscriptionResource as Subscription };
 // when the account is not subscribed — collapse it to `undefined`.
 const observeSubscription = shield.describeSubscription({}).pipe(
   Effect.map((r) => r.Subscription),
-  Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)),
+  Effect.catchTag("SubscriptionNotFound", () => Effect.undefined),
 );
 
 const buildAttrs = (subscription: shield.Subscription) => ({
@@ -121,9 +129,9 @@ export const SubscriptionProvider = () =>
               .describeSubscription({})
               .pipe(Effect.map((r) => r.Subscription));
             if (!subscription) {
-              return yield* Effect.fail(
-                new Error("Failed to create or read the Shield Advanced subscription"),
-              );
+              return yield* new ShieldSubscriptionUnexpectedResponse({
+                message: "Failed to create or read the Shield Advanced subscription",
+              });
             }
           }
 

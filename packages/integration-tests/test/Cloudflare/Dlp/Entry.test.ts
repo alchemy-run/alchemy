@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
@@ -58,7 +58,6 @@ test.provider.skipIf(!entitled)(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
-            name: "alchemy-test-dlp-entry-list-profile",
             allowedMatchCount: 0,
             entries: [
               {
@@ -69,7 +68,6 @@ test.provider.skipIf(!entitled)(
             ],
           });
           const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
-            name: "alchemy-test-dlp-entry-list",
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
           });

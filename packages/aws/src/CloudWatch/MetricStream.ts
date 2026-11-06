@@ -5,12 +5,20 @@ import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
+
+export class MetricStreamUnexpectedResponse extends Data.TaggedError(
+  "MetricStreamUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type MetricStreamName = string;
 export type MetricStreamArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
@@ -47,8 +55,18 @@ export interface MetricStream extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MetricStreamLookup
 > {}
+
+/**
+ * Props for {@link MetricStream.lookup}: find a metric stream this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MetricStreamLookup {
+  /** The metric stream name of the existing metric stream. */
+  metricStreamName: string;
+}
 
 /**
  * A CloudWatch metric stream — continuously exports CloudWatch metrics to
@@ -84,6 +102,16 @@ export interface MetricStream extends Resource<
  * const state = result.State; // "running" | "stopped"
  * ```
  *
+ * ### Looking up an existing metric stream
+ * `MetricStream.lookup` references a metric stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `metricStreamName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing metric stream
+ * ```typescript
+ * const existing = AWS.CloudWatch.MetricStream.lookup({ metricStreamName: "my-metric-stream" });
+ * ```
+ *
  * @resource
  */
 export const MetricStream = Resource<MetricStream>("AWS.CloudWatch.MetricStream");
@@ -110,8 +138,8 @@ export const MetricStreamProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              InvalidParameterValueException: () => Effect.succeed(undefined),
-              ResourceNotFoundException: () => Effect.succeed(undefined),
+              InvalidParameterValueException: () => Effect.undefined,
+              ResourceNotFoundException: () => Effect.undefined,
             }),
           );
 
@@ -181,7 +209,7 @@ export const MetricStreamProvider = () =>
 
             const results = yield* Effect.forEach(
               entries,
-              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.succeed(undefined)),
+              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.undefined),
               { concurrency: 10 },
             );
 
@@ -189,6 +217,11 @@ export const MetricStreamProvider = () =>
               (state): state is NonNullable<typeof state> => state !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ metricStreamName: name }) {
+          const state = yield* readMetricStream(name);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.metricStreamName ?? (yield* createMetricStreamName(id, olds ?? {}));
           const state = yield* readMetricStream(name);
@@ -231,9 +264,9 @@ export const MetricStreamProvider = () =>
 
           const state = yield* readMetricStream(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled metric stream '${name}'`),
-            );
+            return yield* new MetricStreamUnexpectedResponse({
+              message: `failed to read reconciled metric stream '${name}'`,
+            });
           }
 
           return {

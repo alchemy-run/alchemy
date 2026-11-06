@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { HealthCheck, HostedZone, Record } from "@alchemy.run/aws/Route53";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

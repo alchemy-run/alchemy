@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

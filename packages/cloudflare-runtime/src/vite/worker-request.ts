@@ -60,10 +60,23 @@ export function forwardWorkerRequest(
   // short (#1869). We couldn't reproduce that against workerd, but a fresh
   // loopback connection costs next to nothing. See
   // https://github.com/alchemy-run/alchemy/pull/2242.
+  //
+  // A request with a body asks workerd for `100 Continue` first, and the body
+  // is only forwarded once workerd sends it, which it does when the Worker
+  // starts reading. A Worker that answers without reading (a 413 for an
+  // oversized upload) then never receives the body: workerd closes the
+  // connection after such a response, and an upload still in flight races the
+  // response, which macOS can lose to the connection reset.
+  const hasBody =
+    request.headers["transfer-encoding"] !== undefined ||
+    Number(request.headers["content-length"] ?? 0) > 0;
   const upstream = NodeHttp.request(target, {
     agent: false,
     method: request.method,
-    headers: proxyRequestHeaders(request, target, proxySharedSecret),
+    headers: {
+      ...proxyRequestHeaders(request, target, proxySharedSecret),
+      ...(hasBody ? { expect: "100-continue" } : {}),
+    },
   });
   // Watch the socket, not the response: Bun's `ServerResponse` emits no `close`
   // on a hang-up. Once the request body has been read, Bun reports no hang-up
@@ -99,10 +112,10 @@ export function forwardWorkerRequest(
   // takes down the server. Requests in flight while the Worker runtime is
   // being replaced hit exactly that.
   //
-  // The Worker may answer before reading the whole request body (a 413 for an
-  // oversized upload). workerd then closes the connection, so forwarding the
-  // rest of the body fails. That is no failure of the response, which
-  // `workerResponse` reports on its own.
+  // The Worker may also answer part-way through reading the body. workerd
+  // then closes the connection, so forwarding the rest of the body fails.
+  // That is no failure of the response, which `workerResponse` reports on its
+  // own.
   let answered = false;
   upstream.on("error", (error) => {
     if (!answered) {
@@ -135,7 +148,13 @@ export function forwardWorkerRequest(
       });
       return;
     }
-    response.writeHead(workerResponse.statusCode ?? 500, workerResponse.headers);
+    // The Worker's status text (`new Response(body, { statusText })`) is
+    // relayed as written, as `@cloudflare/vite-plugin` does since 1.65.
+    response.writeHead(
+      workerResponse.statusCode ?? 500,
+      workerResponse.statusMessage,
+      workerResponse.headers,
+    );
     workerResponse.pipe(response);
     // `pipe` alone would leave the client's response open forever when the
     // Worker's is cut short.
@@ -147,7 +166,22 @@ export function forwardWorkerRequest(
       }
     });
   });
-  request.pipe(upstream);
+  let forwarding = !hasBody;
+  if (hasBody) {
+    upstream.once("continue", () => {
+      forwarding = true;
+      request.pipe(upstream);
+    });
+  } else {
+    request.pipe(upstream);
+  }
+  // Answered without the body: drain the client's (see above), and close the
+  // upstream request, which never sent one.
+  upstream.once("response", (workerResponse) => {
+    if (forwarding) return;
+    request.resume();
+    finished(workerResponse, () => upstream.destroy());
+  });
 }
 
 interface ReducedError {

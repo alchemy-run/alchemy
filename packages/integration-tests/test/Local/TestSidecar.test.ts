@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect, registerFileCleanup } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Interaction } from "alchemy/Interaction";
 import { RpcProviderProxy } from "alchemy/Local/RpcProviderProxy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -74,7 +74,7 @@ live.test(
 
 const cleanupOrder: Array<string> = [];
 
-describe("file-owned runtime cleanup", () => {
+describe("file-owned runtime cleanup", { tags: ["local"] }, () => {
   const nested = Test.make({
     providers: Layer.empty,
     dev: true,
@@ -92,6 +92,7 @@ describe("file-owned runtime cleanup", () => {
     Effect.sync(() => {
       expect(cleanupOrder).toEqual([]);
     }),
+    { tags: ["unit", "local"] },
   );
   nested.afterAll(
     Effect.sync(() => {
@@ -105,7 +106,7 @@ describe("file-owned runtime cleanup", () => {
     dev: true,
     sidecar: true,
   });
-  skipped.test.skip("unused handles need no RPC session", Effect.void);
+  skipped.test.skip("unused handles need no RPC session", Effect.void, { tags: ["unit", "local"] });
 });
 
 live.afterAll(

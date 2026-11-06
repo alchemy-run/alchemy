@@ -1,8 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
-import { Addon } from "@alchemy.run/aws/EKS";
+import { Network } from "@alchemy.run/aws/EC2/Network";
+import { Addon, Cluster } from "@alchemy.run/aws/EKS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -64,4 +66,55 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 600_000 },
+);
+
+// Regression: every update sent the same clientRequestToken, so EKS answered
+// the second update as a retry of the first and left the add-on unchanged.
+// Provisions its own Auto Mode cluster (~10 min create, ~5 min delete), so it
+// skips under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
+  "applies every configurationValues update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (replicas: number) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("AddonNetwork", {
+              cidrBlock: "10.86.0.0/16",
+              availabilityZones: 2,
+            });
+            const cluster = yield* Cluster("AddonCluster", {
+              compute: "auto",
+              resourcesVpcConfig: {
+                subnetIds: network.publicSubnetIds,
+                endpointPublicAccess: true,
+              },
+            });
+            return yield* Addon("ConfiguredAddon", {
+              clusterName: cluster.clusterName,
+              addonName: "metrics-server",
+              configurationValues: JSON.stringify({ replicas }),
+            });
+          }),
+        );
+
+      const configured = (addon: Addon["Attributes"]) =>
+        eks
+          .describeAddon({ clusterName: addon.clusterName, addonName: addon.addonName })
+          .pipe(Effect.map((response) => response.addon?.configurationValues));
+
+      const first = yield* deploy(1);
+      expect(yield* configured(first)).toBe(JSON.stringify({ replicas: 1 }));
+
+      const second = yield* deploy(2);
+      expect(yield* configured(second)).toBe(JSON.stringify({ replicas: 2 }));
+
+      const third = yield* deploy(1);
+      expect(yield* configured(third)).toBe(JSON.stringify({ replicas: 1 }));
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 2_400_000 },
 );

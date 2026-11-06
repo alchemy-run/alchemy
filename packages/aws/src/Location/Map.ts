@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class MapUnexpectedResponse extends Data.TaggedError("MapUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Rendering configuration for a map. `style` selects the base map style and is
@@ -72,8 +78,18 @@ export interface Map extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MapLookup
 > {}
+
+/**
+ * Props for {@link Map.lookup}: find a map this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MapLookup {
+  /** The map name of the existing map. */
+  mapName: string;
+}
 
 /**
  * An Amazon Location Service map resource. A map exposes vector/raster tiles,
@@ -98,6 +114,16 @@ export interface Map extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing map
+ * `Map.lookup` references a map Alchemy doesn't manage (created in the
+ * console or by another stack), found by `mapName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing map
+ * ```typescript
+ * const existing = AWS.Location.Map.lookup({ mapName: "my-map" });
+ * ```
+ *
  * @resource
  */
 export const Map = Resource<Map>("AWS.Location.Map");
@@ -111,7 +137,7 @@ const createMapName = (id: string, props: { mapName?: string | undefined }) =>
 const readMap = Effect.fn(function* (mapName: string) {
   const found = yield* location
     .describeMap({ MapName: mapName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     mapName: found.MapName,
@@ -147,6 +173,11 @@ export const MapProvider = () =>
             });
             return hydrated.filter((attrs): attrs is Map["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ mapName }) {
+          const state = yield* readMap(mapName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const mapName = output?.mapName ?? (yield* createMapName(id, olds ?? {}));
           const state = yield* readMap(mapName);
@@ -185,7 +216,9 @@ export const MapProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readMap(mapName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created map ${mapName}`));
+              return yield* new MapUnexpectedResponse({
+                message: `failed to read created map ${mapName}`,
+              });
             }
           }
 
@@ -222,7 +255,9 @@ export const MapProvider = () =>
 
           const final = yield* readMap(mapName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled map ${mapName}`));
+            return yield* new MapUnexpectedResponse({
+              message: `failed to read reconciled map ${mapName}`,
+            });
           }
           return final;
         }),

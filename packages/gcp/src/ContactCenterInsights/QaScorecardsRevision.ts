@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -91,7 +91,7 @@ export const QaScorecardsRevision = Resource<QaScorecardsRevision>(
 export class QaScorecardsRevisionNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardsRevisionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, qaScorecardRevisionId: string) =>
@@ -117,10 +117,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaScorecardsRevisions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listScorecards = (parent: string) =>
   cci.listProjectsLocationsQaScorecards.pages({ parent, pageSize: 100 }).pipe(
@@ -177,7 +177,7 @@ export const QaScorecardsRevisionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const qaScorecardRevisionId = yield* toResourceId(
         id,
@@ -192,7 +192,7 @@ export const QaScorecardsRevisionProvider = () =>
       const attrs = toAttrs(existing, env.project);
       return hasOwnershipMarker(existing.snapshot?.description) || output?.name === existing.name
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -244,7 +244,7 @@ export const QaScorecardsRevisionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaScorecardsRevisionNotResolved({ name });
+        return yield* new QaScorecardsRevisionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -261,8 +261,8 @@ export const QaScorecardsRevisionProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
             }),
           );
       }

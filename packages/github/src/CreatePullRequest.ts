@@ -1,17 +1,12 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface CreatePullRequestRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["create"]["parameters"]
-> {}
+export interface CreatePullRequestRequest extends Omit<Pulls.CreateRequest, "owner" | "repo"> {}
 
-export type CreatePullRequestResponse =
-  RestEndpointMethodTypes["pulls"]["create"]["response"]["data"];
+export type CreatePullRequestResponse = Pulls.PullRequest;
 
 /**
  * Open a pull request (`pulls.create`). The `head` branch must already exist;
@@ -43,7 +38,7 @@ export interface CreatePullRequest extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreatePullRequestRequest,
-    ) => Effect.Effect<CreatePullRequestResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<CreatePullRequestResponse, Pulls.CreateError, RuntimeContext>
   >
 > {}
 

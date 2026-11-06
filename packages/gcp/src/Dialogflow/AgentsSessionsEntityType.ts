@@ -1,5 +1,5 @@
 import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -131,7 +131,7 @@ export const AgentsSessionsEntityType = Resource<AgentsSessionsEntityType>(
 export class AgentsSessionsEntityTypeNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsSessionsEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ENTITY_TYPE = "sys.color";
@@ -190,10 +190,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsSessionsEntityTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, agent: string) =>
   dialogflow.listProjectsLocationsAgentsSessionsEntityTypes.pages({ parent, pageSize: 100 }).pipe(
@@ -230,7 +230,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
       const agent = olds?.agent ? expandAgent(olds.agent, env.project, location) : output?.agent;
@@ -241,7 +241,9 @@ export const AgentsSessionsEntityTypeProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, agent);
-      return (yield* ownedByAlchemy(id, ownershipText(existing.entities))) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, ownershipText(existing.entities)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -288,7 +290,7 @@ export const AgentsSessionsEntityTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsSessionsEntityTypeNotResolved({ name });
+        return yield* new AgentsSessionsEntityTypeNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

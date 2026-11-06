@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -34,7 +34,7 @@ const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
 // so this needs no CloudFront lifecycle and runs outside the live gate.
 describe.skipIf(runEmulated)(
   "AWS.Website.Astro plan",
-  { tags: ["provider:aws", "provider:aws:website"] },
+  { tags: ["provider:aws", "provider:aws:website", "live"] },
   () => {
     test.provider(
       "a config-file output 'static' plans an assets-only site without the astro.output prop",
@@ -60,6 +60,7 @@ describe.skipIf(runEmulated)(
           expect(types).toContain("AWS.S3.Bucket");
           expect(types.filter((type) => type.startsWith("AWS.Lambda."))).toEqual([]);
         }),
+      { tags: ["live"] },
     );
   },
 );

@@ -286,20 +286,20 @@ export const InternalRange = Resource<InternalRange>("GCP.NetworkConnectivity.In
 export class InternalRangeNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InternalRangeRangeMissing extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeRangeMissing",
 )<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class InternalRangeStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.InternalRangeStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -437,12 +437,14 @@ const toAttrs = (range: networkconnectivity.InternalRange, project: string) => {
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsInternalRanges({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range ? Effect.succeed(range) : Effect.fail(new InternalRangeNotResolved({ name })),
+      range
+        ? Effect.succeed(range)
+        : Effect.fail(new InternalRangeNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeNotResolved",
@@ -454,7 +456,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((range) =>
-      range === undefined ? Effect.void : Effect.fail(new InternalRangeStillExists({ name })),
+      range === undefined
+        ? Effect.void
+        : Effect.fail(new InternalRangeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.InternalRangeStillExists",
@@ -610,7 +614,7 @@ export const InternalRangeProvider = () =>
       if (current === undefined) {
         if (news.ipCidrRange === undefined && news.prefixLength === undefined) {
           return yield* new InternalRangeRangeMissing({
-            name,
+            resourceName: name,
             message: "InternalRange requires ipCidrRange or prefixLength on create",
           });
         }
@@ -626,7 +630,7 @@ export const InternalRangeProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -635,7 +639,7 @@ export const InternalRangeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InternalRangeNotResolved({ name });
+        return yield* new InternalRangeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -711,7 +715,7 @@ export const InternalRangeProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -55,12 +55,12 @@ class Wallet extends Domain.Aggregate("Wallet", {
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
     Close: () => [new Closed()],
-    Debit: (s, cmd) =>
-      s.balance < cmd.amount
-        ? new Insufficient({ balance: s.balance })
+    Debit: (wallet, cmd) =>
+      wallet.balance < cmd.amount
+        ? new Insufficient({ balance: wallet.balance })
         : [new Debited({ transfer: cmd.transfer, amount: cmd.amount })],
-    Credit: (s, cmd) =>
-      s.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
+    Credit: (wallet, cmd) =>
+      wallet.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
     Refund: (_, cmd) => [new Refunded({ transfer: cmd.transfer, amount: cmd.amount })],
   },
   evolve: {
@@ -95,8 +95,8 @@ class Transfer extends Domain.Aggregate("Transfer", {
   initial: { requested: false },
   commands: [RequestTransfer],
   decide: {
-    RequestTransfer: (s, cmd) =>
-      s.requested
+    RequestTransfer: (transfer, cmd) =>
+      transfer.requested
         ? []
         : [
             new Requested({
@@ -200,6 +200,8 @@ const bob = Wallet.ref("bob");
 const transfer = Transfer.ref("t-1");
 const request = (amount: number, approval = false) =>
   new RequestTransfer({ from: alice.id, to: bob.id, amount, approval });
+const requested = (amount: number, approval = false) =>
+  new Requested({ from: alice.id, to: bob.id, amount, approval });
 
 // A step that sends a debit, then fails its first attempt: the retry sends the
 // same command again, which the wallet must apply once.
@@ -302,12 +304,13 @@ const checks = Story.make(Checks, {
   stub: [Sanctions],
 });
 
-describe("Domain.Saga", () => {
+describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
       Story.given(alice, new Opened({ balance: 100 })),
       Story.given(bob, new Opened({ balance: 0 })),
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.then(alice, new Debited({ transfer: "t-1", amount: 40 })),
       Story.then(bob, new Credited({ transfer: "t-1", amount: 40 })),
       Story.saga(MoveMoney, "t-1", { _tag: "Completed", result: { approvedBy: null } }),
@@ -319,6 +322,7 @@ describe("Domain.Saga", () => {
       Story.given(alice, new Opened({ balance: 100 })),
       Story.given(bob, new Opened({ balance: 0 }), new Closed()),
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.then(
         alice,
         new Debited({ transfer: "t-1", amount: 40 }),
@@ -334,6 +338,7 @@ describe("Domain.Saga", () => {
       Story.given(alice, new Opened({ balance: 10 })),
       Story.given(bob, new Opened({ balance: 0 })),
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.then(alice),
       Story.saga(MoveMoney, "t-1", {
         _tag: "Rejected",
@@ -345,6 +350,7 @@ describe("Domain.Saga", () => {
   it.effect("a step's external system call waits until the story answers it", () =>
     checks(
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.saga(Screen, "t-1", { _tag: "Running" }),
       Story.call(Sanctions.check, { wallet: "alice" }),
       Story.succeed(Sanctions.check, { clear: false }),
@@ -355,6 +361,7 @@ describe("Domain.Saga", () => {
   it.effect("a step's external system call fails with the operation's declared error", () =>
     checks(
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.call(Sanctions.check, { wallet: "alice" }),
       Story.fail(Sanctions.check, new SanctionsDown()),
       Story.saga(Screen, "t-1", { _tag: "Rejected", rejection: new ScreeningUnavailable() }),
@@ -364,6 +371,7 @@ describe("Domain.Saga", () => {
   it.effect("a step's external system call that dies kills the saga", () =>
     checks(
       Story.when(transfer, request(40)),
+      Story.then(transfer, requested(40)),
       Story.call("t-1", Sanctions.check, { wallet: "alice" }),
       Story.die("t-1", Sanctions.check, new Error("socket closed")),
       Story.saga(Screen, "t-1", { _tag: "Died" }),
@@ -371,7 +379,11 @@ describe("Domain.Saga", () => {
   );
 
   it.effect("a saga that dies reads as Died", () =>
-    checks(Story.when(transfer, request(40, true)), Story.saga(Explode, "t-1", { _tag: "Died" })),
+    checks(
+      Story.when(transfer, request(40, true)),
+      Story.then(transfer, requested(40, true)),
+      Story.saga(Explode, "t-1", { _tag: "Died" }),
+    ),
   );
 
   it.effect("a saga that dies fails the story unless a step asserts it", () =>
@@ -388,10 +400,12 @@ describe("Domain.Saga", () => {
       Story.given(alice, new Opened({ balance: 100 })),
       Story.given(bob, new Opened({ balance: 0 })),
       Story.when(transfer, request(40, true)),
+      Story.then(transfer, requested(40, true)),
       Story.then(alice),
       Story.saga(MoveMoney, "t-1", { _tag: "Running" }),
       Story.signal(MoveMoney, "t-1", Approval, "agent-7"),
       Story.then(alice, new Debited({ transfer: "t-1", amount: 40 })),
+      Story.then(bob, new Credited({ transfer: "t-1", amount: 40 })),
       Story.saga(MoveMoney, "t-1", { _tag: "Completed", result: { approvedBy: "agent-7" } }),
     ),
   );
@@ -402,6 +416,7 @@ describe("Domain.Saga", () => {
       Story.given(alice, new Opened({ balance: 100 })),
       Story.given(bob, new Opened({ balance: 0 })),
       Story.when(transfer, request(40, true)),
+      Story.then(transfer, requested(40, true)),
       Story.clock("2026-01-02T08:59:00Z"),
       Story.saga(MoveMoney, "t-1", { _tag: "Running" }),
       Story.clock("2026-01-02T09:00:00Z"),
@@ -418,7 +433,7 @@ describe("Domain.Saga", () => {
       const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
       yield* run.result;
       // Debited once: the retry's send had the same command id.
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
   );
 
@@ -434,7 +449,7 @@ describe("Domain.Saga", () => {
       const second = yield* transfers.start("t-9", input);
       expect(second.executionId).toBe(first.executionId);
       expect(yield* first.result).toEqual({ approvedBy: null });
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Bank.layer(Handlers).pipe(Layer.provide(InMemory)))),
   );
 });

@@ -173,7 +173,7 @@ export const HostnameContentListProvider = () =>
                 hostnames,
                 (h) =>
                   observeContentList(zone.id, h.id).pipe(
-                    Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+                    Effect.catchTag("Forbidden", () => Effect.undefined),
                   ),
                 { concurrency: 10 },
               ),
@@ -294,9 +294,7 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       })),
     } satisfies HostnameContentListAttributes;
   }).pipe(
-    Effect.catchTag(["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"], () => Effect.undefined),
   );
 
 /**

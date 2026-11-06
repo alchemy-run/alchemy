@@ -17,6 +17,7 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -87,7 +88,7 @@ export type SshKey = Resource<
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 
 export class SshKeyNotResolved extends Data.TaggedError("Hetzner.SshKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -119,7 +120,7 @@ const fingerprintOf = (publicKey: string) =>
 const getById = (id: number) =>
   Hetzner.sshKeys.getSshKey({ id }).pipe(
     Effect.map(({ ssh_key }) => ssh_key),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -162,7 +163,7 @@ export const SshKeyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const publicKey = olds?.publicKey ?? output?.publicKey ?? "";
       const existing = yield* observe({
@@ -171,6 +172,16 @@ export const SshKeyProvider = () =>
         publicKey,
       });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -203,7 +214,7 @@ export const SshKeyProvider = () =>
             public_key: news.publicKey,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created?.ssh_key ??
           (yield* observe({
@@ -214,7 +225,7 @@ export const SshKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SshKeyNotResolved({ name });
+        return yield* new SshKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

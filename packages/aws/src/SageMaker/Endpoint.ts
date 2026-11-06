@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class SageMakerEndpointInvalidProps extends Data.TaggedError(
+  "SageMakerEndpointInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SageMakerEndpointUnexpectedResponse extends Data.TaggedError(
+  "SageMakerEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type EndpointStatus = sagemaker.EndpointStatus;
 
 export interface EndpointProps {
@@ -54,8 +68,18 @@ export interface Endpoint extends Resource<
     endpointStatus: EndpointStatus | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 > {}
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointLookup {
+  /** The endpoint name of the existing endpoint. */
+  endpointName: string;
+}
 
 /**
  * An Amazon SageMaker Endpoint — the live, invocable deployment of an
@@ -90,6 +114,16 @@ export interface Endpoint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const existing = AWS.SageMaker.Endpoint.lookup({ endpointName: "my-endpoint" });
+ * ```
+ *
  * @resource
  */
 export const Endpoint = Resource<Endpoint>("AWS.SageMaker.Endpoint");
@@ -102,7 +136,7 @@ const createEndpointName = (id: string, props: { endpointName?: string | undefin
 const fetchEndpointTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -113,7 +147,7 @@ const fetchEndpointTags = Effect.fn(function* (arn: string) {
 const describeEndpointOrUndefined = (name: string) =>
   sagemaker
     .describeEndpoint({ EndpointName: name })
-    .pipe(Effect.catchTag("EndpointNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EndpointNotFound", () => Effect.undefined));
 
 /**
  * The endpoint is still transitioning toward the awaited state — retried by
@@ -196,6 +230,18 @@ export const EndpointProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ endpointName: name }) {
+          const described = yield* describeEndpointOrUndefined(name);
+          if (!described || described.EndpointStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = {
+            endpointName: described.EndpointName,
+            endpointArn: described.EndpointArn,
+            endpointStatus: described.EndpointStatus,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.endpointName ?? (yield* createEndpointName(id, olds ?? {}));
           const described = yield* describeEndpointOrUndefined(name);
@@ -222,7 +268,9 @@ export const EndpointProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker Endpoint requires props"));
+            return yield* new SageMakerEndpointInvalidProps({
+              message: "SageMaker Endpoint requires props",
+            });
           }
           const name = output?.endpointName ?? (yield* createEndpointName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -278,7 +326,9 @@ export const EndpointProvider = () =>
           yield* waitForEndpoint(name, "InService");
           const final = yield* describeEndpointOrUndefined(name);
           if (final === undefined) {
-            return yield* Effect.fail(new Error(`failed to read reconciled endpoint ${name}`));
+            return yield* new SageMakerEndpointUnexpectedResponse({
+              message: `failed to read reconciled endpoint ${name}`,
+            });
           }
 
           // Sync tags — diff against OBSERVED cloud tags.

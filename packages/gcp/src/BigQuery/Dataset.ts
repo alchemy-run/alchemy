@@ -198,7 +198,7 @@ export type Dataset = Resource<
 export const Dataset = Resource<Dataset>("GCP.BigQuery.Dataset");
 
 export class DatasetNotResolved extends Data.TaggedError("GCP.BigQuery.DatasetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -277,7 +277,7 @@ const toAttrs = (
 const getById = (project: string, datasetId: string) =>
   bigquery
     .getDatasets({ projectId: project, datasetId })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameString = (left: string | undefined, right: string | undefined) =>
   (left ?? "") === (right ?? "");
@@ -383,7 +383,7 @@ export const DatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetNotResolved({ name });
+        return yield* new DatasetNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

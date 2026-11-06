@@ -85,6 +85,42 @@ export class Docker extends Context.Service<
         network?: string | undefined;
         /** Linux capabilities to add. */
         "cap-add"?: Array<string> | undefined;
+        /** Linux capabilities to drop. */
+        "cap-drop"?: Array<string> | undefined;
+        /** Hard memory limit in Docker's byte-suffix format. */
+        memory?: string | undefined;
+        /** Combined memory-and-swap limit in Docker's byte-suffix format. */
+        "memory-swap"?: string | undefined;
+        /** Soft memory reservation for memory contention. */
+        "memory-reservation"?: string | undefined;
+        /** CPU quota, in cores. */
+        cpus?: number | undefined;
+        /** Per-container process and thread limit. */
+        "pids-limit"?: number | undefined;
+        /** Mount the root filesystem read-only. */
+        "read-only"?: boolean | undefined;
+        /** Security options such as `no-new-privileges` and seccomp/AppArmor profiles. */
+        "security-opt"?: Array<string> | undefined;
+        /** Per-container user namespace; "host" disables daemon user remapping. */
+        userns?: string | undefined;
+        /** Supplemental Linux groups. */
+        "group-add"?: Array<string> | undefined;
+        /** Per-process soft/hard resource limits. */
+        ulimit?: Array<string> | undefined;
+        /** Docker log driver. */
+        "log-driver"?: string | undefined;
+        /** Driver-specific Docker logging options. */
+        "log-opt"?: Array<string> | undefined;
+        /** Kernel OOM score adjustment. */
+        "oom-score-adj"?: number | undefined;
+        /** Signal used on container stop. */
+        "stop-signal"?: string | undefined;
+        /** Run Docker's tiny init process. */
+        init?: boolean | undefined;
+        /** Runtime UID/GID or named user. */
+        user?: string | undefined;
+        /** Docker tmpfs mount expressions (target[:options]). */
+        tmpfs?: Array<string> | undefined;
         /** Host devices in Docker's `host:container[:permissions]` form. */
         device?: Array<string> | undefined;
         command: Array<string> | undefined;
@@ -130,6 +166,12 @@ export class Docker extends Context.Service<
           platform?: string;
           target?: string;
           "build-arg"?: Record<string, string>;
+          /**
+           * BuildKit secrets, keyed by id (`RUN --mount=type=secret,id=<id>`).
+           * Values reach `docker` through its environment, never its argv,
+           * and are not written to the image.
+           */
+          secrets?: Record<string, string | Redacted.Redacted<string>>;
           "cache-from"?: Array<string>;
           "cache-to"?: Array<string>;
           args?: Array<string>;
@@ -435,6 +477,8 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      User?: string;
+      StopSignal?: string;
       Labels: Record<string, string> | null;
       StopTimeout?: number;
       Healthcheck?: {
@@ -454,12 +498,28 @@ export declare namespace Docker {
       AutoRemove: boolean;
       NetworkMode?: string;
       CapAdd?: string[] | null;
+      CapDrop?: string[] | null;
+      Memory?: number;
+      MemorySwap?: number;
+      MemoryReservation?: number;
+      NanoCpus?: number;
+      PidsLimit?: number;
+      ReadonlyRootfs?: boolean;
+      SecurityOpt?: string[] | null;
+      UsernsMode?: string;
+      GroupAdd?: string[] | null;
+      Ulimits?: Array<{ Name: string; Soft: number; Hard: number }> | null;
+      LogConfig?: { Type: string; Config: Record<string, string> | null };
+      OomScoreAdj?: number;
+      Init?: boolean | null;
+      Tmpfs?: Record<string, string> | null;
       Devices?: Array<{
         PathOnHost: string;
         PathInContainer: string;
         CgroupPermissions: string;
       }> | null;
     };
+    AppArmorProfile?: string;
     NetworkSettings: {
       Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
       Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
@@ -844,17 +904,21 @@ const makeDocker = (options: DockerOptions) =>
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, credentials, ...options },
+          { context: buildContext, engineContext, args, credentials, secrets, ...options },
           session,
           registry,
         ) {
           const tap = outputTap(session);
-          const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
+          const secret = buildSecrets(secrets);
+          const buildArgs = [buildContext, ...formatArgs(options), ...secret.args, ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
             return yield* run(
               [...engine, "image", "build", ...buildArgs],
-              credentials ? yield* registryEnvironment(credentials) : undefined,
+              {
+                ...(credentials ? yield* registryEnvironment(credentials) : undefined),
+                ...secret.env,
+              },
               tap,
             );
           }
@@ -865,7 +929,7 @@ const makeDocker = (options: DockerOptions) =>
             const env = yield* registryEnvironment(registry);
             return yield* run(
               [...engine, "buildx", "build", "--push", ...buildArgs],
-              env,
+              { ...env, ...secret.env },
               tap,
             ).pipe(Effect.mapError(classifyDockerRegistryError));
           }
@@ -881,7 +945,7 @@ const makeDocker = (options: DockerOptions) =>
               ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
               ...buildArgs,
             ],
-            undefined,
+            secret.env,
             tap,
           );
           const [tag, ...tags] =
@@ -1059,6 +1123,22 @@ const systemError = (input: {
       cause: input.cause,
     }),
   );
+
+/**
+ * `--secret id=<id>,env=<var>` per secret, with each value under a generated
+ * variable name: an id is the Dockerfile author's choice and may collide with
+ * the environment Docker itself reads (`PATH`, `DOCKER_HOST`).
+ */
+const buildSecrets = (secrets: Record<string, string | Redacted.Redacted<string>> | undefined) => {
+  const args: Array<string> = [];
+  const env: Record<string, string> = {};
+  Object.entries(secrets ?? {}).forEach(([id, value], index) => {
+    const variable = `ALCHEMY_BUILD_SECRET_${index}`;
+    args.push("--secret", `id=${id},env=${variable}`);
+    env[variable] = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  });
+  return { args, env };
+};
 
 /** Formats a set of options into a list of command-line arguments. */
 const formatArgs = (

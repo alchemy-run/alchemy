@@ -197,6 +197,11 @@ const makeEngineService = ({
         name: "WORKFLOW_NAME",
         json: JSON.stringify(workflow.workflowName),
       },
+      {
+        // Lets the engine remove an instance's SQLite files on delete.
+        name: "WORKFLOW_STORAGE",
+        service: { name: WORKFLOWS_STORAGE_SERVICE_NAME },
+      },
       ...(workflow.stepLimit !== undefined
         ? [
             {

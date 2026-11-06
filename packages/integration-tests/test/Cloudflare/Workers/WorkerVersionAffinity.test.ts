@@ -3,9 +3,9 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { WorkerVersionConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,6 +14,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { stageSuffix } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -30,7 +31,7 @@ const zoneName =
 
 // Deterministic per-run hostnames on the standing test zone (never derive
 // names from Date.now()).
-const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+const suffix = stageSuffix();
 
 const resolveZone = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

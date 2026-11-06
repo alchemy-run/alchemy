@@ -86,8 +86,7 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname attached using `Prisma.CustomDomain`. Only apps on the
-   * default branch support custom domains.
+   * Custom hostname attached using `Prisma.CustomDomain`.
    *
    * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
    * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the
@@ -186,7 +185,7 @@ export const deployWebsite = Effect.fn(function* (
       ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
           name: domainName,
           target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
+            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
           },
         })
       : undefined;
@@ -196,10 +195,7 @@ export const deployWebsite = Effect.fn(function* (
         hostname:
           routing === undefined
             ? domainName
-            : (Output.map(
-                Output.of(routing as ResourceLike),
-                () => domainName,
-              ) as unknown as string),
+            : Output.map(Output.of(routing as ResourceLike), () => domainName),
       })
     : undefined;
   return {

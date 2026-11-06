@@ -69,28 +69,25 @@ const toFrameworkLayer: (
   candidate: unknown,
   options: Options.Options,
   specifier: string,
-) => Effect.Effect<
-  Options.Options.FrameworkLayer,
-  FrameworkError | unknown,
-  Options.Options.FrameworkServices
-> = Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
-  const resolved = Effect.isEffect(candidate)
-    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
-      yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
-    : candidate;
-  if (Layer.isLayer(resolved)) {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
-    return resolved as Options.Options.FrameworkLayer;
-  }
-  if (typeof resolved === "function") {
-    return yield* toFrameworkLayer(
-      (resolved as Options.Options.FrameworkFactory)(options),
-      options,
-      specifier,
-    );
-  }
-  return yield* invalidExport(specifier);
-});
+) => Effect.Effect<Options.Options.FrameworkLayer, unknown, Options.Options.FrameworkServices> =
+  Effect.fn(function* (candidate: unknown, options: Options.Options, specifier: string) {
+    const resolved = Effect.isEffect(candidate)
+      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
+        yield* candidate as Effect.Effect<unknown, unknown, Options.Options.FrameworkServices>
+      : candidate;
+    if (Layer.isLayer(resolved)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- framework export from a dynamically imported module
+      return resolved as Options.Options.FrameworkLayer;
+    }
+    if (typeof resolved === "function") {
+      return yield* toFrameworkLayer(
+        (resolved as Options.Options.FrameworkFactory)(options),
+        options,
+        specifier,
+      );
+    }
+    return yield* invalidExport(specifier);
+  });
 
 /**
  * Resolve the `Framework` Layer for a fixture from its options:

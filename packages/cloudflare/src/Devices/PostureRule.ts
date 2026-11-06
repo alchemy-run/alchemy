@@ -101,8 +101,27 @@ export type DevicePostureRule = Resource<
   DevicePostureRuleProps,
   DevicePostureRuleAttributes,
   never,
-  Providers
+  Providers,
+  DevicePostureRuleLookup
 >;
+
+/**
+ * Props for {@link DevicePostureRule.lookup}: find a posture rule this stack
+ * doesn't manage, by its id or its name.
+ */
+export type DevicePostureRuleLookup =
+  | {
+      /**
+       * The id of the existing posture rule.
+       */
+      postureRuleId: string;
+    }
+  | {
+      /**
+       * The name of the existing posture rule.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust **device posture rule** — a periodic check the
@@ -144,6 +163,22 @@ export type DevicePostureRule = Resource<
  *   type: "disk_encryption",
  *   match: [{ platform: "mac" }],
  *   input: { requireAll: true },
+ * });
+ * ```
+ *
+ * ### Looking up an existing rule
+ * `DevicePostureRule.lookup` references a rule Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `postureRuleId`
+ * or `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Require an existing posture check in an Access policy
+ * ```typescript
+ * const encrypted = Cloudflare.Devices.DevicePostureRule.lookup({ name: "disk-encryption" });
+ * yield* Cloudflare.Access.Policy("ManagedDevices", {
+ *   decision: "allow",
+ *   include: [{ everyone: {} }],
+ *   require: [{ devicePosture: encrypted.postureRuleId }],
  * });
  * ```
  *
@@ -191,7 +226,15 @@ export const DevicePostureRuleProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "postureRuleId" in props
+          ? yield* observeRule(accountId, props.postureRuleId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -205,6 +248,9 @@ export const DevicePostureRuleProvider = () =>
       // carry no ownership markers, so brand the match `Unowned`.
       const name = yield* createRuleName(id, olds?.name);
       const match = yield* findByName(acct, name);
+      // A create-first replacement reuses the name: the generation it is
+      // replacing is not the replacement, so report nothing there yet.
+      if (match && match.id === previous?.postureRuleId) return undefined;
       if (match) return Unowned(toAttributes(match, acct));
       return undefined;
     }),
@@ -287,7 +333,7 @@ type ObservedRule =
 const observeRule = (accountId: string, ruleId: string) =>
   zeroTrust
     .getDevicePosture({ accountId, ruleId })
-    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.undefined));
 
 /**
  * Find a posture rule by exact name (oldest-id-first for determinism when

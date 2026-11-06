@@ -6,6 +6,7 @@
  */
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import {
+  HEADER_REGISTRY_UPDATE_SECRET,
   resolvedTargetKey,
   type ResolvedTarget,
   type ResolvedTargetMap,
@@ -14,7 +15,45 @@ import {
 
 interface Env {
   REGISTRY_DEBUG_PORT: Env.WorkerdDebugPortConnector;
+  /** Per-instance credential required on registry pushes. */
+  REGISTRY_UPDATE_SECRET: ArrayBuffer;
 }
+
+/**
+ * Receives registry pushes from the owning process (Miniflare's
+ * `dev-registry-proxy.worker.ts` default export). The credential is verified
+ * before the body is parsed; updates are only accepted on the loopback host's
+ * root path and never from a browser (`Origin`).
+ */
+export default {
+  async fetch(request, env) {
+    const supplied = new TextEncoder().encode(
+      request.headers.get(HEADER_REGISTRY_UPDATE_SECRET) ?? "",
+    );
+    const expected = env.REGISTRY_UPDATE_SECRET;
+    if (
+      expected === undefined ||
+      supplied.byteLength !== expected.byteLength ||
+      !crypto.subtle.timingSafeEqual(supplied, expected)
+    ) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    const url = new URL(request.url);
+    if (
+      url.pathname !== "/" ||
+      url.hostname !== "127.0.0.1" ||
+      !/^127\.0\.0\.1(?::\d+)?$/.test(request.headers.get("Host") ?? "") ||
+      request.headers.has("Origin")
+    ) {
+      return new Response("Forbidden", { status: 403 });
+    }
+    if (request.method !== "POST") {
+      return new Response("Not Found", { status: 404 });
+    }
+    Target.set(await request.json<ResolvedTargetMap>());
+    return new Response("ok");
+  },
+} satisfies ExportedHandler<Env>;
 
 declare namespace Env {
   /**
@@ -256,7 +295,9 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     if (controller.scheduledTime) {
       params.set("time", String(controller.scheduledTime));
     }
-    const response = await fetcher.fetch(`http://localhost/cdn-cgi/handler/scheduled?${params}`);
+    const response = await fetcher.fetch(
+      `http://localhost/cdn-cgi/handler/scheduled?${params.toString()}`,
+    );
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`Scheduled handler returned HTTP ${response.status}: ${body}`);
@@ -346,16 +387,16 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
   private static SERIALIZED_DATE = "___serialized_date___";
   private static SERIALIZED_BIGINT = "___serialized_bigint___";
 
-  private static tailEventsReplacer(_: string, value: any) {
+  private static tailEventsReplacer = (_: string, value: any) => {
     if (value instanceof Date) {
       return { [ExternalService.SERIALIZED_DATE]: value.toISOString() };
     } else if (typeof value === "bigint") {
       return { [ExternalService.SERIALIZED_BIGINT]: value.toString() };
     }
     return value;
-  }
+  };
 
-  private static tailEventsReviver(_: string, value: any) {
+  private static tailEventsReviver = (_: string, value: any) => {
     if (value && typeof value === "object") {
       if (ExternalService.SERIALIZED_DATE in value) {
         return new Date(value[ExternalService.SERIALIZED_DATE]);
@@ -364,7 +405,7 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
       }
     }
     return value;
-  }
+  };
 }
 
 /**

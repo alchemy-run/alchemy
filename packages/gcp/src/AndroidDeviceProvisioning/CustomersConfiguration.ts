@@ -194,7 +194,7 @@ export class CustomersConfigurationNotResolved extends Data.TaggedError(
   "GCP.AndroidDeviceProvisioning.CustomersConfigurationNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -328,7 +328,7 @@ export const CustomersConfigurationProvider = () =>
       if (current === undefined) {
         return yield* new CustomersConfigurationNotResolved({
           parent,
-          name: name || configurationName,
+          resourceName: name || configurationName,
         });
       }
 

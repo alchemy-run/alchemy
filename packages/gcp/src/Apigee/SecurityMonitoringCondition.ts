@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -135,7 +135,7 @@ export const SecurityMonitoringCondition = Resource<SecurityMonitoringCondition>
 export class SecurityMonitoringConditionNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityMonitoringConditionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, conditionId: string) =>
@@ -195,7 +195,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityMonitoringConditions({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityMonitoringConditionProps,
@@ -235,7 +235,7 @@ export const SecurityMonitoringConditionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityMonitoringConditionId = yield* toConditionId(
@@ -251,7 +251,7 @@ export const SecurityMonitoringConditionProvider = () =>
         (olds?.securityMonitoringConditionId !== undefined &&
           olds.securityMonitoringConditionId === attrs.securityMonitoringConditionId)
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -298,7 +298,7 @@ export const SecurityMonitoringConditionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityMonitoringConditionNotResolved({ name });
+        return yield* new SecurityMonitoringConditionNotResolved({ resourceName: name });
       }
 
       const desiredIncludeAll = news.includeAllResources === true;

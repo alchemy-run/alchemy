@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@foldkit/vite-plugin": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",

@@ -4,14 +4,12 @@ import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
-import type * as Aggregate from "./Aggregate.ts";
-import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { decodeEnvelope, type Kernel } from "./Kernel.ts";
+import type { Kernel } from "./Kernel.ts";
+import * as Key from "./Key.ts";
 import type {
   Json,
   Push,
-  StoredEvent,
   StreamEntry,
   StreamMeta,
   Subscription,
@@ -19,7 +17,7 @@ import type {
   ViewSnapshot,
 } from "./Platform.ts";
 import type * as Read from "./Read.ts";
-import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
+import { readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
@@ -72,6 +70,8 @@ type Validate = (request: Read.Request<unknown>, state: unknown) => Effect.Effec
 interface Item {
   readonly state: unknown;
   readonly value: Option.Option<unknown>;
+  /** A marker (`CaughtUp`), sent as is: `validate` does not judge it. */
+  readonly marker?: true;
 }
 
 /**
@@ -79,9 +79,10 @@ interface Item {
  * values, then, if `validate` rejected an item, the `Exit` that ends the read.
  */
 const encode = (
-  entry: View.Any | Aggregate.Any | DomainStream.Any,
+  validate: Validate | undefined,
+  entry: View.Any | DomainStream.Any,
   subscription: Subscription,
-  ref: Aggregate.Ref,
+  ref: unknown,
   items: ReadonlyArray<Item>,
   cursor: number,
 ): Effect.Effect<Push> =>
@@ -89,12 +90,11 @@ const encode = (
     const rpcs = readRpcs(entry);
     const rpc = subscription.mode === "watch" ? rpcs.watch : rpcs.events;
     const codecs = codecsOf(rpc);
-    const validate = contractOf(entry).validate as Validate | undefined;
-    const context = RequestContext.restore(subscription.context);
+    const context = yield* RequestContext.restore(subscription.context);
     const values: Array<unknown> = [];
     let rejection: Option.Option<unknown> = Option.none();
     for (const item of items) {
-      if (validate) {
+      if (validate && !item.marker) {
         const judged = yield* validate({ mode: subscription.mode, key: ref }, item.state).pipe(
           Effect.provideContext(context),
           Effect.result,
@@ -128,85 +128,75 @@ const encode = (
     };
   }).pipe(Effect.orDie);
 
+/**
+ * The first push of an `events` read is its history: mark its end once, with
+ * a `CaughtUp` item after the history's items.
+ */
+const markCaughtUp = (subscription: Subscription, items: ReadonlyArray<Item>, cursor: number) =>
+  subscription.caughtUpSent
+    ? { subscription, items }
+    : {
+        subscription: { ...subscription, caughtUpSent: true },
+        items: [
+          ...items,
+          {
+            state: null,
+            value: Option.some({ _tag: "CaughtUp", cursor }),
+            marker: true,
+          } satisfies Item,
+        ],
+      };
+
 const where = (subscription: Subscription) => subscription.where as Filter<unknown> | undefined;
 
 /** What a view key's subscriber receives after a commit (or when it connects). */
 export const viewPush =
-  (kernel: Kernel, view: View.Any) =>
+  (kernel: Kernel, view: View.Any, validatorOf: (name: string) => Validate | undefined) =>
   (
     key: string,
     subscription: Subscription,
     snapshot: ViewSnapshot,
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
-      const ref = { aggregate: view.definition.key.aggregateName, id: key } as Aggregate.Ref;
+    Effect.gen(function* () {
+      const ref = Key.refOf(view.definition.key, key);
       if (subscription.mode === "watch") {
         if (snapshot.version <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
+          return { messages: [], subscription, done: false };
         }
         const state = snapshot.state === null ? null : kernel.decodeViewState(view, snapshot.state);
         const visible = state !== null && matches(where(subscription), state) ? state : null;
-        return encode(
+        return yield* encode(
+          validatorOf(view.viewName),
           view,
           subscription,
           ref,
-          [{ state, value: Option.some(visible) }],
+          [{ state, value: Option.some({ state: visible, cursor: snapshot.seq }) }],
           snapshot.version,
         );
       }
       const fresh = entries.filter((entry) => entry.seq > subscription.cursor);
-      const items = fresh.map((stored): Item => {
-        const decoded = kernel.decodeViewEntry(view, stored);
-        return {
+      const items = yield* Effect.forEach(fresh, (stored) =>
+        Effect.map(kernel.decodeViewEntry(view, stored), (decoded): Item => ({
           state: decoded.state,
           value: matches(where(subscription), decoded.event) ? Option.some(decoded) : Option.none(),
-        };
-      });
+        })),
+      );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      return encode(view, subscription, ref, items, cursor);
-    });
-
-/** What an aggregate instance's subscriber receives after a commit (or when it connects). */
-export const aggregatePush =
-  (kernel: Kernel, aggregate: Aggregate.Any) =>
-  (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
-      const ref = { aggregate: nameOf(aggregate), id } as Aggregate.Ref;
-      const state = kernel.decodeState(aggregate, current.state);
-      if (subscription.mode === "watch") {
-        if (current.version <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
-        }
-        return encode(
-          aggregate,
-          subscription,
-          ref,
-          [{ state, value: Option.some(state) }],
-          current.version,
-        );
-      }
-      const fresh = events.filter((stored) => stored.envelope.seq > subscription.cursor);
-      // Judged against the instance's state now, since events carry no state.
-      const items = fresh.map((stored): Item => ({
-        state,
-        value: Option.some({
-          event: kernel.decodeEvent(stored.event),
-          envelope: decodeEnvelope(stored.envelope),
-        }),
-      }));
-      const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
-      return encode(aggregate, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return yield* encode(
+        validatorOf(view.viewName),
+        view,
+        marked.subscription,
+        ref,
+        marked.items,
+        cursor,
+      );
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */
 export const streamPush =
-  (kernel: Kernel, stream: DomainStream.Any) =>
+  (kernel: Kernel, stream: DomainStream.Any, validatorOf: (name: string) => Validate | undefined) =>
   (
     key: string,
     subscription: Subscription,
@@ -214,30 +204,38 @@ export const streamPush =
     entries: ReadonlyArray<StreamEntry>,
     latest: StreamEntry | undefined,
   ): Effect.Effect<Push> =>
-    Effect.suspend(() => {
-      const ref = { aggregate: stream.definition.key.aggregateName, id: key } as Aggregate.Ref;
+    Effect.gen(function* () {
+      const ref = Key.refOf(stream.definition.key, key);
       if (subscription.mode === "watch") {
         if (meta.seq <= subscription.cursor) {
-          return Effect.succeed({ messages: [], subscription, done: false });
+          return { messages: [], subscription, done: false };
         }
-        const decoded = latest ? kernel.decodeStreamEntry(latest) : null;
-        return encode(
+        const decoded = latest ? yield* kernel.decodeStreamEntry(latest) : null;
+        return yield* encode(
+          validatorOf(stream.streamName),
           stream,
           subscription,
           ref,
-          [{ state: decoded, value: Option.some(decoded) }],
+          [{ state: decoded, value: Option.some({ state: decoded, cursor: meta.seq }) }],
           meta.seq,
         );
       }
       const fresh = entries.filter((entry) => entry.seq > subscription.cursor);
       // Each entry is judged as the key's latest entry at that point.
-      const items = fresh.map((stored): Item => {
-        const decoded = kernel.decodeStreamEntry(stored);
-        return {
+      const items = yield* Effect.forEach(fresh, (stored) =>
+        Effect.map(kernel.decodeStreamEntry(stored), (decoded): Item => ({
           state: decoded,
           value: matches(where(subscription), decoded.event) ? Option.some(decoded) : Option.none(),
-        };
-      });
+        })),
+      );
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      return encode(stream, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return yield* encode(
+        validatorOf(stream.streamName),
+        stream,
+        marked.subscription,
+        ref,
+        marked.items,
+        cursor,
+      );
     });

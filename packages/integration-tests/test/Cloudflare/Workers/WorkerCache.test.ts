@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -146,21 +146,27 @@ test.provider(
 
       // Purge by Cache-Tag through the runtime client. Retried until the
       // response parses as JSON — transient placeholders/5xx bodies throw
-      // and retry; a parsed `success: false` is a genuine failure and
-      // surfaces via the assertion.
+      // and retry — and reports success: the purge runs on a token the
+      // binding just minted, which can be rejected until it propagates. A
+      // purge still failing after the retries surfaces its errors below.
       const purged = yield* Effect.sync(() => `${worker.url}/purge?cb=${Date.now()}`).pipe(
         Effect.flatMap(fetchCached),
         Effect.flatMap((res) =>
           res.status === 200
-            ? Effect.try(() => JSON.parse(res.body) as { success: boolean })
+            ? Effect.try(() => JSON.parse(res.body) as { success: boolean; errors?: unknown })
             : Effect.fail(new Error(`Purge worker not ready: ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),
           times: 10,
         }),
+        Effect.repeat({
+          until: (result) => result.success,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
       );
-      expect(purged.success).toBe(true);
+      expect(purged).toMatchObject({ success: true });
 
       // A fresh invocation id proves the tag purge evicted the entry. The
       // marker check keeps a placeholder page (also ≠ cachedBody) from
@@ -420,5 +426,31 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 240_000,
+  },
+);
+
+// Cloudflare rejects an `exports` cache override naming an export the script
+// doesn't have (code 10375); the deploy fails with that typed tag.
+test.provider(
+  "entrypoints naming an unknown export fails with UnknownWorkerEntrypoint",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          Cloudflare.Worker("UnknownEntrypointWorker", {
+            script: cachedScript,
+            entrypoints: { Missing: { cache: { enabled: true } } },
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "UnknownWorkerEntrypoint", code: 10375 });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 120_000,
   },
 );

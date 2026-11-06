@@ -132,7 +132,7 @@ export const BackendBucket = Resource<BackendBucket>("GCP.Compute.BackendBucket"
 export class BackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -227,7 +227,7 @@ const sameCdnPolicy = (
 const getByName = (project: string, name: string) =>
   compute
     .getBackendBuckets({ project, backendBucket: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, name: string) =>
   getByName(project, name).pipe(
@@ -310,7 +310,7 @@ export const BackendBucketProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (inserted !== undefined) {
           current = yield* awaitResource(env.project, name);
@@ -320,7 +320,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       const observedDescription = current.description ?? "";
@@ -360,7 +360,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

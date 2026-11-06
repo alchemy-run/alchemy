@@ -4,8 +4,20 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type { Providers } from "../Providers.ts";
+
+export class KeyGroupConflict extends Data.TaggedError("KeyGroupConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KeyGroupUnexpectedResponse extends Data.TaggedError("KeyGroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface KeyGroupProps {
   /**
@@ -52,8 +64,23 @@ export interface KeyGroup extends Resource<
     comment: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  KeyGroupLookup
 > {}
+
+/**
+ * Props for {@link KeyGroup.lookup}: find a key group this stack doesn't
+ * manage, in the ambient account.
+ */
+export type KeyGroupLookup =
+  | {
+      /** The id of the existing key group. */
+      keyGroupId: string;
+    }
+  | {
+      /** The name of the existing key group. */
+      name: string;
+    };
 
 /**
  * A CloudFront key group.
@@ -78,6 +105,17 @@ export interface KeyGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing key group
+ * `KeyGroup.lookup` references a key group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyGroupId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Sign URLs with an existing key group
+ * ```typescript
+ * const signers = AWS.CloudFront.KeyGroup.lookup({ name: "signers" });
+ * const keyGroupId = signers.keyGroupId;
+ * ```
+ *
  * @resource
  */
 export const KeyGroup = Resource<KeyGroup>("AWS.CloudFront.KeyGroup");
@@ -89,7 +127,7 @@ export const KeyGroupProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getKeyGroupConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchResource", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchResource", () => Effect.undefined));
         if (!config?.KeyGroupConfig) return undefined;
         return { config: config.KeyGroupConfig, etag: config.ETag };
       });
@@ -156,6 +194,16 @@ export const KeyGroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "keyGroupId" in props
+              ? Option.fromUndefinedOr(yield* getById(props.keyGroupId)).pipe(
+                  Option.map((f) => ({ ...f, id: props.keyGroupId })),
+                  Option.getOrUndefined,
+                )
+              : yield* getByName(props.name);
+          return found ? toAttrs(found.id, found.config, found.etag) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.keyGroupId) {
             const found = yield* getById(output.keyGroupId);
@@ -203,16 +251,18 @@ export const KeyGroupProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Key group '${name}' already exists but could not be recovered`,
-                            ),
+                            new KeyGroupConflict({
+                              message: `Key group '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.KeyGroup?.Id) {
-              return yield* Effect.fail(new Error("createKeyGroup returned no identifier"));
+              return yield* new KeyGroupUnexpectedResponse({
+                message: "createKeyGroup returned no identifier",
+              });
             }
             yield* session.note(created.KeyGroup.Id);
             return toAttrs(created.KeyGroup.Id, created.KeyGroup.KeyGroupConfig, created.ETag);
@@ -226,7 +276,9 @@ export const KeyGroupProvider = () =>
             KeyGroupConfig: buildConfig(observed.config.Name, items, news.comment),
           });
           if (!updated.KeyGroup?.Id) {
-            return yield* Effect.fail(new Error("updateKeyGroup returned no identifier"));
+            return yield* new KeyGroupUnexpectedResponse({
+              message: "updateKeyGroup returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(updated.KeyGroup.Id, updated.KeyGroup.KeyGroupConfig, updated.ETag);

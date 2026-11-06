@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -92,7 +93,7 @@ test.provider.skipIf(!entitled)(
 
       const sync = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.CatalogSync("Sync", {
-          name: "alchemy-mcn-catalog-sync",
+          name: testName("alchemy-mcn-catalog-sync"),
           destinationType: "NONE",
           updateMode: "MANUAL",
           description: "alchemy catalog sync test",
@@ -101,20 +102,20 @@ test.provider.skipIf(!entitled)(
 
       expect(sync.syncId).toBeDefined();
       expect(sync.accountId).toEqual(accountId);
-      expect(sync.name).toEqual("alchemy-mcn-catalog-sync");
+      expect(sync.name).toEqual(testName("alchemy-mcn-catalog-sync"));
       expect(sync.destinationType).toEqual("NONE");
       expect(sync.updateMode).toEqual("MANUAL");
       expect(sync.description).toEqual("alchemy catalog sync test");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getSync(accountId, sync.syncId);
-      expect(live.name).toEqual("alchemy-mcn-catalog-sync");
+      expect(live.name).toEqual(testName("alchemy-mcn-catalog-sync"));
       expect(live.updateMode).toEqual("MANUAL");
 
       // Update mutable props in place — same syncId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.CatalogSync("Sync", {
-          name: "alchemy-mcn-catalog-sync-v2",
+          name: testName("alchemy-mcn-catalog-sync-v2"),
           destinationType: "NONE",
           updateMode: "AUTO",
           description: "alchemy catalog sync test v2",
@@ -122,12 +123,12 @@ test.provider.skipIf(!entitled)(
       );
 
       expect(updated.syncId).toEqual(sync.syncId);
-      expect(updated.name).toEqual("alchemy-mcn-catalog-sync-v2");
+      expect(updated.name).toEqual(testName("alchemy-mcn-catalog-sync-v2"));
       expect(updated.updateMode).toEqual("AUTO");
       expect(updated.description).toEqual("alchemy catalog sync test v2");
 
       const liveUpdated = yield* getSync(accountId, sync.syncId);
-      expect(liveUpdated.name).toEqual("alchemy-mcn-catalog-sync-v2");
+      expect(liveUpdated.name).toEqual(testName("alchemy-mcn-catalog-sync-v2"));
       expect(liveUpdated.updateMode).toEqual("AUTO");
 
       yield* stack.destroy();
@@ -164,7 +165,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.CatalogSync("ListSync", {
-          name: "alchemy-mcn-catalog-sync-list",
           destinationType: "NONE",
           updateMode: "MANUAL",
         }),
@@ -193,7 +193,7 @@ test.provider.skipIf(!entitled)(
 
       const initial = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.CatalogSync("ReplaceSync", {
-          name: "alchemy-mcn-catalog-sync-replace",
+          name: testName("alchemy-mcn-catalog-sync-replace"),
           destinationType: "NONE",
           updateMode: "MANUAL",
         }),
@@ -203,7 +203,7 @@ test.provider.skipIf(!entitled)(
       // produce a brand-new sync (new syncId).
       const replaced = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.CatalogSync("ReplaceSync", {
-          name: "alchemy-mcn-catalog-sync-replace",
+          name: testName("alchemy-mcn-catalog-sync-replace"),
           destinationType: "ZERO_TRUST_LIST",
           updateMode: "MANUAL",
         }),

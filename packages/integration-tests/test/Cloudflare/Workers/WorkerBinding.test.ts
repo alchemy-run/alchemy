@@ -2,8 +2,8 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
@@ -11,6 +11,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
+import { A as AsyncCycleA, B as AsyncCycleB } from "./fixtures/async-circular-bindings/stack.ts";
 import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -251,5 +252,54 @@ test(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 120_000,
+  },
+);
+
+/**
+ * Two plain async Workers bind each other: A binds B's default entrypoint
+ * and B binds A's named `Callbacks` entrypoint. Declaring the stack used to
+ * recurse between the two `env` declarations until the heap ran out (#2672).
+ */
+test.provider(
+  "async workers in a cycle deploy and call each other",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const a = yield* AsyncCycleA;
+          const b = yield* AsyncCycleB;
+          return {
+            urlA: a.url.as<string>(),
+            workerNames: [a.workerName, b.workerName],
+          };
+        }),
+      );
+
+      // A → B.start → A's Callbacks.done: both edges of the cycle.
+      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+      const res = yield* client.get(`${deployed.urlA}/?id=7`).pipe(coldStartRetry);
+      expect(yield* res.text).toBe("a got 7");
+
+      yield* stack.destroy();
+
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      for (const scriptName of deployed.workerNames) {
+        const gone = yield* workers.getScript({ accountId, scriptName }).pipe(
+          Effect.as(false),
+          Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
+          Effect.repeat({
+            while: (gone) => !gone,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(gone).toBe(true);
+      }
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 180_000,
   },
 );

@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
@@ -90,7 +90,7 @@ const observe = (scope: { projectId: string; branchId: string; database: string 
   Neon.getProjectBranchDataAPI({
     ...authRequest(scope),
     database_name: scope.database,
-  }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const attributes = (
   scope: { projectId: string; branchId: string; database: string },
@@ -185,7 +185,7 @@ export const DataApiProvider = () =>
           return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (
         !output &&
         !(olds?.branch?.projectId && olds.branch.branchId) &&
@@ -200,7 +200,7 @@ export const DataApiProvider = () =>
       const current = yield* observe(scope);
       if (!current) return undefined;
       const attrs = attributes(scope, current);
-      return output ? attrs : Unowned(attrs);
+      return output ? attrs : unownedUnlessPrevious(attrs, previous, "database");
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateDataApiRemoval(olds, news);

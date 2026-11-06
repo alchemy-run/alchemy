@@ -359,9 +359,7 @@ const alreadyVoided = (error: StripeOpError): boolean =>
   error._tag === "InvalidRequestError" && (error.message?.toLowerCase().includes("void") ?? false);
 
 const getById = (id: string) =>
-  GetBillingCreditGrant({ id }).pipe(
-    Effect.catchIf(isMissingGrant, () => Effect.succeed(undefined)),
-  );
+  GetBillingCreditGrant({ id }).pipe(Effect.catchIf(isMissingGrant, () => Effect.undefined));
 
 const listAllCreditGrants = Effect.fn(function* () {
   const grants: StripeCreditGrant[] = [];

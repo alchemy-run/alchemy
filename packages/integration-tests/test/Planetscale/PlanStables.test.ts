@@ -1,10 +1,10 @@
 import * as Planetscale from "@alchemy.run/planetscale";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Plan from "alchemy/Plan";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { InMemoryService, inMemoryState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";

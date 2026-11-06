@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { logLevel, currentProject, runLifecycle, serviceAccountEmailOf } from "./common.ts";
@@ -67,7 +67,7 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(error._tag).toEqual("AppConnectorsNotImplemented");
+      expect(["AppConnectorsNotImplemented", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

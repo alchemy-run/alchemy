@@ -14,9 +14,9 @@ import {
 } from "@alchemy.run/neon/ProjectMemberRole";
 import { providers } from "@alchemy.run/neon/Providers";
 import { expect, test as unit } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const member = {
@@ -190,7 +190,7 @@ const context = {
   oldBindings: [],
   newBindings: [],
   bindings: [],
-  session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+  session: { note: () => Effect.void },
 };
 const noCloudCredentials = Effect.die("Safety-only governance tests must not issue Neon requests");
 

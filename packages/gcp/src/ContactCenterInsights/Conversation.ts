@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -188,7 +188,7 @@ export const Conversation = Resource<Conversation>("GCP.ContactCenterInsights.Co
 export class ConversationNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_MEDIUM = "CHAT";
@@ -252,10 +252,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversations({ name, view: "BASIC" })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsConversations.pages({ parent, pageSize: 100, view: "BASIC" }).pipe(
@@ -299,7 +299,7 @@ export const ConversationProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const conversationId = yield* toResourceId(id, olds?.conversationId, output?.conversationId);
       const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
@@ -307,7 +307,9 @@ export const ConversationProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -354,7 +356,7 @@ export const ConversationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConversationNotResolved({ name });
+        return yield* new ConversationNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

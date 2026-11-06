@@ -112,13 +112,13 @@ export const InstancesTablesSchemaBundle = Resource<InstancesTablesSchemaBundle>
 export class SchemaBundleNotResolved extends Data.TaggedError(
   "GCP.Bigtable.SchemaBundleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SchemaBundleStillExists extends Data.TaggedError(
   "GCP.Bigtable.SchemaBundleStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, schemaBundleId: string | undefined, existing?: string) =>
@@ -146,12 +146,14 @@ const toAttrs = (bundle: bigtable.SchemaBundle, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesSchemaBundles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle ? Effect.succeed(bundle) : Effect.fail(new SchemaBundleNotResolved({ name })),
+      bundle
+        ? Effect.succeed(bundle)
+        : Effect.fail(new SchemaBundleNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleNotResolved",
@@ -163,7 +165,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle === undefined ? Effect.void : Effect.fail(new SchemaBundleStillExists({ name })),
+      bundle === undefined
+        ? Effect.void
+        : Effect.fail(new SchemaBundleStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleStillExists",
@@ -254,7 +258,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
             schemaBundleId,
             body: { protoSchema },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -279,7 +283,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new SchemaBundleNotResolved({ name });
+          return yield* new SchemaBundleNotResolved({ resourceName: name });
         }
       }
 

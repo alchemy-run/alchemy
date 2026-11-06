@@ -231,8 +231,10 @@ export const deleteGlueDatabase = Effect.fn("AWS.Glue.deleteGlueDatabase")(funct
         })
         .pipe(
           retryWhileConcurrentModification,
-          Effect.catchTag("EntityNotFoundException", () => Effect.void),
-          Effect.catchTag("AccessDeniedException", () => Effect.fail(error)),
+          Effect.catchTags({
+            EntityNotFoundException: () => Effect.void,
+            AccessDeniedException: () => Effect.fail(error),
+          }),
           Effect.andThen(drop),
         ),
     ),

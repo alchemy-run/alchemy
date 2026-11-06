@@ -152,8 +152,18 @@ export interface ClientVpnEndpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClientVpnEndpointLookup
 > {}
+
+/**
+ * Props for {@link ClientVpnEndpoint.lookup}: find a Client VPN endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClientVpnEndpointLookup {
+  /** The id of the existing endpoint. */
+  clientVpnEndpointId: string;
+}
 
 /**
  * An AWS Client VPN endpoint for authenticated remote access to a VPC.
@@ -200,6 +210,16 @@ export interface ClientVpnEndpoint extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Client VPN endpoint
+ * `ClientVpnEndpoint.lookup` references a Client VPN endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clientVpnEndpointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Client VPN endpoint
+ * ```typescript
+ * const vpn = AWS.EC2.ClientVpnEndpoint.lookup({ clientVpnEndpointId: "cvpn-endpoint-0123456789abcdef0" });
+ * ```
+ *
  * @resource
  */
 export const ClientVpnEndpoint = Resource<ClientVpnEndpoint>("AWS.EC2.ClientVpnEndpoint");
@@ -223,7 +243,7 @@ const usable = (endpoint: EC2.ClientVpnEndpoint) =>
 const describe = (endpointId: string) =>
   EC2.describeClientVpnEndpoints({ ClientVpnEndpointIds: [endpointId] }).pipe(
     Effect.map((result) => result.ClientVpnEndpoints?.find((endpoint) => !gone(endpoint))),
-    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.undefined),
   );
 
 const authentication = (
@@ -353,13 +373,11 @@ const changesFor = Effect.fn(function* (
 ) {
   const desired = settings(news);
   const observed = observedSettings(endpoint, news);
-  const changes: EC2.ModifyClientVpnEndpointRequest = {
-    ...Object.fromEntries(
-      Object.entries(desired).filter(
-        ([key, value]) => !deepEqual(value, observed[key as keyof typeof observed]),
-      ),
+  const changes: EC2.ModifyClientVpnEndpointRequest = Object.fromEntries(
+    Object.entries(desired).filter(
+      ([key, value]) => !deepEqual(value, observed[key as keyof typeof observed]),
     ),
-  };
+  );
   if (!deepEqual(news.dnsServers ?? [], endpoint.DnsServers ?? [])) {
     changes.DnsServers = {
       Enabled: !!news.dnsServers?.length,
@@ -448,6 +466,10 @@ export const ClientVpnEndpointProvider = () =>
           );
           if (Object.keys(changes).length || removed.length || upsert.length)
             return { action: "update" };
+        }),
+        lookup: Effect.fn(function* ({ clientVpnEndpointId }) {
+          const endpoint = yield* describe(clientVpnEndpointId);
+          return endpoint ? yield* toAttrs(endpoint) : undefined;
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const endpoint = output

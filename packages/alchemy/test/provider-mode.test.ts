@@ -1,8 +1,10 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type { ResourceAnnotated, ResourceStatusChanged } from "@/Events.ts";
 import * as LocalProvider from "@/Local/LocalProvider.ts";
 import * as Provider from "@/Provider.ts";
 import { remote, type ProviderMode } from "@/ProviderMode.ts";
@@ -25,11 +27,9 @@ import { remote, type ProviderMode } from "@/ProviderMode.ts";
  * provider service directly.
  */
 import { Cli } from "@/Report.ts";
-import type { ResourceAnnotated, ResourceStatusChanged } from "@/Report.ts";
 import { Resource } from "@/Resource";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import {
   Bucket,
   inDev,
@@ -398,8 +398,8 @@ describe("provider modes", { tags: ["unit", "local"] }, () => {
                 done: () => Effect.void,
                 emit: (event) =>
                   Effect.sync(() => {
-                    if (event._tag === "apply.resource.status") events.push(event);
-                    if (event._tag === "apply.resource.note") notes.push(event);
+                    if (event.type === "apply.resource.status") events.push(event);
+                    if (event.type === "apply.resource.note") notes.push(event);
                   }),
               };
             }),
@@ -433,7 +433,7 @@ describe("provider modes", { tags: ["unit", "local"] }, () => {
         ).toBe(true);
         // A local instance whose attrs carry a `url` announces it.
         expect(notes).toContainEqual({
-          _tag: "apply.resource.note",
+          type: "apply.resource.note",
           fqn: "A",
           id: "A",
           message: "ready at http://localhost:1337",

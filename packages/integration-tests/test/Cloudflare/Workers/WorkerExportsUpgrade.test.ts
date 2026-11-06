@@ -2,17 +2,18 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { encodeDurableObjectTags } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { adopt } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 /**
  * Upgrading a Worker that an earlier Alchemy release deployed with
@@ -90,9 +91,12 @@ export default {
 
 type Scratch = { name: string; stage: string };
 
-/** A deterministic per-stage script name. */
-const scriptNameFor = (scratch: Scratch, suffix: string) =>
-  `alchemy-test-upgrade-${suffix}-${scratch.stage}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+/**
+ * A deterministic per-stage script name, short enough for workers.dev
+ * previews (54 characters) under any stage.
+ */
+const scriptNameFor = (_scratch: Scratch, suffix: string) =>
+  testName(`alchemy-test-upgrade-${suffix}`);
 
 /**
  * Deploy a Worker the way an earlier Alchemy release did: a `migrations`

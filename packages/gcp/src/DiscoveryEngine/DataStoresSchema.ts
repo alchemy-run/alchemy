@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -112,7 +112,7 @@ export const DataStoresSchema = Resource<DataStoresSchema>("GCP.DiscoveryEngine.
 export class DataStoresSchemaNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSchemaNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (dataStore: string, schemaId: string) => `${dataStore}/schemas/${schemaId}`;
@@ -138,10 +138,10 @@ const toAttrs = (schema: discoveryengine.GoogleCloudDiscoveryengineV1Schema, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresSchemaProvider = () =>
   Provider.succeed(DataStoresSchema, {
@@ -160,7 +160,7 @@ export const DataStoresSchemaProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const schemaId = yield* toPhysical(id, olds?.schemaId, output?.schemaId, rfc1035);
       const parent = olds?.dataStore
@@ -171,7 +171,7 @@ export const DataStoresSchemaProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -200,7 +200,7 @@ export const DataStoresSchemaProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -209,7 +209,7 @@ export const DataStoresSchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresSchemaNotResolved({ name });
+        return yield* new DataStoresSchemaNotResolved({ resourceName: name });
       }
 
       const stripComment = (json: string | undefined) => {
@@ -242,7 +242,7 @@ export const DataStoresSchemaProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsDataStoresSchemas({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

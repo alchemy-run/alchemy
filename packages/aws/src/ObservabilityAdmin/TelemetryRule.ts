@@ -15,6 +15,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class TelemetryRuleNotReady extends Data.TaggedError("TelemetryRuleNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Where a telemetry rule delivers the telemetry it enables. Mirrors the wire
  * `TelemetryDestinationConfiguration`, with the retention period expressed as
@@ -251,7 +256,7 @@ export const TelemetryRuleProvider = () =>
       const readRule = Effect.fn(function* (identifier: string) {
         return yield* obs
           .getTelemetryRule({ RuleIdentifier: identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const waitUntilRuleAbsent = Effect.fn(function* (ruleName: string) {
@@ -470,7 +475,11 @@ export const TelemetryRuleProvider = () =>
             observed = yield* readRule(name).pipe(
               Effect.flatMap((rule) =>
                 rule === undefined
-                  ? Effect.fail(new Error(`telemetry rule '${name}' not yet visible`))
+                  ? Effect.fail(
+                      new TelemetryRuleNotReady({
+                        message: `telemetry rule '${name}' not yet visible`,
+                      }),
+                    )
                   : Effect.succeed(rule),
               ),
               Effect.retry({

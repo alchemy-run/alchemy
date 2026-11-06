@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
@@ -56,7 +56,6 @@ test.provider.skipIf(!entitled)(
 
       const site = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("Site", {
-          name: "alchemy-wan-list-site",
           description: "alchemy magic site wan list test",
         }),
       );
@@ -65,7 +64,6 @@ test.provider.skipIf(!entitled)(
         Cloudflare.MagicTransit.MagicSiteWan("Wan", {
           siteId: site.siteId,
           physport: 1,
-          name: "alchemy-wan-list",
           priority: 10,
         }),
       );

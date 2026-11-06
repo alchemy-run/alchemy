@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEqualsUnordered } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ListUnexpectedResponse extends Data.TaggedError("ListUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Gateway.List" as const;
 type TypeId = typeof TypeId;
@@ -95,7 +101,26 @@ export interface ListAttributes {
   updatedAt: string | undefined;
 }
 
-export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers, ListLookup>;
+
+/**
+ * Props for {@link List.lookup}: find a Gateway list this stack doesn't
+ * manage, by its id or its name.
+ */
+export type ListLookup =
+  | {
+      /**
+       * The UUID of the existing list.
+       */
+      listId: string;
+    }
+  | {
+      /**
+       * The name of the existing list. Names are not unique; the oldest list
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Gateway list — a named set of domains, IPs,
@@ -134,6 +159,21 @@ export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>
  *   action: "block",
  *   filters: ["dns"],
  *   traffic: `any(dns.domains[*] in $${blocked.listId})`,
+ * });
+ * ```
+ *
+ * ### Looking up an existing list
+ * `List.lookup` references a list Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `listId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Block every domain in an existing list
+ * ```typescript
+ * const blocked = Cloudflare.Gateway.List.lookup({ name: "blocked-domains" });
+ * yield* Cloudflare.Gateway.Rule("BlockListedDomains", {
+ *   action: "block",
+ *   filters: ["dns"],
+ *   traffic: Output.interpolate`any(dns.domains[*] in $${blocked.listId})`,
  * });
  * ```
  *
@@ -178,6 +218,14 @@ export const ListProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const listId =
+        "listId" in props ? props.listId : (yield* findByName(accountId, props.name))?.id;
+      if (!listId) return undefined;
+      const observed = yield* getList(accountId, listId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -224,9 +272,9 @@ export const ListProvider = () =>
           items: desiredItems,
         });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the Gateway list"),
-          );
+          return yield* new ListUnexpectedResponse({
+            message: "Cloudflare did not return an id for the Gateway list",
+          });
         }
         // Create echoes items without count — re-read for a full shape.
         const fresh = yield* getList(accountId, created.id);
@@ -284,7 +332,7 @@ type ObservedList = zeroTrust.GetGatewayListResponse;
 const getList = (accountId: string, listId: string) =>
   zeroTrust.getGatewayList({ accountId, listId }).pipe(
     Effect.map((l): ObservedList | undefined => l),
-    Effect.catchTag("GatewayListNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayListNotFound", () => Effect.undefined),
   );
 
 /**

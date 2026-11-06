@@ -28,6 +28,7 @@
     "vite": "catalog:solid-v1"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "tailwindcss": "catalog:"
   },

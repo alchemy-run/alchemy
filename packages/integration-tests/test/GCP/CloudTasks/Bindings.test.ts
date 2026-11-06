@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import CloudTasksBindingsHost, { Jobs, TASK_URL } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -15,7 +15,7 @@ let baseUrl: string;
 let queueName: string;
 let hostAccount: string;
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "CloudTasks Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:cloudtasks", "provider:gcp:run", "live"],

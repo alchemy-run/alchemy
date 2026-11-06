@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -47,7 +48,7 @@ test.provider(
 
       const profile = yield* stack.deploy(
         Cloudflare.Devices.DeviceCustomProfile("Contractors", {
-          name: "alchemy-test-custom-profile",
+          name: testName("alchemy-test-custom-profile"),
           match: 'identity.email == "contractor@alchemy-test-2.us"',
           precedence: 12010,
           description: "Alchemy test profile",
@@ -57,7 +58,7 @@ test.provider(
 
       expect(profile.policyId).toBeTruthy();
       expect(profile.accountId).toEqual(accountId);
-      expect(profile.name).toEqual("alchemy-test-custom-profile");
+      expect(profile.name).toEqual(testName("alchemy-test-custom-profile"));
       expect(profile.match).toEqual('identity.email == "contractor@alchemy-test-2.us"');
       expect(profile.description).toEqual("Alchemy test profile");
       expect(profile.switchLocked).toEqual(true);
@@ -65,14 +66,14 @@ test.provider(
 
       // Out-of-band verify against the live API.
       const live = yield* getProfile(accountId, profile.policyId);
-      expect(live?.name).toEqual("alchemy-test-custom-profile");
+      expect(live?.name).toEqual(testName("alchemy-test-custom-profile"));
       expect(live?.switchLocked).toEqual(true);
 
       // Update mutable props (body + split-tunnel exclude list) in place —
       // same policyId.
       const updated = yield* stack.deploy(
         Cloudflare.Devices.DeviceCustomProfile("Contractors", {
-          name: "alchemy-test-custom-profile",
+          name: testName("alchemy-test-custom-profile"),
           match: 'identity.email == "contractor@alchemy-test-2.us"',
           precedence: 12010,
           description: "Alchemy test profile v2",
@@ -113,7 +114,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.Devices.DeviceCustomProfile("ListProfile", {
-          name: "alchemy-test-custom-profile-list",
+          name: testName("alchemy-test-custom-profile-list"),
           match: 'identity.email == "list@alchemy-test-2.us"',
           precedence: 12011,
           description: "Alchemy list() test profile",
@@ -127,7 +128,7 @@ test.provider(
       // just deployed, hydrated into the exact `read` Attributes shape.
       const found = all.find((p) => p.policyId === deployed.policyId);
       expect(found).toBeDefined();
-      expect(found?.name).toEqual("alchemy-test-custom-profile-list");
+      expect(found?.name).toEqual(testName("alchemy-test-custom-profile-list"));
       expect(found?.match).toEqual('identity.email == "list@alchemy-test-2.us"');
       expect(found?.accountId).toEqual(deployed.accountId);
       expect(found?.default).toEqual(false);

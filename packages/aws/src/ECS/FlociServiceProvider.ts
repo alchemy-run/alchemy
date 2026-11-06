@@ -35,10 +35,11 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { deepEqual } from "alchemy/Diff";
 import { registerRpcErrorClasses } from "alchemy/Local/RpcSerialization";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { ImageSourceLike } from "../ECR/ImageSource.ts";
+import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
 import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import { imageSourceTrigger, restartFamilyTasks } from "./EcsDevWatch.ts";
 import {
@@ -55,6 +56,7 @@ import {
   ServiceHostedZoneNotFound,
   ServiceProvider,
   ServiceRuleActionConflict,
+  serviceImageInput,
   UnsupportedListenerProtocol,
   type ServiceProps,
 } from "./Service.ts";
@@ -108,7 +110,8 @@ export const FlociServiceProvider = () =>
         byoTaskDefinitionArn: taskRefOf(news)?.taskDefinitionArn,
         main: source.main,
         handler: source.handler,
-        build: source.build,
+        // Secrets stay out, as in the image hash: rotating one does not rebuild.
+        build: source.build === undefined ? undefined : { ...source.build, secrets: undefined },
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,
@@ -169,7 +172,7 @@ export const FlociServiceProvider = () =>
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so rolling only from the
     // watch loop left the service's containers on the old revision).
-    onReconciled: ({ id, previous, attrs }) =>
+    onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (
           attrs.taskFamily === undefined ||
@@ -178,7 +181,7 @@ export const FlociServiceProvider = () =>
         ) {
           return;
         }
-        const startedAt = Date.now();
+        const startedAt = yield* Clock.currentTimeMillis;
         // `updateService` (inside the reconcile) pointed the service at
         // the new revision, but floci's in-place swap keeps the old
         // containers running — stop them so the scheduler relaunches on
@@ -189,13 +192,9 @@ export const FlociServiceProvider = () =>
           serviceManaged: true,
         });
         yield* Effect.logInfo(
-          `[alchemy dev] ${attrs.serviceName}: task definition swapped (${restarted} service task(s) rolling) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} service task(s) rolling) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
         );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`[alchemy dev] ${id}: service roll failed`, cause),
-        ),
-      ),
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning(`service roll failed`, cause))),
     startWatch: (ctx) =>
       Effect.gen(function* () {
         if (taskRefOf(ctx.news) !== undefined) {
@@ -203,6 +202,7 @@ export const FlociServiceProvider = () =>
           // the referenced `AWS.ECS.Task` resource.
           return;
         }
+        const imageSource = yield* makeImageSource;
         const trigger = yield* imageSourceTrigger({
           id: ctx.id,
           source: ctx.news as ImageSourceLike,
@@ -213,11 +213,21 @@ export const FlociServiceProvider = () =>
           // onto it; the `onReconciled` hook (shared with engine-driven
           // updates) rolls the running tasks.
           Stream.runForEach(() =>
-            ctx.rerunReconcile.pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
-              ),
-            ),
+            // The staleness check runs under the per-id lock, against the
+            // freshest attrs (see FlociTaskProvider).
+            ctx
+              .rerunReconcileIfStale((current) =>
+                Effect.gen(function* () {
+                  const hash = yield* imageSource.hash(serviceImageInput(ctx.news));
+                  // Bundle.watch emits its initial build too. Re-reconciling
+                  // unchanged content would register another revision and
+                  // roll the running tasks for nothing.
+                  return (
+                    hash === undefined || current.code === undefined || hash !== current.code.hash
+                  );
+                }),
+              )
+              .pipe(Effect.catchCause((cause) => Effect.logWarning(`image swap failed`, cause))),
           ),
         );
       }),

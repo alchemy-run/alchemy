@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/aws",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "AWS resources, Lambda, ECS, EC2 and EKS for Alchemy.",
   "keywords": [
     "alchemy",
@@ -1325,6 +1325,7 @@
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*",
     "@types/aws-lambda": "catalog:",
     "rolldown": "catalog:"
   },

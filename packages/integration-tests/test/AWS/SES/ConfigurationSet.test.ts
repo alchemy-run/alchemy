@@ -1,12 +1,17 @@
 import * as AWS from "@alchemy.run/aws";
-import { ConfigurationSet, ConfigurationSetEventDestination } from "@alchemy.run/aws/SES";
+import {
+  ConfigurationSet,
+  ConfigurationSetEventDestination,
+  EmailIdentity,
+} from "@alchemy.run/aws/SES";
 import { Topic } from "@alchemy.run/aws/SNS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -327,4 +332,110 @@ test.provider(
       yield* assertConfigurationSetDeleted(configSet.configurationSetName);
     }),
   { tags: ["provider:aws", "provider:aws:ses", "live"], timeout: 120_000 },
+);
+
+// #2688: `read` must observe configuration set options, event destination
+// settings and identity settings, or out-of-band changes read as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band SES configuration changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const domain = `ses-drift-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.alchemy-test.example.com`;
+      const { configSet, destination, identity } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const topic = yield* Topic("DriftSesTopic", {});
+          const configSet = yield* ConfigurationSet("DriftConfigSet", {
+            tlsPolicy: "REQUIRE",
+            tags: { team: "declared" },
+          });
+          const destination = yield* ConfigurationSetEventDestination("DriftDestination", {
+            configurationSetName: configSet.configurationSetName,
+            matchingEventTypes: ["SEND", "DELIVERY"],
+            snsDestination: { topicArn: topic.topicArn },
+          });
+          const identity = yield* EmailIdentity("DriftIdentity", {
+            emailIdentity: domain,
+            configurationSetName: configSet.configurationSetName,
+            feedbackForwardingEnabled: true,
+          });
+          return { configSet, destination, identity };
+        }),
+      );
+      expect(yield* driftActions(stack)).toEqual({
+        DriftSesTopic: "unchanged",
+        DriftConfigSet: "unchanged",
+        DriftDestination: "unchanged",
+        DriftIdentity: "unchanged",
+      });
+
+      const name = configSet.configurationSetName;
+      yield* sesv2.putConfigurationSetDeliveryOptions({
+        ConfigurationSetName: name,
+        TlsPolicy: "OPTIONAL",
+      });
+      yield* sesv2.updateConfigurationSetEventDestination({
+        ConfigurationSetName: name,
+        EventDestinationName: destination.eventDestinationName,
+        EventDestination: {
+          Enabled: false,
+          MatchingEventTypes: ["SEND"],
+          SnsDestination: destination.configuration?.snsTopicArn
+            ? { TopicArn: destination.configuration.snsTopicArn }
+            : undefined,
+        },
+      });
+      yield* sesv2.putEmailIdentityConfigurationSetAttributes({
+        EmailIdentity: identity.emailIdentity,
+      });
+      yield* sesv2.putEmailIdentityFeedbackAttributes({
+        EmailIdentity: identity.emailIdentity,
+        EmailForwardingEnabled: false,
+      });
+
+      expect(
+        (yield* waitForDrift(stack, "DriftConfigSet", "drifted"))?.attr?.configuration,
+      ).toMatchObject({
+        tlsPolicy: "OPTIONAL",
+      });
+      expect(
+        (yield* waitForDrift(stack, "DriftDestination", "drifted"))?.attr?.configuration,
+      ).toMatchObject({
+        enabled: false,
+        matchingEventTypes: ["SEND"],
+      });
+      expect(
+        (yield* waitForDrift(stack, "DriftIdentity", "drifted"))?.attr?.configuration,
+      ).toMatchObject({
+        configurationSetName: undefined,
+        feedbackForwardingEnabled: false,
+      });
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftConfigSet?.action).toBe("repaired");
+      expect(repaired.resources.DriftDestination?.action).toBe("repaired");
+      expect(repaired.resources.DriftIdentity?.action).toBe("repaired");
+      expect(yield* driftActions(stack)).toEqual({
+        DriftSesTopic: "unchanged",
+        DriftConfigSet: "unchanged",
+        DriftDestination: "unchanged",
+        DriftIdentity: "unchanged",
+      });
+
+      const restored = yield* sesv2.getConfigurationSet({ ConfigurationSetName: name });
+      expect(restored.DeliveryOptions?.TlsPolicy).toBe("REQUIRE");
+      const restoredIdentity = yield* sesv2.getEmailIdentity({
+        EmailIdentity: identity.emailIdentity,
+      });
+      expect(restoredIdentity.ConfigurationSetName).toBe(name);
+      expect(restoredIdentity.FeedbackForwardingStatus).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertConfigurationSetDeleted(name);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ses", "provider:aws:sns", "live"],
+    timeout: 180_000,
+  },
 );

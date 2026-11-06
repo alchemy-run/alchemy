@@ -30,16 +30,16 @@ export const DEFAULT_REGIONAL_LOCATION = "us";
 export const LIST_LOCATIONS = ["us-central1", "global", "us"] as const;
 
 export class DlpNotResolved extends Data.TaggedError("GCP.DLP.NotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class StoredInfoTypeNotReady extends Data.TaggedError("GCP.DLP.StoredInfoTypeNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class StoredInfoTypeFailed extends Data.TaggedError("GCP.DLP.StoredInfoTypeFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
@@ -50,7 +50,7 @@ const storedInfoTypeFailure = (
 ) =>
   version?.state === "FAILED" || version?.state === "INVALID"
     ? new StoredInfoTypeFailed({
-        name,
+        resourceName: name,
         state: version.state,
         message:
           (version.errors ?? [])
@@ -78,7 +78,7 @@ export const waitForStoredInfoTypeReady = <E extends { readonly _tag: string }, 
         StoredInfoTypeNotReady | StoredInfoTypeFailed
       > => {
         if (stored === undefined) {
-          return Effect.fail(new StoredInfoTypeNotReady({ name, state: undefined }));
+          return Effect.fail(new StoredInfoTypeNotReady({ resourceName: name, state: undefined }));
         }
         const pending = stored.pendingVersions ?? [];
         const failed = storedInfoTypeFailure(
@@ -89,7 +89,7 @@ export const waitForStoredInfoTypeReady = <E extends { readonly _tag: string }, 
         if (stored.currentVersion?.state !== "READY" || pending.length > 0) {
           return Effect.fail(
             new StoredInfoTypeNotReady({
-              name,
+              resourceName: name,
               state: pending[0]?.state ?? stored.currentVersion?.state,
             }),
           );
@@ -344,14 +344,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {

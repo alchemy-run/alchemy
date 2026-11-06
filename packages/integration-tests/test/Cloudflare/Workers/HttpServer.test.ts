@@ -1,15 +1,22 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Cookies from "effect/http/Cookies";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import { expectUrlContains } from "../Utils/Http.ts";
+import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import HttpServerWorker, { readyMarker, sensitiveContext } from "./fixtures/http-server-worker.ts";
 import RawResponseWorker from "./fixtures/raw-response/worker.ts";
+import NoSignalWorker from "./fixtures/request-abort/no-signal-worker.ts";
+import RequestAbortWorker from "./fixtures/request-abort/worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -193,3 +200,125 @@ for (const dev of [false, true]) {
     },
   );
 }
+
+/**
+ * Holds a raw HTTP/1.1 request open over `openssl s_client`. Closing the
+ * scope SIGKILLs the client, so the kernel drops the connection without a TLS
+ * `close_notify`, the way a client that went away does. (A `close_notify`
+ * reads as an HTTP half-close, which Cloudflare keeps serving, and Bun's
+ * `node:tls` sends one even from `destroy()`.)
+ */
+const rawRequest = (host: string, request: string) =>
+  ChildProcess.make(
+    "openssl",
+    ["s_client", "-connect", `${host}:443`, "-servername", host, "-alpn", "http/1.1", "-quiet"],
+    {
+      // `-quiet` keeps the connection open after stdin ends.
+      stdin: Stream.make(request).pipe(Stream.encodeText),
+      stdout: "ignore",
+      stderr: "ignore",
+      killSignal: "SIGKILL",
+    },
+  );
+
+/**
+ * Deploy `worker`, send `/slow` over a raw connection, kill the client once
+ * the handler has started, and return what the handler recorded within
+ * `polls` seconds afterwards.
+ */
+const disconnectMidRequest = (
+  worker: { url: string | undefined },
+  polls: number,
+  path = "/slow",
+  done = (events: ReadonlyArray<string>) => events.some((event) => event.startsWith("released:")),
+) =>
+  Effect.gen(function* () {
+    // `/ready` calls the journal Durable Object, whose first calls after a
+    // deploy can fail with an opaque "internal error".
+    yield* waitUntilStable(
+      `request-abort Worker at ${worker.url}`,
+      requestWorker(HttpClientRequest.get(`${worker.url!}/ready`)).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.map((body) => body === "request-abort:ready"),
+        Effect.catch(() => Effect.succeed(false)),
+      ),
+      { timeout: "60 seconds" },
+    );
+    const id = yield* Effect.sync(() => crypto.randomUUID());
+    const events = requestWorker(HttpClientRequest.get(`${worker.url!}/events?id=${id}`)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((response) => response.json),
+      Effect.map((body) => body as string[]),
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+    );
+
+    const host = yield* Effect.sync(() => new URL(worker.url!).host);
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* rawRequest(host, `GET ${path}?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
+        yield* events.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            times: 30,
+            until: (events) => events.includes("started"),
+          }),
+        );
+      }),
+    );
+
+    return yield* events.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: polls,
+        until: done,
+      }),
+    );
+  });
+
+// A client that disconnects interrupts the handler, so its resources are
+// released as an interruption instead of staying open for nobody. Live only:
+// local workerd does not fire `request.signal` when the client disconnects.
+test.provider(
+  "a client disconnect interrupts the handler",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const worker = yield* stack.deploy(RequestAbortWorker);
+      const events = yield* disconnectMidRequest(worker, 20);
+      expect(events).toEqual(["started", "released:interrupt"]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
+);
+
+// The interrupted handler's event still waits for its `waitUntil` work, which
+// can use the handler's resources after the client has gone.
+test.provider(
+  "a client disconnect keeps the event's scope open for waitUntil work",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const worker = yield* stack.deploy(RequestAbortWorker);
+      const events = yield* disconnectMidRequest(worker, 20, "/slow-background", (events) =>
+        events.includes("resource:released"),
+      );
+      expect(events).toEqual(["started", "background:open", "resource:released"]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
+);
+
+// Without `enable_request_signal`, Cloudflare cancels the request when the
+// client disconnects and the handler's finalizers never run.
+test.provider(
+  "without enable_request_signal a client disconnect skips the handler's release",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const worker = yield* stack.deploy(NoSignalWorker);
+      const events = yield* disconnectMidRequest(worker, 10);
+      expect(events).toEqual(["started"]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 120_000 },
+);

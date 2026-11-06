@@ -60,8 +60,18 @@ export interface AnomalyMonitor extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AnomalyMonitorLookup
 > {}
+
+/**
+ * Props for {@link AnomalyMonitor.lookup}: find an anomaly monitor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AnomalyMonitorLookup {
+  /** The ARN of the existing anomaly monitor. */
+  monitorArn: string;
+}
 
 /**
  * A Cost Explorer anomaly detection monitor. Monitors evaluate your spend for
@@ -93,6 +103,16 @@ export interface AnomalyMonitor extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing anomaly monitor
+ * `AnomalyMonitor.lookup` references an anomaly monitor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `monitorArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing anomaly monitor
+ * ```typescript
+ * const existing = AWS.CostExplorer.AnomalyMonitor.lookup({ monitorArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const AnomalyMonitor = Resource<AnomalyMonitor>("AWS.CostExplorer.AnomalyMonitor");
@@ -112,7 +132,7 @@ export const AnomalyMonitorProvider = () =>
       const getByArn = (monitorArn: string) =>
         pinCe(ce.getAnomalyMonitors({ MonitorArnList: [monitorArn] })).pipe(
           Effect.map((r) => r.AnomalyMonitors[0]),
-          Effect.catchTag("UnknownMonitorException", () => Effect.succeed(undefined)),
+          Effect.catchTag("UnknownMonitorException", () => Effect.undefined),
         );
 
       // Fallback observation when no ARN is cached: scan all monitors for the
@@ -149,6 +169,12 @@ export const AnomalyMonitorProvider = () =>
               { concurrency: 10 },
             );
           }),
+        lookup: Effect.fn(function* ({ monitorArn }) {
+          const live = yield* getByArn(monitorArn);
+          if (live?.MonitorArn === undefined) return undefined;
+          const attrs = yield* toAttrs(live);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const live = output?.monitorArn
             ? yield* getByArn(output.monitorArn)

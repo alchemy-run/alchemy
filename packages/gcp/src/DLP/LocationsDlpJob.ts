@@ -1,5 +1,5 @@
 import * as dlp from "@distilled.cloud/gcp/dlp_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -149,7 +149,7 @@ export const LocationsDlpJob = Resource<LocationsDlpJob>("GCP.DLP.LocationsDlpJo
 export class LocationsDlpJobNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDlpJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, jobId: string, risk = false) =>
@@ -231,10 +231,10 @@ const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listType = (parent: string, type: "INSPECT_JOB" | "RISK_ANALYSIS_JOB") =>
   collectPages(
@@ -277,7 +277,7 @@ export const LocationsDlpJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, LOCATION);
       const jobId = yield* toJobId(id, olds?.jobId, output?.jobId);
@@ -294,7 +294,9 @@ export const LocationsDlpJobProvider = () =>
       const attrs = toAttrs(existing, env.project);
       const hybrid = hybridOf(existing);
       const owned = yield* ownedByAlchemy(id, hybrid?.description);
-      return owned || hasHybridOwnership(hybrid?.labels) ? attrs : Unowned(attrs);
+      return owned || hasHybridOwnership(hybrid?.labels)
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -351,7 +353,7 @@ export const LocationsDlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDlpJobNotResolved({ name });
+        return yield* new LocationsDlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

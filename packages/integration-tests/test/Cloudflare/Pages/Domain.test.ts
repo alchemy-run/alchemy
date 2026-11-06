@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as pages from "@distilled.cloud/cloudflare/pages";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -17,13 +18,13 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic per-test names (never derived from Date.now() or
 // randomness). Each test owns disjoint identifiers so reruns never collide.
-const PROJECT_CRUD = "alchemy-e3-pages-dom-crud";
-const PROJECT_REPLACE = "alchemy-e3-pages-dom-repl";
-const PROJECT_LIST = "alchemy-e3-pages-dom-list";
-const DOMAIN_LIST = `alchemy-pages-list.${zoneName}`;
-const DOMAIN_CRUD = `alchemy-pages-crud.${zoneName}`;
-const DOMAIN_REPLACE_A = `alchemy-pages-replace-a.${zoneName}`;
-const DOMAIN_REPLACE_B = `alchemy-pages-replace-b.${zoneName}`;
+const PROJECT_CRUD = testName("alchemy-e3-pages-dom-crud");
+const PROJECT_REPLACE = testName("alchemy-e3-pages-dom-repl");
+const PROJECT_LIST = testName("alchemy-e3-pages-dom-list");
+const DOMAIN_LIST = `${testName("alchemy-pages-list")}.${zoneName}`;
+const DOMAIN_CRUD = `${testName("alchemy-pages-crud")}.${zoneName}`;
+const DOMAIN_REPLACE_A = `${testName("alchemy-pages-replace-a")}.${zoneName}`;
+const DOMAIN_REPLACE_B = `${testName("alchemy-pages-replace-b")}.${zoneName}`;
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,

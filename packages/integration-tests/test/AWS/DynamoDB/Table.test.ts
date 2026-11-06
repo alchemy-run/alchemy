@@ -2,12 +2,13 @@ import * as AWS from "@alchemy.run/aws";
 import { Table } from "@alchemy.run/aws/DynamoDB";
 import { Stream as KinesisStream } from "@alchemy.run/aws/Kinesis";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as CloudWatch from "@distilled.cloud/aws/cloudwatch";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -1160,6 +1161,78 @@ describe.skipIf(!!process.env.FAST)(
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       );
     });
+
+    // #2659: `read` must observe every managed setting, and must not report
+    // values that move on their own (index item counts, the PITR restore
+    // window), or drift is either blind or never quiet.
+    test.provider(
+      "drift detects and repairs out-of-band configuration changes",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const table = yield* stack.deploy(
+            Table("DriftConfigTable", {
+              partitionKey: "id",
+              attributes: { id: "S", gsiKey: "S" },
+              globalSecondaryIndexes: [
+                {
+                  indexName: "ByGsiKey",
+                  partitionKey: "gsiKey",
+                  projection: { ProjectionType: "KEYS_ONLY" },
+                },
+              ],
+              pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+              timeToLiveSpecification: { Enabled: true, AttributeName: "expiresAt" },
+            }),
+          );
+          const target = { name: stack.name, stage: stack.stage };
+          const detect = Drift.detect(target).pipe(
+            Effect.map((result) => result.resources.DriftConfigTable),
+            Effect.provide(stack.state),
+          );
+          expect((yield* detect)?.action).toBe("unchanged");
+
+          yield* DynamoDB.updateTable({
+            TableName: table.tableName,
+            DeletionProtectionEnabled: true,
+          });
+          yield* DynamoDB.updateContinuousBackups({
+            TableName: table.tableName,
+            PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: false },
+          });
+
+          const drifted = yield* detect.pipe(
+            Effect.repeat({
+              until: (result) =>
+                result?.attr?.deletionProtectionEnabled === true &&
+                result.attr.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus ===
+                  "DISABLED",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 15,
+            }),
+          );
+          expect(drifted?.action).toBe("drifted");
+
+          const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+          expect(repaired.resources.DriftConfigTable?.action).toBe("repaired");
+          expect((yield* detect)?.action).toBe("unchanged");
+
+          const described = yield* DynamoDB.describeTable({ TableName: table.tableName });
+          expect(described.Table?.DeletionProtectionEnabled).toBe(false);
+          const backups = yield* DynamoDB.describeContinuousBackups({
+            TableName: table.tableName,
+          });
+          expect(
+            backups.ContinuousBackupsDescription?.PointInTimeRecoveryDescription
+              ?.PointInTimeRecoveryStatus,
+          ).toBe("ENABLED");
+
+          yield* stack.destroy();
+          yield* assertTableIsDeleted(table.tableName);
+        }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+      { timeout: 240_000 },
+    );
 
     const assertTableIsDeleted = Effect.fn(function* (tableName: string) {
       yield* Effect.logInfo(`DynamoDB Table test: waiting for deletion of ${tableName}`);

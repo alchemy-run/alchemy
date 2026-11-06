@@ -123,8 +123,18 @@ export interface EventDataStore extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  EventDataStoreLookup
 > {}
+
+/**
+ * Props for {@link EventDataStore.lookup}: find an event data store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventDataStoreLookup {
+  /** The ARN of the existing event data store. */
+  eventDataStoreArn: string;
+}
 
 /**
  * A CloudTrail Lake event data store — an immutable collection of events
@@ -161,6 +171,16 @@ export interface EventDataStore extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing event data store
+ * `EventDataStore.lookup` references an event data store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `eventDataStoreArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event data store
+ * ```typescript
+ * const existing = AWS.CloudTrail.EventDataStore.lookup({ eventDataStoreArn: "..." });
  * ```
  *
  * @resource
@@ -248,7 +268,7 @@ export const EventDataStoreProvider = () =>
           .pipe(
             Effect.catchTag(
               ["EventDataStoreNotFoundException", "EventDataStoreARNInvalidException"],
-              () => Effect.succeed(undefined),
+              () => Effect.undefined,
             ),
           );
 
@@ -287,6 +307,18 @@ export const EventDataStoreProvider = () =>
                 status: s.Status ?? "ENABLED",
               }));
           }),
+        lookup: Effect.fn(function* ({ eventDataStoreArn }) {
+          const store = yield* getByArn(eventDataStoreArn);
+          if (store === undefined || store.Status === "PENDING_DELETION") {
+            return undefined;
+          }
+          const attrs = {
+            eventDataStoreArn: store.EventDataStoreArn!,
+            name: store.Name!,
+            status: store.Status ?? "ENABLED",
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const store = output?.eventDataStoreArn
             ? yield* getByArn(output.eventDataStoreArn)
@@ -320,7 +352,7 @@ export const EventDataStoreProvider = () =>
             ? yield* getByArn(output.eventDataStoreArn)
             : yield* findByName(name).pipe(
                 Effect.flatMap((s) =>
-                  s?.EventDataStoreArn ? getByArn(s.EventDataStoreArn) : Effect.succeed(undefined),
+                  s?.EventDataStoreArn ? getByArn(s.EventDataStoreArn) : Effect.undefined,
                 ),
               );
 
@@ -358,9 +390,7 @@ export const EventDataStoreProvider = () =>
                 }).map(([Key, Value]) => ({ Key, Value })),
               })
               .pipe(
-                Effect.catchTag("EventDataStoreAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("EventDataStoreAlreadyExistsException", () => Effect.undefined),
               );
             if (created?.EventDataStoreArn) {
               store = yield* getByArn(created.EventDataStoreArn);

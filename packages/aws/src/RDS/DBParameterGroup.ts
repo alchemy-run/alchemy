@@ -10,6 +10,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class RDSDBParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "RDSDBParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface DBParameterGroupProps {
   /**
    * Name of the parameter group. If omitted, Alchemy generates one.
@@ -76,8 +83,18 @@ export interface DBParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link DBParameterGroup.lookup}: find a DB parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBParameterGroupLookup {
+  /** The db parameter group name of the existing DB parameter group. */
+  dbParameterGroupName: string;
+}
 
 /**
  * An RDS DB parameter group — instance-level engine settings, applied to a
@@ -118,6 +135,16 @@ export interface DBParameterGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing DB parameter group
+ * `DBParameterGroup.lookup` references a DB parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB parameter group
+ * ```typescript
+ * const existing = AWS.RDS.DBParameterGroup.lookup({ dbParameterGroupName: "my-db-parameter-group" });
+ * ```
+ *
  * @resource
  */
 export const DBParameterGroup = Resource<DBParameterGroup>("AWS.RDS.DBParameterGroup");
@@ -136,7 +163,7 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
   });
 
 class DBParameterGroupNotSettled extends Data.TaggedError("DBParameterGroupNotSettled")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const DBParameterGroupProvider = () =>
@@ -153,7 +180,7 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: name,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBParameterGroups?.[0];
       });
 
@@ -218,7 +245,7 @@ export const DBParameterGroupProvider = () =>
             if (!group) return { action: "update", stables: [] } as const;
             const desired = news.parameters ?? {};
             const parameters = yield* readParameters(output.dbParameterGroupName).pipe(
-              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)),
+              Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined),
             );
             if (parameters === undefined) {
               return { action: "update", stables: [] } as const;
@@ -266,6 +293,21 @@ export const DBParameterGroupProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ dbParameterGroupName }) {
+          const group = yield* readGroup(dbParameterGroupName);
+          if (!group?.DBParameterGroupName) return undefined;
+          return {
+            dbParameterGroupName: group.DBParameterGroupName,
+            dbParameterGroupArn: group.DBParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            parameters: toManagedParameterRecord(
+              yield* readParameters(group.DBParameterGroupName),
+              undefined,
+            ),
+            tags: yield* readTags(group.DBParameterGroupArn),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??
@@ -312,7 +354,9 @@ export const DBParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
+              return yield* new RDSDBParameterGroupUnexpectedResponse({
+                message: `Failed to create DB parameter group '${name}'`,
+              });
             }
           }
 
@@ -403,7 +447,7 @@ export const DBParameterGroupProvider = () =>
               const observed = toManagedParameterRecord(parameters, desiredParameters);
               return deepEqual(desiredParameters, observed)
                 ? Effect.succeed(observed)
-                : Effect.fail(new DBParameterGroupNotSettled({ name }));
+                : Effect.fail(new DBParameterGroupNotSettled({ resourceName: name }));
             }),
             Effect.retry({
               while: (error) => error._tag === "DBParameterGroupNotSettled",

@@ -198,7 +198,7 @@ export const ManagedLoginBrandingProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ManagedLoginBranding),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 
@@ -210,7 +210,7 @@ export const ManagedLoginBrandingProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.ManagedLoginBranding),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

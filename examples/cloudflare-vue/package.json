@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/node24": "catalog:",
     "@types/node": "catalog:node24",

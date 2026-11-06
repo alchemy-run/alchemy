@@ -108,13 +108,13 @@ export const InstancesLogicalView = Resource<InstancesLogicalView>(
 export class LogicalViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.LogicalViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LogicalViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.LogicalViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, logicalViewId: string | undefined, existing?: string) =>
@@ -140,12 +140,12 @@ const toAttrs = (view: bigtable.LogicalView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesLogicalViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new LogicalViewNotResolved({ name })),
+      view ? Effect.succeed(view) : Effect.fail(new LogicalViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewNotResolved",
@@ -157,7 +157,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new LogicalViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new LogicalViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.LogicalViewStillExists",
@@ -255,7 +257,7 @@ export const InstancesLogicalViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -289,7 +291,7 @@ export const InstancesLogicalViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new LogicalViewNotResolved({ name });
+          return yield* new LogicalViewNotResolved({ resourceName: name });
         }
       }
 

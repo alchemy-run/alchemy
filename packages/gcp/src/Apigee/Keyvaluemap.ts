@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -87,7 +87,7 @@ export type Keyvaluemap = Resource<
 export const Keyvaluemap = Resource<Keyvaluemap>("GCP.Apigee.Keyvaluemap");
 
 export class KeyvaluemapNotResolved extends Data.TaggedError("GCP.Apigee.KeyvaluemapNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, mapId: string) =>
@@ -110,14 +110,14 @@ const toAttrs = (map: apigee.GoogleCloudApigeeV1KeyValueMap, organization: strin
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemaps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_ENTRY}`,
     })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const upsertOwnershipEntry = (mapName: string, marker: string) =>
   apigee
@@ -153,7 +153,7 @@ export const KeyvaluemapProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const mapId = yield* toResourceId(id, olds?.mapId, output?.mapId, MAX_NAME_LENGTH);
@@ -163,7 +163,9 @@ export const KeyvaluemapProvider = () =>
       const attrs = toAttrs(existing, organization);
       const entry = yield* getOwnershipEntry(attrs.name);
       const { labels } = parseOwnership(entry?.value);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -204,7 +206,7 @@ export const KeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyvaluemapNotResolved({ name });
+        return yield* new KeyvaluemapNotResolved({ resourceName: name });
       }
 
       const currentName = current.name?.includes("/") ? current.name : name;

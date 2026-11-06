@@ -2,11 +2,12 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -14,13 +15,13 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 
 // Deterministic record names — disjoint from other suites and the same on
 // every run.
-const CNAME_NAME = `alchemy-recordlist-cname.${zoneName}`;
-const TXT_NAME = `alchemy-recordlist-txt.${zoneName}`;
-const A_NAME = `alchemy-recordlist-a.${zoneName}`;
-const ADDED_NAME = `alchemy-recordlist-added.${zoneName}`;
+const CNAME_NAME = `${testName("alchemy-recordlist-cname")}.${zoneName}`;
+const TXT_NAME = `${testName("alchemy-recordlist-txt")}.${zoneName}`;
+const A_NAME = `${testName("alchemy-recordlist-a")}.${zoneName}`;
+const ADDED_NAME = `${testName("alchemy-recordlist-added")}.${zoneName}`;
 
-const TARGET_1 = `target-1.${zoneName}`;
-const TARGET_2 = `target-2.${zoneName}`;
+const TARGET_1 = `${testName("target-1")}.${zoneName}`;
+const TARGET_2 = `${testName("target-2")}.${zoneName}`;
 const OURS = "alchemy-recordlist=ours";
 const FOREIGN = "alchemy-recordlist=foreign";
 

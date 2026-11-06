@@ -25,6 +25,7 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -38,7 +39,7 @@ import { parsePlan } from "./Plan.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
 import { captureStrayOutput } from "./StrayOutput.ts";
-import { TuiReporter } from "./Tui.ts";
+import { worktreeStage } from "./WorktreeStage.ts";
 
 const paths = Argument.String("paths").pipe(
   Argument.withDescription("Test files or directories (default: ./test)"),
@@ -103,6 +104,26 @@ const toConcurrency = (value: string): number | "unbounded" => {
   }
   return parsed;
 };
+
+/** `--tui` was requested but the optional `@opentui/core` peer isn't installed. */
+class TuiUnavailable extends Data.TaggedError("TuiUnavailable")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+// The TUI's renderer (`@opentui/core`) is an optional peer, so it loads only
+// when `--tui` asks for it.
+const tuiReporter = (logFile: string) =>
+  Layer.unwrap(
+    Effect.tryPromise({
+      try: () => import("./Tui.ts"),
+      catch: (cause) =>
+        new TuiUnavailable({
+          message: "--tui needs @opentui/core. Install it with `bun add -d @opentui/core`.",
+          cause,
+        }),
+    }).pipe(Effect.map(({ TuiReporter }) => TuiReporter(logFile))),
+  );
 
 const sequential = Flag.Boolean("sequential").pipe(
   Flag.withDescription("Run tests within each file sequentially"),
@@ -202,6 +223,17 @@ const rootCommand = Command.make(
       process.env.NO_COLOR = "1";
       process.env.FORCE_COLOR = "0";
     });
+    // A linked git worktree defaults to its own stage, so two worktrees of
+    // one developer running the same suite never share deployments. An
+    // explicit `--stage` or ALCHEMY_TEST_STAGE wins.
+    if (Option.isNone(args.stage) && !process.env.ALCHEMY_TEST_STAGE) {
+      const stage = yield* worktreeStage(yield* Effect.sync(() => process.cwd()));
+      if (stage !== undefined) {
+        yield* Effect.sync(() => {
+          process.env.ALCHEMY_TEST_STAGE = stage;
+        });
+      }
+    }
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.
@@ -246,7 +278,7 @@ const rootCommand = Command.make(
       yield* reporter.waitForExit(summary);
       return summary;
     }).pipe(
-      Effect.provide(interactive ? TuiReporter(logFile) : PlainReporterLive),
+      Effect.provide(interactive ? tuiReporter(logFile) : PlainReporterLive),
       Effect.scoped,
       Effect.onExit(() => Effect.sync(() => restoreStrayCapture?.())),
     );

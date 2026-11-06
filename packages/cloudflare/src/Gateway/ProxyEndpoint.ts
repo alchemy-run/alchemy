@@ -157,7 +157,7 @@ export const ProxyEndpointProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
       const kind = news.kind ?? "ip";
@@ -238,7 +238,7 @@ type ObservedEndpoint = zeroTrust.GetGatewayProxyEndpointResponse;
 const getEndpoint = (accountId: string, proxyEndpointId: string) =>
   zeroTrust.getGatewayProxyEndpoint({ accountId, proxyEndpointId }).pipe(
     Effect.map((e): ObservedEndpoint | undefined => e),
-    Effect.catchTag("ProxyEndpointNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ProxyEndpointNotFound", () => Effect.undefined),
   );
 
 /**

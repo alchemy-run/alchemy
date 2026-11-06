@@ -1,26 +1,20 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import InvokeCallee from "./fixtures/invoke-callee.ts";
 import InvokeCaller from "./fixtures/invoke-caller.ts";
+import PublicRpc from "./fixtures/invoke-public-rpc.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 interface CallerBody {
   status: number;
@@ -48,7 +42,7 @@ const getUntil = <A>(
     }),
   );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "InvokeService calls a private service with a Google-signed ID token",
   (stack) =>
     Effect.gen(function* () {
@@ -112,6 +106,26 @@ test.provider.skipIf(!dockerAvailable)(
         body: "ping",
       });
 
+      // RPC methods ride the same ID token.
+      const rpc = yield* getUntil(
+        `${out.caller.uri}/rpc`,
+        (status, body) =>
+          status === 200
+            ? (JSON.parse(body) as { sum: number; countdown: number[]; viaClient: unknown })
+            : { status },
+        (value) => "sum" in value,
+      );
+      expect(rpc).toEqual({
+        sum: 5,
+        countdown: [3, 2, 1],
+        viaClient: { from: "callee", method: "GET", path: "/hello", body: "" },
+      });
+
+      // The RPC route is behind the invoker check like every other path.
+      const client = yield* HttpClient.HttpClient;
+      const unsigned = yield* client.post(`${out.callee.uri}/__rpc__/add`);
+      expect(unsigned.status).toEqual(403);
+
       yield* stack.destroy();
 
       for (const name of [out.callee.name, out.caller.name]) {
@@ -123,4 +137,27 @@ test.provider.skipIf(!dockerAvailable)(
       }
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
+);
+
+test.provider(
+  "a public service cannot serve RPC methods",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const exit = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* PublicRpc;
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toEqual(true);
+      expect(String(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "")).toContain(
+        "GCP.Run.ServiceRpcPublic",
+      );
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 180_000 },
 );

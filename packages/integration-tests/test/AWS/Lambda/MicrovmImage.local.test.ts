@@ -29,10 +29,10 @@ import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
 import * as Region from "@alchemy.run/aws/Region";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import type { RegionName } from "@distilled.cloud/aws/Region";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -40,7 +40,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { dockerAvailable, FLOCI_ENDPOINT } from "../Local/fixtures/raw.ts";
+import { FLOCI_ENDPOINT } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -82,7 +82,7 @@ const bootsToRunning = (imageArn: string, imageVersion?: string) =>
     return { state, imageVersion: vm.imageVersion };
   }).pipe(Effect.provide(flociContext));
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev builds the image host-side (docker://), boots it, and a content edit hot-rebuilds it within seconds",
   (stack) =>
     Effect.gen(function* () {

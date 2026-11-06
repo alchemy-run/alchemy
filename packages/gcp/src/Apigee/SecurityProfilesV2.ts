@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -130,7 +130,7 @@ export const SecurityProfilesV2 = Resource<SecurityProfilesV2>("GCP.Apigee.Secur
 export class SecurityProfilesV2NotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityProfilesV2NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ASSESSMENTS: Record<string, ProfileAssessmentConfig> = {
@@ -200,7 +200,7 @@ const toAttrs = (profile: apigee.GoogleCloudApigeeV1SecurityProfileV2, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityProfilesV2({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityProfilesV2Props,
@@ -232,7 +232,7 @@ export const SecurityProfilesV2Provider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityProfileV2Id = yield* toResourceId(
@@ -246,7 +246,9 @@ export const SecurityProfilesV2Provider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
       const { labels } = parseOwnership(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -300,7 +302,7 @@ export const SecurityProfilesV2Provider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfilesV2NotResolved({ name });
+        return yield* new SecurityProfilesV2NotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

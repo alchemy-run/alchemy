@@ -110,7 +110,7 @@ export type AppsVersion = Resource<
 export const AppsVersion = Resource<AppsVersion>("GCP.CES.AppsVersion");
 
 export class AppsVersionNotResolved extends Data.TaggedError("GCP.CES.AppsVersionNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, appVersionId: string) => `${app}/versions/${appVersionId}`;
@@ -134,10 +134,10 @@ const toAttrs = (version: ces.AppVersion, project: string, region: string, appHi
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -214,7 +214,7 @@ export const AppsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsVersionNotResolved({ name });
+        return yield* new AppsVersionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, app);

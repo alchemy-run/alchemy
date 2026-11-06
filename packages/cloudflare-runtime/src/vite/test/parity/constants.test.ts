@@ -11,6 +11,7 @@ import {
   WORKFLOW_ENTRYPOINT_KEYS,
 } from "../../module-runner/keys.shared.ts";
 import { SANDBOX_ORIGIN_REGEXP } from "../../websockets.ts";
+import { AHEAD_OF_RELEASE_BUILT_IN_MODULES } from "./ahead-of-release.ts";
 
 // The runtime pieces ported from `@cloudflare/vite-plugin`, checked against
 // the installed release: a new handler key, module rule or built-in module
@@ -39,9 +40,10 @@ describe("ported constants match @cloudflare/vite-plugin", () => {
 
   it("treats the same modules as runtime built-ins", async () => {
     const plugin = await read("index.mjs");
-    expect([...CLOUDFLARE_BUILT_IN_MODULES]).toEqual(
-      arrayLiteral(plugin, "cloudflareBuiltInModules"),
-    );
+    const upstream = arrayLiteral(plugin, "cloudflareBuiltInModules");
+    // Built-ins upstream has added on `main` after the installed release.
+    const ahead = AHEAD_OF_RELEASE_BUILT_IN_MODULES.filter((id) => !upstream.includes(id));
+    expect([...CLOUDFLARE_BUILT_IN_MODULES].sort()).toEqual([...upstream, ...ahead].sort());
   });
 
   it("imports the same additional module types", async () => {

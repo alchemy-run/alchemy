@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -46,7 +47,7 @@ describe.sequential(
             // rather than failing with `OwnedBySomeoneElse` or racing an
             // out-of-band delete against the singleton's eventual consistency.
             Cloudflare.MagicNetworkMonitoring.Config("Config", {
-              name: "alchemy-mnm-list-test",
+              name: testName("alchemy-mnm-list-test"),
               defaultSampling: 1,
             }).pipe(adopt(true)),
           );

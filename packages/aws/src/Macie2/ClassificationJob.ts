@@ -151,7 +151,7 @@ export const ClassificationJobProvider = () =>
       const describe = (jobId: string) =>
         macie2
           .describeClassificationJob({ jobId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       return {
         stables: ["jobId", "jobArn", "name"],

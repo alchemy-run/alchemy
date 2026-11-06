@@ -6,9 +6,9 @@ import * as Fly from "@alchemy.run/fly";
 import { FlyAuth } from "@alchemy.run/fly/AuthProvider";
 import { fromAuthProvider } from "@alchemy.run/fly/Credentials";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -16,13 +16,14 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import CertificatesApi, { CertIp, CertSite } from "./fixtures/certificates-api.ts";
+import { flyApi } from "./limit.ts";
 
 /**
  * Runtime certificate management on a Fly App: `request` a Fly-managed
  * certificate, upload a Let's Encrypt staging certificate, check, get, and remove.
  */
 const providers = Layer.mergeAll(Fly.providers(), Cloudflare.providers(), ACME.providers());
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ limit: flyApi, providers });
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const UPLOAD_HOST = `alchemy-wc-upload.${zoneName}`;
 const REQUEST_HOST = `alchemy-wc-request.${zoneName}`;

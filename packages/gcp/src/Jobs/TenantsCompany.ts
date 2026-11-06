@@ -169,7 +169,7 @@ export const TenantsCompany = Resource<TenantsCompany>("GCP.Jobs.TenantsCompany"
 export class TenantsCompanyNotResolved extends Data.TaggedError(
   "GCP.Jobs.TenantsCompanyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
@@ -274,7 +274,7 @@ export const TenantsCompanyProvider = () =>
 
       if (current === undefined) {
         return yield* new TenantsCompanyNotResolved({
-          name: name || `${parent}/companies/${clientId}`,
+          resourceName: name || `${parent}/companies/${clientId}`,
         });
       }
 

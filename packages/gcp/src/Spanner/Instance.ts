@@ -209,16 +209,16 @@ export type Instance = Resource<
 export const Instance = Resource<Instance>("GCP.Spanner.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Spanner.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Spanner.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Spanner.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -362,14 +362,14 @@ const toAttrs = (instance: spanner.Instance, project: string): Instance["Attribu
 };
 
 const getByName = (name: string) =>
-  spanner
-    .getProjectsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  spanner.getProjectsInstances({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceNotResolved",
@@ -382,13 +382,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is spanner.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_UNSPECIFIED") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -404,7 +404,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceStillExists",
@@ -550,7 +552,7 @@ export const InstanceProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -558,7 +560,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") !== "READY") {

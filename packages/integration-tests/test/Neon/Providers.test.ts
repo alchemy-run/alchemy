@@ -2,16 +2,17 @@ import * as Neon from "@alchemy.run/neon";
 import { Credentials } from "@alchemy.run/neon/Credentials";
 import { Project } from "@alchemy.run/neon/Project";
 import { expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import * as Interaction from "alchemy/Interaction";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -42,7 +43,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
             name: "test",
@@ -58,6 +59,7 @@ it.live(
           ),
           Layer.sync(ArtifactStore, createArtifactStore),
           NodeServices.layer,
+          SecureRandom.layerWebCrypto,
           FetchHttpClient.layer,
           Interaction.layerNonInteractive(),
         ),

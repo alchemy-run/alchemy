@@ -43,7 +43,12 @@ export class HttpMarkerPresent extends Data.TaggedError("HttpMarkerPresent")<{
 export class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
   hostname: string;
   type: string;
-}> {}
+  detail: string;
+}> {
+  override get message() {
+    return `${this.type} lookup for ${this.hostname} failed: ${this.detail}`;
+  }
+}
 
 /**
  * Wait until `hostname` resolves for every record type in `types` on its
@@ -58,40 +63,44 @@ export class DnsNotReady extends Data.TaggedError("DnsNotReady")<{
  * Authoritative nameservers keep no cache, so they answer as soon as the
  * record exists. The zone is found by asking for NS records on the
  * hostname's parents, never on the hostname itself.
+ *
+ * Each attempt queries through a fresh `Resolver`: c-ares (behind
+ * `dns.Resolver` in Node and Bun) caches negative answers per resolver for
+ * the SOA minimum, so reusing one would replay the first NXDOMAIN on every
+ * retry.
  */
 export const waitForDns = Effect.fn(function* (
   hostname: string,
   types: ReadonlyArray<"A" | "AAAA"> = ["A", "AAAA"],
 ) {
-  const authoritative = yield* Effect.tryPromise({
+  const nameservers = yield* Effect.tryPromise({
     try: async () => {
       const labels = hostname.split(".");
       for (let i = 1; i < labels.length - 1; i++) {
         const zone = labels.slice(i).join(".");
         const ns = await dns.resolveNs(zone).catch(() => []);
         if (ns.length > 0) {
-          const ips = await Promise.all(ns.map((host) => dns.resolve4(host)));
-          const resolver = new dns.Resolver();
-          resolver.setServers(ips.flat());
-          return resolver;
+          return (await Promise.all(ns.map((host) => dns.resolve4(host)))).flat();
         }
       }
       throw new Error(`no zone found for ${hostname}`);
     },
-    catch: () => new DnsNotReady({ hostname, type: "NS" }),
+    catch: (cause) => new DnsNotReady({ hostname, type: "NS", detail: String(cause) }),
   });
   yield* Effect.forEach(
     types,
     (type) =>
       Effect.tryPromise({
         try: async () => {
+          const authoritative = new dns.Resolver();
+          authoritative.setServers(nameservers);
           const answers =
             type === "A"
               ? await authoritative.resolve4(hostname)
               : await authoritative.resolve6(hostname);
           if (answers.length === 0) throw new Error("no answer");
         },
-        catch: () => new DnsNotReady({ hostname, type }),
+        catch: (cause) => new DnsNotReady({ hostname, type, detail: String(cause) }),
       }).pipe(
         Effect.retry({
           while: (e) => e._tag === "DnsNotReady",

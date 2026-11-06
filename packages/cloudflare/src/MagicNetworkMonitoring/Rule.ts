@@ -357,7 +357,7 @@ type ObservedRule = mnm.GetRuleResponse;
 const getRule = (accountId: string, ruleId: string) =>
   mnm.getRule({ accountId, ruleId }).pipe(
     Effect.map((rule): ObservedRule | undefined => rule),
-    Effect.catchTag("MnmRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("MnmRuleNotFound", () => Effect.undefined),
   );
 
 /**

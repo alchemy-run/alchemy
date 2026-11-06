@@ -191,7 +191,7 @@ const toAttrs = (enrollment: eventarc.Enrollment, project: string, region: strin
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsEnrollments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const EnrollmentProvider = () =>
   Provider.succeed(Enrollment, {
@@ -298,7 +298,7 @@ export const EnrollmentProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -346,7 +346,7 @@ export const EnrollmentProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

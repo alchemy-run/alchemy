@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as turnstile from "@distilled.cloud/cloudflare/turnstile";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -81,39 +82,41 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("UpdateWidget", {
-          name: "alchemy-turnstile-update",
+          name: testName("alchemy-turnstile-update"),
           domains: [zoneName],
           mode: "managed",
         }),
       );
 
-      expect(initial.name).toEqual("alchemy-turnstile-update");
+      expect(initial.name).toEqual(testName("alchemy-turnstile-update"));
       expect(initial.mode).toEqual("managed");
 
       const updated = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("UpdateWidget", {
-          name: "alchemy-turnstile-update-v2",
-          domains: [zoneName, `www.${zoneName}`],
+          name: testName("alchemy-turnstile-update-v2"),
+          domains: [zoneName, `${testName("www")}.${zoneName}`],
           mode: "invisible",
         }),
       );
 
       // Same widget mutated in place — not a replacement.
       expect(updated.sitekey).toEqual(initial.sitekey);
-      expect(updated.name).toEqual("alchemy-turnstile-update-v2");
+      expect(updated.name).toEqual(testName("alchemy-turnstile-update-v2"));
       expect(updated.mode).toEqual("invisible");
-      expect([...updated.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
+      expect([...updated.domains].sort()).toEqual(
+        [zoneName, `${testName("www")}.${zoneName}`].sort(),
+      );
 
       const live = yield* getWidget(accountId, updated.sitekey);
-      expect(live.name).toEqual("alchemy-turnstile-update-v2");
+      expect(live.name).toEqual(testName("alchemy-turnstile-update-v2"));
       expect(live.mode).toEqual("invisible");
-      expect([...live.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
+      expect([...live.domains].sort()).toEqual([zoneName, `${testName("www")}.${zoneName}`].sort());
 
       // Redeploying identical props is a no-op (still the same widget).
       const noop = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("UpdateWidget", {
-          name: "alchemy-turnstile-update-v2",
-          domains: [zoneName, `www.${zoneName}`],
+          name: testName("alchemy-turnstile-update-v2"),
+          domains: [zoneName, `${testName("www")}.${zoneName}`],
           mode: "invisible",
         }),
       );
@@ -136,7 +139,7 @@ test.provider(
 
       const widget = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("HealWidget", {
-          name: "alchemy-turnstile-heal",
+          name: testName("alchemy-turnstile-heal"),
           domains: [zoneName],
           mode: "non-interactive",
         }),
@@ -155,7 +158,7 @@ test.provider(
 
       const healed = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("HealWidget", {
-          name: "alchemy-turnstile-heal",
+          name: testName("alchemy-turnstile-heal"),
           domains: [zoneName],
           mode: "managed",
         }),
@@ -164,7 +167,7 @@ test.provider(
       expect(healed.sitekey).not.toEqual(widget.sitekey);
       expect(healed.mode).toEqual("managed");
       const live = yield* getWidget(accountId, healed.sitekey);
-      expect(live.name).toEqual("alchemy-turnstile-heal");
+      expect(live.name).toEqual(testName("alchemy-turnstile-heal"));
       expect(live.mode).toEqual("managed");
 
       yield* stack.destroy();
@@ -182,7 +185,7 @@ test.provider(
 
       const widget = yield* stack.deploy(
         Cloudflare.Turnstile.Widget("ListWidget", {
-          name: "alchemy-turnstile-list",
+          name: testName("alchemy-turnstile-list"),
           domains: [zoneName],
           mode: "managed",
         }),
@@ -193,7 +196,7 @@ test.provider(
 
       const found = all.find((w) => w.sitekey === widget.sitekey);
       expect(found).toBeDefined();
-      expect(found?.name).toEqual("alchemy-turnstile-list");
+      expect(found?.name).toEqual(testName("alchemy-turnstile-list"));
       expect(found?.domains).toEqual([zoneName]);
       expect(found?.mode).toEqual("managed");
       // list() hydrates the write-only secret to match the read shape.

@@ -236,6 +236,22 @@ export class LoggingOptions extends $.Struct {
     return "LoggingOptions_" + super.toString();
   }
 }
+export const Socket_TcpTlsMode = {
+  /**
+   * Perform the TLS handshake as soon as a connection is accepted. The `connect()` handler sees
+   * only the decrypted stream, and its socket does not support `startTls()`.
+   *
+   */
+  IMPLICIT: 0,
+  /**
+   * Accept connections in plaintext. The `connect()` handler's socket has secureTransport set to
+   * "starttls" and the handler performs the TLS handshake as the server by calling `startTls()` at
+   * the point in its protocol where the upgrade belongs.
+   *
+   */
+  START_TLS: 1,
+} as const;
+export type Socket_TcpTlsMode = (typeof Socket_TcpTlsMode)[keyof typeof Socket_TcpTlsMode];
 export class Socket_Https extends $.Struct {
   static readonly _capnp = {
     displayName: "https",
@@ -287,6 +303,7 @@ export class Socket_Tcp extends $.Struct {
     displayName: "tcp",
     id: "b59d8ecf6886b64c",
     size: new $.ObjectSize(16, 5),
+    defaultTlsMode: $.getUint16Mask(0),
   };
   _adoptTlsOptions(value: $.Orphan<TlsOptions>): void {
     $.utils.adopt(value, $.utils.getPointer(2, this));
@@ -305,6 +322,16 @@ export class Socket_Tcp extends $.Struct {
   }
   set tlsOptions(value: TlsOptions) {
     $.utils.copyFrom(value, $.utils.getPointer(2, this));
+  }
+  /**
+   * How `tlsOptions` is applied to accepted connections. Ignored if `tlsOptions` is not set.
+   *
+   */
+  get tlsMode(): Socket_TcpTlsMode {
+    return $.utils.getUint16(4, this, Socket_Tcp._capnp.defaultTlsMode) as Socket_TcpTlsMode;
+  }
+  set tlsMode(value: Socket_TcpTlsMode) {
+    $.utils.setUint16(4, value, this, Socket_Tcp._capnp.defaultTlsMode);
   }
   toString(): string {
     return "Socket_Tcp_" + super.toString();
@@ -366,6 +393,7 @@ export class Socket extends $.Struct {
   static readonly HTTPS = Socket_Which.HTTPS;
   static readonly TCP = Socket_Which.TCP;
   static readonly UDP = Socket_Which.UDP;
+  static readonly TcpTlsMode = Socket_TcpTlsMode;
   static readonly _capnp = {
     displayName: "Socket",
     id: "9a0eba45530ee79f",
@@ -1417,69 +1445,11 @@ export class Worker_Binding_Type extends $.Struct {
     return $.utils.getUint16(0, this) as Worker_Binding_Type_Which;
   }
 }
-export class Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy extends $.Struct {
-  static readonly _capnp = {
-    displayName: "RetryPolicy",
-    id: "d9f9c39c6b94b8fb",
-    size: new $.ObjectSize(8, 0),
-    defaultMaxAttempts: $.getUint32Mask(4),
-    defaultTimeoutMs: $.getUint32Mask(10000),
-  };
-  /**
-   * Maximum number of retries after the initial attempt. Zero disables retries, and one
-   * allows a single retry. The default matches the runtime's default of five attempts in
-   * total.
-   *
-   */
-  get maxAttempts(): number {
-    return $.utils.getUint32(
-      0,
-      this,
-      Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy._capnp.defaultMaxAttempts,
-    );
-  }
-  set maxAttempts(value: number) {
-    $.utils.setUint32(
-      0,
-      value,
-      this,
-      Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy._capnp.defaultMaxAttempts,
-    );
-  }
-  /**
-   * Time in milliseconds, measured from the start of the call, after which no retry may
-   * start. A retry still running when it expires is cancelled, and the caller gets the
-   * error that caused the first retry. The initial request, and the first request after each
-   * redirect, always run to completion. The clock starts after any output-gate wait, and a
-   * redirect shares the original call's timeout. Must be between 500 and 60,000. The default
-   * matches the runtime's default.
-   *
-   */
-  get timeoutMs(): number {
-    return $.utils.getUint32(
-      4,
-      this,
-      Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy._capnp.defaultTimeoutMs,
-    );
-  }
-  set timeoutMs(value: number) {
-    $.utils.setUint32(
-      4,
-      value,
-      this,
-      Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy._capnp.defaultTimeoutMs,
-    );
-  }
-  toString(): string {
-    return "Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy_" + super.toString();
-  }
-}
 /**
  * The type of a Durable Object namespace binding.
  *
  */
 export class Worker_Binding_DurableObjectNamespaceDesignator extends $.Struct {
-  static readonly RetryPolicy = Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy;
   static readonly _capnp = {
     displayName: "DurableObjectNamespaceDesignator",
     id: "804f144ff477aac7",
@@ -1513,33 +1483,19 @@ export class Worker_Binding_DurableObjectNamespaceDesignator extends $.Struct {
   set serviceName(value: string) {
     $.utils.setText(1, value, this);
   }
-  _adoptRetryPolicy(
-    value: $.Orphan<Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy>,
-  ): void {
+  _adoptObsolete2(value: $.Orphan<$.Pointer>): void {
     $.utils.adopt(value, $.utils.getPointer(2, this));
   }
-  _disownRetryPolicy(): $.Orphan<Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy> {
-    return $.utils.disown(this.retryPolicy);
+  _disownObsolete2(): $.Orphan<$.Pointer> {
+    return $.utils.disown(this.obsolete2);
   }
-  /**
-   * Limits on how the runtime retries calls through stubs minted from this binding. When
-   * absent, the runtime's default retry behavior applies.
-   *
-   */
-  get retryPolicy(): Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy {
-    return $.utils.getStruct(2, Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy, this);
+  get obsolete2(): $.Pointer {
+    return $.utils.getPointer(2, this);
   }
-  _hasRetryPolicy(): boolean {
+  _hasObsolete2(): boolean {
     return !$.utils.isNull($.utils.getPointer(2, this));
   }
-  _initRetryPolicy(): Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy {
-    return $.utils.initStructAt(
-      2,
-      Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy,
-      this,
-    );
-  }
-  set retryPolicy(value: Worker_Binding_DurableObjectNamespaceDesignator_RetryPolicy) {
+  set obsolete2(value: $.Pointer) {
     $.utils.copyFrom(value, $.utils.getPointer(2, this));
   }
   toString(): string {

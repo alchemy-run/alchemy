@@ -1,11 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   awsFixture,
@@ -27,7 +26,7 @@ const fixtureEntries = [
   "public",
 ];
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Nextjs: deploy, GET page, API and static routes, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

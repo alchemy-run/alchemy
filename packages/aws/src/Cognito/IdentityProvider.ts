@@ -64,8 +64,20 @@ export interface IdentityProvider extends Resource<
     providerType: IdentityProviderType;
   },
   never,
-  Providers
+  Providers,
+  IdentityProviderLookup
 > {}
+
+/**
+ * Props for {@link IdentityProvider.lookup}: find an identity provider this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IdentityProviderLookup {
+  /** The user pool the provider belongs to. */
+  userPoolId: string;
+  /** The name of the existing provider. */
+  providerName: string;
+}
 
 /**
  * A third-party identity provider (SAML, OIDC, or social) attached to an
@@ -97,6 +109,16 @@ export interface IdentityProvider extends Resource<
  *   userPoolId: pool.userPoolId,
  *   supportedIdentityProviders: ["COGNITO", oidc.providerName],
  * });
+ * ```
+ *
+ * ### Looking up an existing identity provider
+ * `IdentityProvider.lookup` references an identity provider Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userPoolId` and `providerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing identity provider
+ * ```typescript
+ * const google = AWS.Cognito.IdentityProvider.lookup({ userPoolId, providerName: "Google" });
  * ```
  *
  * @resource
@@ -155,7 +177,7 @@ export const IdentityProviderProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.IdentityProvider),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 
@@ -178,6 +200,12 @@ export const IdentityProviderProvider = () =>
         // doctrine.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ userPoolId, providerName }) {
+          const observed = yield* describeProvider(userPoolId, providerName);
+          return observed === undefined
+            ? undefined
+            : attributesOf(observed, providerName, userPoolId);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;

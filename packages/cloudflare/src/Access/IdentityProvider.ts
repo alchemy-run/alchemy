@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import { unwrapRedacted } from "alchemy/Util/data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import type * as Redacted from "effect/Redacted";
@@ -14,6 +15,7 @@ import { listAllZones } from "../Zone/lookup.ts";
 import {
   findByName,
   findByType,
+  findFirst,
   getIdp,
   isSingletonType,
   type ObservedIdp,
@@ -66,11 +68,13 @@ export interface OAuthClientConfig {
    */
   clientId: string;
   /**
-   * OAuth client secret. Cloudflare masks this field on read, so it
+   * OAuth client secret. Pass a `Redacted` value (e.g.
+   * `yield* Config.Redacted("GITHUB_CLIENT_SECRET")`) to keep it out of
+   * plan output and state. Cloudflare masks this field on read, so it
    * diffs against the previously declared props rather than observed
    * cloud state.
    */
-  clientSecret: string;
+  clientSecret: string | Redacted.Redacted<string>;
 }
 
 /**
@@ -502,8 +506,46 @@ export type IdentityProvider = Resource<
   IdentityProviderProps,
   IdentityProviderAttributes,
   never,
-  Providers
+  Providers,
+  IdentityProviderLookup
 >;
+
+/**
+ * Props for {@link IdentityProvider.lookup}: find an identity provider this
+ * stack doesn't manage, by its id, its display name, or its type.
+ */
+export type IdentityProviderLookup = {
+  /**
+   * Zone to search (legacy zone-level Access). When omitted, the
+   * account-level (Zero Trust organization) identity providers are searched.
+   */
+  zoneId?: string;
+} & (
+  | {
+      /**
+       * The UUID of the existing identity provider.
+       */
+      identityProviderId: string;
+    }
+  | {
+      /**
+       * The display name of the existing identity provider. Names are not
+       * unique; the first match is used. `""` matches the managed WARP IdP.
+       */
+      name: string;
+      /**
+       * Also require this type, e.g. `"okta"`.
+       */
+      type?: IdentityProviderType;
+    }
+  | {
+      /**
+       * The type of the existing identity provider, e.g. `"cloudflare"` for
+       * the managed WARP login method. The first match is used.
+       */
+      type: IdentityProviderType;
+    }
+);
 
 /**
  * A Cloudflare Zero Trust Access identity provider — the login method
@@ -546,6 +588,17 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
+ * **Example:** GitHub with the client secret from config
+ * ```typescript
+ * const github = yield* Cloudflare.Access.IdentityProvider("GitHub", {
+ *   type: "github",
+ *   config: {
+ *     clientId: "my-client-id",
+ *     clientSecret: yield* Config.Redacted("GITHUB_CLIENT_SECRET"),
+ *   },
+ * });
+ * ```
+ *
  * **Example:** Microsoft Entra ID (Azure AD)
  * ```typescript
  * const entra = yield* Cloudflare.Access.IdentityProvider("Entra", {
@@ -577,6 +630,30 @@ export type IdentityProvider = Resource<
  * yield* Cloudflare.Access.Application("Admin", {
  *   domain: "admin.example.com",
  *   allowedIdps: [oidc.identityProviderId],
+ * });
+ * ```
+ *
+ * ### Looking up an existing identity provider
+ * `IdentityProvider.lookup` references an identity provider Alchemy doesn't
+ * manage (set up in the dashboard or by another stack), found by
+ * `identityProviderId`, display `name`, or `type`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Restrict an Access application to the managed WARP IdP
+ * ```typescript
+ * const warp = Cloudflare.Access.IdentityProvider.lookup({ type: "cloudflare" });
+ * yield* Cloudflare.Access.Application("Admin", {
+ *   domain: "admin.example.com",
+ *   allowedIdps: [warp.identityProviderId],
+ * });
+ * ```
+ *
+ * **Example:** By display name, in a Worker's `env`
+ * ```typescript
+ * const okta = Cloudflare.Access.IdentityProvider.lookup({ name: "Okta SSO" });
+ * yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { IDP_ID: okta.identityProviderId },
  * });
  * ```
  *
@@ -626,6 +703,21 @@ export const IdentityProviderProvider = () =>
         }
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "identityProviderId" in props
+          ? yield* getIdp(props.zoneId, accountId, props.identityProviderId)
+          : yield* findFirst(
+              props.zoneId,
+              accountId,
+              (idp) =>
+                (!("name" in props) || idp.name === props.name) &&
+                (props.type === undefined || idp.type === props.type),
+            );
+      return observed?.id ? toAttributes(observed, props.zoneId, accountId, undefined) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -749,7 +841,7 @@ export const IdentityProviderProvider = () =>
         const created = yield* createIdp(zoneId, accountId, {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: unwrapRedacted(news.config ?? {}),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });
@@ -762,14 +854,15 @@ export const IdentityProviderProvider = () =>
       //    declared props because Cloudflare masks secrets on read.
       const dirty =
         observed.name !== name ||
-        JSON.stringify(news.config ?? {}) !== JSON.stringify(olds?.config ?? null) ||
+        JSON.stringify(unwrapRedacted(news.config ?? {})) !==
+          JSON.stringify(unwrapRedacted(olds?.config ?? null)) ||
         samlCertificateSetIdOf(news) !== samlCertificateSetIdOf(olds) ||
         (news.scimConfig !== undefined && !sameScim(observed.scimConfig, news.scimConfig));
       if (dirty) {
         const updated = yield* updateIdp(zoneId, accountId, observed.id ?? "", {
           name,
           type: news.type,
-          config: news.config ?? {},
+          config: unwrapRedacted(news.config ?? {}),
           scimConfig: news.scimConfig,
           samlCertificateSetId: samlCertificateSetIdOf(news),
         });

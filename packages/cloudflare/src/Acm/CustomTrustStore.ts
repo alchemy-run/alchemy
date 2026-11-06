@@ -270,8 +270,9 @@ const isGoneStatus = (status: CustomTrustStoreStatus): boolean =>
 const getTrustStore = (zoneId: string, id: string) =>
   acm.getCustomTrustStore({ zoneId, customOriginTrustStoreId: id }).pipe(
     Effect.map((cert): ObservedTrustStore | undefined => cert),
-    Effect.catchTag(["CustomTrustStoreNotFound", "InvalidObjectIdentifier"], () =>
-      Effect.succeed(undefined),
+    Effect.catchTag(
+      ["CustomTrustStoreNotFound", "InvalidObjectIdentifier"],
+      () => Effect.undefined,
     ),
   );
 

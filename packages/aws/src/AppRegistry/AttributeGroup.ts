@@ -45,8 +45,18 @@ export interface AttributeGroup extends Resource<
     attributeGroupName: string;
   },
   never,
-  Providers
+  Providers,
+  AttributeGroupLookup
 > {}
+
+/**
+ * Props for {@link AttributeGroup.lookup}: find an attribute group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AttributeGroupLookup {
+  /** The attribute group id of the existing attribute group. */
+  attributeGroupId: string;
+}
 
 /**
  * An AWS Service Catalog AppRegistry attribute group — a named container of
@@ -76,6 +86,16 @@ export interface AttributeGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing attribute group
+ * `AttributeGroup.lookup` references an attribute group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `attributeGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing attribute group
+ * ```typescript
+ * const existing = AWS.AppRegistry.AttributeGroup.lookup({ attributeGroupId: "my-attribute-group" });
+ * ```
+ *
  * @resource
  */
 export const AttributeGroup = Resource<AttributeGroup>("AWS.AppRegistry.AttributeGroup");
@@ -95,7 +115,7 @@ export const AttributeGroupProvider = () =>
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getAttributeGroup({ attributeGroup: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Canonical comparison of the observed attribute JSON against the
@@ -129,6 +149,16 @@ export const AttributeGroupProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ attributeGroupId: specifier }) {
+          const found = yield* observe(specifier);
+          if (!found?.id) return undefined;
+          const attrs = {
+            attributeGroupId: found.id,
+            attributeGroupArn: found.arn!,
+            attributeGroupName: found.name!,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const specifier = output?.attributeGroupId ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(specifier);

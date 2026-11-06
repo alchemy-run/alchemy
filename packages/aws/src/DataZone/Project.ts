@@ -45,8 +45,29 @@ export interface Project extends Resource<
     domainUnitId: string | undefined;
     /** The DataZone user who created the project. */
     createdBy: string;
-  }
+  },
+  never,
+  undefined,
+  ProjectLookup
 > {}
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ProjectLookup =
+  | {
+      /** The domain the project belongs to. */
+      domainId: string;
+      /** The id of the existing project. */
+      projectId: string;
+    }
+  | {
+      /** The domain the project belongs to. */
+      domainId: string;
+      /** The name of the existing project. */
+      name: string;
+    };
 
 /**
  * An Amazon DataZone project — the collaboration space within a domain where
@@ -76,6 +97,16 @@ export interface Project extends Resource<
  *   name: "analytics-team",
  *   glossaryTerms: [term.id],
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainId` with `projectId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const sales = AWS.DataZone.Project.lookup({ domainId, name: "sales" });
  * ```
  *
  * @resource
@@ -117,8 +148,8 @@ export const ProjectProvider = () =>
           .getProject({ domainIdentifier: domainId, identifier: projectId })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -126,8 +157,8 @@ export const ProjectProvider = () =>
       const findByName = Effect.fn(function* (domainId: string, name: string) {
         const found = yield* datazone.listProjects({ domainIdentifier: domainId, name }).pipe(
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
-            AccessDeniedException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
+            AccessDeniedException: () => Effect.undefined,
           }),
         );
         const summary = (found?.items ?? []).find(
@@ -179,6 +210,14 @@ export const ProjectProvider = () =>
         // account-level enumeration without a domain identifier.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* (props) {
+          const projectId =
+            "projectId" in props ? props.projectId : yield* findByName(props.domainId, props.name);
+          if (projectId === undefined) return undefined;
+          const project = yield* getProjectOrUndefined(props.domainId, projectId);
+          if (project === undefined || project.projectStatus === "DELETING") return undefined;
+          return toAttributes(project);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const domainId = output?.domainId ?? olds?.domainId;
           if (domainId === undefined) return undefined;

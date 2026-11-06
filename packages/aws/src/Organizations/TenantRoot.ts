@@ -1,4 +1,5 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
@@ -22,7 +23,12 @@ import { RootPolicyType as OrganizationsRootPolicyType } from "./RootPolicyType.
 import type { TrustedServiceAccess } from "./TrustedServiceAccess.ts";
 import { TrustedServiceAccess as OrganizationsTrustedServiceAccess } from "./TrustedServiceAccess.ts";
 
-export type TenantTargetKey = "root" | string;
+export class TenantRootInvalidProps extends Data.TaggedError("TenantRootInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export type TenantTargetKey = string;
 
 export interface TenantAccountSpec extends Omit<AccountProps, "parentId" | "name" | "email"> {
   /** Stable key identifying the account within the tenant (used in logical IDs and `targetKeys`). */
@@ -342,9 +348,9 @@ export const TenantRoot = Effect.fn(function* (id: string, props: TenantRootProp
     for (const targetKey of policySpec.targetKeys) {
       const target = targets[targetKey];
       if (!target) {
-        return yield* Effect.fail(
-          new Error(`Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`),
-        );
+        return yield* new TenantRootInvalidProps({
+          message: `Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`,
+        });
       }
 
       policyAttachments.push(
@@ -448,9 +454,9 @@ const createTenantIdentityCenter = Effect.fn(function* ({
   if (spec.delegatedAdminAccountKey) {
     const account = accounts[spec.delegatedAdminAccountKey];
     if (!account) {
-      return yield* Effect.fail(
-        new Error(`Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`),
-      );
+      return yield* new TenantRootInvalidProps({
+        message: `Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`,
+      });
     }
     delegatedAdministrators.push(
       yield* OrganizationsDelegatedAdministrator(
@@ -493,31 +499,29 @@ const createTenantIdentityCenter = Effect.fn(function* ({
   for (const assignmentSpec of spec.assignments ?? []) {
     const account = accounts[assignmentSpec.accountKey];
     if (!account) {
-      return yield* Effect.fail(
-        new Error(`Unknown assignment account '${assignmentSpec.accountKey}'`),
-      );
+      return yield* new TenantRootInvalidProps({
+        message: `Unknown assignment account '${assignmentSpec.accountKey}'`,
+      });
     }
     const permissionSet = permissionSets[assignmentSpec.permissionSetKey];
     if (!permissionSet) {
-      return yield* Effect.fail(
-        new Error(`Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`),
-      );
+      return yield* new TenantRootInvalidProps({
+        message: `Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`,
+      });
     }
     const principalId =
       assignmentSpec.groupKey !== undefined
         ? groups[assignmentSpec.groupKey]?.groupId
         : assignmentSpec.principalId;
     if (!principalId) {
-      return yield* Effect.fail(
-        new Error(
-          `Unable to resolve principal for assignment '${assignmentSpec.key ?? `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}`}'`,
-        ),
-      );
+      return yield* new TenantRootInvalidProps({
+        message: `Unable to resolve principal for assignment '${assignmentSpec.key ?? `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}`}'`,
+      });
     }
 
     const key =
       assignmentSpec.key ??
-      `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}-${assignmentSpec.groupKey ?? principalId}`;
+      `${assignmentSpec.permissionSetKey}-${assignmentSpec.accountKey}-${assignmentSpec.groupKey ?? assignmentSpec.principalId}`;
 
     assignments[key] = yield* IdentityCenter.AccountAssignment(
       `${id}${toLogicalIdSegment(key)}Assignment`,

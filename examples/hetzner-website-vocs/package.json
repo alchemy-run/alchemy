@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@types/node": "catalog:node24",

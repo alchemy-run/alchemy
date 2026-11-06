@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -45,7 +46,7 @@ test.provider(
 
       const endpoint = yield* stack.deploy(
         Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
-          name: "alchemy-zt-proxy-identity",
+          name: testName("alchemy-zt-proxy-identity"),
           kind: "identity",
         }),
       );
@@ -57,22 +58,22 @@ test.provider(
       expect(endpoint.subdomain).toBeTruthy();
 
       const live = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
-      expect(live.name).toEqual("alchemy-zt-proxy-identity");
+      expect(live.name).toEqual(testName("alchemy-zt-proxy-identity"));
       expect(live.subdomain).toEqual(endpoint.subdomain);
 
       // Rename in place — same id, same subdomain.
       const updated = yield* stack.deploy(
         Cloudflare.Gateway.ProxyEndpoint("IdentityProxy", {
-          name: "alchemy-zt-proxy-identity-v2",
+          name: testName("alchemy-zt-proxy-identity-v2"),
           kind: "identity",
         }),
       );
       expect(updated.proxyEndpointId).toEqual(endpoint.proxyEndpointId);
       expect(updated.subdomain).toEqual(endpoint.subdomain);
-      expect(updated.name).toEqual("alchemy-zt-proxy-identity-v2");
+      expect(updated.name).toEqual(testName("alchemy-zt-proxy-identity-v2"));
 
       const liveAfter = yield* getEndpoint(accountId, endpoint.proxyEndpointId);
-      expect(liveAfter.name).toEqual("alchemy-zt-proxy-identity-v2");
+      expect(liveAfter.name).toEqual(testName("alchemy-zt-proxy-identity-v2"));
 
       yield* stack.destroy();
       yield* expectGone(accountId, endpoint.proxyEndpointId);
@@ -136,7 +137,7 @@ test.provider(
       // previously-interrupted run so the deploy below doesn't trip the
       // "OwnedBySomeoneElse" adoption guard.
       const orphans = yield* zeroTrust.listGatewayProxyEndpoints.items({ accountId }).pipe(
-        Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
+        Stream.filter((e) => e.name === testName("alchemy-zt-proxy-list")),
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk)),
       );
@@ -150,7 +151,7 @@ test.provider(
       // not entitlement-gated (unlike ip-kind, which needs Enterprise).
       const endpoint = yield* stack.deploy(
         Cloudflare.Gateway.ProxyEndpoint("ListProxy", {
-          name: "alchemy-zt-proxy-list",
+          name: testName("alchemy-zt-proxy-list"),
           kind: "identity",
         }),
       );
@@ -161,10 +162,23 @@ test.provider(
       const match = all.find((x) => x.proxyEndpointId === endpoint.proxyEndpointId);
       expect(match).toBeDefined();
       expect(match?.accountId).toEqual(accountId);
-      expect(match?.name).toEqual("alchemy-zt-proxy-list");
+      expect(match?.name).toEqual(testName("alchemy-zt-proxy-list"));
       expect(match?.kind).toEqual("identity");
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:gateway", "live"] },
+);
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Gateway.ProxyEndpoint("NoProps"));
+      expect(deployed.proxyEndpointId).toBeTruthy();
+      yield* stack.destroy();
+    }),
   { tags: ["provider:cloudflare", "provider:cloudflare:gateway", "live"] },
 );

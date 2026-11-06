@@ -242,7 +242,18 @@ const expectStatus = (reply: Reply, command: string): Effect.Effect<void, Comman
     return Effect.void;
   }
   return Effect.fail(
-    commandError(command, new ProtocolError({ message: `expected OK, got ${String(reply)}` })),
+    commandError(
+      command,
+      new ProtocolError({
+        message: `expected OK, got ${
+          typeof reply === "object" && reply !== null
+            ? JSON.stringify(reply, (_key, value: unknown) =>
+                typeof value === "bigint" ? value.toString() : value,
+              )
+            : String(reply)
+        }`,
+      }),
+    ),
   );
 };
 

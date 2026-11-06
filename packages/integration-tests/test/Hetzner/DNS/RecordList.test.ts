@@ -1,9 +1,9 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zoneRrsetActions from "@distilled.cloud/hetzner/zone_rrset_actions";
 import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as zones from "@distilled.cloud/hetzner/zones";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -11,8 +11,6 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const OURS = "alchemy-recordlist=ours";
 const FOREIGN = "alchemy-recordlist=foreign";
@@ -41,7 +39,7 @@ const waitUntilZoneGone = (zoneId: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "publishes, converges, and removes only its own values",
   (stack) =>
     Effect.gen(function* () {

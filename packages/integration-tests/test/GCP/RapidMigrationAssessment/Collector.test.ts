@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -54,6 +55,9 @@ test.provider.skip(
   "createProjectsLocationsCollectors is rejected with ServiceDisabled when Rapid Migration Assessment is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("rapidmigrationassessment.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       const parent = `projects/${project}/locations/us-central1`;
       const serviceAccount = `alchemy-testing@${project}.iam.gserviceaccount.com`;

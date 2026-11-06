@@ -168,7 +168,7 @@ export const StorageLensConfigurationProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.StorageLensConfiguration),
-            Effect.catchTag("NoSuchConfiguration", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchConfiguration", () => Effect.undefined),
           );
 
       const observedTags = (accountId: string, configId: string) =>

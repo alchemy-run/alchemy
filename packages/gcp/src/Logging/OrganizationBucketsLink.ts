@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -120,7 +120,7 @@ export const OrganizationBucketsLink = Resource<OrganizationBucketsLink>(
 export class OrganizationBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseLinkName = (name: string) => {
@@ -182,19 +182,19 @@ const toAttrs = (link: logging.Link, fallbackBucket: string, project: string) =>
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (isDeleted(link)) {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new OrganizationBucketsLinkNotResolved({ name });
+      return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -208,7 +208,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new OrganizationBucketsLinkNotResolved({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new OrganizationBucketsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.OrganizationBucketsLinkNotResolved",
@@ -247,7 +249,7 @@ export const OrganizationBucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       yield* resolveOrganization(olds?.organization ?? output?.organization, output?.organization);
       const linkId = yield* toPhysicalId(id, olds?.linkId, output?.linkId, "l", {
@@ -260,7 +262,9 @@ export const OrganizationBucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, bucket, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -335,7 +339,7 @@ export const OrganizationBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new OrganizationBucketsLinkNotResolved({ name });
+        return yield* new OrganizationBucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, bucket, env.project);
@@ -345,7 +349,7 @@ export const OrganizationBucketsLinkProvider = () =>
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       const operation = yield* logging
         .deleteOrganizationsLocationsBucketsLinks({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

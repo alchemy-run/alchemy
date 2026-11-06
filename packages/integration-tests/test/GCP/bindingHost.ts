@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -17,15 +16,6 @@ import * as Schedule from "effect/Schedule";
  * probe Effects and serve it with {@link serveProbes}. Test side: call
  * {@link callProbe} with the deployed URL and a route name.
  */
-
-/** Whether Docker is available to build the fixture image. */
-export const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 /** What a probe route answers: the value, or the typed failure it hit. */
 export type ProbeOutcome<A> =

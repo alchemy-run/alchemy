@@ -157,7 +157,7 @@ export const DashboardProvider = () =>
           // by re-creating.
           const observed = output?.uid
             ? yield* get({ uid: output.uid }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -178,7 +178,7 @@ export const DashboardProvider = () =>
           if (!output?.uid) return undefined;
           return yield* get({ uid: output.uid }).pipe(
             Effect.map(toAttrsFromGet),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
         // Enumerate every dashboard visible to the caller. `GET /v2/dashboards`

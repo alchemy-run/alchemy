@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -167,7 +167,7 @@ export const DataStoresServingConfig = Resource<DataStoresServingConfig>(
 export class DataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -205,10 +205,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresServingConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresServingConfigProvider = () =>
   Provider.succeed(DataStoresServingConfig, {
@@ -236,7 +236,7 @@ export const DataStoresServingConfigProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const servingConfigId = yield* toPhysical(
         id,
@@ -252,7 +252,7 @@ export const DataStoresServingConfigProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -297,7 +297,7 @@ export const DataStoresServingConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresServingConfigNotResolved({ name });
+        return yield* new DataStoresServingConfigNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

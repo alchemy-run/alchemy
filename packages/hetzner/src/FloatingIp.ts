@@ -18,6 +18,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -196,7 +198,7 @@ const createFloatingIpName = (id: string, name: string | undefined, existing?: s
 const getById = (id: number) =>
   Hetzner.floatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -268,7 +270,7 @@ const disableProtection = (id: number) =>
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
 export class FloatingIpNotCreated extends Data.TaggedError("Hetzner.FloatingIpNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const FloatingIpProvider = () =>
@@ -288,17 +290,27 @@ export const FloatingIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameHomeLocation(news.homeLocation, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -336,7 +348,7 @@ export const FloatingIpProvider = () =>
             description: desiredDescription,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           if (created.action) {
             yield* waitForAction(created.action);
@@ -351,7 +363,7 @@ export const FloatingIpProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FloatingIpNotCreated({ name });
+        return yield* new FloatingIpNotCreated({ resourceName: name });
       }
 
       // Sync — name / description / labels via PUT (labels overwrite the

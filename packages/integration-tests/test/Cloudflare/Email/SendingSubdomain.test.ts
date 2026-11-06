@@ -2,16 +2,17 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as emailSending from "@distilled.cloud/cloudflare/email-sending";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -23,12 +24,12 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 // Deterministic per-test subdomain names. Each test owns a disjoint
 // subdomain so reruns and parallel runs never collide, and the same name is
 // reused on every run (never derive physical names from Date.now()/random).
-const NAME_DEFAULT = `alchemy-sendsub-default.${zoneName}`;
-const NAME_REPLACE_A = `alchemy-sendsub-replace-a.${zoneName}`;
-const NAME_REPLACE_B = `alchemy-sendsub-replace-b.${zoneName}`;
-const NAME_ADOPT = `alchemy-sendsub-adopt.${zoneName}`;
-const NAME_LIST = `alchemy-sendsub-list.${zoneName}`;
-const NAME_PREVIEW = `alchemy-sendsub-preview.${zoneName}`;
+const NAME_DEFAULT = `${testName("alchemy-sendsub-default")}.${zoneName}`;
+const NAME_REPLACE_A = `${testName("alchemy-sendsub-replace-a")}.${zoneName}`;
+const NAME_REPLACE_B = `${testName("alchemy-sendsub-replace-b")}.${zoneName}`;
+const NAME_ADOPT = `${testName("alchemy-sendsub-adopt")}.${zoneName}`;
+const NAME_LIST = `${testName("alchemy-sendsub-list")}.${zoneName}`;
+const NAME_PREVIEW = `${testName("alchemy-sendsub-preview")}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

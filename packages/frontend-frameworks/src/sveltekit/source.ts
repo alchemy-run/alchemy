@@ -118,6 +118,8 @@ export interface SourceDevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
     readonly bindings: ReadonlyArray<unknown>;
+    /** The Worker's runtime settings; `workerd` reaches the dev platform proxy. */
+    readonly options: { readonly workerd?: unknown };
   };
   /**
    * The host's pre-built `Context<RuntimeServices>` (opaque here). Handed
@@ -342,7 +344,7 @@ const hashDirectory = Effect.fnUntraced(function* (
             ]),
             (file) => (file ? NodePath.relative(cwd, file) : undefined),
           )
-        : Effect.succeed(undefined),
+        : Effect.undefined,
     ],
     { concurrency: "unbounded" },
   );
@@ -421,7 +423,7 @@ const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
     .readFileString(file)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 
@@ -648,6 +650,7 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.
           services: ctx.runtimeContext,
+          workerd: ctx.worker.options.workerd,
         }),
       );
       const server = yield* framework

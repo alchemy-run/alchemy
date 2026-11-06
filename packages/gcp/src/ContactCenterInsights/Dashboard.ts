@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -139,7 +139,7 @@ export const Dashboard = Resource<Dashboard>("GCP.ContactCenterInsights.Dashboar
 export class DashboardNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, dashboardId: string) => `${parent}/dashboards/${dashboardId}`;
@@ -187,10 +187,10 @@ const toAttrs = (dashboard: cci.GoogleCloudContactcenterinsightsV1Dashboard, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsDashboards({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsDashboards.pages({ parent, pageSize: 100 }).pipe(
@@ -228,7 +228,7 @@ export const DashboardProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const dashboardId = yield* toResourceId(id, olds?.dashboardId, output?.dashboardId);
       const location = olds?.location ?? output?.location ?? env.region;
@@ -236,7 +236,9 @@ export const DashboardProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -275,7 +277,7 @@ export const DashboardProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DashboardNotResolved({ name });
+        return yield* new DashboardNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

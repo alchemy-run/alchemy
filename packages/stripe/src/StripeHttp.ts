@@ -127,7 +127,7 @@ export const asOptionalStringEffect = (
   value: unknown,
 ): Effect.Effect<Effect.Effect<string | undefined>> => {
   if (value === undefined || value === null || value === "") {
-    return Effect.succeed(Effect.succeed(undefined));
+    return Effect.succeed(Effect.undefined);
   }
   return asStringEffect(value).pipe(
     Effect.map((inner) => inner.pipe(Effect.map((s) => (s.length > 0 ? s : undefined)))),

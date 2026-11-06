@@ -11,6 +11,7 @@ import {
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isMissingStripeResource } from "./missing.ts";
@@ -491,9 +492,7 @@ const toAttrs = (registration: StripeTaxRegistration): TaxRegistrationAttributes
 const isMissingRegistration = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetTaxRegistration({ id }).pipe(
-    Effect.catchIf(isMissingRegistration, () => Effect.succeed(undefined)),
-  );
+  GetTaxRegistration({ id }).pipe(Effect.catchIf(isMissingRegistration, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: "active" | "all" | "expired" | "scheduled") {
   const registrations: StripeTaxRegistration[] = [];
@@ -677,7 +676,7 @@ export const TaxRegistrationProvider = () =>
       // future. `expires_at: "now"` fails when the registration was
       // created in the same unix second; `expires_at: nowSec` fails
       // when the clock ticks between compute and the request.
-      const nowSec = yield* Effect.sync(() => Math.floor(Date.now() / 1000));
+      const nowSec = Math.floor((yield* Clock.currentTimeMillis) / 1000);
       const expiresAt = Math.max(nowSec + 1, existing.active_from + 1);
       yield* UpdateTaxRegistration({
         id: existing.id,

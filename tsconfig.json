@@ -12,6 +12,9 @@
       "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/s3/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {
@@ -171,6 +174,9 @@
     },
     {
       "path": "./examples/cloudflare-better-auth/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-domain-better-auth/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-federated-api/tsconfig.json"

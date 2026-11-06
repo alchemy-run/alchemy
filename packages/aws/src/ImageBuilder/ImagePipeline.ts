@@ -6,6 +6,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -18,6 +20,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class ImagePipelineUnexpectedResponse extends Data.TaggedError(
+  "ImagePipelineUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Image test settings applied to builds of the pipeline. Mirrors the wire
@@ -131,8 +140,18 @@ export interface ImagePipeline extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImagePipelineLookup
 > {}
+
+/**
+ * Props for {@link ImagePipeline.lookup}: find an image pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImagePipelineLookup {
+  /** The image pipeline arn of the existing image pipeline. */
+  imagePipelineArn: string;
+}
 
 /**
  * An EC2 Image Builder image pipeline — wires a recipe to an infrastructure
@@ -165,6 +184,16 @@ export interface ImagePipeline extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing image pipeline
+ * `ImagePipeline.lookup` references an image pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imagePipelineArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image pipeline
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImagePipeline.lookup({ imagePipelineArn: "my-image-pipeline" });
+ * ```
+ *
  * @resource
  */
 export const ImagePipeline = Resource<ImagePipeline>("AWS.ImageBuilder.ImagePipeline");
@@ -183,15 +212,15 @@ export const ImagePipelineProvider = () =>
       const getPipeline = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImagePipeline({ imagePipelineArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imagePipeline;
       });
 
       const toAttrs = Effect.fn(function* (pipeline: imagebuilder.ImagePipeline) {
         if (!pipeline.arn || !pipeline.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder image pipeline is missing its ARN or name"),
-          );
+          return yield* new ImagePipelineUnexpectedResponse({
+            message: "Image Builder image pipeline is missing its ARN or name",
+          });
         }
         return {
           imagePipelineName: pipeline.name,
@@ -228,6 +257,13 @@ export const ImagePipelineProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ imagePipelineArn: arn }) {
+          const pipeline = yield* getPipeline(arn);
+          if (pipeline === undefined) return undefined;
+          const attrs = yield* toAttrs(pipeline);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn = output?.imagePipelineArn ?? (yield* toArn(yield* toName(id, olds)));
           const pipeline = yield* getPipeline(arn);
@@ -240,7 +276,8 @@ export const ImagePipelineProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.imagePipelineName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -275,14 +312,12 @@ export const ImagePipelineProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getPipeline(created?.imagePipelineArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`created Image Builder pipeline '${name}' is not readable`),
-              );
+              return yield* new ImagePipelineUnexpectedResponse({
+                message: `created Image Builder pipeline '${name}' is not readable`,
+              });
             }
           }
 

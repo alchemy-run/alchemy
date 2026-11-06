@@ -61,11 +61,11 @@ export const makeStorageClient = Effect.fn(function* (config: StorageConfig, buc
   return {
     get: (key: string) =>
       provide(S3.getObject({ Bucket: bucket, Key: key })).pipe(
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
       ),
     head: (key: string) =>
       provide(S3.headObject({ Bucket: bucket, Key: key })).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       ),
     list: (
       options: {
@@ -161,7 +161,9 @@ export const makeStorageClient = Effect.fn(function* (config: StorageConfig, buc
     ) => provide(presignS3Url({ bucket, key, method, ...options })),
     getTags: () =>
       provide(S3.getBucketTagging({ Bucket: bucket })).pipe(
-        Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })),
+        Effect.catchTag("NoSuchTagSet", () =>
+          Effect.succeed<S3.GetBucketTaggingOutput>({ TagSet: [] }),
+        ),
       ),
     putTags: (tags: Record<string, string>) =>
       provide(

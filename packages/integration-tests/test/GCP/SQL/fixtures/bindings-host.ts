@@ -15,7 +15,7 @@ export const Db = Effect.gen(function* () {
     edition: "ENTERPRISE",
     tier: "db-f1-micro",
     availabilityType: "ZONAL",
-    backupEnabled: false,
+    backup: { enabled: false },
     deletionProtectionEnabled: false,
     dataApiAccess: true,
   });

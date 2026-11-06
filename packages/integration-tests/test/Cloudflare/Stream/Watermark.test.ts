@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -87,7 +88,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Stream.Watermark("ReplaceWatermark", {
-          name: "alchemy-stream-wm-replace",
+          name: testName("alchemy-stream-wm-replace"),
           url: PNG_URL,
         }),
       );
@@ -97,7 +98,7 @@ test.provider(
       // No update endpoint — changing any prop must replace (new uid).
       const replaced = yield* stack.deploy(
         Cloudflare.Stream.Watermark("ReplaceWatermark", {
-          name: "alchemy-stream-wm-replace",
+          name: testName("alchemy-stream-wm-replace"),
           url: PNG_URL,
           position: "center",
           opacity: 0.5,
@@ -118,7 +119,7 @@ test.provider(
       // Redeploying identical props is a no-op (same uid).
       const noop = yield* stack.deploy(
         Cloudflare.Stream.Watermark("ReplaceWatermark", {
-          name: "alchemy-stream-wm-replace",
+          name: testName("alchemy-stream-wm-replace"),
           url: PNG_URL,
           position: "center",
           opacity: 0.5,
@@ -148,7 +149,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.Stream.Watermark("ListWatermark", {
-          name: "alchemy-stream-wm-list",
           url: PNG_URL,
         }),
       );

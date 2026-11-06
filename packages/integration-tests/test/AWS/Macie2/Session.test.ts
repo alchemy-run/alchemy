@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Session } from "@alchemy.run/aws/Macie2/Session";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as macie2 from "@distilled.cloud/aws/macie2";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { makeMacie2TestLease } from "./TestLease.ts";
 

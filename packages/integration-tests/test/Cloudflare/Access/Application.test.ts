@@ -1,15 +1,16 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as AdoptPolicy from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as State from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -35,12 +36,12 @@ test.provider(
 
       yield* stack.destroy();
 
-      const domain = `alchemy-test-app.${zoneName}`;
+      const domain = `${testName("alchemy-test-app")}.${zoneName}`;
       const { app, policy } = yield* stack.deploy(
         Effect.gen(function* () {
           yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const policy = yield* Cloudflare.Access.Policy("AllowExampleDomain", {
-            name: "Allow example.com",
+            name: testName("Allow example.com"),
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
@@ -136,13 +137,12 @@ test.provider(
         Effect.gen(function* () {
           // Warp apps derive their domain from the auth domain — no zone needed.
           const policy = yield* Cloudflare.Access.Policy("WarpAllowDomain", {
-            name: "Allow example.com",
+            name: testName("Allow example.com"),
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
           return yield* Cloudflare.Access.Application("WarpEnroll", {
             type: "warp",
-            name: "Alchemy Warp Test",
             sessionDuration: "720h",
             allowedIdps: [idp],
             autoRedirectToIdentity: true,
@@ -166,12 +166,12 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const domain = `alchemy-test-list-app.${zoneName}`;
+      const domain = `${testName("alchemy-test-list-app")}.${zoneName}`;
       const app = yield* stack.deploy(
         Effect.gen(function* () {
           yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const policy = yield* Cloudflare.Access.Policy("ListAllowDomain", {
-            name: "Allow example.com",
+            name: testName("Allow example.com"),
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
@@ -224,13 +224,13 @@ test.provider(
 
       yield* stack.destroy();
 
-      const domain = `alchemy-test-update-policies.${zoneName}`;
+      const domain = `${testName("alchemy-test-update-policies")}.${zoneName}`;
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
           yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
-            name: "Allow example.com",
+            name: testName("Allow example.com"),
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
@@ -255,12 +255,11 @@ test.provider(
         Effect.gen(function* () {
           yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.Access.Policy("UpdateAllow", {
-            name: "Allow example.com",
+            name: testName("Allow example.com"),
             decision: "allow",
             include: [{ emailDomain: { domain: "example.com" } }],
           });
           const deny = yield* Cloudflare.Access.Policy("UpdateDeny", {
-            name: "Deny everyone else",
             decision: "deny",
             include: [{ everyone: {} }],
           });
@@ -332,11 +331,10 @@ test.provider(
 
       yield* stack.destroy();
 
-      const domain = `alchemy-test-cold-read.${zoneName}`;
+      const domain = `${testName("alchemy-test-cold-read")}.${zoneName}`;
       const program = Effect.gen(function* () {
         yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
         const policy = yield* Cloudflare.Access.Policy("ColdReadAllow", {
-          name: "Allow example.com (cold read)",
           decision: "allow",
           include: [{ emailDomain: { domain: "example.com" } }],
         });
@@ -405,7 +403,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const domain = `alchemy-test-inline-policies.${zoneName}`;
+      const domain = `${testName("alchemy-test-inline-policies")}.${zoneName}`;
       const makeApp = (policies: Cloudflare.Access.ApplicationProps["policies"]) =>
         Effect.gen(function* () {
           yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
@@ -468,7 +466,6 @@ test.provider(
       const reusableProgram = Effect.gen(function* () {
         yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
         const reusable = yield* Cloudflare.Access.Policy("InlineSwapPolicy", {
-          name: "Reusable for inline-swap test",
           decision: "allow",
           include: [{ emailDomain: "example.com" }],
         });
@@ -775,7 +772,6 @@ test.provider(
         Effect.gen(function* () {
           const saml = yield* Cloudflare.Access.Application("SamlApp", {
             type: "saas",
-            name: "alchemy-test-saml",
             saasApp: {
               authType: "saml",
               spEntityId: "https://saml.example.com",
@@ -785,7 +781,6 @@ test.provider(
           });
           const oidc = yield* Cloudflare.Access.Application("OidcApp", {
             type: "saas",
-            name: "alchemy-test-oidc",
             saasApp: {
               authType: "oidc",
               redirectUris: [redirectUri],

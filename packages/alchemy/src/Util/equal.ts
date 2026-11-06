@@ -30,8 +30,9 @@ export const arrayEqualsUnordered = <T extends string | number>(
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
   if (a.length !== b.length) return false;
-  const as = [...a].sort();
-  const bs = [...b].sort();
+  const compare = (x: T, y: T) => (x < y ? -1 : x > y ? 1 : 0);
+  const as = [...a].sort(compare);
+  const bs = [...b].sort(compare);
   for (let i = 0; i < as.length; i++) {
     if (as[i] !== bs[i]) return false;
   }

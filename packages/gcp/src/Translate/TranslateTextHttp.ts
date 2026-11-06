@@ -18,7 +18,7 @@ export const TranslateTextHttp = Layer.effect(
     withBody: (name, request) => ({
       parent: locationParentOf(name),
       body: {
-        ...(request?.body ?? {}),
+        ...request?.body,
         model: name,
       },
     }),

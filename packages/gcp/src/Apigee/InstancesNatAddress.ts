@@ -97,13 +97,13 @@ export const InstancesNatAddress = Resource<InstancesNatAddress>("GCP.Apigee.Ins
 export class InstancesNatAddressNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesNatAddressNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstancesNatAddressNotReady extends Data.TaggedError(
   "GCP.Apigee.InstancesNatAddressNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -135,7 +135,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesNatAddresses({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesNatAddresses
@@ -156,13 +156,13 @@ const waitUntilState = (name: string, allowed: ReadonlySet<string>) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (address): address is apigee.GoogleCloudApigeeV1NatAddress => address !== undefined,
-      () => new InstancesNatAddressNotResolved({ name }),
+      () => new InstancesNatAddressNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (address) => allowed.has(address.state ?? "STATE_UNSPECIFIED"),
       (address) =>
         new InstancesNatAddressNotReady({
-          name,
+          resourceName: name,
           state: address.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -259,7 +259,7 @@ export const InstancesNatAddressProvider = () =>
             parent,
             body: { name: natAddressId },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -267,7 +267,7 @@ export const InstancesNatAddressProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstancesNatAddressNotResolved({ name });
+        return yield* new InstancesNatAddressNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") === "CREATING") {
@@ -292,9 +292,7 @@ export const InstancesNatAddressProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesNatAddresses({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

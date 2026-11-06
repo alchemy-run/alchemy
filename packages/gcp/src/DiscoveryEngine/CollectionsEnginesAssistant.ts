@@ -127,7 +127,7 @@ export const CollectionsEnginesAssistant = Resource<CollectionsEnginesAssistant>
 export class CollectionsEnginesAssistantNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesAssistantNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, assistantId: string) => `${engine}/assistants/${assistantId}`;
@@ -135,7 +135,7 @@ const resourceName = (engine: string, assistantId: string) => `${engine}/assista
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesAssistants({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   assistant: discoveryengine.GoogleCloudDiscoveryengineV1Assistant,
@@ -221,7 +221,7 @@ export const CollectionsEnginesAssistantProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesAssistantNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

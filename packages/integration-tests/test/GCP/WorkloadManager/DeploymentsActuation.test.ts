@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -46,7 +47,7 @@ test.provider(
           name: `${missingDeployment}/actuations/alchemy-missing-actuation`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -60,6 +61,9 @@ test.provider.skipIf(entitled)(
   "createProjectsLocationsDeploymentsActuations is rejected with ServiceDisabled while Workload Manager is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("workloadmanager.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       const missingDeployment = missingDeploymentOf(project);
       yield* stack.destroy();

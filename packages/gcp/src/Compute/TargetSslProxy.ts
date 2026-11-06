@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -250,7 +250,7 @@ const toAttrs = (proxy: compute.TargetSslProxy, project: string) => {
 const getByName = (project: string, targetSslProxy: string) =>
   compute
     .getTargetSslProxies({ project, targetSslProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetSslProxyProvider = () =>
   Provider.succeed(TargetSslProxy, {
@@ -273,7 +273,7 @@ export const TargetSslProxyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetSslProxyName = yield* toName(
         id,
@@ -284,7 +284,9 @@ export const TargetSslProxyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetSslProxyName");
     }),
 
     list: () =>
@@ -345,7 +347,7 @@ export const TargetSslProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, targetSslProxyName);
       }
@@ -452,7 +454,7 @@ export const TargetSslProxyProvider = () =>
           project: env.project,
           targetSslProxy: output.targetSslProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

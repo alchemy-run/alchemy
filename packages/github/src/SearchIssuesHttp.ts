@@ -1,11 +1,12 @@
+import * as Search from "@distilled.cloud/github/search";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { SearchIssues, type SearchIssuesRequest } from "./SearchIssues.ts";
 
 export const searchIssuesOperation = BindingHttp.operation(
   "search.issuesAndPullRequests",
-  (octokit, repo) => (request: SearchIssuesRequest) =>
-    octokit.rest.search.issuesAndPullRequests({
+  (repo) => (request: SearchIssuesRequest) =>
+    Search.issuesAndPullRequests({
       ...request,
       q: `repo:${repo.owner}/${repo.repository} ${request.q}`,
     }),

@@ -41,7 +41,7 @@ export const makeReservationHttpBinding = <I extends { name?: string }, A, E>(op
         request?: Omit<I, "name">,
       ) {
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: yield* name,
         } as I);
       });
@@ -69,7 +69,7 @@ export const makeTopicNameHttpBinding = <I extends { name?: string }, A, E>(opti
       const name = yield* topic.name;
       return Effect.fn(`${options.tag}(${topic.LogicalId})`)(function* (request?: Omit<I, "name">) {
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: yield* name,
         } as I);
       });
@@ -99,7 +99,7 @@ export const makeTopicStatsHttpBinding = <I extends { topic: string }, A, E>(opt
         request?: Omit<I, "topic">,
       ) {
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           topic: yield* name,
         } as I);
       });
@@ -136,8 +136,8 @@ export const makeSubscriptionHttpBinding = <
         const resolved = yield* name;
         const input =
           options.field === "subscription"
-            ? ({ ...(request ?? {}), subscription: resolved } as I)
-            : ({ ...(request ?? {}), name: resolved } as I);
+            ? ({ ...request, subscription: resolved } as I)
+            : ({ ...request, name: resolved } as I);
         return yield* run(input);
       });
     });

@@ -1,16 +1,17 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
-import { Octokit as RestOctokit } from "@octokit/rest";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Teams from "@distilled.cloud/github/teams";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as Stream from "effect/Stream";
+import { gh, mockGitHub, scopedToOwner } from "./scope.ts";
 
 const testOwner = (value: string) => {
   if (value !== "alchemy-run-test" && value !== "alchemy-run-test-2") {
@@ -28,50 +29,20 @@ const { test } = Test.make({
 
 const getTeams = (repo: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.paginate(octokit.rest.repos.listTeams, {
+    return yield* gh(
+      Stream.runCollect(
+        Repos.listTeams.items({
           owner,
           repo,
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
   });
 
 const listTestOrgAccess = Effect.gen(function* () {
-  const credentials = yield* yield* GitHubCredentials;
   const provider = yield* Provider.findProviderByType<GitHub.TeamAccess>(GitHub.TeamAccess.Type);
-  return yield* provider.list().pipe(
-    Effect.provideService(
-      GitHubCredentials,
-      Effect.succeed({
-        ...credentials,
-        octokit: (override) => {
-          const octokit = credentials.octokit(override);
-          octokit.hook.before("request", (options) => {
-            const url = new URL(options.url, "https://api.github.com");
-            if (url.pathname === "/user/repos") {
-              url.pathname = `/orgs/${owner}/repos`;
-              options.url = url.href;
-            }
-            if (
-              url.hostname !== "api.github.com" ||
-              !(
-                url.pathname === `/orgs/${owner}/repos` ||
-                url.pathname.startsWith(`/repos/${owner}/`) ||
-                (options.url === "/repos/{owner}/{repo}/teams" && options.owner === owner)
-              )
-            ) {
-              throw new Error(`Refusing GitHub enumeration outside ${owner}: ${options.url}`);
-            }
-          });
-          return octokit;
-        },
-      }),
-    ),
-  );
+  return yield* provider.list().pipe(scopedToOwner(owner));
 });
 
 test.provider(
@@ -79,17 +50,14 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const octokit = yield* Octokit;
       // Creating a fresh dedicated team requires admin:org; never use an existing team's access.
-      const { data: team } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.rest.teams.create({
-            org: owner,
-            name: teamName,
-            privacy: "closed",
-          }),
-        catch: (error) => error as Error,
-      });
+      const team = yield* gh(
+        Teams.create({
+          org: owner,
+          name: teamName,
+          privacy: "closed",
+        }),
+      );
       expect(team.slug).toBe(teamName);
 
       const deployAccess = (permission?: GitHub.TeamAccessProps["permission"]) =>
@@ -135,22 +103,20 @@ test.provider(
             expect(
               (yield* getTeams(repositoryName)).find((item) => item.slug === team.slug),
             ).toBeUndefined();
-            yield* Effect.tryPromise({
-              try: () =>
-                octokit.rest.teams.deleteInOrg({
-                  org: owner,
-                  team_slug: team.slug,
-                }),
-              catch: (error) => error as Error,
-            });
-            const remaining = yield* Effect.tryPromise({
-              try: () =>
-                octokit.paginate(octokit.rest.teams.list, {
+            yield* gh(
+              Teams.deleteInOrg({
+                org: owner,
+                team_slug: team.slug,
+              }),
+            );
+            const remaining = yield* gh(
+              Stream.runCollect(
+                Teams.list.items({
                   org: owner,
                   per_page: 100,
                 }),
-              catch: (error) => error as Error,
-            });
+              ),
+            );
             expect(remaining.some((item) => item.slug === team.slug)).toBe(false);
           }).pipe(Effect.orDie),
         ),
@@ -177,66 +143,51 @@ test.provider(
 const grants = new Map<string, string>();
 const requests: { method: string; path: string }[] = [];
 let rejectWrites = false;
-const mockedCredentials = Layer.succeed(
-  GitHubCredentials,
-  Effect.succeed({
-    token: Redacted.make("test-token"),
-    octokit: () =>
-      new RestOctokit({
-        auth: "test-token",
-        request: {
-          fetch: (input: string | URL | Request, init?: RequestInit) =>
-            Effect.runPromise(
-              Effect.sync(() => {
-                const url = new URL(
-                  typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-                );
-                const method = init?.method ?? "GET";
-                requests.push({ method, path: url.pathname });
-                const json = (data: unknown, status = 200) =>
-                  new Response(JSON.stringify(data), {
-                    status,
-                    headers: { "content-type": "application/json" },
-                  });
-                const match = url.pathname.match(
-                  /^\/orgs\/([^/]+)\/teams\/([^/]+)\/repos\/([^/]+)\/([^/]+)$/,
-                );
-                if (match) {
-                  expect(match[1]).toBe(owner);
-                  expect(match[3]).toBe(owner);
-                  const key = `${match[2]}/${match[4]}`;
-                  if (method === "PUT") {
-                    if (rejectWrites)
-                      return json({ message: "Resource not accessible by integration" }, 403);
-                    grants.set(key, JSON.parse(String(init?.body)).permission);
-                    return new Response(null, { status: 204 });
-                  }
-                  if (method === "DELETE") {
-                    return grants.delete(key)
-                      ? new Response(null, { status: 204 })
-                      : json({ message: "Not Found" }, 404);
-                  }
-                }
-                if (method === "GET" && url.pathname === "/user/repos") {
-                  return json([{ owner: { login: owner }, name: repositoryName }]);
-                }
-                if (
-                  method === "GET" &&
-                  url.pathname === `/repos/${owner}/${repositoryName}/teams`
-                ) {
-                  return json(
-                    [...grants].map(([key, permission]) => ({
-                      slug: key.split("/")[0],
-                      permission,
-                    })),
-                  );
-                }
-                throw new Error(`Unexpected mocked request: ${method} ${url.pathname}`);
-              }),
-            ),
-        },
-      }),
-  }),
+const mockedCredentials = mockGitHub((input: string | URL | Request, init?: RequestInit) =>
+  Effect.runPromise(
+    Effect.sync(() => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
+      const method = init?.method ?? "GET";
+      requests.push({ method, path: url.pathname });
+      const json = (data: unknown, status = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      const match = url.pathname.match(
+        /^\/orgs\/([^/]+)\/teams\/([^/]+)\/repos\/([^/]+)\/([^/]+)$/,
+      );
+      if (match) {
+        expect(match[1]).toBe(owner);
+        expect(match[3]).toBe(owner);
+        const key = `${match[2]}/${match[4]}`;
+        if (method === "PUT") {
+          if (rejectWrites) return json({ message: "Resource not accessible by integration" }, 403);
+          grants.set(key, JSON.parse(String(init?.body)).permission);
+          return new Response(null, { status: 204 });
+        }
+        if (method === "DELETE") {
+          return grants.delete(key)
+            ? new Response(null, { status: 204 })
+            : json({ message: "Not Found" }, 404);
+        }
+      }
+      if (method === "GET" && url.pathname === "/user/repos") {
+        return json([{ owner: { login: owner }, name: repositoryName }]);
+      }
+      if (method === "GET" && url.pathname === `/repos/${owner}/${repositoryName}/teams`) {
+        return json(
+          [...grants].map(([key, permission]) => ({
+            slug: key.split("/")[0],
+            permission,
+          })),
+        );
+      }
+      throw new Error(`Unexpected mocked request: ${method} ${url.pathname}`);
+    }),
+  ),
 );
 const { test: unit } = Test.make({
   providers: Layer.effect(GitHub.Providers, Provider.collection([GitHub.TeamAccess])).pipe(

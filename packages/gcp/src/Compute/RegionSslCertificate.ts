@@ -320,7 +320,7 @@ const toAttrs = (cert: compute.SslCertificate, project: string) => {
 const getByName = (project: string, region: string, sslCertificate: string) =>
   compute
     .getRegionSslCertificates({ project, region, sslCertificate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, sslCertificateName: string) =>
   getByName(project, region, sslCertificateName).pipe(
@@ -474,7 +474,7 @@ export const RegionSslCertificateProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           created !== undefined
@@ -507,7 +507,7 @@ export const RegionSslCertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(

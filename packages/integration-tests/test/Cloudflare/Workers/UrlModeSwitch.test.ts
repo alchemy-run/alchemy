@@ -7,10 +7,11 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { testName } from "../../names.ts";
 import { inDev } from "../../test.resources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -111,7 +112,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const hostname = `url-mode-switch.${zoneName}`;
+      const hostname = `${testName("url-mode-switch")}.${zoneName}`;
       const program = Effect.gen(function* () {
         const worker = yield* Cloudflare.Worker("url-mode-switch-domain", {
           script,

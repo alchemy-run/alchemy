@@ -1,10 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
 import { HealthCheck } from "@alchemy.run/aws/Route53";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -139,4 +140,66 @@ test.provider(
       yield* assertCheckGone(replaced.id);
     }),
   { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
+);
+
+// #2688: `read` must observe the endpoint, thresholds, disabled state and
+// tags, or an out-of-band change reads as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band health check changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const check = yield* stack.deploy(
+        HealthCheck("DriftCheck", {
+          type: "HTTP",
+          fullyQualifiedDomainName: "example.com",
+          resourcePath: "/health",
+          port: 80,
+          failureThreshold: 3,
+          tags: { env: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftCheck"))?.action).toBe("unchanged");
+
+      const current = yield* route53.getHealthCheck({ HealthCheckId: check.id });
+      yield* route53.updateHealthCheck({
+        HealthCheckId: check.id,
+        HealthCheckVersion: current.HealthCheck.HealthCheckVersion,
+        ResourcePath: "/out-of-band",
+        Disabled: true,
+      });
+      yield* route53.changeTagsForResource({
+        ResourceType: "healthcheck",
+        ResourceId: check.id,
+        AddTags: [{ Key: "env", Value: "out-of-band" }],
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftCheck", "drifted");
+      expect(drifted?.attr?.configuration).toMatchObject({
+        resourcePath: "/out-of-band",
+        disabled: true,
+        tags: { env: "out-of-band" },
+      });
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftCheck?.action).toBe("repaired");
+      // Route 53 reads lag writes, so poll for the restored config.
+      const restored = yield* route53.getHealthCheck({ HealthCheckId: check.id }).pipe(
+        Effect.repeat({
+          until: (r) =>
+            r.HealthCheck.HealthCheckConfig.ResourcePath === "/health" &&
+            !r.HealthCheck.HealthCheckConfig.Disabled,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      expect(restored.HealthCheck.HealthCheckConfig.ResourcePath).toBe("/health");
+      expect(restored.HealthCheck.HealthCheckConfig.Disabled ?? false).toBe(false);
+      expect((yield* waitForDrift(stack, "DriftCheck", "unchanged"))?.action).toBe("unchanged");
+
+      yield* stack.destroy();
+      yield* assertCheckGone(check.id);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"] },
 );

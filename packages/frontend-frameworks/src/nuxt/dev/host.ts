@@ -63,6 +63,8 @@ export interface OpenDevProxyOptions {
    * the proxy's internal local-only layer cannot serve.
    */
   readonly services?: unknown;
+  /** `cloudflare-runtime` `WorkerdOptions` for the proxy's workerd process. */
+  readonly workerd?: unknown;
   /** Static assets served to an `Assets.local` binding. */
   readonly assets?: { readonly directory: string } | undefined;
 }
@@ -91,6 +93,9 @@ export const openPlatformProxy: OpenDevProxy = async (options) => {
       ? {
           services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
         }
+      : undefined),
+    ...(options.workerd !== undefined
+      ? { workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"] }
       : undefined),
   });
   return {
@@ -148,6 +153,7 @@ export const makeCloudflareDevPlatform =
               compatibilityFlags: options.compatibilityFlags,
               bindings: context.bindings ?? [],
               services: context.services,
+              workerd: context.workerd,
               // Nuxt's public directory: what the deployed Worker's `ASSETS`
               // serves besides the client build.
               assets: { directory: NodePath.join(context.root, "public") },

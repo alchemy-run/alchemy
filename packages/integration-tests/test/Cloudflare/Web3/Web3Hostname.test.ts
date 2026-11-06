@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as web3 from "@distilled.cloud/cloudflare/web3";
 import * as zones from "@distilled.cloud/cloudflare/zones";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -97,7 +98,7 @@ test.provider(
       const error = yield* web3
         .createHostname({
           zoneId,
-          name: `alchemy-web3-entitlement.${zoneName}`,
+          name: `${testName("alchemy-web3-entitlement")}.${zoneName}`,
           target: "ipfs",
           dnslink: "/ipns/onboarding.ipfs.cloudflare.com",
         })
@@ -126,7 +127,7 @@ test.provider.skipIf(!entitledZoneId)(
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
       const zone = yield* zones.getZone({ zoneId });
-      const name = `alchemy-web3-hostname.${zone.name}`;
+      const name = `${testName("alchemy-web3-hostname")}.${zone.name}`;
 
       yield* stack.destroy();
       yield* purgeHostname(zoneId, name);
@@ -203,7 +204,7 @@ test.provider.skipIf(!entitledZoneId)(
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
       const zone = yield* zones.getZone({ zoneId });
-      const name = `alchemy-web3-universal.${zone.name}`;
+      const name = `${testName("alchemy-web3-universal")}.${zone.name}`;
       const cid = "QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco";
 
       yield* stack.destroy();

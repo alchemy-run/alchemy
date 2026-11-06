@@ -804,7 +804,7 @@ const toAttrs = (item: developerconnect.Connection, project: string, region: str
 const getByName = (name: string) =>
   developerconnect
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -911,7 +911,7 @@ export const ConnectionProvider = () =>
             connectionId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -919,7 +919,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -968,7 +968,7 @@ export const ConnectionProvider = () =>
               disabled: desiredDisabled,
             }),
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* developerconnect
             .createProjectsLocationsConnections({
@@ -976,7 +976,7 @@ export const ConnectionProvider = () =>
               connectionId,
               body,
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -992,7 +992,7 @@ export const ConnectionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* developerconnect
         .deleteProjectsLocationsConnections({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

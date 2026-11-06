@@ -448,7 +448,7 @@ type ContainerShape<Shape> = {
  *
  * - `main` — bundle your Effect program into a generated image.
  * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — pull a pre-built remote image and re-push it.
+ * - `image` — pull a pre-built image and re-push it.
  *
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
@@ -485,6 +485,25 @@ type ContainerShape<Shape> = {
  *   context: `${import.meta.dirname}/context`,
  * }) {}
  * ```
+ *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   context: `${import.meta.dirname}/api`,
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Resolved at deploy time; mounted only into the `RUN` step that asks
+ *     // for it, never written to a layer or the build history.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ * }) {}
+ * ```
+ *
+ * `build.args` are part of the image hash, so changing one rebuilds the
+ * image. `build.secrets` are not: rotating a token reuses the published image.
  *
  * Builds are cached by default at
  * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
@@ -550,6 +569,28 @@ type ContainerShape<Shape> = {
  *   image: "mendhak/http-https-echo:latest",
  * }) {}
  * ```
+ *
+ * Alchemy pulls an `image` as `linux/amd64` on every deploy and every
+ * `alchemy dev` start, so a mutable tag like `:latest` picks up a newly
+ * pushed image. A private registry needs a `docker login` first.
+ *
+ * **Example:** Image built on this machine
+ * ```typescript
+ * // docker build --platform linux/amd64 -t local-only/app:dev .
+ * export class App extends Cloudflare.Container<App>()("App", {
+ *   image: "local-only/app:dev",
+ * }) {}
+ * ```
+ *
+ * An image only in the local Docker, built on this machine or loaded with
+ * `docker load`, has no registry to pull from. When the pull fails and the
+ * image is present locally, Alchemy uses the local copy, in `alchemy dev`
+ * and on deploy. Build it with `--platform linux/amd64`, the platform
+ * Cloudflare runs: deploy fails on an image built only for another
+ * platform. When the image can be neither pulled nor found locally,
+ * Alchemy fails with the image name and the commands that fix it. The
+ * image name alone is the identity, so rebuilding under the same tag does
+ * not redeploy; give each build its own tag.
  *
  * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript

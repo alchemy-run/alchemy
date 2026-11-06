@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as s3control from "@distilled.cloud/aws/s3-control";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -248,17 +248,21 @@ describe.skipIf(!!process.env.FAST).sequential(
     );
 
     afterAll(
-      mrapStack
-        .destroy()
-        .pipe(
-          Effect.andThen(
-            inSecondRegion(
-              s3
-                .deleteBucket({ Bucket: secondBucket })
-                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
+      mrapStack.destroy().pipe(
+        Effect.andThen(
+          inSecondRegion(
+            // S3 still reports the deleted MRAP as attached for a while.
+            s3.deleteBucket({ Bucket: secondBucket }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "BucketHasAccessPointsAttached",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+              Effect.catchTag("NoSuchBucket", () => Effect.void),
             ),
           ),
         ),
+      ),
       { timeout: 1_200_000 },
     );
 

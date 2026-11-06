@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -44,7 +45,20 @@ export interface BaseRuntimeContext {
    * overriding the env-driven default.
    */
   telemetry?: Layer.Layer<never, any, any>;
+  /**
+   * Mint an OIDC ID token for `audience`, signed by the host's platform
+   * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
+   * issues them. Bindings exchange it with a cloud's STS instead of
+   * holding a key Alchemy created.
+   */
+  oidcToken?: (audience: string) => Effect.Effect<Redacted.Redacted<string>, OidcTokenError>;
 }
+
+/** The host's platform did not issue an OIDC token. */
+export class OidcTokenError extends Data.TaggedError("OidcTokenError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Keys a Platform's Init captured through {@link BaseRuntimeContext.set}
@@ -143,7 +157,7 @@ export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Reda
   Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
 // Only JSON's four whitespace characters may precede a valid JSON value.
-const possibleJson = /^[\x20\t\r\n]*["{\[0-9tfn-]/;
+const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
 
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its

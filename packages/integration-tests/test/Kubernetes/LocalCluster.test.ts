@@ -7,15 +7,17 @@ import {
 } from "@alchemy.run/kubernetes/internal/kind";
 import { imagePlatformOf } from "@alchemy.run/kubernetes/internal/workload";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import { kubectl } from "./fixtures/kind.ts";
+import LocalDockerfileJob, { BUILD_SECRET } from "./fixtures/local-dockerfile-job.ts";
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
@@ -156,6 +158,7 @@ const stack = Core.scratchStack(testOptions, "LocalClusterE2E");
 describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
   let cluster: Kubernetes.LocalCluster["Attributes"];
   let jobName: string;
+  let dockerfileJobName: string;
 
   beforeAll(
     Effect.gen(function* () {
@@ -164,12 +167,14 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
         Effect.gen(function* () {
           const cluster = yield* TestLocalCluster;
           const job = yield* LocalEffectJob;
+          const dockerfileJob = yield* LocalDockerfileJob;
           yield* LocalEffectServer;
-          return { cluster, jobName: job.jobName };
+          return { cluster, jobName: job.jobName, dockerfileJobName: dockerfileJob.jobName };
         }),
       );
       cluster = deployed.cluster;
       jobName = deployed.jobName;
+      dockerfileJobName = deployed.dockerfileJobName;
     }),
     { timeout: 300_000 },
   );
@@ -227,6 +232,35 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
         };
         expect(spec.status?.succeeded).toBe(1);
         expect(spec.spec?.template?.spec?.containers?.[0]?.image).toMatch(/^localhost:5061\//);
+      }),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "a Dockerfile Job is built with its build args and BuildKit secrets",
+    () =>
+      Effect.gen(function* () {
+        const transport = yield* connectCluster(cluster.connection);
+        yield* readObject({
+          transport,
+          object: {
+            apiVersion: "batch/v1",
+            kind: "Job",
+            name: dockerfileJobName,
+            namespace: "default",
+          },
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (job) =>
+              ((job as { status?: { succeeded?: number } }).status?.succeeded ?? 0) >= 1,
+            times: 45,
+          }),
+        );
+        // The image prints the file its build wrote: the arg, and the
+        // secret's length rather than its value.
+        const logs = yield* kubectl(cluster, ["logs", `job/${dockerfileJobName}`]);
+        expect(logs.trim()).toBe(`hello ${BUILD_SECRET.length}`);
       }),
     { timeout: 120_000 },
   );

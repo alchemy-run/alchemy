@@ -3,11 +3,11 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { makeK2LocalAuth } from "@alchemy.run/cloudflare/K2/K2Http";
 import { makeReadSubscriptionClient } from "@alchemy.run/cloudflare/K2/ReadSubscriptionHttp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as k2 from "@distilled.cloud/cloudflare/k2";
 import { Action } from "alchemy/Action";
 import { createHostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

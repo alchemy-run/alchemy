@@ -496,7 +496,7 @@ export const updateIamMembership = (options: {
     Effect.flatMap((policy) =>
       rewrite(policy, member, add, remove, options.condition) === undefined
         ? Effect.void
-        : Effect.fail(new IamPolicyNotConverged({ name: options.name })),
+        : Effect.fail(new IamPolicyNotConverged({ resourceName: options.name })),
     ),
   );
   return write.pipe(
@@ -511,7 +511,7 @@ export const updateIamMembership = (options: {
 
 /** A written IAM policy did not read back with the change applied. */
 export class IamPolicyNotConverged extends Data.TaggedError("GCP.IamPolicyNotConverged")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /**

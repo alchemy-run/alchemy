@@ -165,7 +165,9 @@ export const makeCloudWatchResourceSetHttpBinding = <
           ],
         });
       }
-      return Effect.fn(`${options.tag}(${sorted})`)(function* () {
+      return Effect.fn(
+        `${options.tag}(${sorted.map((resource) => resource.LogicalId).join(", ")})`,
+      )(function* () {
         const input: Record<string, unknown> = {};
         input[options.namesKey] = yield* Effect.forEach(names, (name) => name);
         return yield* op(input as unknown as I);

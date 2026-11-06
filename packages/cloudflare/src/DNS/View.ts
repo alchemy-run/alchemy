@@ -184,7 +184,7 @@ type ObservedView =
 const getView = (accountId: string, viewId: string) =>
   dns
     .getSettingAccountView({ accountId, viewId })
-    .pipe(Effect.catchTag("ViewNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ViewNotFound", () => Effect.undefined));
 
 /**
  * Find a view by exact name. The `name.exact` filter narrows

@@ -210,8 +210,8 @@ export const AccountEntrypointProvider = () =>
             Effect.map((ruleset) => toAttributes(accountId, ruleset)),
             // Removed/empty out-of-band or plan-gated phases are skipped.
             Effect.catchTags({
-              RulesetNotFound: () => Effect.succeed(undefined),
-              Forbidden: () => Effect.succeed(undefined),
+              RulesetNotFound: () => Effect.undefined,
+              Forbidden: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -234,7 +234,7 @@ export const AccountEntrypointProvider = () =>
       // (mirrors the zone-level `Cloudflare.Ruleset.Ruleset`).
       return yield* rulesets.getPhasForAccount({ accountId, rulesetPhase: phase }).pipe(
         Effect.map((ruleset) => toAttributes(accountId, ruleset)),
-        Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("RulesetNotFound", () => Effect.undefined),
       );
     }),
 

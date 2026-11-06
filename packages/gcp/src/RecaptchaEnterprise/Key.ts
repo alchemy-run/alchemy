@@ -275,7 +275,7 @@ export type Key = Resource<
 export const Key = Resource<Key>("GCP.RecaptchaEnterprise.Key");
 
 export class KeyNotResolved extends Data.TaggedError("GCP.RecaptchaEnterprise.KeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type KeyKind = "web" | "android" | "ios" | "express";
@@ -597,7 +597,7 @@ export const KeyProvider = () =>
 
       if (current === undefined) {
         return yield* new KeyNotResolved({
-          name: lookupName.length > 0 ? lookupName : displayName,
+          resourceName: lookupName.length > 0 ? lookupName : displayName,
         });
       }
 

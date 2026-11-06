@@ -1,7 +1,7 @@
 import * as Fly from "@alchemy.run/fly";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -9,8 +9,9 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import { flyApi } from "../limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 

@@ -86,7 +86,7 @@ export const SchemaRegistry = Resource<SchemaRegistry>("GCP.ManagedKafka.SchemaR
 export class SchemaRegistryNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, schemaRegistryId: string) =>
@@ -182,7 +182,7 @@ export const SchemaRegistryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SchemaRegistryNotResolved({ name });
+        return yield* new SchemaRegistryNotResolved({ resourceName: name });
       }
 
       yield* stampSchemaRegistryOwnership(current.name ?? name, labels);

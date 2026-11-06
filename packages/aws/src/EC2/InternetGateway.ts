@@ -1,4 +1,5 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
@@ -7,12 +8,15 @@ import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
 } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -65,10 +69,34 @@ export interface InternetGateway extends Resource<
       state: "attaching" | "available" | "detaching" | "detached";
       vpcId: string;
     }>;
+    /**
+     * Tags on the internet gateway, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InternetGatewayLookup
 > {}
+
+/**
+ * Props for {@link InternetGateway.lookup}: find an internet gateway this
+ * stack doesn't manage, in the ambient account and region.
+ */
+export type InternetGatewayLookup =
+  | {
+      /** The gateway's id. */
+      internetGatewayId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC the gateway is attached to. */
+      vpcId: string;
+    };
 /**
  * An internet gateway provides a target for internet-routable traffic in a
  * VPC, enabling bidirectional IPv4 and IPv6 connectivity between resources in
@@ -139,6 +167,24 @@ export interface InternetGateway extends Resource<
  * `publicRouteTable` can send and receive internet traffic. Add an analogous
  * route with `destinationIpv6CidrBlock: "::/0"` to enable IPv6.
  *
+ * ### Looking up an existing internet gateway
+ * `InternetGateway.lookup` references an internet gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `internetGatewayId`, its `Name`
+tag, or the `vpcId` it is attached to. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Route through an existing VPC's gateway
+ * ```typescript
+ * const igw = AWS.EC2.InternetGateway.lookup({ vpcId });
+ *
+ * yield* AWS.EC2.Route("Default", {
+ *   routeTableId: table.routeTableId,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   gatewayId: igw.internetGatewayId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const InternetGateway = Resource<InternetGateway>("AWS.EC2.InternetGateway");
@@ -157,8 +203,76 @@ export const InternetGatewayProvider = () =>
           .find((candidate) => candidate.InternetGatewayId !== undefined);
       });
 
+      /**
+       * The attributes `read` and `reconcile` both report, so a converged
+       * gateway reads unchanged. The VPC is the one the gateway is attached
+       * (or attaching) to.
+       */
+      const toAttributes = (
+        igw: ec2.InternetGateway,
+        region: RegionID,
+        accountId: AccountID,
+      ): InternetGateway["Attributes"] => {
+        const internetGatewayId = igw.InternetGatewayId as InternetGatewayId;
+        return {
+          internetGatewayId,
+          internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
+          vpcId: igw.Attachments?.find((a) => a.State === "available" || a.State === "attaching")
+            ?.VpcId as VpcId | undefined,
+          ownerId: igw.OwnerId,
+          attachments: igw.Attachments?.map((a) => ({
+            state: a.State! as "attaching" | "available" | "detaching" | "detached",
+            vpcId: a.VpcId!,
+          })),
+          tags: tagListRecord(igw.Tags),
+        };
+      };
+
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeInternetGateways(
+              "internetGatewayId" in props
+                ? { InternetGatewayIds: [props.internetGatewayId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : { Filters: [{ Name: "attachment.vpc-id", Values: [props.vpcId] }] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+                Effect.succeed({ InternetGateways: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.InternetGateway",
+            "internetGatewayId" in props
+              ? props.internetGatewayId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `vpc=${props.vpcId}`,
+            found.InternetGateways ?? [],
+            (x) => x.InternetGatewayId,
+          );
+          if (!match?.InternetGatewayId) return undefined;
+          return toAttributes(match, region, accountId);
+        }),
+        read: Effect.fn(function* ({ id, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const igw = output?.internetGatewayId
+            ? (yield* ec2
+                .describeInternetGateways({ InternetGatewayIds: [output.internetGatewayId] })
+                .pipe(
+                  Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+                    Effect.succeed({ InternetGateways: [] }),
+                  ),
+                )).InternetGateways?.[0]
+            : yield* findInternetGatewayByTags(id);
+          if (!igw?.InternetGatewayId) return undefined;
+          const attrs = toAttributes(igw, region, accountId);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
+        }),
 
         list: () =>
           Effect.gen(function* () {
@@ -317,16 +431,7 @@ export const InternetGatewayProvider = () =>
 
           // Re-read final state.
           const final = yield* describeInternetGateway(internetGatewayId);
-          return {
-            internetGatewayId,
-            internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
-            vpcId: news.vpcId,
-            ownerId: final.OwnerId,
-            attachments: final.Attachments?.map((a) => ({
-              state: a.State! as "attaching" | "available" | "detaching" | "detached",
-              vpcId: a.VpcId!,
-            })),
-          };
+          return { ...toAttributes(final, region, accountId), tags: desiredTags };
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

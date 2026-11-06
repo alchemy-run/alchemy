@@ -44,7 +44,7 @@ export const RetrieveAppsSecretHttp = Layer.effect(
         const user = yield* scopeUser;
         return yield* auth(
           GetAppsSecretsFind({
-            ...(request ?? {}),
+            ...request,
             name: yield* name,
             scope: {
               type: (yield* scopeType) as AppsSecretScopeType,

@@ -1,13 +1,14 @@
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Actions from "@distilled.cloud/github/actions";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
@@ -23,20 +24,16 @@ const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
 // succeeding (vs. 404) is how we assert presence/absence out-of-band.
 const secretExists = (name: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise(async () => {
-      try {
-        await octokit.rest.actions.getRepoSecret({
-          owner,
-          repo: repository,
-          secret_name: name,
-        });
-        return true;
-      } catch (error: any) {
-        if (error.status === 404) return false;
-        throw error;
-      }
-    });
+    return yield* gh(
+      Actions.getRepoSecret({
+        owner,
+        repo: repository,
+        secret_name: name,
+      }),
+    ).pipe(
+      Effect.as(true),
+      Effect.catchTag("NotFound", () => Effect.succeed(false)),
+    );
   });
 
 test.provider.skipIf(!owner)(

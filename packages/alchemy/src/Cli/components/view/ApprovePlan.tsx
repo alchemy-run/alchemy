@@ -10,6 +10,7 @@ import {
   Box,
   KeyBar,
   Text,
+  useAlchemyStatus,
   useGlyphs,
   useKeyGlyphs,
   useTerminalInput,
@@ -35,6 +36,7 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
   const action = plan.destroy ? "Destroy" : "Deploy";
   const glyphs = useGlyphs();
   const keys = useKeyGlyphs();
+  useAlchemyStatus({ state: "blocked", kind: "permission", msg: `${action}?` });
   const tree = useMemo(
     () =>
       new PlanTree(plan, {

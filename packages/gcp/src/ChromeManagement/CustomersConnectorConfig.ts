@@ -181,7 +181,7 @@ export class CustomersConnectorConfigNotResolved extends Data.TaggedError(
   "GCP.ChromeManagement.CustomersConnectorConfigNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -308,7 +308,7 @@ export const CustomersConnectorConfigProvider = () =>
       if (current === undefined) {
         return yield* new CustomersConnectorConfigNotResolved({
           parent,
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 

@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
@@ -68,7 +69,11 @@ const Tracing = OtlpTracer.layer({
   resource: { serviceName: "bank-web" },
 }).pipe(Layer.provide(OtlpSerialization.layerJson));
 
-const Resources = Layer.mergeAll(BankConnection, Tracing).pipe(
+const Headers = Layer.succeed(DomainFoldkit.CommandHeaders, {
+  get: (command) => Effect.succeed(command === "WithdrawMoney" ? { "x-mfa-code": "000000" } : {}),
+});
+
+const Resources = Layer.mergeAll(BankConnection, Tracing, Headers).pipe(
   Layer.provide(FetchHttpClient.layer),
 );
 

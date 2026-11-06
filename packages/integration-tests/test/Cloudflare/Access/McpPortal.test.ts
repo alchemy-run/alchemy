@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -18,10 +19,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // a hostname is a per-account unique constraint, so a shared hostname makes the
 // two deploys race on "This hostname is already in use in a different MCP
 // Portal".
-const PORTAL_ID = "alchemy-test-mcp-portal";
-const HOSTNAME = "alchemy-test-mcp.alchemy-test-2.us";
-const LIST_PORTAL_ID = "alchemy-test-mcp-portal-list";
-const LIST_HOSTNAME = "alchemy-test-mcp-list.alchemy-test-2.us";
+const PORTAL_ID = testName("alc-mcp-portal");
+const HOSTNAME = `${testName("alchemy-test-mcp")}.alchemy-test-2.us`;
+const LIST_PORTAL_ID = testName("alc-mcp-portal-list");
+const LIST_HOSTNAME = `${testName("alchemy-test-mcp-list")}.alchemy-test-2.us`;
 
 // Read a portal out-of-band, mapping "gone" to undefined.
 const getLivePortal = (accountId: string, id: string) =>
@@ -90,7 +91,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.McpPortal("AiPortal", {
             portalId: PORTAL_ID,
-            name: "Alchemy AI Portal",
+            name: testName("Alchemy AI Portal"),
             hostname: HOSTNAME,
             description: "alchemy mcp portal v2",
             secureWebGateway: true,
@@ -98,12 +99,12 @@ test.provider(
         }),
       );
       expect(updated.portalId).toEqual(PORTAL_ID);
-      expect(updated.name).toEqual("Alchemy AI Portal");
+      expect(updated.name).toEqual(testName("Alchemy AI Portal"));
       expect(updated.description).toEqual("alchemy mcp portal v2");
       expect(updated.secureWebGateway).toEqual(true);
 
       const liveUpdated = yield* getLivePortal(accountId, PORTAL_ID);
-      expect(liveUpdated?.name).toEqual("Alchemy AI Portal");
+      expect(liveUpdated?.name).toEqual(testName("Alchemy AI Portal"));
       expect(liveUpdated?.secureWebGateway).toEqual(true);
 
       // No-op redeploy keeps the same portal without drift.
@@ -111,7 +112,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.Access.McpPortal("AiPortal", {
             portalId: PORTAL_ID,
-            name: "Alchemy AI Portal",
+            name: testName("Alchemy AI Portal"),
             hostname: HOSTNAME,
             description: "alchemy mcp portal v2",
             secureWebGateway: true,

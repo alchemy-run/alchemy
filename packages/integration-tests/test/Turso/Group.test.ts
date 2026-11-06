@@ -1,10 +1,10 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Turso from "@alchemy.run/turso";
 import { organization } from "@alchemy.run/turso/Credentials";
 import * as turso from "@distilled.cloud/turso/turso";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { Stage } from "alchemy/Stage";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";

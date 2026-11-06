@@ -1,16 +1,12 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Issues from "@distilled.cloud/github/issues";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface CreateIssueRequest extends EndpointParameters<
-  RestEndpointMethodTypes["issues"]["create"]["parameters"]
-> {}
+export interface CreateIssueRequest extends Omit<Issues.CreateRequest, "owner" | "repo"> {}
 
-export type CreateIssueResponse = RestEndpointMethodTypes["issues"]["create"]["response"]["data"];
+export type CreateIssueResponse = Issues.Issue;
 
 /**
  * Open an issue in the bound repository (`issues.create`).
@@ -40,7 +36,7 @@ export interface CreateIssue extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateIssueRequest,
-    ) => Effect.Effect<CreateIssueResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<CreateIssueResponse, Issues.CreateError, RuntimeContext>
   >
 > {}
 

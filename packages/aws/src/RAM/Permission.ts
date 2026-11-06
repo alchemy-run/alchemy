@@ -6,10 +6,18 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Array from "effect/Array";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class RAMPermissionUnexpectedResponse extends Data.TaggedError(
+  "RAMPermissionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The policy template of a customer managed permission — the actions a
@@ -190,7 +198,7 @@ const toAttrs = (
 const readDetail = Effect.fn(function* (arn: string) {
   const detail = yield* ram.getPermission({ permissionArn: arn }).pipe(
     Effect.map((r) => r.permission),
-    Effect.catchTag("UnknownResourceException", () => Effect.succeed(undefined)),
+    Effect.catchTag("UnknownResourceException", () => Effect.undefined),
   );
   return detail && isLive(detail.status) ? detail : undefined;
 });
@@ -268,9 +276,7 @@ export const PermissionProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.permission),
-                Effect.catchTag("PermissionAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("PermissionAlreadyExistsException", () => Effect.undefined),
               );
             // Prefer the ARN from the create response; on the AlreadyExists
             // race fall back to the (briefly eventually consistent) list.
@@ -280,7 +286,9 @@ export const PermissionProvider = () =>
                 yield* session.note(created.arn);
                 return { ...toAttrs(created), tags: desiredTags };
               }
-              return yield* Effect.fail(new Error(`permission '${name}' not found after create`));
+              return yield* new RAMPermissionUnexpectedResponse({
+                message: `permission '${name}' not found after create`,
+              });
             }
             yield* session.note(detail.arn);
             return toAttrs(detail);

@@ -83,8 +83,20 @@ export interface Channel extends Resource<
     }[];
   },
   never,
-  Providers
+  Providers,
+  ChannelLookup
 > {}
+
+/**
+ * Props for {@link Channel.lookup}: find a channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ChannelLookup {
+  /** The channel group the channel belongs to. */
+  channelGroupName: string;
+  /** The name of the existing channel. */
+  channelName: string;
+}
 
 /**
  * An AWS Elemental MediaPackage v2 channel — the entry point for live
@@ -139,6 +151,16 @@ export interface Channel extends Resource<
  * const urls = channel.ingestEndpoints;
  * ```
  *
+ * ### Looking up an existing channel
+ * `Channel.lookup` references a channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelGroupName` and `channelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing channel
+ * ```typescript
+ * const live = AWS.MediaPackageV2.Channel.lookup({ channelGroupName: "broadcast", channelName: "live" });
+ * ```
+ *
  * @resource
  */
 export const Channel = Resource<Channel>("AWS.MediaPackageV2.Channel");
@@ -175,7 +197,7 @@ export const ChannelProvider = () =>
             ChannelGroupName: channelGroupName,
             ChannelName: channelName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
@@ -195,6 +217,10 @@ export const ChannelProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ channelGroupName, channelName }) {
+          const channel = yield* getChannel(channelGroupName, channelName);
+          return channel === undefined ? undefined : toAttrs(channel);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const channelGroupName = output?.channelGroupName ?? olds?.channelGroupName;
           if (channelGroupName === undefined) return undefined;
@@ -271,7 +297,7 @@ export const ChannelProvider = () =>
             })
             .pipe(
               Effect.map((response) => response.Policy as string | undefined),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (news.policy !== undefined) {
             if (!policiesEqual(observedPolicy, news.policy)) {

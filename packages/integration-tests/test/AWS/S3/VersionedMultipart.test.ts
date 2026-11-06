@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -152,8 +152,8 @@ const assertBucketDeleted = (Bucket: string) =>
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (error) => error._tag === "BucketStillExists",
-      schedule: Schedule.spaced("1 second"),
-      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
     }),
     Effect.catchTag("NotFound", () => Effect.void),
   );

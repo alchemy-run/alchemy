@@ -1,3 +1,4 @@
+import * as Pulls from "@distilled.cloud/github/pulls";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import {
@@ -7,12 +8,8 @@ import {
 
 export const createPullRequestReviewOperation = BindingHttp.operation(
   "pulls.createReview",
-  (octokit, repo) => (request: CreatePullRequestReviewRequest) =>
-    octokit.rest.pulls.createReview({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: CreatePullRequestReviewRequest) =>
+    Pulls.createReview({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

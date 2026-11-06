@@ -1,7 +1,7 @@
 import { providers } from "@alchemy.run/neon/Providers";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { getProject, getProjectBranchFunction } from "@distilled.cloud/neon";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";

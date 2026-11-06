@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -129,7 +130,7 @@ test.provider(
       const deploy = () =>
         stack.deploy(
           Cloudflare.Worker("AdoptIdWorker", {
-            name: "alchemy-test-workerid-adopt",
+            name: testName("alchemy-test-workerid-adopt"),
             script: script("v1"),
           }),
         );

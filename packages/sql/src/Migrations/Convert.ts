@@ -6,7 +6,13 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { quoteIdentifier, sqlLiteral, timestampPrefixMillis } from "./Utils.ts";
+import {
+  bookkeepingColumns,
+  quoteIdentifier,
+  scalarText,
+  sqlLiteral,
+  timestampPrefixMillis,
+} from "./Utils.ts";
 
 /**
  * A row of applied history harvested from a foreign migration tool's table,
@@ -38,7 +44,7 @@ export const toTimestampString = (value: unknown): string | undefined =>
     ? undefined
     : value instanceof Date
       ? value.toISOString()
-      : String(value);
+      : scalarText(value);
 
 const qualify = (table: string, dialect: SqlExecutor["dialect"], schema?: string) =>
   schema
@@ -87,7 +93,7 @@ export const findForeignHistory = (options: {
             .filter((row) => row.name !== null && row.name !== undefined)
             .map((row) => ({
               name: String(row.name),
-              hash: row.hash === null || row.hash === undefined ? undefined : String(row.hash),
+              hash: row.hash === null || row.hash === undefined ? undefined : scalarText(row.hash),
               createdAtMillis:
                 row.created_at === null || row.created_at === undefined
                   ? undefined
@@ -135,7 +141,7 @@ export const findForeignHistory = (options: {
               hash:
                 row.checksum === null || row.checksum === undefined
                   ? undefined
-                  : String(row.checksum),
+                  : scalarText(row.checksum),
               createdAtMillis: timestampPrefixMillis(String(row.migration_name)),
               appliedAt: toTimestampString(row.finished_at),
             })),
@@ -224,4 +230,4 @@ export const convertedRowInsertSql = (
   dialect: SqlExecutor["dialect"],
   row: ConvertedRow,
 ): string =>
-  `INSERT INTO ${quoteIdentifier(table, dialect)} (hash, created_at, name, applied_at) VALUES (${sqlLiteral(row.hash ?? "")}, ${sqlLiteral(row.createdAtMillis ?? null)}, ${sqlLiteral(row.name)}, ${sqlLiteral(row.appliedAt ?? null)});`;
+  `INSERT INTO ${quoteIdentifier(table, dialect)} (${bookkeepingColumns(dialect, "hash", "created_at", "name", "applied_at")}) VALUES (${sqlLiteral(row.hash ?? "", dialect)}, ${sqlLiteral(row.createdAtMillis ?? null, dialect)}, ${sqlLiteral(row.name, dialect)}, ${sqlLiteral(row.appliedAt ?? null, dialect)});`;

@@ -148,13 +148,13 @@ export const Repository = Resource<Repository>("GCP.CloudBuild.Repository");
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.CloudBuild.RepositoryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -274,7 +274,7 @@ const toAttrs = (repository: cloudbuild.Repository, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnectionsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build repositories long-running operation (seconds to a minute).
@@ -330,7 +330,9 @@ const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundO
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository ? Effect.succeed(repository) : Effect.fail(new RepositoryNotResolved({ name })),
+      repository
+        ? Effect.succeed(repository)
+        : Effect.fail(new RepositoryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryNotResolved",
@@ -342,7 +344,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((repository) =>
-      repository === undefined ? Effect.void : Effect.fail(new RepositoryStillExists({ name })),
+      repository === undefined
+        ? Effect.void
+        : Effect.fail(new RepositoryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.RepositoryStillExists",
@@ -517,7 +521,7 @@ export const RepositoryProvider = () =>
               annotations: desiredAnnotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -525,7 +529,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -538,7 +542,7 @@ export const RepositoryProvider = () =>
       }
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnectionsRepositories({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

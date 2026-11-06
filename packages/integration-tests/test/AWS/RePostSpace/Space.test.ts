@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Space } from "@alchemy.run/aws/RePostSpace";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as repostspace from "@distilled.cloud/aws/repostspace";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

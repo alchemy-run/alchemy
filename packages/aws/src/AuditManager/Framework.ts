@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
+
+export class FrameworkUnexpectedResponse extends Data.TaggedError("FrameworkUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A control referenced by a framework control set.
@@ -84,8 +90,18 @@ export interface Framework extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FrameworkLookup
 > {}
+
+/**
+ * Props for {@link Framework.lookup}: find a framework this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FrameworkLookup {
+  /** The id of the existing framework. */
+  frameworkId: string;
+}
 
 /**
  * A custom assessment framework in AWS Audit Manager — a named collection
@@ -117,6 +133,16 @@ export interface Framework extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing framework
+ * `Framework.lookup` references a framework Alchemy doesn't manage (created in the
+ * console or by another stack), found by `frameworkId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing framework
+ * ```typescript
+ * const existing = AWS.AuditManager.Framework.lookup({ frameworkId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Framework = Resource<Framework>("AWS.AuditManager.Framework");
@@ -135,7 +161,7 @@ const toAttributes = (framework: auditmanager.Framework): Framework["Attributes"
 const readFrameworkById = Effect.fn(function* (frameworkId: string) {
   const response = yield* auditmanager
     .getAssessmentFramework({ frameworkId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.framework;
 });
 
@@ -188,6 +214,12 @@ export const FrameworkProvider = () =>
               framework === undefined ? [] : [toAttributes(framework)],
             );
           }),
+        lookup: Effect.fn(function* ({ frameworkId }) {
+          const framework = yield* readFrameworkById(frameworkId);
+          if (!framework) return undefined;
+          const attrs = toAttributes(framework);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const framework = output?.frameworkId
             ? yield* readFrameworkById(output.frameworkId)
@@ -218,9 +250,9 @@ export const FrameworkProvider = () =>
             });
             framework = created.framework;
             if (!framework?.id) {
-              return yield* Effect.fail(
-                new Error(`CreateAssessmentFramework for '${name}' returned no framework`),
-              );
+              return yield* new FrameworkUnexpectedResponse({
+                message: `CreateAssessmentFramework for '${name}' returned no framework`,
+              });
             }
             yield* session.note(`Created framework ${name} (${framework.id})`);
           }

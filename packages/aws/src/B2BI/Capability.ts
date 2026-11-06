@@ -58,8 +58,18 @@ export interface Capability extends Resource<
     type: string;
   },
   never,
-  Providers
+  Providers,
+  CapabilityLookup
 > {}
+
+/**
+ * Props for {@link Capability.lookup}: find a capability this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CapabilityLookup {
+  /** The id of the existing capability. */
+  capabilityId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) capability. A capability contains the
@@ -80,6 +90,16 @@ export interface Capability extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing capability
+ * `Capability.lookup` references a capability Alchemy doesn't manage (created in the
+ * console or by another stack), found by `capabilityId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing capability
+ * ```typescript
+ * const existing = AWS.B2BI.Capability.lookup({ capabilityId: "..." });
  * ```
  *
  * @resource
@@ -107,21 +127,28 @@ export const CapabilityProvider = () =>
             head._tag === "Some"
               ? b2bi
                   .getCapability({ capabilityId: head.value.capabilityId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
-              : Effect.succeed(undefined),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : Effect.undefined,
           ),
         );
 
       return {
         stables: ["capabilityId", "capabilityArn"],
 
+        lookup: Effect.fn(function* ({ capabilityId }) {
+          const found = yield* b2bi
+            .getCapability({ capabilityId: capabilityId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = output?.capabilityId
             ? yield* b2bi
                 .getCapability({ capabilityId: output.capabilityId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -137,7 +164,7 @@ export const CapabilityProvider = () =>
           let live = output?.capabilityId
             ? yield* b2bi
                 .getCapability({ capabilityId: output.capabilityId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -189,7 +216,7 @@ export const CapabilityProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getCapability({ capabilityId: s.capabilityId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               ),
             ),
             Stream.filter((item) => item !== undefined),

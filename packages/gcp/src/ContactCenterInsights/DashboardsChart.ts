@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -157,7 +157,7 @@ export const DashboardsChart = Resource<DashboardsChart>(
 export class DashboardsChartNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.DashboardsChartNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, chartId: string) => `${parent}/charts/${chartId}`;
@@ -212,10 +212,10 @@ const toAttrs = (chart: cci.GoogleCloudContactcenterinsightsV1Chart, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsDashboardsCharts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDashboards = (parent: string) =>
   cci.listProjectsLocationsDashboards.pages({ parent, pageSize: 100 }).pipe(
@@ -254,7 +254,7 @@ export const DashboardsChartProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const chartId = yield* toResourceId(id, olds?.chartId, output?.chartId);
       const name =
@@ -262,7 +262,9 @@ export const DashboardsChartProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -309,7 +311,7 @@ export const DashboardsChartProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DashboardsChartNotResolved({ name });
+        return yield* new DashboardsChartNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

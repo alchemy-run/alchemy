@@ -1,8 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
+import { Network } from "@alchemy.run/aws/EC2/Network";
 import { Cluster } from "@alchemy.run/aws/EKS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -70,4 +72,57 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 1_800_000 },
+);
+
+// Regression: every config update of one category sent the same
+// clientRequestToken, so EKS answered the second logging change as a retry of
+// the first and left logging unchanged. Provisions its own Auto Mode cluster
+// (~10 min create, ~5 min delete), so it skips under `--fast`.
+test.provider.skipIf(!!process.env.FAST)(
+  "applies every logging update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (enabled: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("LoggingNetwork", {
+              cidrBlock: "10.87.0.0/16",
+              availabilityZones: 2,
+            });
+            return yield* Cluster("LoggingCluster", {
+              compute: "auto",
+              resourcesVpcConfig: {
+                subnetIds: network.publicSubnetIds,
+                endpointPublicAccess: true,
+              },
+              logging: { clusterLogging: [{ types: ["api"], enabled }] },
+            });
+          }),
+        );
+
+      const apiLogging = (cluster: Cluster["Attributes"]) =>
+        eks
+          .describeCluster({ name: cluster.clusterName })
+          .pipe(
+            Effect.map((response) =>
+              (response.cluster?.logging?.clusterLogging ?? []).some(
+                (setup) => setup.enabled === true && (setup.types ?? []).includes("api"),
+              ),
+            ),
+          );
+
+      const created = yield* deploy(false);
+      expect(yield* apiLogging(created)).toBe(false);
+
+      const enabled = yield* deploy(true);
+      expect(yield* apiLogging(enabled)).toBe(true);
+
+      const disabled = yield* deploy(false);
+      expect(yield* apiLogging(disabled)).toBe(false);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 2_400_000 },
 );

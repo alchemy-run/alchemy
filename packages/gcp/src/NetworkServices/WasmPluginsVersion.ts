@@ -205,15 +205,15 @@ const toAttrs = (version: networkservices.WasmPluginVersion, project: string) =>
 
 const getByName = (name: string) =>
   name.length === 0 || !name.includes("/wasmPlugins/") || name.includes("/wasmPlugins//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : networkservices
         .getProjectsLocationsWasmPluginsVersions({ name })
-        .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound"], () => Effect.undefined));
 
 const getPlugin = (name: string) =>
   networkservices
     .getProjectsLocationsWasmPlugins({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const replaceIfChanged = (previous: string | undefined, next: string | undefined) =>
   previous !== undefined &&
@@ -357,7 +357,7 @@ export const WasmPluginsVersionProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -392,7 +392,7 @@ export const WasmPluginsVersionProvider = () =>
                 mainVersionId: nextMain,
               },
             })
-            .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag(["NotFound"], () => Effect.undefined));
           if (switched !== undefined) {
             yield* waitForOperation(switched, { notFoundOk: true });
           }
@@ -402,7 +402,7 @@ export const WasmPluginsVersionProvider = () =>
       yield* Effect.gen(function* () {
         const operation = yield* networkservices
           .deleteProjectsLocationsWasmPluginsVersions({ name: output.name })
-          .pipe(Effect.catchTag(["NotFound"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["NotFound"], () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation, { notFoundOk: true });
         }

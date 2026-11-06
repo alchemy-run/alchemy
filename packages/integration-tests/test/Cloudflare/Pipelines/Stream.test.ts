@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -52,4 +52,17 @@ test.provider(
     tags: ["provider:cloudflare", "provider:cloudflare:pipelines", "live"],
     timeout: 300_000,
   },
+);
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Pipelines.Stream("NoProps"));
+      expect(deployed.streamId).toBeTruthy();
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:pipelines", "live"] },
 );

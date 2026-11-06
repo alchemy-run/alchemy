@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as images from "@distilled.cloud/cloudflare/images";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -51,7 +51,6 @@ test.provider.skipIf(!canUpload)(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const cleanup = makeSubscriptionCleanup();
       const variant = Cloudflare.Images.Variant("Variant", {
-        name: "alchemySubscriptionUpload",
         fit: "contain",
         width: 100,
         height: 100,

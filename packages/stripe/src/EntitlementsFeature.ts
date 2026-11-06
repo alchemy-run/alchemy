@@ -166,9 +166,7 @@ const toAttrs = (feature: StripeEntitlementsFeature): EntitlementsFeatureAttribu
 const isMissingFeature = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetEntitlementsFeature({ id }).pipe(
-    Effect.catchIf(isMissingFeature, () => Effect.succeed(undefined)),
-  );
+  GetEntitlementsFeature({ id }).pipe(Effect.catchIf(isMissingFeature, () => Effect.undefined));
 
 const listByArchived = Effect.fn(function* (archived: boolean) {
   const features: StripeEntitlementsFeature[] = [];

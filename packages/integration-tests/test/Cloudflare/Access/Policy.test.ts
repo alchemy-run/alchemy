@@ -1,11 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -104,7 +105,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = "alchemy-access-policy-adopt-test";
+      const name = testName("alchemy-access-policy-adopt-test");
 
       yield* stack.destroy();
 

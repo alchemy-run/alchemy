@@ -3,9 +3,9 @@ import { Export } from "@alchemy.run/aws/BCMDataExports/Export";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as bcm from "@distilled.cloud/aws/bcm-data-exports";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

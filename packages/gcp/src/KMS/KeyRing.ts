@@ -78,7 +78,7 @@ export type KeyRing = Resource<
 export const KeyRing = Resource<KeyRing>("GCP.KMS.KeyRing");
 
 export class KeyRingNotResolved extends Data.TaggedError("GCP.KMS.KeyRingNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -127,7 +127,7 @@ const toAttrs = (keyRing: kms.KeyRing, project: string, region: string) => {
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listKeyRingsAt = (parent: string) =>
   Effect.gen(function* () {
@@ -235,7 +235,7 @@ export const KeyRingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyRingNotResolved({ name });
+        return yield* new KeyRingNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

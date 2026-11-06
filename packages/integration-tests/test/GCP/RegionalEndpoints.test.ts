@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as Region from "@distilled.cloud/gcp/Region";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

@@ -1,17 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface ListPullRequestReviewsRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["listReviews"]["parameters"]
+export interface ListPullRequestReviewsRequest extends Omit<
+  Pulls.ListReviewsRequest,
+  "owner" | "repo"
 > {}
 
-export type ListPullRequestReviewsResponse =
-  RestEndpointMethodTypes["pulls"]["listReviews"]["response"]["data"];
+export type ListPullRequestReviewsResponse = Pulls.ListReviewsResponse;
 
 /**
  * List one page of a pull request's reviews (`pulls.listReviews`).
@@ -38,7 +36,7 @@ export interface ListPullRequestReviews extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListPullRequestReviewsRequest,
-    ) => Effect.Effect<ListPullRequestReviewsResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<ListPullRequestReviewsResponse, Pulls.ListReviewsError, RuntimeContext>
   >
 > {}
 

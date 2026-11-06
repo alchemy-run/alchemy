@@ -318,7 +318,7 @@ type ObservedRule = pageRules.GetPageRuleResponse;
 const getRule = (zoneId: string, pageruleId: string) =>
   pageRules.getPageRule({ zoneId, pageruleId }).pipe(
     Effect.map((rule): ObservedRule | undefined => rule),
-    Effect.catchTag("PageRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("PageRuleNotFound", () => Effect.undefined),
   );
 
 /**

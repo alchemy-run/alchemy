@@ -1,9 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
-import { FargateProfile } from "@alchemy.run/aws/EKS";
+import { Network } from "@alchemy.run/aws/EC2/Network";
+import { Cluster, FargateProfile } from "@alchemy.run/aws/EKS";
+import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -53,48 +55,96 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:eks", "live"] },
 );
 
-// Full deploy lifecycle. Gate behind a pre-existing cluster supplied via
-// AWS_TEST_EKS_CLUSTER (+ the Fargate pod execution role ARN and PRIVATE subnet
-// IDs — Fargate pods reject public subnets). Deploys a Fargate profile, waits
-// for ACTIVE, then tears down and asserts it is gone.
-test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
-  "creates and deletes a Fargate profile",
+const clusterTrustPolicy = {
+  Version: "2012-10-17" as const,
+  Statement: [
+    {
+      Effect: "Allow" as const,
+      Principal: { Service: "eks.amazonaws.com" },
+      Action: ["sts:AssumeRole"],
+    },
+  ],
+};
+
+const podExecutionTrustPolicy = {
+  Version: "2012-10-17" as const,
+  Statement: [
+    {
+      Effect: "Allow" as const,
+      Principal: { Service: "eks-fargate-pods.amazonaws.com" },
+      Action: ["sts:AssumeRole"],
+    },
+  ],
+};
+
+// Full deploy lifecycle on its own cluster (~10 min create, ~5 min delete), so
+// it skips under `--fast`. Fargate pods reject public subnets, so the profile
+// uses the network's private subnets. Deploys a profile, replaces it with a
+// new selector, then tears down and asserts both are gone.
+test.provider.skipIf(!!process.env.FAST)(
+  "creates, replaces, and deletes a Fargate profile",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const clusterName = process.env.AWS_TEST_EKS_CLUSTER!;
-      const podExecutionRoleArn = process.env.AWS_TEST_EKS_FARGATE_ROLE_ARN!;
-      const subnets = (process.env.AWS_TEST_EKS_PRIVATE_SUBNETS ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const deploy = (namespace: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("FargateNetwork", {
+              cidrBlock: "10.89.0.0/16",
+              availabilityZones: 2,
+            });
+            const clusterRole = yield* Role("FargateClusterRole", {
+              assumeRolePolicyDocument: clusterTrustPolicy,
+              managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
+            });
+            const podExecutionRole = yield* Role("FargatePodExecutionRole", {
+              assumeRolePolicyDocument: podExecutionTrustPolicy,
+              managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy"],
+            });
+            const cluster = yield* Cluster("FargateCluster", {
+              roleArn: clusterRole.roleArn,
+              resourcesVpcConfig: {
+                subnetIds: network.privateSubnetIds,
+                endpointPublicAccess: true,
+              },
+              accessConfig: { authenticationMode: "API" },
+            });
+            return yield* FargateProfile("TestFargateProfile", {
+              clusterName: cluster.clusterName,
+              podExecutionRoleArn: podExecutionRole.roleArn,
+              subnets: network.privateSubnetIds,
+              selectors: [{ namespace }],
+            });
+          }),
+        );
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* FargateProfile("TestFargateProfile", {
-            clusterName,
-            podExecutionRoleArn,
-            subnets,
-            selectors: [{ namespace: "alchemy-fargate-test" }],
-          });
-        }),
-      );
+      const exists = (profile: FargateProfile["Attributes"]) =>
+        eks
+          .describeFargateProfile({
+            clusterName: profile.clusterName,
+            fargateProfileName: profile.fargateProfileName,
+          })
+          .pipe(
+            Effect.map((response) => response.fargateProfile?.status),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          );
+
+      const created = yield* deploy("alchemy-fargate-test");
       expect(created.status).toBe("ACTIVE");
       expect(created.selectors[0]?.namespace).toBe("alchemy-fargate-test");
 
+      // Selectors are immutable, so a new selector replaces the profile.
+      const replaced = yield* deploy("alchemy-fargate-test-2");
+      expect(replaced.status).toBe("ACTIVE");
+      expect(replaced.selectors[0]?.namespace).toBe("alchemy-fargate-test-2");
+      expect(replaced.fargateProfileArn).not.toBe(created.fargateProfileArn);
+      expect(yield* exists(replaced)).toBe("ACTIVE");
+
       yield* stack.destroy();
 
-      const gone = yield* eks
-        .describeFargateProfile({
-          clusterName,
-          fargateProfileName: created.fargateProfileName,
-        })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
-        );
-      expect(gone).toBe(true);
+      expect(yield* exists(created)).toBeUndefined();
+      expect(yield* exists(replaced)).toBeUndefined();
     }),
-  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 900_000 },
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 2_700_000 },
 );

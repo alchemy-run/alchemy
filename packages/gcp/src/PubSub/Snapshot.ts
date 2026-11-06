@@ -99,11 +99,11 @@ export type Snapshot = Resource<
 export const Snapshot = Resource<Snapshot>("GCP.PubSub.Snapshot");
 
 export class SnapshotNotResolved extends Data.TaggedError("GCP.PubSub.SnapshotNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SnapshotStillExists extends Data.TaggedError("GCP.PubSub.SnapshotStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const snapshotIdOf = (name: string) => name.split("/").pop() ?? name;
@@ -151,13 +151,13 @@ const toAttrs = (snapshot: pubsub.Snapshot, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSnapshots({ snapshot: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (existing): existing is undefined => existing === undefined,
-      () => new SnapshotStillExists({ name }),
+      () => new SnapshotStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -176,7 +176,7 @@ const waitUntilPresent = (name: string) =>
     for (let read = 0; read < CONSISTENT_READS; read++) {
       if (read > 0) yield* Effect.sleep("1 second");
       found = yield* getByName(name);
-      if (found === undefined) return yield* new SnapshotNotResolved({ name });
+      if (found === undefined) return yield* new SnapshotNotResolved({ resourceName: name });
     }
     return found!;
   }).pipe(
@@ -274,14 +274,14 @@ export const SnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub consistently serves the snapshot; the next
         // call (label patch) can otherwise hit a lagging replica.
         current = yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {
-        return yield* new SnapshotNotResolved({ name });
+        return yield* new SnapshotNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

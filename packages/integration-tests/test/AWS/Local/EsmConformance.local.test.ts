@@ -25,17 +25,17 @@ import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
 import * as Region from "@alchemy.run/aws/Region";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import * as Test from "alchemy/Test/Alchemy";
 import { zipCode } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "./fixtures/raw.ts";
+import { FLOCI_ENDPOINT, rawS3GetObject } from "./fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -99,7 +99,7 @@ const assumeRolePolicy = {
   ],
 };
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "SQS -> raw floci Lambda -> S3 event pumping through our client stack",
   (stack) =>
     Effect.gen(function* () {

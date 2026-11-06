@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { WebFunctionAuthType } from "./WebFunctionEndpointSync.ts";
 
@@ -58,6 +59,12 @@ export interface WebFunctionPermission extends Resource<
     endpointArn: string;
     /** Statement ID of the grant in the function's resource policy. */
     statementId: string;
+    /**
+     * The grant's policy statement (principal, effect, action, resource and
+     * conditions), as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    statement?: unknown;
   },
   never,
   Providers
@@ -171,7 +178,7 @@ export const WebFunctionPermissionProvider = () =>
 
       const getPolicy = Effect.fn(function* (functionArn: string) {
         const observed = yield* LambdaWeb.getResourcePolicy({ resourceArn: functionArn }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         if (observed === undefined) return undefined;
         const document = yield* Effect.try({
@@ -272,6 +279,7 @@ export const WebFunctionPermissionProvider = () =>
             functionArn,
             endpointArn: (statement.Resource as string) ?? output?.endpointArn ?? "",
             statementId: sid,
+            statement: plainJson(statement),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -284,10 +292,13 @@ export const WebFunctionPermissionProvider = () =>
           }
           const sid = output?.statementId ?? (yield* statementIdOf(id));
           yield* updateStatement(endpoint.functionArn, sid, statementFor(sid, news));
+          const policy = yield* getPolicy(endpoint.functionArn);
+          const statement = policy?.document.Statement?.find((s) => s.Sid === sid);
           return {
             functionArn: endpoint.functionArn,
             endpointArn: endpoint.endpointArn,
             statementId: sid,
+            statement: plainJson(statement ?? statementFor(sid, news)),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

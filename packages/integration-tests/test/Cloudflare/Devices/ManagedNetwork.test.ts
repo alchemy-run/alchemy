@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -52,27 +53,27 @@ test.provider(
 
       const network = yield* stack.deploy(
         Cloudflare.Devices.DeviceManagedNetwork("Office", {
-          name: "alchemy-test-managed-network",
+          name: testName("alchemy-test-managed-network"),
           config: { tlsSockaddr: "192.0.2.1:443", sha256: SHA_A },
         }),
       );
 
       expect(network.networkId).toBeTruthy();
       expect(network.accountId).toEqual(accountId);
-      expect(network.name).toEqual("alchemy-test-managed-network");
+      expect(network.name).toEqual(testName("alchemy-test-managed-network"));
       expect(network.type).toEqual("tls");
       expect(network.config.tlsSockaddr).toEqual("192.0.2.1:443");
       expect(network.config.sha256).toEqual(SHA_A);
 
       // Out-of-band verify against the live API.
       const live = yield* getNetwork(accountId, network.networkId);
-      expect(live.name).toEqual("alchemy-test-managed-network");
+      expect(live.name).toEqual(testName("alchemy-test-managed-network"));
       expect(live.config?.tlsSockaddr).toEqual("192.0.2.1:443");
 
       // Update config in place — same networkId.
       const updated = yield* stack.deploy(
         Cloudflare.Devices.DeviceManagedNetwork("Office", {
-          name: "alchemy-test-managed-network",
+          name: testName("alchemy-test-managed-network"),
           config: { tlsSockaddr: "192.0.2.2:443", sha256: SHA_B },
         }),
       );
@@ -86,7 +87,7 @@ test.provider(
       // Redeploying identical props is a no-op (same network).
       const noop = yield* stack.deploy(
         Cloudflare.Devices.DeviceManagedNetwork("Office", {
-          name: "alchemy-test-managed-network",
+          name: testName("alchemy-test-managed-network"),
           config: { tlsSockaddr: "192.0.2.2:443", sha256: SHA_B },
         }),
       );
@@ -106,7 +107,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.Devices.DeviceManagedNetwork("ListResource", {
-          name: "alchemy-test-managed-network-list",
           config: { tlsSockaddr: "192.0.2.3:443", sha256: SHA_A },
         }),
       );

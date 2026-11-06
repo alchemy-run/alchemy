@@ -3,10 +3,16 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryWhileConflict, toLexName } from "./internal.ts";
+
+export class IntentUnexpectedResponse extends Data.TaggedError("IntentUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface IntentProps {
   /**
@@ -112,7 +118,7 @@ const createIntentName = (id: string, props: { intentName?: string | undefined }
 const describeIntent = Effect.fn(function* (botId: string, localeId: string, intentId: string) {
   return yield* lexm
     .describeIntent({ botId, botVersion: "DRAFT", localeId, intentId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find an intent of the locale by exact name (used when state was lost). */
@@ -216,9 +222,9 @@ export const IntentProvider = () =>
             );
             observed = yield* describeIntent(news.botId, news.localeId, created.intentId!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created Lex intent ${intentName}`),
-              );
+              return yield* new IntentUnexpectedResponse({
+                message: `failed to read created Lex intent ${intentName}`,
+              });
             }
           } else if (
             // 3. SYNC — UpdateIntent replaces the declared aspects; skip the
@@ -246,9 +252,9 @@ export const IntentProvider = () =>
             );
             observed = yield* describeIntent(news.botId, news.localeId, observed.intentId!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read updated Lex intent ${intentName}`),
-              );
+              return yield* new IntentUnexpectedResponse({
+                message: `failed to read updated Lex intent ${intentName}`,
+              });
             }
           }
 

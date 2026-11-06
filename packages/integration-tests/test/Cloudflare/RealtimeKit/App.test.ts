@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -37,7 +37,8 @@ const listApps = (accountId: string) =>
   );
 
 // Deterministic name — RealtimeKit apps cannot be deleted, so every run of
-// this suite adopts the same app instead of leaking a new one. The Preset
+// this suite adopts the same app instead of leaking a new one, so the name is
+// shared by every user rather than derived from the stage. The Preset
 // and Webhook suites share this name and adopt the same app.
 const APP_NAME = "alchemy-rtk-test-app";
 

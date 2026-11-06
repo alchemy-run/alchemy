@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as firebaseappdistribution from "@distilled.cloud/gcp/firebaseappdistribution_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -55,6 +56,10 @@ test.provider.skipIf(entitled)(
   "getProjectsGroups fails with ServiceDisabled while the API is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // With the API enabled, this project (no App Engine app / no Firebase
+      // setup) answers an untyped INTERNAL / INVALID_ARGUMENT: the probe only
+      // holds while the API is disabled.
+      if (yield* isServiceEnabled("firebaseappdistribution.googleapis.com")) return;
       const parent = yield* currentParent;
       yield* stack.destroy();
 

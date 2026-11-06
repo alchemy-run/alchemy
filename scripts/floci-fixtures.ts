@@ -419,7 +419,7 @@ const ensureRole = (
       .getRole({ RoleName: roleName })
       .pipe(Effect.map((response) => response.Role));
     const existing = yield* getRole.pipe(
-      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
     );
     const role =
       existing === undefined
@@ -459,7 +459,7 @@ const ensureRole = (
 
 const findEksCluster = eks.describeCluster({ name: NAME }).pipe(
   Effect.map((response) => response.cluster),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
 );
 
 const deleteEksCluster = Effect.gen(function* () {
@@ -790,7 +790,7 @@ const VPC_LINK_NLB = `${NAME}-nlb`;
 
 const findLoadBalancer = elbv2.describeLoadBalancers({ Names: [VPC_LINK_NLB] }).pipe(
   Effect.map((response) => response.LoadBalancers?.[0]),
-  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
 );
 
 const deleteLoadBalancer = Effect.gen(function* () {

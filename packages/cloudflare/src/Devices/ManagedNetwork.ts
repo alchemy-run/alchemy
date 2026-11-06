@@ -221,7 +221,7 @@ type ObservedNetwork = {
 const observeNetwork = (accountId: string, networkId: string) =>
   zeroTrust
     .getDeviceNetwork({ accountId, networkId })
-    .pipe(Effect.catchTag("DeviceNetworkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DeviceNetworkNotFound", () => Effect.undefined));
 
 /**
  * Find a managed network by exact name. Names are unique per account.
@@ -233,7 +233,8 @@ const findByName = (accountId: string, name: string) =>
 
 const createNetworkName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+    // Cloudflare caps managed network names at 50 characters.
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 50 }));
   });
 
 const encodeConfig = (

@@ -14,7 +14,7 @@ export const MAX_NAME_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.OracleDatabase.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export { ResourceNotResolved as OracleDatabaseNotResolved };
@@ -22,16 +22,16 @@ export { ResourceNotResolved as OracleDatabaseNotResolved };
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.OracleDatabase.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.OracleDatabase.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.OracleDatabase.ResourceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   details: string | undefined;
 }> {}
@@ -287,7 +287,7 @@ export const waitUntilExists = <A, E extends { _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.OracleDatabase.ResourceNotResolved",
@@ -303,7 +303,7 @@ export const waitUntilGone = <A, E extends { _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.OracleDatabase.ResourceStillExists",
@@ -322,13 +322,13 @@ export const waitUntilReady = <A, E extends { _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !isFailedState(stateOf(value)),
       (value) =>
         new ResourceFailed({
-          name,
+          resourceName: name,
           state: stateOf(value) ?? "",
           details: detailsOf?.(value),
         }),
@@ -340,7 +340,7 @@ export const waitUntilReady = <A, E extends { _tag: string }, R>(
       },
       (value) =>
         new ResourceNotReady({
-          name,
+          resourceName: name,
           state: stateOf(value) ?? "",
         }),
     ),

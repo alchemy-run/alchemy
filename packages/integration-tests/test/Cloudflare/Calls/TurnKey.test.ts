@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as calls from "@distilled.cloud/cloudflare/calls";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -168,5 +168,18 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:calls", "live"] },
+);
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Calls.TurnKey("NoProps"));
+      expect(deployed.keyId).toBeTruthy();
+      yield* stack.destroy();
+    }),
   { tags: ["provider:cloudflare", "provider:cloudflare:calls", "live"] },
 );

@@ -1,12 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
 
@@ -30,22 +31,12 @@ const canDeleteRepos = !!process.env.GITHUB_TEST_DELETE_REPO;
 
 const getRepo = (repo: string, repoOwner: string = owner) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.get({
-            owner: repoOwner,
-            repo,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    return yield* gh(
+      Repos.get({
+        owner: repoOwner,
+        repo,
+      }),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
 test.provider.skipIf(!owner || !canDeleteRepos)(
@@ -125,7 +116,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       const afterRename = yield* getRepo(renamed);
       expect(afterRename?.id).toEqual(created.repoId);
       // GitHub keeps a permanent redirect from a renamed repository's old
-      // name, and Octokit follows the 301 — so fetching the old name returns
+      // name, and fetch follows the 301 — so fetching the old name returns
       // the SAME repository under its new name rather than a 404.
       const oldName = yield* getRepo(name);
       expect(oldName?.id).toEqual(created.repoId);

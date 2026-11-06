@@ -1,5 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -106,7 +106,7 @@ export const TensorboardsExperiment = Resource<TensorboardsExperiment>(
 export class TensorboardsExperimentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardsExperimentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -138,10 +138,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboardsExperiments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listParents = (project: string, location: string) =>
   aiplatform.listProjectsLocationsTensorboards
@@ -191,7 +191,7 @@ export const TensorboardsExperimentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const experimentId = yield* toResourceId(id, olds?.experimentId, output?.experimentId);
       const name =
@@ -199,7 +199,9 @@ export const TensorboardsExperimentProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -245,7 +247,7 @@ export const TensorboardsExperimentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TensorboardsExperimentNotResolved({ name });
+        return yield* new TensorboardsExperimentNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -281,7 +283,7 @@ export const TensorboardsExperimentProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsTensorboardsExperiments({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

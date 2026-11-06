@@ -2,11 +2,17 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
+
+export class DashboardUnexpectedResponse extends Data.TaggedError("DashboardUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DashboardName = string;
 export type DashboardArn = `arn:aws:cloudwatch::${AccountID}:dashboard/${string}`;
@@ -136,8 +142,18 @@ export interface Dashboard extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 > {}
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DashboardLookup {
+  /** The dashboard name of the existing dashboard. */
+  dashboardName: string;
+}
 
 /**
  * An Amazon CloudWatch dashboard. The `DashboardBody` is a structured,
@@ -190,6 +206,16 @@ export interface Dashboard extends Resource<
  * const body = JSON.parse(result.DashboardBody ?? "{}");
  * ```
  *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dashboardName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const existing = AWS.CloudWatch.Dashboard.lookup({ dashboardName: "my-dashboard" });
+ * ```
+ *
  * @resource
  */
 export const Dashboard = Resource<Dashboard>("AWS.CloudWatch.Dashboard");
@@ -223,7 +249,7 @@ export const DashboardProvider = () =>
           .getDashboard({
             DashboardName: dashboardName,
           })
-          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.undefined));
 
         if (!output?.DashboardName) {
           return undefined;
@@ -247,6 +273,9 @@ export const DashboardProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dashboardName: name }) {
+          return yield* readDashboard(name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.dashboardName ?? (yield* createDashboardName(id, olds ?? {}));
@@ -272,7 +301,9 @@ export const DashboardProvider = () =>
 
           const state = yield* readDashboard(name);
           if (!state) {
-            return yield* Effect.fail(new Error(`failed to read reconciled dashboard '${name}'`));
+            return yield* new DashboardUnexpectedResponse({
+              message: `failed to read reconciled dashboard '${name}'`,
+            });
           }
 
           // Dashboards do not support the generic CloudWatch tagging APIs,

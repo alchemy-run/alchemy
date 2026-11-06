@@ -2,12 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -105,7 +106,7 @@ test.provider.skipIf(!secondaryZoneId)(
       const { incoming, peer } = yield* stack.deploy(
         Effect.gen(function* () {
           const peer = yield* Cloudflare.DNS.ZoneTransferPeer("IncomingPeer", {
-            name: "alchemy-dnszt-incoming-peer",
+            name: testName("alchemy-dnszt-incoming-peer"),
             ip: "192.0.2.53",
             port: 53,
           });
@@ -128,7 +129,7 @@ test.provider.skipIf(!secondaryZoneId)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const peer = yield* Cloudflare.DNS.ZoneTransferPeer("IncomingPeer", {
-            name: "alchemy-dnszt-incoming-peer",
+            name: testName("alchemy-dnszt-incoming-peer"),
             ip: "192.0.2.53",
             port: 53,
           });

@@ -5,7 +5,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import {
   createProjectBranch,
   createProjectEndpoint,
@@ -33,7 +33,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { runPgMigrations, runSql } from "./Migrations.ts";
+import { runImports, runPgMigrations } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import { DeletionPending, type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -115,6 +115,13 @@ export type BranchProps = {
    * one-way conversion on first deploy: the old tool's applied history is
    * copied into Alchemy's table and the old table is left frozen. No
    * baselining required.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -337,14 +344,14 @@ export const BranchProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.branchId) {
         return yield* getProjectBranch({
           project_id: output.projectId,
           branch_id: output.branchId,
         }).pipe(
           Effect.flatMap(({ branch }) => hydrateBranch(output.projectId, branch, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       if (!olds?.project) return undefined;
@@ -365,6 +372,8 @@ export const BranchProvider = () =>
       const match = matches[0];
       if (!match) return undefined;
       const attrs = yield* hydrateBranch(projectId, match);
+      // The generation a replacement is replacing is ours.
+      if (attrs && attrs.branchId === previous?.branchId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -397,7 +406,7 @@ export const BranchProvider = () =>
               branch_id: output.branchId,
             }).pipe(
               Effect.map(({ branch }) => branch),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
       if (!observed) {
@@ -652,7 +661,7 @@ const hydrateBranch = (
     return attributes;
   }).pipe(
     // A branch/database/endpoint can disappear mid-enumeration — skip it.
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const rootDir = Effect.sync(() => process.cwd());
@@ -834,28 +843,4 @@ const fetchConnection = (
       pooled: true,
     });
     return { uri: direct.uri, pooled: pooled.uri };
-  });
-
-const runImports = (
-  connectionUri: Redacted.Redacted<string>,
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-  previous: Record<string, string>,
-) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runSql(connectionUri, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
   });

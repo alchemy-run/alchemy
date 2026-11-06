@@ -273,7 +273,7 @@ export const AuroraDataApi = (
       const runtime = Effect.gen(function* () {
         const context = yield* Effect.context<RuntimeContext>();
         const run = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
-          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
+          Effect.runPromiseWith(context)(effect);
         const dialect = yield* makeDataApiDialect({
           execute: (request) =>
             executeStatement(request as AWS.RDSData.ExecuteStatementRequest).pipe(
@@ -327,9 +327,7 @@ export const AuroraDataApi = (
                   ...(options?.database === undefined ? {} : { database: options.database }),
                 };
                 const run = <A>(effect: Effect.Effect<A, any, any>) =>
-                  Effect.runPromise(
-                    effect.pipe(Effect.provideContext(ambient)) as Effect.Effect<A>,
-                  );
+                  Effect.runPromiseWith(ambient)(effect as Effect.Effect<A, any, never>);
                 const dialect = yield* makeDataApiDialect({
                   execute: (request) =>
                     rdsdata

@@ -176,7 +176,7 @@ export const RulesProvider = () =>
               rules.length === 0 ? undefined : { zoneId: zone.id, rules },
             ),
             // Plan-gated zones reject the route; skip them.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

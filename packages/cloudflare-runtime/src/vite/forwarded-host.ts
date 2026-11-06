@@ -35,7 +35,7 @@ export function proxyRequestHeaders(
   proxySharedSecret: string,
 ): IncomingHttpHeaders {
   const original = new URL(target);
-  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  const protocol = firstHeaderValue(request.headers["x-forwarded-proto"])?.toLowerCase();
   original.protocol =
     protocol === "https" || protocol === "http"
       ? `${protocol}:`

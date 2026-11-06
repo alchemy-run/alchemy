@@ -1,14 +1,19 @@
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import TestService from "./fixtures/service.ts";
 import { awaitLogGroups, logGroupNamesFor, observeLogGroups } from "./logGroups.ts";
+
+// App Runner closed to new customers on 2026-04-30; accounts that weren't
+// already customers get "Account <id> can't create new App Runner services".
+// Set AWS_TEST_APPRUNNER_SERVICES=1 on an account that can still create them.
+const appRunnerServices = !!process.env.AWS_TEST_APPRUNNER_SERVICES;
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,7 +27,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // It is heavy (Docker build + ECR push + 3-5 min App Runner provisioning,
 // bills while running), so it is skipped under `--fast` and always
 // destroys what it created.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
   "deploys an Effect-native App Runner service and serves HTTP",
   (stack) =>
     Effect.gen(function* () {

@@ -55,8 +55,23 @@ export interface TableBucket extends Resource<
     type: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableBucketLookup
 > {}
+
+/**
+ * Props for {@link TableBucket.lookup}: find a table bucket this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type TableBucketLookup =
+  | {
+      /** The ARN of the existing table bucket. */
+      tableBucketArn: string;
+    }
+  | {
+      /** The name of the existing table bucket. */
+      name: string;
+    };
 
 /**
  * An Amazon S3 Tables table bucket — a purpose-built bucket for storing
@@ -89,6 +104,17 @@ export interface TableBucket extends Resource<
  *     kmsKeyArn: key.keyArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing table bucket
+ * `TableBucket.lookup` references a table bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableBucketArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table bucket
+ * ```typescript
+ * const lake = AWS.S3Tables.TableBucket.lookup({ name: "lake" });
+ * const tableBucketArn = lake.tableBucketArn;
  * ```
  *
  * @resource
@@ -129,6 +155,24 @@ export const TableBucketProvider = () =>
         type: b.type,
       }));
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const arn =
+        "tableBucketArn" in props
+          ? props.tableBucketArn
+          : (`arn:aws:s3tables:${region}:${accountId}:bucket/${props.name}` as TableBucketArn);
+      return yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
+        Effect.map((b): TableBucket["Attributes"] => ({
+          tableBucketArn: b.arn as TableBucketArn,
+          name: b.name,
+          ownerAccountId: b.ownerAccountId,
+          createdAt: b.createdAt,
+          tableBucketId: b.tableBucketId,
+          type: b.type,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId, region } = yield* AWSEnvironment.current;
       const name = output?.name ?? (yield* createBucketName(id, olds ?? {}));
@@ -144,7 +188,7 @@ export const TableBucketProvider = () =>
           tableBucketId: b.tableBucketId,
           type: b.type,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
@@ -172,7 +216,7 @@ export const TableBucketProvider = () =>
       // the deterministic ARN; the bucket may have been deleted out-of-band.
       let bucket = yield* s3tables.getTableBucket({ tableBucketARN: arn }).pipe(
         Effect.map((b) => b),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing. Tolerate a concurrent create

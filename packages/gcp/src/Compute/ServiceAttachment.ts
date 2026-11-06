@@ -416,7 +416,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, serviceAttachment: string) =>
   compute
     .getServiceAttachments({ project, region, serviceAttachment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireAttachment = (project: string, region: string, serviceAttachmentName: string) =>
   getByName(project, region, serviceAttachmentName).pipe(

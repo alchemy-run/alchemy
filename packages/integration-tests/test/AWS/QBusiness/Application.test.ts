@@ -7,8 +7,8 @@ import {
   WebExperience,
 } from "@alchemy.run/aws/QBusiness";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as qbusiness from "@distilled.cloud/aws/qbusiness";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

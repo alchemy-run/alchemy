@@ -135,7 +135,7 @@ export const CollectionsEnginesServingConfig = Resource<CollectionsEnginesServin
 export class CollectionsEnginesServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, servingConfigId: string) =>
@@ -161,7 +161,7 @@ const toId = (id: string, explicit: string | undefined, existing: string | undef
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesServingConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   config: discoveryengine.GoogleCloudDiscoveryengineV1ServingConfig,
@@ -267,7 +267,7 @@ export const CollectionsEnginesServingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesServingConfigNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

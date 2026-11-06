@@ -1,7 +1,7 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -10,12 +10,11 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/octane-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -40,7 +39,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "Octane: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

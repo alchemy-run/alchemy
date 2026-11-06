@@ -1,33 +1,17 @@
 import {
-  makeMySQLMigrationExecutor,
   runMigrations,
+  withMySqlExecutor,
   type NormalizedMigrationsInput,
+  type SqlExecutor,
   type StampedMigrationsState,
 } from "@alchemy.run/sql/Migrations";
-import { readSqlFile, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
+import { applySqlImports, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
 import * as ps from "@distilled.cloud/planetscale";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import type { Connection } from "mysql2/promise";
 
 const MIGRATION_PASSWORD_TTL_SECONDS = 600;
-
-// `mysql2` is an optional peer dependency — loaded lazily so importing the
-// Planetscale provider never requires the driver unless migrations run.
-const importMysql = () =>
-  import("mysql2/promise").catch((cause) => {
-    throw new Error(
-      "Failed to load the 'mysql2' driver. Install the optional peer dependency 'mysql2' to run Planetscale MySQL migrations.",
-      { cause },
-    );
-  });
-
-export class MySQLMigrationError extends Data.TaggedError("Planetscale::MySQLMigrationError")<{
-  message: string;
-  cause?: unknown;
-}> {}
 
 export interface MySQLMigrationTarget {
   organization: string;
@@ -47,69 +31,48 @@ export const runMySQLMigrations = (
   runMigrations({
     input,
     stamped,
-    withExecutor: (apply) =>
-      withMySQLConnection(target, (connection) => apply(makeMySQLMigrationExecutor(connection))),
+    withExecutor: (apply) => withMySQLExecutor(target, apply),
   });
 
+/**
+ * Apply `importFiles`, each once and again only when it changes. Vitess
+ * rejects drizzle-kit's `--> statement-breakpoint` markers, so statements
+ * run one at a time.
+ */
 export const runMySQLImports = (
   target: MySQLMigrationTarget,
   importFiles: ReadonlyArray<string>,
   rootDir: string,
   previous: Record<string, string>,
 ) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runMySQLSql(target, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
+  applySqlImports({
+    importFiles,
+    rootDir,
+    previous,
+    apply: (file) =>
+      withMySQLExecutor(target, (executor) =>
+        Effect.forEach(splitSqlStatements(file.sql), (statement) => executor.query(statement), {
+          discard: true,
+        }),
+      ),
   });
 
-const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
-  withMySQLConnection(target, (connection) =>
-    Effect.gen(function* () {
-      for (const statement of splitSqlStatements(sql)) {
-        yield* mysqlQuery(connection, statement);
-      }
-    }),
-  );
-
-const withMySQLConnection = <A, E, R>(
+/** A verified-TLS `mysql2` session as a short-lived admin password. */
+const withMySQLExecutor = <A, E, R>(
   target: MySQLMigrationTarget,
-  use: (connection: Connection) => Effect.Effect<A, E, R>,
+  use: (executor: SqlExecutor) => Effect.Effect<A, E, R>,
 ) =>
   withTemporaryMySQLPassword(target, (password) =>
-    Effect.acquireUseRelease(
-      Effect.tryPromise({
-        try: async () => {
-          const { createConnection } = await importMysql();
-          return createConnection({
-            host: password.host,
-            user: password.username,
-            password: Redacted.value(password.password),
-            database: target.database,
-            multipleStatements: true,
-            ssl: { rejectUnauthorized: true },
-          });
-        },
-        catch: toMigrationError,
-      }),
+    withMySqlExecutor(
+      {
+        host: password.host,
+        user: password.username,
+        password: Redacted.value(password.password),
+        database: target.database,
+        multipleStatements: true,
+        ssl: { rejectUnauthorized: true },
+      },
       use,
-      (connection) =>
-        Effect.tryPromise({
-          try: () => connection.end(),
-          catch: toMigrationError,
-        }).pipe(Effect.ignore),
     ),
   );
 
@@ -168,15 +131,3 @@ const withTemporaryMySQLPassword = <A, E, R>(
           ),
         ),
   );
-
-const mysqlQuery = (connection: Connection, sql: string) =>
-  Effect.tryPromise({
-    try: () => connection.query(sql).then(() => undefined),
-    catch: toMigrationError,
-  });
-
-const toMigrationError = (cause: unknown) =>
-  new MySQLMigrationError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    cause,
-  });

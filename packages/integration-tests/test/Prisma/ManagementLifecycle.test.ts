@@ -25,13 +25,13 @@ import type {
   SourceRepository as ApiSourceRepository,
 } from "@alchemy.run/prisma/Types";
 import { expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
-import * as Test from "alchemy/Test/Alchemy";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -1415,38 +1415,6 @@ const customDomainClient = {
               message: "not found",
             }),
           );
-    }),
-  getApp: (appId: string) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["getApp", appId]);
-      return {
-        id: appId,
-        type: "app" as const,
-        url: `https://api.prisma.test/v1/services/${appId}`,
-        name: "api",
-        region: { id: "us-east-1", name: "US East" },
-        projectId: "project-1",
-        branchId: "branch-1",
-        latestDeploymentId: null,
-        appEndpointDomain: "api.prisma.build",
-        createdAt,
-      };
-    }),
-  getBranch: (branchId: string) =>
-    Effect.succeed({
-      id: branchId,
-      type: "branch" as const,
-      url: `https://api.prisma.test/v1/branches/${branchId}`,
-      gitName: "main",
-      isDefault: true,
-      role: "production" as const,
-      createdAt,
-      updatedAt: createdAt,
-      project: {
-        id: "project-1",
-        url: "https://api.prisma.test/v1/projects/project-1",
-        name: "app",
-      },
     }),
   createAppDomain: (appId: string, input: { hostname: string }) =>
     Effect.sync(() => {

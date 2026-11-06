@@ -69,7 +69,32 @@ export interface PrefixAttributes {
   modifiedAt: string | undefined;
 }
 
-export type Prefix = Resource<TypeId, PrefixProps, PrefixAttributes, never, Providers>;
+export type Prefix = Resource<
+  TypeId,
+  PrefixProps,
+  PrefixAttributes,
+  never,
+  Providers,
+  PrefixLookup
+>;
+
+/**
+ * Props for {@link Prefix.lookup}: find a BYOIP prefix this stack doesn't
+ * manage, by its id or its CIDR.
+ */
+export type PrefixLookup =
+  | {
+      /**
+       * The id of the existing prefix.
+       */
+      prefixId: string;
+    }
+  | {
+      /**
+       * The CIDR of the existing prefix, unique per account.
+       */
+      cidr: string;
+    };
 
 /**
  * A BYOIP (Bring Your Own IP) prefix onboarded to Cloudflare's network.
@@ -105,6 +130,22 @@ export type Prefix = Resource<TypeId, PrefixProps, PrefixAttributes, never, Prov
  * **Example:** Advertise via a BGP prefix
  * ```typescript
  * const bgp = yield* Cloudflare.Addressing.BgpPrefix("advertise", {
+ *   prefixId: prefix.prefixId,
+ *   cidr: prefix.cidr,
+ *   advertised: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing prefix
+ * Prefixes are usually onboarded once, by contract. `Prefix.lookup`
+ * references one Alchemy doesn't manage (onboarded in the dashboard or by
+ * another stack), found by `prefixId` or `cidr`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Advertise an onboarded prefix
+ * ```typescript
+ * const prefix = Cloudflare.Addressing.Prefix.lookup({ cidr: "203.0.113.0/24" });
+ * yield* Cloudflare.Addressing.BgpPrefix("advertise", {
  *   prefixId: prefix.prefixId,
  *   cidr: prefix.cidr,
  *   advertised: true,
@@ -167,6 +208,14 @@ export const PrefixProvider = () =>
       );
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "prefixId" in props
+          ? yield* getPrefix(accountId, props.prefixId)
+          : yield* findByCidr(accountId, props.cidr);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -241,7 +290,7 @@ export const PrefixProvider = () =>
 const getPrefix = (accountId: string, prefixId: string) =>
   addressing
     .getPrefix({ accountId, prefixId })
-    .pipe(Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PrefixNotFound", () => Effect.undefined));
 
 /**
  * Find a prefix by exact CIDR — unique per account.

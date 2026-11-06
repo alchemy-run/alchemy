@@ -1,5 +1,5 @@
 import * as gmailpostmastertools from "@distilled.cloud/gcp/gmailpostmastertools_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -100,7 +100,7 @@ export const Domain = Resource<Domain>("GCP.GmailPostmasterTools.Domain");
 export class DomainNotResolved extends Data.TaggedError(
   "GCP.GmailPostmasterTools.DomainNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (domain: gmailpostmastertools.Domain, project: string, fallbackId?: string) => {
@@ -133,14 +133,16 @@ export const DomainProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const domainId = olds?.domainId ?? output?.domainId ?? "";
       const name = toDomainName(output?.name || domainId);
       const existing = yield* getDomain(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, domainId);
-      return output !== undefined || isAlchemyDomain(existing.name) ? attrs : Unowned(attrs);
+      return output !== undefined || isAlchemyDomain(existing.name)
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -165,7 +167,7 @@ export const DomainProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DomainNotResolved({ name });
+        return yield* new DomainNotResolved({ resourceName: name });
       }
 
       const resourceName = current.name ?? name;

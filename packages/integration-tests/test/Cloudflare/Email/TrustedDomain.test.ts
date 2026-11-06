@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -20,7 +21,7 @@ const entitled = !!process.env.CLOUDFLARE_EMAIL_SECURITY;
 
 const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
-const pattern = "alchemy-trusted.alchemy-test-2.us";
+const pattern = `${testName("alchemy-trusted")}.alchemy-test-2.us`;
 
 const findByPattern = (accountId: string) =>
   emailSecurity.listSettingTrustedDomains.items({ accountId, pattern }).pipe(

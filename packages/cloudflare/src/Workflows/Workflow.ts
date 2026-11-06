@@ -8,20 +8,27 @@ import type * as Output from "alchemy/Output";
 import { ALCHEMY_PHASE } from "alchemy/Phase";
 import type { PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { isResourceOfType, Resource } from "alchemy/Resource";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { effectClass, taggedFunction } from "alchemy/Util/effect";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
+import type { Providers } from "../Providers.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "../Workers/Worker.ts";
 import { generateWorkflowName } from "./WorkflowName.ts";
 import { type WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
+
+export class WorkflowInvalidProps extends Data.TaggedError("WorkflowInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export { WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
 
@@ -270,6 +277,13 @@ export interface WorkflowLimits {
 }
 
 /**
+ * Jurisdiction where a Workflow's instances run and store data:
+ * `"eu"` (the European Union), `"us"` (the United States), or `"fedramp"`
+ * (FedRAMP-Moderate data centers).
+ */
+export type WorkflowJurisdiction = workflows.WorkflowJurisdiction;
+
+/**
  * Props for the reference (async) form of {@link Workflow}. Used when binding
  * a Workflow class to a plain async Worker (one without an Effect runtime) via
  * the Worker's `env`. Mirrors `DurableObjectProps`.
@@ -313,6 +327,16 @@ export interface WorkflowRefProps {
    * Account-wide limit: 100 cron expressions.
    */
   schedules?: string[];
+  /**
+   * Restrict where the Workflow's instances run and store data, e.g. for
+   * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
+   *
+   * Cloudflare sets the jurisdiction when it creates the Workflow and can't
+   * change it, so changing or removing it replaces the Workflow and deletes
+   * its instances. Ignored when `scriptName` is set; set it on the Worker
+   * that hosts the Workflow. Local development ignores it.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 /**
@@ -344,6 +368,15 @@ export interface WorkflowProps {
    * Account-wide limit: 100 cron expressions.
    */
   schedules?: string[];
+  /**
+   * Restrict where the Workflow's instances run and store data, e.g. for
+   * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
+   *
+   * Cloudflare sets the jurisdiction when it creates the Workflow and can't
+   * change it, so changing or removing it replaces the Workflow and deletes
+   * its instances. Local development ignores it.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 /**
@@ -365,6 +398,8 @@ export interface WorkflowLike<Params = unknown> {
   limits?: WorkflowLimits;
   /** @internal phantom */
   schedules?: string[];
+  /** @internal phantom */
+  jurisdiction?: WorkflowJurisdiction;
   /** @internal phantom */
   Params?: Params;
 }
@@ -427,6 +462,8 @@ export type WorkflowInstanceSubscribeOptions = runtime.WorkflowInstanceSubscribe
 export interface WorkflowHandle<Input = unknown, Result = unknown> {
   Type: TypeId;
   name: string;
+  /** Account-global physical Workflow name, for a resource that starts runs through the API. */
+  workflowName: Output.Output<string> | string;
   /**
    * Start a workflow instance. Pass payload through `params`; omit `id` to let
    * Cloudflare generate an instance ID.
@@ -503,6 +540,13 @@ export interface WorkflowInstanceStatus<Result = unknown> {
 export interface WorkflowClass extends Effect.Effect<WorkflowHandle, never, WorkflowHandle> {
   /** Reference a deployed Workflow by logical ID, optionally in another stack or stage. */
   ref: typeof WorkflowResource.ref;
+  /**
+   * Find a Workflow this stack doesn't manage by its account-global
+   * `workflowName`. Its class and host script are read from Cloudflare, so
+   * binding it in a Worker's `env` needs nothing else. `Params` types the
+   * instance payload, as on the props-only form.
+   */
+  lookup<Params = unknown>(props: WorkflowResourceLookup): WorkflowLookup<Params>;
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never, E = never>(
       name: string,
@@ -638,6 +682,36 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  *     });
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Restricting data location
+ * `jurisdiction` keeps every instance's execution and stored state inside
+ * the EU, the US, or FedRAMP-Moderate data centers. Cloudflare fixes it at
+ * creation, so changing it replaces the Workflow and deletes its instances.
+ * **Example:** EU-only Workflow
+ * ```typescript
+ * export default class GdprWorkflow extends Cloudflare.Workflow<GdprWorkflow>()(
+ *   "GdprWorkflow",
+ *   { jurisdiction: "eu" },
+ *   Effect.gen(function* () {
+ *     return Effect.fn(function* (input: { userId: string }) {
+ *       return { processed: input.userId };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** EU-only Workflow on an async Worker
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     GDPR_WORKFLOW: Cloudflare.Workflow("GdprWorkflow", {
+ *       className: "GdprWorkflow",
+ *       jurisdiction: "eu",
+ *     }),
+ *   },
+ * });
  * ```
  *
  * ### Step Primitives
@@ -911,6 +985,26 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  * });
  * ```
  *
+ * ### Looking up an existing Workflow
+ * `Workflow.lookup` binds a Workflow this stack doesn't manage (hosted by
+ * another stack's Worker, or created outside Alchemy), found by its
+ * account-global `workflowName`. Its class and host script are read from
+ * Cloudflare, and `Params` types the instance payload as on the form above.
+ * It is read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Consumer Worker binds a looked-up Workflow
+ * ```typescript
+ * const consumer = yield* Cloudflare.Worker("Consumer", {
+ *   main: "./src/consumer.ts",
+ *   env: {
+ *     MY_WORKFLOW: Cloudflare.Workflow.lookup<{ value: string }>({
+ *       workflowName: "my-existing-workflow",
+ *     }),
+ *   },
+ * });
+ * type Env = Cloudflare.InferEnv<typeof consumer>; // MY_WORKFLOW: Workflow<{ value: string }>
+ * ```
+ *
  * ### Testing Workflows
  * Workflows run asynchronously, so tests start an instance and poll until it
  * reaches a terminal status. Keep polling bounded with `Effect.repeat`.
@@ -986,6 +1080,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       scriptName: refProps?.scriptName,
       limits: refProps?.limits,
       schedules: refProps?.schedules,
+      jurisdiction: refProps?.jurisdiction,
     } satisfies WorkflowLike;
   }
   const props = Effect.isEffect(second) ? undefined : (second as WorkflowProps);
@@ -999,6 +1094,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
         scriptName: props?.workflowName === undefined ? worker.workerName : undefined,
         limits: props?.limits,
         schedules: props?.schedules,
+        jurisdiction: props?.jurisdiction,
       });
       // Keep named identities resolvable for the engine's cold-adoption probe.
       if (props?.workflowName !== undefined) {
@@ -1035,6 +1131,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       const self: WorkflowHandle<any, any> = {
         Type: TypeId,
         name,
+        workflowName: props?.workflowName ?? workflow.workflowName,
         create: (options?: WorkflowInstanceCreateOptions<any>) =>
           Effect.tryPromise(() => binding.create(options)).pipe(
             Effect.map(wrapInstance),
@@ -1073,6 +1170,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
 }) as any);
 
 Workflow.ref = (id, options) => WorkflowResource.ref(id, options);
+Workflow.lookup = (props) => WorkflowResource.lookup(props);
 
 // ---------------------------------------------------------------------------
 // WorkflowResource -- manages the Cloudflare Workflows API lifecycle
@@ -1095,6 +1193,11 @@ export interface WorkflowResourceProps {
    * Pass an empty array to remove all schedules.
    */
   schedules?: string[];
+  /**
+   * Jurisdiction where instances run and store data. Fixed at creation;
+   * changing it replaces the Workflow.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 export interface WorkflowResourceAttrs {
@@ -1107,6 +1210,11 @@ export interface WorkflowResourceAttrs {
    * Cron expressions currently attached to this Workflow.
    */
   schedules: string[];
+  /**
+   * Jurisdiction where instances run and store data, or `undefined` when
+   * unrestricted.
+   */
+  jurisdiction: WorkflowJurisdiction | undefined;
 }
 
 const WorkflowResourceTypeId = "Cloudflare.Workflow";
@@ -1115,15 +1223,44 @@ export interface WorkflowResource extends Resource<
   typeof WorkflowResourceTypeId,
   WorkflowResourceProps,
   WorkflowResourceAttrs,
-  { scriptName: string }
+  { scriptName: string },
+  Providers,
+  WorkflowResourceLookup
 > {}
 
 export const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
 
+/**
+ * Props for {@link Workflow.lookup}: find a Workflow this stack doesn't
+ * manage, by its account-global name.
+ */
+export interface WorkflowResourceLookup {
+  /**
+   * The account-global name of the existing Workflow.
+   */
+  workflowName: string;
+}
+
+/**
+ * A Workflow found by {@link Workflow.lookup}. Bound in a Worker's `env`,
+ * `InferEnv` types it as the runtime `Workflow<Params>`.
+ */
+export type WorkflowLookup<Params = unknown> = WorkflowResource & {
+  /** @internal phantom */
+  readonly WorkflowParams?: Params;
+};
+
+/**
+ * A Workflow resource or {@link Workflow.lookup} result, classified by its
+ * resource type.
+ */
+export const isWorkflowResource = (value: unknown): value is WorkflowResource =>
+  isResourceOfType(value, WorkflowResourceTypeId);
+
 const getWorkflowOrUndefined = (accountId: string, workflowName: string) =>
   workflows
     .getWorkflow({ accountId, workflowName })
-    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.undefined));
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {
@@ -1135,6 +1272,20 @@ export const ProviderLive = () =>
     // persisted `providerMode` stamp differs), so the live provider never
     // sees a `dev:` id.
     stables: ["workflowId", "accountId", "workflowName"],
+    lookup: Effect.fn(function* ({ workflowName }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const wf = yield* getWorkflowOrUndefined(accountId, workflowName);
+      if (!wf) return undefined;
+      return {
+        workflowId: wf.id,
+        workflowName: wf.name,
+        className: wf.className ?? "",
+        scriptName: wf.scriptName ?? "",
+        accountId,
+        schedules: fromObservedSchedules(wf.schedules),
+        jurisdiction: wf.jurisdiction ?? undefined,
+      };
+    }),
     // Workflows are account-scoped. Enumerate every workflow in the account
     // via the paginated list API and hydrate each into the same Attributes
     // shape `reconcile` returns (id/name/className/scriptName are all on the
@@ -1155,6 +1306,7 @@ export const ProviderLive = () =>
                 scriptName: wf.scriptName ?? "",
                 accountId,
                 schedules: fromObservedSchedules(wf.schedules),
+                jurisdiction: wf.jurisdiction ?? undefined,
               })),
             ),
           ),
@@ -1188,11 +1340,20 @@ export const ProviderLive = () =>
         }
         return { action: "replace" } as const;
       }
+      // Cloudflare fixes the jurisdiction at creation. The replacement keeps
+      // the same account-global name, so the old Workflow goes first.
+      if (
+        "jurisdiction" in news &&
+        isResolved(news.jurisdiction) &&
+        news.jurisdiction !== (output?.jurisdiction ?? olds.jurisdiction)
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       if (!isResolved(newBindings) || havePropsChanged(oldBindings, newBindings)) {
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName =
         output?.workflowName ??
@@ -1212,9 +1373,15 @@ export const ProviderLive = () =>
         scriptName: workflow.scriptName,
         accountId: acct,
         schedules: fromObservedSchedules(workflow.schedules),
+        jurisdiction: workflow.jurisdiction ?? undefined,
       };
-      // Explicit names carry no ownership marker; cold reads require adoption.
-      return output === undefined && olds?.workflowName !== undefined ? Unowned(attrs) : attrs;
+      // Explicit names carry no ownership marker; cold reads require adoption,
+      // except of the generation a replacement is replacing.
+      return output === undefined &&
+        olds?.workflowName !== undefined &&
+        previous?.workflowId !== workflow.id
+        ? Unowned(attrs)
+        : attrs;
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1230,11 +1397,9 @@ export const ProviderLive = () =>
         output?.workflowName !== undefined &&
         news.workflowName !== output.workflowName
       ) {
-        return yield* Effect.fail(
-          new Error(
-            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
-          ),
-        );
+        return yield* new WorkflowInvalidProps({
+          message: `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+        });
       }
 
       const existing = yield* getWorkflowOrUndefined(acct, workflowName);
@@ -1251,6 +1416,15 @@ export const ProviderLive = () =>
           physicalName: workflowName,
         });
       }
+      // PUT keeps an existing Workflow's jurisdiction, so a mismatch can't converge.
+      if (existing !== undefined && (existing.jurisdiction ?? undefined) !== news.jurisdiction) {
+        return yield* new WorkflowInvalidProps({
+          message:
+            `Workflow '${workflowName}' has jurisdiction '${existing.jurisdiction ?? "none"}', ` +
+            `but '${news.jurisdiction ?? "none"}' was requested. Cloudflare fixes a ` +
+            "Workflow's jurisdiction at creation; use a new name or delete the Workflow first.",
+        });
+      }
       // PUT clears omitted schedules; preserve observed state unless explicitly set.
       const schedules = news.schedules ?? fromObservedSchedules(existing?.schedules);
 
@@ -1265,6 +1439,7 @@ export const ProviderLive = () =>
         scriptName,
         limits: news.limits,
         schedules: toPutSchedules(schedules),
+        jurisdiction: news.jurisdiction,
       });
       return {
         workflowId: result.id,
@@ -1273,6 +1448,7 @@ export const ProviderLive = () =>
         scriptName: result.scriptName,
         accountId: acct,
         schedules,
+        jurisdiction: result.jurisdiction ?? news.jurisdiction,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -1326,11 +1502,9 @@ export const ProviderLocal = () =>
         output?.workflowName !== undefined &&
         news.workflowName !== output.workflowName
       ) {
-        return yield* Effect.fail(
-          new Error(
-            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
-          ),
-        );
+        return yield* new WorkflowInvalidProps({
+          message: `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+        });
       }
       return {
         workflowId: output?.workflowId ?? generateLocalId(),
@@ -1342,6 +1516,7 @@ export const ProviderLocal = () =>
         scriptName,
         accountId: output?.accountId ?? accountId,
         schedules: news.schedules ?? output?.schedules ?? [],
+        jurisdiction: news.jurisdiction,
       };
     }),
     delete: Effect.fn(function* () {
@@ -1374,7 +1549,11 @@ const resolveWorkflowScriptName = (
   ];
   return scripts.length === 1
     ? Effect.succeed(scripts[0]!)
-    : Effect.fail(new Error("Workflow requires exactly one hosting Worker script"));
+    : Effect.fail(
+        new WorkflowInvalidProps({
+          message: "Workflow requires exactly one hosting Worker script",
+        }),
+      );
 };
 
 const toPutSchedules = (schedules: string[]): workflows.UpdateRequestSchedulesList =>

@@ -68,7 +68,7 @@ export const HostServiceAccountProvider = () =>
       const name = `projects/${env.project}/serviceAccounts/${email}`;
       const existing = yield* iam
         .getProjectsServiceAccounts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (existing === undefined || !isManaged(existing, env.project)) {
         return undefined;
       }
@@ -84,7 +84,7 @@ export const HostServiceAccountProvider = () =>
       const name = `projects/${env.project}/serviceAccounts/${email}`;
       const existing = yield* iam
         .getProjectsServiceAccounts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (existing === undefined) {
         return {
           name,

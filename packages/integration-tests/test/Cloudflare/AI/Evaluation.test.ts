@@ -1,19 +1,20 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const GATEWAY_ID = "alchemy-test-aigw-eval";
+const GATEWAY_ID = testName("alchemy-test-aigw-eval");
 
 class EvaluationStillExists extends Data.TaggedError("EvaluationStillExists") {}
 
@@ -52,7 +53,7 @@ test.provider(
           const gateway = yield* Cloudflare.AI.Gateway("EvalGateway", { id: GATEWAY_ID });
           const dataset = yield* Cloudflare.AI.Dataset("EvalDataset", {
             gatewayId: gateway.gatewayId,
-            name: "alchemy-test-eval-dataset",
+            name: testName("alchemy-test-eval-dataset"),
             filters: [{ key: "success", operator: "eq", value: [true] }],
           });
           const evaluation = yield* Cloudflare.AI.Evaluation("Evaluation", {
@@ -125,12 +126,12 @@ test.provider(
           const gateway = yield* Cloudflare.AI.Gateway("EvalGateway", { id: GATEWAY_ID });
           const dataset = yield* Cloudflare.AI.Dataset("EvalDataset", {
             gatewayId: gateway.gatewayId,
-            name: "alchemy-test-eval-list-dataset",
+            name: testName("alchemy-test-eval-list-dataset"),
             filters: [{ key: "success", operator: "eq", value: [true] }],
           });
           const evaluation = yield* Cloudflare.AI.Evaluation("Evaluation", {
             gatewayId: gateway.gatewayId,
-            name: "alchemy-test-eval-list",
+            name: testName("alchemy-test-eval-list"),
             datasetIds: [dataset.datasetId],
             evaluationTypeIds: typeIds,
           });
@@ -145,7 +146,7 @@ test.provider(
       expect(found).toBeDefined();
       expect(found?.accountId).toEqual(accountId);
       expect(found?.gatewayId).toEqual(GATEWAY_ID);
-      expect(found?.name).toEqual("alchemy-test-eval-list");
+      expect(found?.name).toEqual(testName("alchemy-test-eval-list"));
 
       yield* stack.destroy();
     }).pipe(logLevel),

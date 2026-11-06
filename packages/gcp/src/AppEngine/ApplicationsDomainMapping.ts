@@ -152,7 +152,7 @@ export const ApplicationsDomainMapping = Resource<ApplicationsDomainMapping>(
 export class ApplicationsDomainMappingNotResolved extends Data.TaggedError(
   "GCP.AppEngine.ApplicationsDomainMappingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -189,7 +189,7 @@ const getByDomain = (
   domain: string,
 ) =>
   domain.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getProjectsLocationsApplicationsDomainMappings({
           projectsId,
@@ -318,7 +318,7 @@ export const ApplicationsDomainMappingProvider = () =>
 
       if (current === undefined) {
         return yield* new ApplicationsDomainMappingNotResolved({
-          name: `projects/${project}/locations/${location}/applications/${applicationsId}/domainMappings/${domain}`,
+          resourceName: `projects/${project}/locations/${location}/applications/${applicationsId}/domainMappings/${domain}`,
         });
       }
 
@@ -350,7 +350,7 @@ export const ApplicationsDomainMappingProvider = () =>
           applicationsId: output.applicationsId,
           domainMappingsId: output.domain,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.applicationsId,

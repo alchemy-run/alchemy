@@ -253,7 +253,7 @@ export type Service = Resource<
 export const Service = Resource<Service>("GCP.Monitoring.Service");
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Monitoring.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export type IdentifierKind =
@@ -397,9 +397,7 @@ const identifierBody = (
 };
 
 const getByName = (name: string) =>
-  monitoring
-    .getServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  monitoring.getServices({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPages = (project: string) =>
   monitoring.listServices
@@ -528,7 +526,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

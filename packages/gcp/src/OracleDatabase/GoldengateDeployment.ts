@@ -331,10 +331,10 @@ const toAttrs = (deployment: oracle.GoldengateDeployment, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : oracle
         .getProjectsLocationsGoldengateDeployments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -481,7 +481,7 @@ export const GoldengateDeploymentProvider = () =>
             goldengateDeploymentId,
             body: toCreateBody(news, desiredLabels, displayName, odbNetwork, odbSubnet),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -489,7 +489,7 @@ export const GoldengateDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -511,7 +511,7 @@ export const GoldengateDeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("5 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

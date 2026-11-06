@@ -305,10 +305,7 @@ export const makeDevWatchProvider = <
                 yield* spec.whileReconciling!(input).pipe(
                   Effect.provide(services),
                   Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[alchemy dev] ${input.id}: reconcile side task failed`,
-                      cause,
-                    ),
+                    Effect.logWarning(`reconcile side task failed`, cause),
                   ),
                   Effect.forkScoped,
                 );
@@ -401,9 +398,7 @@ export const makeDevWatchProvider = <
         };
         const fiber = yield* spec.startWatch(ctx).pipe(
           Effect.provide(services),
-          Effect.catchCause((cause) =>
-            Effect.logWarning(`[alchemy dev] ${input.id}: watch loop exited`, cause),
-          ),
+          Effect.catchCause((cause) => Effect.logWarning(`watch loop exited`, cause)),
           Effect.forkDetach,
           Scope.provide(scope),
         );

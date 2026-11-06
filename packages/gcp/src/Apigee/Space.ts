@@ -103,7 +103,7 @@ export type Space = Resource<
 export const Space = Resource<Space>("GCP.Apigee.Space");
 
 export class SpaceNotResolved extends Data.TaggedError("GCP.Apigee.SpaceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -157,7 +157,7 @@ const toAttrs = (space: apigee.GoogleCloudApigeeV1Space, org: string) => {
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSpaces({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const SpaceProvider = () =>
   Provider.succeed(Space, {
@@ -236,7 +236,7 @@ export const SpaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SpaceNotResolved({ name });
+        return yield* new SpaceNotResolved({ resourceName: name });
       }
 
       if ((current.displayName ?? "") !== desiredDisplayName) {

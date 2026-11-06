@@ -2,14 +2,15 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -34,10 +35,10 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 // hostnames stay `pending` forever, which is fine: CRUD is still fully
 // exercisable. Each test owns a disjoint hostname so reruns and parallel
 // runs never collide (never derive names from Date.now()/random).
-const HOST_DEFAULT = "alchemy-ch-default.alchemy-saas-example.com";
-const HOST_UPDATE = "alchemy-ch-update.alchemy-saas-example.com";
-const HOST_REPLACE_A = "alchemy-ch-replace-a.alchemy-saas-example.com";
-const HOST_REPLACE_B = "alchemy-ch-replace-b.alchemy-saas-example.com";
+const HOST_DEFAULT = `${testName("alchemy-ch-default")}.alchemy-saas-example.com`;
+const HOST_UPDATE = `${testName("alchemy-ch-update")}.alchemy-saas-example.com`;
+const HOST_REPLACE_A = `${testName("alchemy-ch-replace-a")}.alchemy-saas-example.com`;
+const HOST_REPLACE_B = `${testName("alchemy-ch-replace-b")}.alchemy-saas-example.com`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

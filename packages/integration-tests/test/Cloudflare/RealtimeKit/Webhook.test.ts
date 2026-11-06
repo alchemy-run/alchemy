@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -55,8 +56,8 @@ const expectGone = (accountId: string, appId: string, webhookId: string) =>
 // same app. RealtimeKit enforces a unique webhook url per app, so two suites
 // sharing a url race to a 409 (a shared name alone is not enough to collide).
 const APP_NAME = "alchemy-rtk-test-app";
-const LIFECYCLE_WEBHOOK_NAME = "alchemy-rtk-test-webhook-lifecycle";
-const LIST_WEBHOOK_NAME = "alchemy-rtk-test-webhook-list";
+const LIFECYCLE_WEBHOOK_NAME = testName("alchemy-rtk-test-webhook-lifecycle");
+const LIST_WEBHOOK_NAME = testName("alchemy-rtk-test-webhook-list");
 const LIFECYCLE_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-lifecycle";
 const LIST_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-list";
 

@@ -109,7 +109,7 @@ const toAttrs = (item: StripeRadarValueListItem): RadarValueListItemAttributes =
 const isMissing = isMissingStripeResource;
 
 const getById = (item: string) =>
-  GetRadarValueListItem({ item }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  GetRadarValueListItem({ item }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listItems = Effect.fn(function* (valueList: string) {
   const items: StripeRadarValueListItem[] = [];
@@ -119,7 +119,7 @@ const listItems = Effect.fn(function* (valueList: string) {
       value_list: valueList,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -144,7 +144,7 @@ const findByValue = Effect.fn(function* (valueList: string, value: string) {
       value,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }

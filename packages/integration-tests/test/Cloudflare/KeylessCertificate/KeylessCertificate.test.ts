@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as keylessCertificates from "@distilled.cloud/cloudflare/keyless-certificates";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { CERT_1, CERT_2 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -114,7 +115,7 @@ test.provider(
         .createKeylessCertificate({
           zoneId,
           certificate: CERT_1,
-          host: `keyless.${zoneName}`,
+          host: `${testName("keyless")}.${zoneName}`,
           port: 24008,
           name: "alchemy-keyless-entitlement-probe",
         })
@@ -189,9 +190,8 @@ test.provider.skipIf(!enterpriseZoneId)(
         Cloudflare.KeylessCertificate.KeylessCertificate("ListKeyless", {
           zoneId,
           certificate: CERT_1,
-          host: `keyless.${zoneName}`,
+          host: `${testName("keyless")}.${zoneName}`,
           port: 24008,
-          name: "alchemy-keyless-list",
         }),
       );
 
@@ -229,23 +229,23 @@ test.provider.skipIf(!enterpriseZoneId)(
         Cloudflare.KeylessCertificate.KeylessCertificate("Keyless", {
           zoneId,
           certificate: CERT_1,
-          host: `keyless.${zoneName}`,
+          host: `${testName("keyless")}.${zoneName}`,
           port: 24008,
-          name: "alchemy-keyless-lifecycle",
+          name: testName("alchemy-keyless-lifecycle"),
         }),
       );
 
       expect(created.keylessCertificateId).toBeDefined();
       expect(created.zoneId).toEqual(zoneId);
-      expect(created.name).toEqual("alchemy-keyless-lifecycle");
-      expect(created.host).toEqual(`keyless.${zoneName}`);
+      expect(created.name).toEqual(testName("alchemy-keyless-lifecycle"));
+      expect(created.host).toEqual(`${testName("keyless")}.${zoneName}`);
       expect(created.port).toEqual(24008);
       expect(created.status).toEqual("active");
 
       // Out-of-band verify against the live API.
       const live = yield* getKeyless(zoneId, created.keylessCertificateId);
       expect(live.id).toEqual(created.keylessCertificateId);
-      expect(live.host).toEqual(`keyless.${zoneName}`);
+      expect(live.host).toEqual(`${testName("keyless")}.${zoneName}`);
       expect(live.port).toEqual(24008);
 
       // Update mutable props in place — same identifier.
@@ -253,20 +253,20 @@ test.provider.skipIf(!enterpriseZoneId)(
         Cloudflare.KeylessCertificate.KeylessCertificate("Keyless", {
           zoneId,
           certificate: CERT_1,
-          host: `keyless2.${zoneName}`,
+          host: `${testName("keyless2")}.${zoneName}`,
           port: 24009,
-          name: "alchemy-keyless-lifecycle-v2",
+          name: testName("alchemy-keyless-lifecycle-v2"),
           enabled: false,
         }),
       );
       expect(updated.keylessCertificateId).toEqual(created.keylessCertificateId);
-      expect(updated.host).toEqual(`keyless2.${zoneName}`);
+      expect(updated.host).toEqual(`${testName("keyless2")}.${zoneName}`);
       expect(updated.port).toEqual(24009);
-      expect(updated.name).toEqual("alchemy-keyless-lifecycle-v2");
+      expect(updated.name).toEqual(testName("alchemy-keyless-lifecycle-v2"));
       expect(updated.enabled).toEqual(false);
 
       const liveUpdated = yield* getKeyless(zoneId, updated.keylessCertificateId);
-      expect(liveUpdated.host).toEqual(`keyless2.${zoneName}`);
+      expect(liveUpdated.host).toEqual(`${testName("keyless2")}.${zoneName}`);
       expect(liveUpdated.port).toEqual(24009);
       expect(liveUpdated.enabled).toEqual(false);
 
@@ -276,9 +276,9 @@ test.provider.skipIf(!enterpriseZoneId)(
         Cloudflare.KeylessCertificate.KeylessCertificate("Keyless", {
           zoneId,
           certificate: CERT_2,
-          host: `keyless2.${zoneName}`,
+          host: `${testName("keyless2")}.${zoneName}`,
           port: 24009,
-          name: "alchemy-keyless-lifecycle-v2",
+          name: testName("alchemy-keyless-lifecycle-v2"),
           enabled: false,
         }),
       );

@@ -1,6 +1,6 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { bodyContaining } from "./Fixture.ts";

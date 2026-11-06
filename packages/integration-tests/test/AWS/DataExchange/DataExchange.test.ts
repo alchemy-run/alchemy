@@ -2,8 +2,8 @@ import * as AWS from "@alchemy.run/aws";
 import { DataSet, EventAction, Revision } from "@alchemy.run/aws/DataExchange";
 import { toTagRecord } from "@alchemy.run/aws/DataExchange/internal";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dataexchange from "@distilled.cloud/aws/dataexchange";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

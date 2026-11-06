@@ -2,16 +2,17 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -25,10 +26,10 @@ const main = pathe.resolve(import.meta.dirname, "fixtures", "route-worker.ts");
 // subdomain so reruns and parallel runs never collide, and the same
 // pattern is reused on every run (never derive physical names from
 // Date.now()/random).
-const PATTERN_DEFAULT = `alchemy-route-default.${zoneName}/*`;
-const PATTERN_UPDATE_V1 = `alchemy-route-update.${zoneName}/*`;
-const PATTERN_UPDATE_V2 = `alchemy-route-update.${zoneName}/api/*`;
-const PATTERN_ADOPT = `alchemy-route-adopt.${zoneName}/*`;
+const PATTERN_DEFAULT = `${testName("alchemy-route-default")}.${zoneName}/*`;
+const PATTERN_UPDATE_V1 = `${testName("alchemy-route-update")}.${zoneName}/*`;
+const PATTERN_UPDATE_V2 = `${testName("alchemy-route-update")}.${zoneName}/api/*`;
+const PATTERN_ADOPT = `${testName("alchemy-route-adopt")}.${zoneName}/*`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -251,7 +252,7 @@ test.provider(
   },
 );
 
-const PATTERN_LIST = `alchemy-route-list.${zoneName}/*`;
+const PATTERN_LIST = `${testName("alchemy-route-list")}.${zoneName}/*`;
 
 // Canonical `list()` test (zone-scoped collection): routes have no account-
 // wide enumeration API, so `list()` fans out over every zone via

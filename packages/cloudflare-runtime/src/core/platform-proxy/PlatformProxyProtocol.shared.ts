@@ -87,7 +87,7 @@ export type EncodedValue =
       readonly body?: { readonly base64: string };
     };
 
-export type BytesKind = "arraybuffer" | "uint8array" | string;
+export type BytesKind = string;
 
 export interface EncodedChainSegment {
   readonly method: string;

@@ -110,7 +110,7 @@ export const NodesNode = Resource<NodesNode>("GCP.SasPortal.NodesNode");
 
 export class NodesNodeNotResolved extends Data.TaggedError("GCP.SasPortal.NodesNodeNotResolved")<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (node: sasportal.SasPortalNode, parent: string, project: string) => {
@@ -216,7 +216,7 @@ export const NodesNodeProvider = () =>
       if (current === undefined) {
         return yield* new NodesNodeNotResolved({
           parent,
-          name: news.name ?? output?.name ?? displayName,
+          resourceName: news.name ?? output?.name ?? displayName,
         });
       }
 

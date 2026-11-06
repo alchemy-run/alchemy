@@ -6,10 +6,10 @@ import {
   ResourcePolicy,
 } from "@alchemy.run/aws/RUM";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rum from "@distilled.cloud/aws/rum";
 import * as sts from "@distilled.cloud/aws/sts";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 

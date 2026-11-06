@@ -34,18 +34,22 @@ enableCompileCache();
 // distilled's lazy service stubs: with the `distilled-lazy` export condition
 // a service module resolves to a stub that loads each operation on first
 // use, so importing whole providers (as a stack does) costs a fraction of
-// the heap. Only this process opts in. Bundles never see the condition: a
-// stub `require`s its full module at runtime, which no bundle contains.
-// Installed before anything imports a provider.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (!specifier.startsWith("@distilled.cloud/")) return nextResolve(specifier, context);
-    return nextResolve(specifier, {
-      ...context,
-      conditions: [...context.conditions, "distilled-lazy"],
-    });
-  },
-});
+// the heap. Opt-in: `alchemy --fast-distilled` (bin/cli.js turns the flag
+// into `ALCHEMY_FAST_DISTILLED=1`, which child processes inherit), or the
+// env var directly. Bundles never see the condition: a stub `require`s its
+// full module at runtime, which no bundle contains. Installed before
+// anything imports a provider.
+if (process.env.ALCHEMY_FAST_DISTILLED === "1") {
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (!specifier.startsWith("@distilled.cloud/")) return nextResolve(specifier, context);
+      return nextResolve(specifier, {
+        ...context,
+        conditions: [...context.conditions, "distilled-lazy"],
+      });
+    },
+  });
+}
 
 const { registerOxc } = await import("@alchemy.run/node-utils/register-oxc");
 

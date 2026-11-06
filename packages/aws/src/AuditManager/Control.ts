@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord, unredact } from "./internal.ts";
+
+export class ControlUnexpectedResponse extends Data.TaggedError("ControlUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The keyword used to search evidence for a control mapping source.
@@ -124,8 +130,18 @@ export interface Control extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ControlLookup
 > {}
+
+/**
+ * Props for {@link Control.lookup}: find a control this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ControlLookup {
+  /** The id of the existing control. */
+  controlId: string;
+}
 
 /**
  * A custom control in AWS Audit Manager — a compliance requirement paired
@@ -168,6 +184,16 @@ export interface Control extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing control
+ * `Control.lookup` references a control Alchemy doesn't manage (created in the
+ * console or by another stack), found by `controlId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing control
+ * ```typescript
+ * const existing = AWS.AuditManager.Control.lookup({ controlId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Control = Resource<Control>("AWS.AuditManager.Control");
@@ -187,7 +213,7 @@ const toAttributes = (control: auditmanager.Control): Control["Attributes"] => (
 const readControlById = Effect.fn(function* (controlId: string) {
   const response = yield* auditmanager
     .getControl({ controlId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.control;
 });
 
@@ -246,6 +272,12 @@ export const ControlProvider = () =>
               control === undefined ? [] : [toAttributes(control)],
             );
           }),
+        lookup: Effect.fn(function* ({ controlId }) {
+          const control = yield* readControlById(controlId);
+          if (!control) return undefined;
+          const attrs = toAttributes(control);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const control = output?.controlId
             ? yield* readControlById(output.controlId)
@@ -278,9 +310,9 @@ export const ControlProvider = () =>
             });
             control = created.control;
             if (!control?.id) {
-              return yield* Effect.fail(
-                new Error(`CreateControl for '${name}' returned no control`),
-              );
+              return yield* new ControlUnexpectedResponse({
+                message: `CreateControl for '${name}' returned no control`,
+              });
             }
             yield* session.note(`Created control ${name} (${control.id})`);
           }

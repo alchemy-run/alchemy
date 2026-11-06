@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -199,7 +199,7 @@ export const DataStoresControl = Resource<DataStoresControl>(
 export class DataStoresControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -286,10 +286,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresControls({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresControlProvider = () =>
   Provider.succeed(DataStoresControl, {
@@ -339,7 +339,7 @@ export const DataStoresControlProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const controlId = yield* toPhysical(id, olds?.controlId, output?.controlId, controlIdOf);
       const parent = olds?.dataStore
@@ -350,7 +350,7 @@ export const DataStoresControlProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -374,7 +374,7 @@ export const DataStoresControlProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresControlNotResolved({ name });
+        return yield* new DataStoresControlNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, displayName);

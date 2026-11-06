@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as gamesConfiguration from "@distilled.cloud/gcp/gamesConfiguration_v1configuration";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { applicationId, logLevel, missingTag, probeApplicationId } from "./common.ts";

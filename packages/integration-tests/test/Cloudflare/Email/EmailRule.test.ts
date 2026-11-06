@@ -3,17 +3,18 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { CatchAllRuleNotSupported } from "@alchemy.run/cloudflare/Email/Rule";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { emailRoutingScoped } from "./scope.ts";
+import { testName } from "../../names.ts";
+import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -115,50 +116,53 @@ describe.sequential.skipIf(!emailRoutingScoped)(
     // paginates each zone's rules (skipping zones without Email Routing enabled).
     // Deploy a rule on the standing test zone, then assert it appears in the
     // exhaustively-paginated result.
-    test.provider("list enumerates the deployed email rule across all zones", (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+    test.provider(
+      "list enumerates the deployed email rule across all zones",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        yield* enableRouting(zoneId);
+          yield* stack.destroy();
+          yield* enableRouting(zoneId);
 
-        const rule = yield* stack.deploy(
-          Effect.gen(function* () {
-            const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
-            return yield* Cloudflare.Email.Rule("ListRule", {
-              zone: { zoneId: routing.zoneId },
-              name: "alchemy list test",
-              matchers: [{ type: "literal", field: "to", value: "list@alchemy-test-2.us" }],
-              actions: [{ type: "drop" }],
-            });
-          }),
-        );
+          const rule = yield* stack.deploy(
+            Effect.gen(function* () {
+              const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
+              return yield* Cloudflare.Email.Rule("ListRule", {
+                zone: { zoneId: routing.zoneId },
+                name: testName("alchemy list test"),
+                matchers: [{ type: "literal", field: "to", value: "list@alchemy-test-2.us" }],
+                actions: [{ type: "drop" }],
+              });
+            }),
+          );
 
-        expect(rule.zoneId).toEqual(zoneId);
-        expect(rule.ruleId).not.toEqual("");
+          expect(rule.zoneId).toEqual(zoneId);
+          expect(rule.ruleId).not.toEqual("");
 
-        const provider = yield* Provider.findProvider(Cloudflare.Email.Rule);
-        // The freshly-minted scoped token propagates eventually-consistently,
-        // so the account-wide enumeration intermittently 401s (`Unauthorized`,
-        // code 10000) or 403s (`Forbidden`). Both are transient here — ride
-        // out the blip like every other out-of-band call in this suite.
-        const all = yield* provider.list().pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
+          const provider = yield* Provider.findProvider(Cloudflare.Email.Rule);
+          // The freshly-minted scoped token propagates eventually-consistently,
+          // so the account-wide enumeration intermittently 401s (`Unauthorized`,
+          // code 10000) or 403s (`Forbidden`). Both are transient here — ride
+          // out the blip like every other out-of-band call in this suite.
+          const all = yield* provider.list().pipe(
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+          );
 
-        const row = all.find((r) => r.ruleId === rule.ruleId);
-        expect(row).toBeDefined();
-        expect(row!.zoneId).toEqual(zoneId);
-        expect(row!.name).toEqual("alchemy list test");
-        expect(Array.isArray(row!.matchers)).toBe(true);
-        expect(row!.actions).toEqual([{ type: "drop" }]);
+          const row = all.find((r) => r.ruleId === rule.ruleId);
+          expect(row).toBeDefined();
+          expect(row!.zoneId).toEqual(zoneId);
+          expect(row!.name).toEqual(testName("alchemy list test"));
+          expect(Array.isArray(row!.matchers)).toBe(true);
+          expect(row!.actions).toEqual([{ type: "drop" }]);
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { exclusive: EMAIL_ROUTING_ZONE },
     );
 
     // #413: a sole `{ type: "all" }` matcher is the zone catch-all, which
@@ -200,6 +204,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
 
           yield* stack.destroy();
         }).pipe(logLevel),
+      { exclusive: EMAIL_ROUTING_ZONE },
     );
 
     // A pre-existing non-catch-all rule with identical matchers must be
@@ -218,7 +223,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const pre = yield* rideOutAuth(
             emailRouting.createRule({
               zoneId,
-              name: "alchemy adopt 413",
+              name: testName("alchemy adopt 413"),
               matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
               actions: [{ type: "drop" }],
               enabled: true,
@@ -231,7 +236,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
             .deploy(
               Cloudflare.Email.Rule("AdoptRule", {
                 zone: zoneName,
-                name: "alchemy adopt 413",
+                name: testName("alchemy adopt 413"),
                 matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
                 actions: [{ type: "drop" }],
               }),
@@ -245,13 +250,13 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const adopted = yield* stack.deploy(
             Cloudflare.Email.Rule("AdoptRule", {
               zone: zoneName,
-              name: "alchemy adopt 413 v2",
+              name: testName("alchemy adopt 413 v2"),
               matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
               actions: [{ type: "drop" }],
             }).pipe(adopt(true)),
           );
           expect(adopted.ruleId).toEqual(pre.id);
-          expect(adopted.name).toEqual("alchemy adopt 413 v2");
+          expect(adopted.name).toEqual(testName("alchemy adopt 413 v2"));
           expect(adopted.matchers).toEqual([{ type: "literal", field: "to", value: ADOPT_TO }]);
 
           const live = yield* rideOutAuth(
@@ -261,14 +266,14 @@ describe.sequential.skipIf(!emailRoutingScoped)(
             }),
           );
           expect(live.id).toEqual(pre.id);
-          expect(live.name).toEqual("alchemy adopt 413 v2");
+          expect(live.name).toEqual(testName("alchemy adopt 413 v2"));
 
           yield* stack.destroy();
 
           const gone = yield* findRuleByTo(zoneId, ADOPT_TO);
           expect(gone).toBeUndefined();
         }).pipe(logLevel),
-      { timeout: 180_000 },
+      { timeout: 180_000, exclusive: EMAIL_ROUTING_ZONE },
     );
   },
 );

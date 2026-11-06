@@ -4,8 +4,8 @@ import {
   ApplicationCloudWatchLoggingOption,
 } from "@alchemy.run/aws/KinesisAnalyticsV2";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

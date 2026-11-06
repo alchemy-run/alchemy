@@ -227,7 +227,7 @@ const getByName = (
       instanceGroupManager,
       resizeRequest,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (
   project: string,
@@ -386,7 +386,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, zone, instanceGroupManager, resizeRequestName);
       }
@@ -424,9 +424,9 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
-              Conflict: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
+              Conflict: () => Effect.undefined,
             }),
           );
         if (cancelled !== undefined) {
@@ -456,7 +456,7 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitZoneOperation(env.project, zone, operation).pipe(

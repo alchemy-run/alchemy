@@ -95,6 +95,7 @@ reason the platform forces. References:
 | One operation waiter | `rg -c 'waitFor\w*Operation\|pollOperation' src/<P>` | one definition in a shared module, many call sites |
 | Realistic wait budgets | read each budget against the provider's documented create time | minutes for databases, clusters, environments; never a test-style 10 × 5s |
 | Ready before return | read each `reconcile` | returns after the API reports ready, not after the create call |
+| SQL migrations | for each resource hosting a SQL schema, `rg -n 'runMigrations' src/<P>` | a `migrations` prop driven by `@alchemy.run/sql/Migrations` (see **SQL database migrations** in `AGENTS.md`), with a live test that adds a file and redeploys |
 | Identity change replaces | for each user-chosen name/id prop, read `diff` | `replace`; a rename test proves the old one is deleted |
 | Ownership markers | `rg -n 'alchemy' src/<P> \| rg -v 'label\|tag\|import'` | markers only in labels/tags, never in user-visible fields |
 | Copied helpers | `rg -c 'const (isNotFound\|isMissing\|ignoreMissing\|jsonEqual)' src/<P>` | one shared copy each |
@@ -105,7 +106,8 @@ reason the platform forces. References:
 | Check | How | Expect |
 | --- | --- | --- |
 | Bind, not host.bind | `rg -n 'host\.bind\(' src/<P>` and `rg -ln 'Bindings\.Bind' src/<P>` | bindings call `<P>Bindings.Bind`; no direct `host.bind` and no allowlist of host types |
-| Foreign hosts | read `<P>Bindings.ts` | a non-native host gets a created identity + key bound into its env; `withCredentials` reads it at runtime |
+| Foreign hosts | read `<P>Bindings.ts` | a host whose platform signs identity tokens (Cloud Run, Lambda/ECS/EC2, Fly Services) federates with no key; only a host with no platform identity gets a created identity + key bound into its env; `withCredentials` reads it at runtime |
+| Keys are the last resort | `rg -n 'AccessKey\|ServiceAccountKey\|makeRandom\|Random(' src/<P>` in bindings and runtimes | every created key or shared token is for a host or caller whose platform signs nothing, and the JSDoc says so; runtime-to-runtime calls authorize the caller by a platform-signed identity where one exists |
 | Other providers' types | `rg -n '"(AWS\|Cloudflare\|GCP\|Azure\|Fly\|Hetzner\|Railway)\.[A-Z]' src/<P>` minus `<P>`'s own prefix | 0; host access goes through `RuntimeContext` and core host services |
 | Deploy-only reads | `rg -n 'Environment\.current' src/<P>` in binding files | every hit inside the `!globalThis.__ALCHEMY_RUNTIME__` block |
 | Native bundles fold | `rg -ln 'HostBundle' src/<P>` | applied by every host bundler the provider owns |

@@ -263,7 +263,7 @@ const getRecipient = (accountId: string, shareId: string, recipientId: string) =
     Effect.map((recipient): ObservedRecipient | undefined =>
       recipient.associationStatus === "disassociated" ? undefined : recipient,
     ),
-    Effect.catchTag("ShareRecipientNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareRecipientNotFound", () => Effect.undefined),
   );
 
 /**
@@ -275,7 +275,7 @@ const findRecipient = (accountId: string, shareId: string, target: string) =>
     Stream.filter((r) => r.accountId === target && r.associationStatus !== "disassociated"),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

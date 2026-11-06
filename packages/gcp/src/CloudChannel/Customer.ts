@@ -177,7 +177,7 @@ export type Customer = Resource<
 export const Customer = Resource<Customer>("GCP.CloudChannel.Customer");
 
 export class CustomerNotResolved extends Data.TaggedError("GCP.CloudChannel.CustomerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const CustomerProvider = () =>
@@ -248,7 +248,7 @@ export const CustomerProvider = () =>
 
       if (current === undefined) {
         return yield* new CustomerNotResolved({
-          name: name || `${parent}/customers/${domain}`,
+          resourceName: name || `${parent}/customers/${domain}`,
         });
       }
 

@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccountConfiguration } from "@alchemy.run/aws/ACM/AccountConfiguration";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/aws/acm";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

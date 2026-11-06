@@ -1,15 +1,12 @@
+import * as Pulls from "@distilled.cloud/github/pulls";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { ListPullRequestFiles, type ListPullRequestFilesRequest } from "./ListPullRequestFiles.ts";
 
 export const listPullRequestFilesOperation = BindingHttp.operation(
   "pulls.listFiles",
-  (octokit, repo) => (request: ListPullRequestFilesRequest) =>
-    octokit.rest.pulls.listFiles({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: ListPullRequestFilesRequest) =>
+    Pulls.listFiles({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

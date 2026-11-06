@@ -132,24 +132,22 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                   },
                 }
               : {}),
-            optimizeDeps: {
-              // (Node.js built-ins are excluded from pre-bundling for every
-              // Worker environment by the options plugin.)
-              ...(this.meta.rolldownVersion
-                ? {
-                    rolldownOptions: {
-                      plugins: [
-                        // In Vite 8, `require` calls are not automatically replaced when
-                        // the format is ESM and `platform` is `neutral`.
-                        esmExternalRequirePlugin({
-                          external: [NODE_BUILTIN_MODULES_REGEXP],
-                          skipDuplicateCheck: true,
-                        }),
-                      ],
-                    },
-                  }
-                : {}),
-            },
+            // (Node.js built-ins are excluded from pre-bundling for every
+            // Worker environment by the options plugin.)
+            optimizeDeps: this.meta.rolldownVersion
+              ? {
+                  rolldownOptions: {
+                    plugins: [
+                      // In Vite 8, `require` calls are not automatically replaced when
+                      // the format is ESM and `platform` is `neutral`.
+                      esmExternalRequirePlugin({
+                        external: [NODE_BUILTIN_MODULES_REGEXP],
+                        skipDuplicateCheck: true,
+                      }),
+                    ],
+                  },
+                }
+              : {},
           };
         },
         async configureServer(server) {

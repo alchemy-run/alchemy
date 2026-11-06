@@ -103,7 +103,7 @@ export const ExportJobProvider = () =>
           .getSearchResultExportJob({
             ExportJobIdentifier: exportJobIdentifier,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (

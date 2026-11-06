@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -189,7 +189,7 @@ export const QaScorecardsRevisionsQaQuestion = Resource<QaScorecardsRevisionsQaQ
 export class QaScorecardsRevisionsQaQuestionNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardsRevisionsQaQuestionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, qaQuestionId: string) =>
@@ -248,10 +248,10 @@ const toAttrs = (question: cci.GoogleCloudContactcenterinsightsV1QaQuestion, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaScorecardsRevisionsQaQuestions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRevisions = (parent: string) =>
   cci.listProjectsLocationsQaScorecardsRevisions.pages({ parent, pageSize: 100 }).pipe(
@@ -294,7 +294,7 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const qaQuestionId = yield* toResourceId(id, olds?.qaQuestionId, output?.qaQuestionId);
       const name =
@@ -302,7 +302,9 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.answerInstructions)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.answerInstructions))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -359,7 +361,7 @@ export const QaScorecardsRevisionsQaQuestionProvider = () =>
 
       if (current === undefined) {
         return yield* new QaScorecardsRevisionsQaQuestionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -101,7 +102,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
 
       const onramp = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.OnRamp("Ramp", {
-          name: "alchemy-mcn-onramp",
+          name: testName("alchemy-mcn-onramp"),
           cloudType: "AWS",
           type: "OnrampTypeSingle",
           region: vpcRegion!,
@@ -115,18 +116,18 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
 
       expect(onramp.onRampId).toBeDefined();
       expect(onramp.accountId).toEqual(accountId);
-      expect(onramp.name).toEqual("alchemy-mcn-onramp");
+      expect(onramp.name).toEqual(testName("alchemy-mcn-onramp"));
       expect(onramp.cloudType).toEqual("AWS");
       expect(onramp.type).toEqual("OnrampTypeSingle");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getOnRamp(accountId, onramp.onRampId);
-      expect(live.name).toEqual("alchemy-mcn-onramp");
+      expect(live.name).toEqual(testName("alchemy-mcn-onramp"));
 
       // Update mutable props in place — same onRampId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.OnRamp("Ramp", {
-          name: "alchemy-mcn-onramp-v2",
+          name: testName("alchemy-mcn-onramp-v2"),
           cloudType: "AWS",
           type: "OnrampTypeSingle",
           region: vpcRegion!,
@@ -139,7 +140,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       );
 
       expect(updated.onRampId).toEqual(onramp.onRampId);
-      expect(updated.name).toEqual("alchemy-mcn-onramp-v2");
+      expect(updated.name).toEqual(testName("alchemy-mcn-onramp-v2"));
       expect(updated.installRoutesInMagicWan).toBe(true);
       expect(updated.description).toEqual("alchemy on-ramp test v2");
 
@@ -195,7 +196,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
 
       const onramp = yield* stack.deploy(
         Cloudflare.MagicCloudNetworking.OnRamp("ListRamp", {
-          name: "alchemy-mcn-list-onramp",
+          name: testName("alchemy-mcn-list-onramp"),
           cloudType: "AWS",
           type: "OnrampTypeSingle",
           region: vpcRegion!,
@@ -210,7 +211,7 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       const all = yield* provider.list();
 
       expect(all.some((x) => x.onRampId === onramp.onRampId)).toBe(true);
-      expect(all.some((x) => x.name === "alchemy-mcn-list-onramp")).toBe(true);
+      expect(all.some((x) => x.name === testName("alchemy-mcn-list-onramp"))).toBe(true);
 
       yield* stack.destroy();
 

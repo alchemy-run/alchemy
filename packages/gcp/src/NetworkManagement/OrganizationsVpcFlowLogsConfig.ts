@@ -325,7 +325,7 @@ const toAttrs = (config: networkmanagement.VpcFlowLogsConfig) => {
 const getByName = (name: string) =>
   networkmanagement
     .getOrganizationsLocationsVpcFlowLogsConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (organization: string) =>
   collectPages(
@@ -472,7 +472,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -539,7 +539,7 @@ export const OrganizationsVpcFlowLogsConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -66,8 +66,20 @@ export interface CodeInterpreter extends Resource<
      * Current status of the code interpreter (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  CodeInterpreterLookup
 > {}
+
+/**
+ * Props for {@link CodeInterpreter.lookup}: find a code interpreter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CodeInterpreterLookup {
+  /** The id of the existing code interpreter. */
+  codeInterpreterId: string;
+}
 
 /**
  * A custom Amazon Bedrock AgentCore Code Interpreter — an isolated sandbox
@@ -116,6 +128,16 @@ export interface CodeInterpreter extends Resource<
  * };
  * ```
  *
+ * ### Looking up an existing code interpreter
+ * `CodeInterpreter.lookup` references a code interpreter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `codeInterpreterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing code interpreter
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.CodeInterpreter.lookup({ codeInterpreterId: "..." });
+ * ```
+ *
  * @resource
  */
 export const CodeInterpreter = Resource<CodeInterpreter>("AWS.BedrockAgentCore.CodeInterpreter");
@@ -136,7 +158,7 @@ export const CodeInterpreterProvider = () =>
       const getLiveOrUndefined = Effect.fn(function* (codeInterpreterId: string) {
         const found = yield* control
           .getCodeInterpreter({ codeInterpreterId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return found === undefined || found.status === "DELETED" || found.status === "DELETING"
           ? undefined
           : found;
@@ -175,6 +197,13 @@ export const CodeInterpreterProvider = () =>
             );
             return hydrated.filter((c) => c !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ codeInterpreterId }) {
+          const ci = yield* getLiveOrUndefined(codeInterpreterId);
+          if (ci === undefined) return undefined;
+          const attrs = toAttributes(ci);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const ci = output?.codeInterpreterId
@@ -233,7 +262,7 @@ export const CodeInterpreterProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             ci =
               created === undefined
@@ -266,7 +295,7 @@ export const CodeInterpreterProvider = () =>
             })
             .pipe(
               retryWhileConflict,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           // Deletion completes quickly (soft-delete to DELETED); wait until
           // it is out of the live set so a re-create of the same name works.

@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -136,7 +136,7 @@ export const EnvironmentsApisRevisionsDebugsession =
 export class EnvironmentsApisRevisionsDebugsessionNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsApisRevisionsDebugsessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const revisionParent = (
@@ -191,26 +191,12 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : missingToUndefined(
         apigee.getOrganizationsEnvironmentsApisRevisionsDebugsessions({
           name,
         }),
       );
-
-const listAtRevision = (parent: string) =>
-  parent.length === 0
-    ? Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[])
-    : apigee.listOrganizationsEnvironmentsApisRevisionsDebugsessions
-        .pages({ parent, pageSize: 100 })
-        .pipe(
-          Stream.flatMap((page) => Stream.fromIterable(page.sessions ?? [])),
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-            Effect.succeed([] as apigee.GoogleCloudApigeeV1Session[]),
-          ),
-        );
 
 const listOrgApis = (organizationId: string) =>
   emptyOnMissing(
@@ -270,7 +256,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
         olds?.organization ?? output?.organizationId,
@@ -291,7 +277,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
       const attrs = toAttrs(existing, organizationId, environmentId, api, revision);
       return output !== undefined || isAlchemySessionId(attrs.debugsessionId)
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -380,7 +366,7 @@ export const EnvironmentsApisRevisionsDebugsessionProvider = () =>
 
       if (current === undefined) {
         return yield* new EnvironmentsApisRevisionsDebugsessionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

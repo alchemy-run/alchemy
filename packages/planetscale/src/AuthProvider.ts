@@ -406,6 +406,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       profileName: string,
       config: PlanetscaleAuthConfig,
       updateConfig?: (config: PlanetscaleAuthConfig) => Effect.Effect<void, AuthError>,
+      reload?: Effect.Effect<PlanetscaleAuthConfig, AuthError>,
     ) =>
       Match.value(config).pipe(
         Match.when({ method: "stored" }, (stored) => Effect.succeed(stored)),
@@ -422,23 +423,50 @@ export const PlanetscaleAuth = AuthProviderLayer<
             if (!OAuthClient.usesCurrentClient(credentials)) {
               return yield* configureOAuth(profileName);
             }
-            const refreshed = yield* withProfileCredentialsLock(
+            // Refresh tokens are single-use: refresh with the token stored
+            // now, read under the lock, not the one `config` was read with.
+            const outcome = yield* withProfileCredentialsLock(
               profileName,
-              Interaction.info("Planetscale: refreshing OAuth credentials...").pipe(
-                Effect.andThen(OAuthClient.refresh(credentials)),
-                Effect.flatMap((credentials) => {
-                  const config = {
-                    ...oauth,
-                    clientId: credentials.clientId,
-                    access: Redacted.value(credentials.access),
-                    refresh: Redacted.value(credentials.refresh),
-                    expires: credentials.expires,
-                    scopes: credentials.scopes,
-                  };
-                  return (updateConfig?.(config) ?? Effect.void).pipe(Effect.as(config));
-                }),
-                Effect.tap(() => Interaction.success("Planetscale: OAuth credentials refreshed.")),
-              ),
+              Effect.gen(function* () {
+                const current = yield* reload ?? Effect.succeed(oauth);
+                if (current.method !== "oauth") return { type: "browser" as const };
+                const currentCredentials: OAuthClient.OAuthCredentials = {
+                  type: "oauth",
+                  clientId: current.clientId,
+                  access: Redacted.make(current.access),
+                  refresh: Redacted.make(current.refresh),
+                  expires: current.expires,
+                  scopes: current.scopes,
+                };
+                if (!OAuthClient.usesCurrentClient(currentCredentials)) {
+                  return { type: "browser" as const };
+                }
+                return yield* Interaction.info("Planetscale: refreshing OAuth credentials...").pipe(
+                  Effect.andThen(OAuthClient.refresh(currentCredentials)),
+                  Effect.flatMap((credentials) => {
+                    const config = {
+                      ...current,
+                      clientId: credentials.clientId,
+                      access: Redacted.value(credentials.access),
+                      refresh: Redacted.value(credentials.refresh),
+                      expires: credentials.expires,
+                      scopes: credentials.scopes,
+                    };
+                    // Saved here, under the lock, when the caller can take it;
+                    // otherwise handed back for the caller to save.
+                    const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
+                      updateConfig === undefined
+                        ? Effect.succeed(config)
+                        : Effect.as(updateConfig(config), undefined);
+                    return unsaved.pipe(
+                      Effect.map((config) => ({ type: "refreshed" as const, config })),
+                    );
+                  }),
+                  Effect.tap(() =>
+                    Interaction.success("Planetscale: OAuth credentials refreshed."),
+                  ),
+                );
+              }),
             ).pipe(
               Effect.catchTag(
                 [
@@ -447,10 +475,13 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   "OAuthServerUnavailable",
                   "OAuthInvalidResponse",
                 ],
-                () => configureOAuth(profileName),
+                () => Effect.succeed({ type: "browser" as const }),
               ),
             );
-            return refreshed;
+            if (outcome.type === "browser") {
+              return yield* configureOAuth(profileName);
+            }
+            return outcome.config;
           }),
         ),
         Match.exhaustive,
@@ -467,10 +498,8 @@ export const PlanetscaleAuth = AuthProviderLayer<
         Clock.currentTimeMillis,
       ]).pipe(
         Effect.map(([creds, now]): ProviderDetails => {
-          const sourceStr =
-            "details" in creds.source && creds.source.details
-              ? `${creds.source.type} - ${creds.source.details}`
-              : creds.source.type;
+          const source: PlanetscaleResolvedCredentials["source"] = creds.source;
+          const sourceStr = source.details ? `${source.type} - ${source.details}` : source.type;
           return Match.value(creds).pipe(
             Match.when({ type: "apiToken" }, (c) => ({
               lines: [

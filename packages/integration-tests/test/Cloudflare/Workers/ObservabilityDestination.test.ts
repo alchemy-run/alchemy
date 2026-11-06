@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { adopt } from "alchemy/AdoptPolicy";
 import type * as Plan from "alchemy/Plan";
 import * as Provider from "alchemy/Provider";
 import { isActionState, State } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
@@ -14,6 +14,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -26,10 +27,10 @@ const main = pathe.resolve(import.meta.dirname, "fixtures", "observability-sink-
 // reuses them on every run (never derive physical names from
 // Date.now()/random).
 const NAME_DEFAULT_URL = "https://example.com";
-const NAME_UPDATE = "alchemy-obsdest-update";
-const NAME_REPLACE_V1 = "alchemy-obsdest-replace-v1";
-const NAME_REPLACE_V2 = "alchemy-obsdest-replace-v2";
-const NAME_LIST = "alchemy-obsdest-list";
+const NAME_UPDATE = testName("alchemy-obsdest-update");
+const NAME_REPLACE_V1 = testName("alchemy-obsdest-replace-v1");
+const NAME_REPLACE_V2 = testName("alchemy-obsdest-replace-v2");
+const NAME_LIST = testName("alchemy-obsdest-list");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,

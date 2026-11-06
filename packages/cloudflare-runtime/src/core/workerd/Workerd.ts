@@ -1,4 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -43,6 +44,13 @@ export interface ServeOptions {
    * closes and the process is killed on purpose.
    */
   readonly onExit?: (exit: WorkerdExit) => void;
+  /**
+   * Path to the workerd binary to run instead of the one from the `workerd`
+   * package. Takes precedence over {@link PATH_ENV}.
+   */
+  readonly bin?: string;
+  /** Extra environment variables for the workerd process. */
+  readonly env?: Record<string, string>;
 }
 
 /** How much trailing stderr output is kept for {@link WorkerdExit}. */
@@ -109,6 +117,14 @@ interface ProcessHandle {
  */
 export const V8_FLAGS_ENV = "ALCHEMY_WORKERD_V8_FLAGS";
 
+/**
+ * Environment variable holding the path to the workerd binary every workerd
+ * process this package spawns runs, instead of the one from the `workerd`
+ * package. Useful where the npm binary can't start, e.g. NixOS. A
+ * per-Worker `bin` takes precedence.
+ */
+export const PATH_ENV = "ALCHEMY_WORKERD_PATH";
+
 /** Splits the value of {@link V8_FLAGS_ENV} into individual flags. */
 export const parseV8Flags = (value: string | undefined): Array<string> =>
   (value ?? "").split(/\s+/).filter((flag) => flag.length > 0);
@@ -122,23 +138,27 @@ const make = (
     args: Array<string>,
     config: Buffer,
     configuredAddresses: Array<string>,
+    env: Record<string, string> | undefined,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
 ) =>
   Workerd.of({
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (serveConfig, args, options) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
         const config = withV8Flags(serveConfig, parseV8Flags(process.env[V8_FLAGS_ENV]));
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
         const dumpDir = process.env.WORKERD_DUMP_CONFIG;
         if (dumpDir) {
+          const now = yield* Clock.currentTimeMillis;
           yield* Effect.promise(async () => {
             const fs = await import("node:fs/promises");
             const path = await import("node:path");
             await fs.mkdir(dumpDir, { recursive: true });
             await fs.writeFile(
-              path.join(dumpDir, `workerd-config-${Date.now()}.json`),
+              path.join(dumpDir, `workerd-config-${now}.json`),
               JSON.stringify(config, null, 2),
             );
           });
@@ -161,7 +181,8 @@ const make = (
           }
         }
         const handle = yield* spawn(
-          workerd.bin,
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
+          options?.bin || process.env[PATH_ENV] || workerd.bin,
           [
             "serve",
             "--binary",
@@ -174,6 +195,7 @@ const make = (
           ],
           Buffer.from(serializeConfig(config)),
           configuredAddresses,
+          options?.env,
         );
         let killed = false;
         yield* Effect.addFinalizer(() =>
@@ -270,18 +292,18 @@ const makeStreamPump = (
   };
 };
 
-const externalEnv = () => {
+const externalEnv = (extra: Record<string, string> | undefined) => {
   const env = { ...process.env };
   delete env.NODE_ENV;
-  return env;
+  return { ...env, ...extra };
 };
 
 const makeBun = () =>
-  make((command, args, config, configuredAddresses) =>
+  make((command, args, config, configuredAddresses, env) =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
-        env: externalEnv(),
+        env: externalEnv(env),
         stdio: [config, "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
@@ -357,12 +379,12 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args, config, configuredAddresses) => {
+  make((command, args, config, configuredAddresses, env) => {
     const stderrTail = makeTail();
     return Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
-          env: externalEnv(),
+          env: externalEnv(env),
           stdio: ["pipe", "pipe", "pipe", "pipe"],
           killSignal: "SIGKILL",
         }),
@@ -574,19 +596,23 @@ const classifyWorkerdError = (
     });
   }
 
-  // Pattern: address-in-use comes through as a `kj::Exception`. The offending
-  // address was reported by the C++ backend; the Rust backend omits it.
-  if (/Address already in use/i.test(text)) {
-    const address = text.match(/toString\(\) = (\S+)/)?.[1];
+  // Pattern: address-in-use. The C++ server over kj sockets names the
+  // address; the Rust server names the socket; the C++ server over tokio
+  // sockets names neither.
+  const inUse = parseAddressInUse(text);
+  if (inUse) {
+    const { address, socket } = inUse;
     return ConfigError.make({
       subtag: ADDRESS_IN_USE_SUBTAG,
       message: address
         ? `The Workers runtime could not bind to ${address} (already in use).`
-        : configuredAddresses.length > 0
-          ? `The Workers runtime could not bind (address already in use). Configured listeners: ${configuredAddresses.join(", ")}.`
-          : "The Workers runtime could not bind to the requested address (already in use).",
+        : `The Workers runtime could not bind${socket ? ` socket "${socket}"` : ""} (address already in use).${
+            configuredAddresses.length > 0
+              ? ` Configured listeners: ${configuredAddresses.join(", ")}.`
+              : ""
+          }`,
       hint: "Pick a different port or stop the process using it.",
-      detail: { ...detail, address, configuredAddresses },
+      detail: { ...detail, address, socket, configuredAddresses },
     });
   }
 
@@ -595,6 +621,26 @@ const classifyWorkerdError = (
     message: "The Workers runtime failed to start.",
     detail,
   });
+};
+
+// `EADDRINUSE` on macOS and Linux; `WSAEADDRINUSE` on Windows, and
+// `WSAEACCES`, which workerd's bind (with `SO_REUSEADDR`) gets when the port's
+// holder has `SO_EXCLUSIVEADDRUSE`, as Node's servers do on Windows.
+// Ported from miniflare's `parseAddressInUse` (workers-sdk
+// packages/miniflare/src/runtime/structured-logs.ts).
+const ADDRESS_IN_USE_OS_ERRORS = ["48", "98", "10013", "10048"];
+
+export const parseAddressInUse = (
+  text: string,
+): { address?: string; socket?: string } | undefined => {
+  const bind = /(?:Socket \\?"(.+?)\\?": )?bind\(\): [^\n]*\(os error (\d+)\)/.exec(text);
+  if (bind !== null && ADDRESS_IN_USE_OS_ERRORS.includes(bind[2]!)) {
+    return bind[1] === undefined ? {} : { socket: bind[1] };
+  }
+  const kj = /Address already in use; toString\(\) = ([^;\s]+)/.exec(text);
+  if (kj !== null) return { address: kj[1] };
+  if (/Address already in use/i.test(text)) return {};
+  return undefined;
 };
 
 export const isAddressInUseError = (error: ConfigError | SystemError) => {

@@ -49,10 +49,10 @@ const s3Store = (bucket: string, prefix: string): DataCacheStore => {
         }).pipe(
           Effect.flatMap((result) =>
             result.Body === undefined
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : result.Body.pipe(Stream.decodeText, Stream.mkString),
           ),
-          Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchKey", () => Effect.undefined),
         ),
       );
     },

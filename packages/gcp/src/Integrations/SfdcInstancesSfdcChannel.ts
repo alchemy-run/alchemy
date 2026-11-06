@@ -141,7 +141,7 @@ export const SfdcInstancesSfdcChannel = Resource<SfdcInstancesSfdcChannel>(
 export class SfdcInstancesSfdcChannelNotResolved extends Data.TaggedError(
   "GCP.Integrations.SfdcInstancesSfdcChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (sfdcInstance: string, sfdcChannelId: string) =>
@@ -175,10 +175,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations.getProjectsLocationsSfdcInstancesSfdcChannels({ name }).pipe(
         Effect.map((channel) => (isDeleted(channel) ? undefined : channel)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const SfdcInstancesSfdcChannelProvider = () =>
@@ -273,7 +273,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SfdcInstancesSfdcChannelNotResolved({ name });
+        return yield* new SfdcInstancesSfdcChannelNotResolved({ resourceName: name });
       }
 
       const currentName = withProjectId(current.name ?? name, env.project);

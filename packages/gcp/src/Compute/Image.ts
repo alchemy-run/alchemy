@@ -251,9 +251,7 @@ const toAttrs = (image: compute.Image, project: string) => ({
 });
 
 const getByName = (project: string, image: string) =>
-  compute
-    .getImages({ project, image })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  compute.getImages({ project, image }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (project: string, imageName: string) =>
   getByName(project, imageName).pipe(
@@ -458,7 +456,7 @@ export const ImageProvider = () =>
             project: env.project,
             body: insertBody(imageName, news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -537,7 +535,7 @@ export const ImageProvider = () =>
           image: output.imageName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

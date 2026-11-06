@@ -363,7 +363,7 @@ export const Connection = Resource<Connection>("GCP.BigQueryConnection.Connectio
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.BigQueryConnection.ConnectionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -735,7 +735,7 @@ const toCreateBody = (
 const getByName = (name: string) =>
   bigqueryconnection
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (parent: string, project: string) =>
   bigqueryconnection.listProjectsLocationsConnections
@@ -848,7 +848,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const updateMask: string[] = [];
@@ -944,7 +944,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched === undefined) {
           const created = yield* bigqueryconnection
             .createProjectsLocationsConnections({
@@ -960,7 +960,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const latest = (yield* getByName(current.name ?? name)) ?? current;

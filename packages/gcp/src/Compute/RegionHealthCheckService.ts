@@ -177,7 +177,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       healthCheckService: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, serviceName: string) =>
   getByName(project, region, serviceName).pipe(
@@ -292,7 +292,7 @@ export const RegionHealthCheckServiceProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, serviceName);
       }
 
@@ -362,6 +362,6 @@ export const RegionHealthCheckServiceProvider = () =>
           healthCheckService: output.serviceName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

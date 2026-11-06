@@ -1,17 +1,16 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/hetzner/load_balancers";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   loadBalancers.getLoadBalancer({ id }).pipe(
@@ -37,7 +36,7 @@ const tcpService = (listenPort: number, destinationPort: number) => ({
   },
 });
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a load balancer",
   (stack) =>
     Effect.gen(function* () {
@@ -222,10 +221,11 @@ test.provider.skipIf(!hasHetznerCreds)(
       "live",
     ],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when location changes",
   (stack) =>
     Effect.gen(function* () {
@@ -272,5 +272,6 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:loadbalancer", "provider:hetzner:service", "live"],
     timeout: 180_000,
+    exclusive: hetznerLoadBalancers,
   },
 );

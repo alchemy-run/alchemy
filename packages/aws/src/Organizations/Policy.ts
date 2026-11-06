@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
@@ -16,6 +17,13 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class OrganizationsPolicyUnexpectedResponse extends Data.TaggedError(
+  "OrganizationsPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type PolicyId = string;
 export type PolicyArn = string;
@@ -87,8 +95,25 @@ export interface Policy extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 > {}
+
+/**
+ * Props for {@link Policy.lookup}: find an organization policy (an SCP, tag
+ * policy, ...) this stack doesn't manage, in the ambient organization.
+ */
+export type PolicyLookup =
+  | {
+      /** The id of the existing policy, e.g. `p-abcd1234`. */
+      policyId: string;
+    }
+  | {
+      /** The policy's type. */
+      type: organizations.PolicyType;
+      /** The name of the existing policy. */
+      name: string;
+    };
 
 /**
  * An AWS Organizations policy such as an SCP or tag policy.
@@ -146,6 +171,17 @@ export interface Policy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyId`, or `type` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach an existing SCP to an OU
+ * ```typescript
+ * const denyRegions = AWS.Organizations.Policy.lookup({ type: "SERVICE_CONTROL_POLICY", name: "deny-regions" });
+ * const policyId = denyRegions.policyId;
+ * ```
+ *
  * @resource
  */
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
@@ -167,6 +203,11 @@ export const PolicyProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          return "policyId" in props
+            ? yield* readPolicyById(props.policyId)
+            : yield* readPolicyByName({ type: props.type, name: props.name });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.policyId
@@ -256,7 +297,9 @@ export const PolicyProvider = () =>
               name,
             });
             if (!state) {
-              return yield* Effect.fail(new Error(`policy '${name}' not found after create`));
+              return yield* new OrganizationsPolicyUnexpectedResponse({
+                message: `policy '${name}' not found after create`,
+              });
             }
           }
 
@@ -294,9 +337,9 @@ export const PolicyProvider = () =>
 
           const updated = yield* readPolicyById(state.policyId);
           if (!updated) {
-            return yield* Effect.fail(
-              new Error(`policy '${state.policyId}' not found after reconcile`),
-            );
+            return yield* new OrganizationsPolicyUnexpectedResponse({
+              message: `policy '${state.policyId}' not found after reconcile`,
+            });
           }
 
           yield* session.note(updated.policyArn);
@@ -344,7 +387,7 @@ const readPolicyById = Effect.fn(function* (policyId: string) {
   const described = yield* retryOrganizations(
     organizations.describePolicy({ PolicyId: policyId }).pipe(
       Effect.map((response) => response.Policy),
-      Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("PolicyNotFoundException", () => Effect.undefined),
     ),
   );
 

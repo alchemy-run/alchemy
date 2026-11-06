@@ -53,8 +53,18 @@ export interface SignalingChannel extends Resource<
     channelArn: string;
   },
   {},
-  Providers
+  Providers,
+  SignalingChannelLookup
 > {}
+
+/**
+ * Props for {@link SignalingChannel.lookup}: find a signaling channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SignalingChannelLookup {
+  /** The channel name of the existing signaling channel. */
+  channelName: string;
+}
 
 /**
  * An Amazon Kinesis Video Streams WebRTC signaling channel — the rendezvous
@@ -89,6 +99,16 @@ export interface SignalingChannel extends Resource<
  * const { IceServerList } = yield* getIceServers({ ClientId: "viewer-1" });
  * ```
  *
+ * ### Looking up an existing signaling channel
+ * `SignalingChannel.lookup` references a signaling channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing signaling channel
+ * ```typescript
+ * const existing = AWS.KinesisVideo.SignalingChannel.lookup({ channelName: "my-signaling-channel" });
+ * ```
+ *
  * @resource
  */
 export const SignalingChannel = Resource<SignalingChannel>("AWS.KinesisVideo.SignalingChannel");
@@ -107,7 +127,7 @@ export const SignalingChannelProvider = () =>
       const observeChannel = Effect.fn(function* (channelName: string) {
         return yield* kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
           Effect.map((r) => r.ChannelInfo),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -134,6 +154,18 @@ export const SignalingChannelProvider = () =>
                 channelArn: info.ChannelARN!,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ channelName }) {
+          const info = yield* observeChannel(channelName);
+          if (info?.ChannelARN === undefined || info.ChannelStatus === "DELETING") {
+            return undefined;
+          }
+          const attrs = {
+            channelName,
+            channelArn: info.ChannelARN,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const channelName = output?.channelName ?? (yield* createName(id, olds ?? {}));

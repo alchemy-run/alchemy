@@ -2,12 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as hostnames from "@distilled.cloud/cloudflare/hostnames";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -54,7 +55,9 @@ test.provider(
         })
         .pipe(
           Effect.map((settings) =>
-            settings.find((setting) => setting.hostname === `alchemy-htls-gate.${zoneName}`),
+            settings.find(
+              (setting) => setting.hostname === `${testName("alchemy-htls-gate")}.${zoneName}`,
+            ),
           ),
         );
       expect(observed).toBeUndefined();
@@ -65,7 +68,7 @@ test.provider(
         .putSettingTls({
           zoneId,
           settingId: "min_tls_version",
-          hostname: `alchemy-htls-gate.${zoneName}`,
+          hostname: `${testName("alchemy-htls-gate")}.${zoneName}`,
           value: "1.2",
         })
         .pipe(

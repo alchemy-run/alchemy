@@ -20,6 +20,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -184,7 +185,7 @@ const toAttrs = (zone: CloudZone): ZoneAttributes => ({
 const getZoneBy = (idOrName: string) =>
   Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 class ZoneStillExists extends Data.TaggedError("ZoneStillExists")<{ idOrName: string }> {}
@@ -223,7 +224,7 @@ export const ZoneProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       let zone: CloudZone | undefined;
       if (output?.zoneId !== undefined) {
         zone = yield* getZoneBy(String(output.zoneId));
@@ -248,6 +249,16 @@ export const ZoneProvider = () =>
         }
       }
       if (zone === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.zoneId,
+          foundId: zone.id,
+          claimedName: olds?.name === undefined ? undefined : normalizeName(olds.name),
+          foundName: zone.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(zone);
       return (yield* hasAlchemyLabels(id, tagRecord(zone.labels))) ? attrs : Unowned(attrs);
     }),
@@ -339,7 +350,7 @@ export const ZoneProvider = () =>
       const deleted = yield* retryLocked(
         Hetzner.zones
           .deleteZone({ id_or_name: idOrName })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (deleted !== undefined) {
         yield* waitForZoneAction(deleted.action);

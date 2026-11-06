@@ -144,8 +144,8 @@ export const RegionalTieredCacheProvider = () =>
             Effect.map((observed) => toAttributes(zoneId, observed, observed.value)),
             // Zone deleted out-of-band or plan-gated: skip it.
             Effect.catchTags({
-              InvalidRoute: () => Effect.succeed(undefined),
-              SettingUnavailableForPlan: () => Effect.succeed(undefined),
+              InvalidRoute: () => Effect.undefined,
+              SettingUnavailableForPlan: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -169,7 +169,7 @@ export const RegionalTieredCacheProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* cache.getRegionalTieredCache({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -213,8 +213,8 @@ export const RegionalTieredCacheProvider = () =>
       // so the setting no longer exists for the zone), nothing to restore.
       const observed = yield* cache.getRegionalTieredCache({ zoneId }).pipe(
         Effect.catchTags({
-          InvalidRoute: () => Effect.succeed(undefined),
-          SettingUnavailableForPlan: () => Effect.succeed(undefined),
+          InvalidRoute: () => Effect.undefined,
+          SettingUnavailableForPlan: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return;

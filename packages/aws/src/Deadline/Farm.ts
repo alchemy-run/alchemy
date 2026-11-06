@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,16 @@ import {
   retryWhileConflict,
   syncDeadlineTags,
 } from "./internal.ts";
+
+export class FarmInvalidProps extends Data.TaggedError("FarmInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class FarmUnexpectedResponse extends Data.TaggedError("FarmUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FarmProps {
   /**
@@ -76,8 +87,23 @@ export interface Farm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FarmLookup
 > {}
+
+/**
+ * Props for {@link Farm.lookup}: find a farm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FarmLookup =
+  | {
+      /** The id of the existing farm. */
+      farmId: string;
+    }
+  | {
+      /** The display name of the existing farm. */
+      displayName: string;
+    };
 
 /**
  * An AWS Deadline Cloud farm — the top-level container for render-farm
@@ -101,6 +127,17 @@ export interface Farm extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing farm
+ * `Farm.lookup` references a farm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing farm
+ * ```typescript
+ * const render = AWS.Deadline.Farm.lookup({ displayName: "render" });
+ * const farmId = render.farmId;
+ * ```
+ *
  * @resource
  */
 export const Farm = Resource<Farm>("AWS.Deadline.Farm");
@@ -118,7 +155,7 @@ interface FarmState {
 const readFarmById = Effect.fn(function* (farmId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getFarm({ farmId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const farmArn = arnOf(`farm/${described.farmId}`);
   const state: FarmState = {
@@ -170,6 +207,14 @@ export const FarmProvider = () =>
               .filter((state): state is FarmState => state !== undefined)
               .map((state) => state.attrs);
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "farmId" in props
+              ? yield* readFarmById(props.farmId, arnOf)
+              : yield* findFarmByDisplayName(props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const state = output?.farmId
@@ -190,7 +235,7 @@ export const FarmProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Farm requires props"));
+            return yield* new FarmInvalidProps({ message: "AWS.Deadline.Farm requires props" });
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createFarmName(id, news);
@@ -215,7 +260,9 @@ export const FarmProvider = () =>
             yield* session.note(`Created farm ${displayName} (${created.farmId})`);
             state = yield* readFarmById(created.farmId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created farm ${displayName}`));
+              return yield* new FarmUnexpectedResponse({
+                message: `failed to read created farm ${displayName}`,
+              });
             }
           }
 
@@ -243,7 +290,9 @@ export const FarmProvider = () =>
           yield* session.note(state.attrs.farmArn);
           const final = yield* readFarmById(state.attrs.farmId, arnOf);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled farm ${displayName}`));
+            return yield* new FarmUnexpectedResponse({
+              message: `failed to read reconciled farm ${displayName}`,
+            });
           }
           return final.attrs;
         }),

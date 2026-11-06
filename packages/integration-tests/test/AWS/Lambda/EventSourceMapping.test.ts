@@ -1,12 +1,14 @@
+import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { EventSourceMapping } from "@alchemy.run/aws/Lambda";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as DynamoDBStreams from "@distilled.cloud/aws/dynamodb-streams";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, driftOf, repairDrift, waitForDrift } from "../drift.ts";
 import EventSourceMappingFunctionLive, {
   EventSourceMappingFunction,
 } from "./fixtures/event-source-mapping-handler.ts";
@@ -20,8 +22,13 @@ import {
   makeTableFunction,
   type TableFunctionOptions,
 } from "./fixtures/event-source-mapping-table-handler.ts";
+import EventSourceMappingVisibilityFunctionLive, {
+  EventSourceMappingVisibilityFunction,
+} from "./fixtures/event-source-mapping-visibility-handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // minimal Lambda Function + SQS Queue + EventSourceMapping (wired via the
@@ -70,6 +77,34 @@ test.provider(
           schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 240_000,
+  },
+);
+
+// Lambda runs a Function for `timeout + timeoutMargin`, so a 30-second Function
+// on a queue left at SQS's 30-second visibility timeout is refused by AWS. The
+// mapping reports it as a typed error that names the setting to change.
+test.provider(
+  "a queue whose visibility timeout is below the function's Lambda timeout fails with a typed error",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const error = yield* stack
+        .deploy(
+          EventSourceMappingVisibilityFunction.pipe(
+            Effect.provide(EventSourceMappingVisibilityFunctionLive),
+          ),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("QueueVisibilityTimeoutBelowFunctionTimeout");
+      expect(error.message).toContain("31 seconds");
+      expect(error.message).toContain("visibilityTimeout");
+
+      yield* stack.destroy();
     }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
@@ -275,5 +310,86 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:dynamodb", "live"],
     timeout: 240_000,
+  },
+);
+
+// #2688: EventSourceMapping and Permission had no `read`, so drift skipped
+// them: a consumer disabled or reconfigured out of band, or a removed invoke
+// permission, went unnoticed.
+test.provider(
+  "drift detects and repairs a disabled mapping and a removed permission",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { fn, mapping } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* AWS.SQS.Queue("DriftMappingQueue", {});
+          const fn = yield* AWS.Lambda.Function("DriftMappingFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+          });
+          yield* fn.bind("AllowQueuePoll", {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
+                Resource: [queue.queueArn],
+              },
+            ],
+          });
+          const mapping = yield* EventSourceMapping("DriftMapping", {
+            functionName: fn.functionName,
+            eventSourceArn: queue.queueArn,
+            batchSize: 5,
+          });
+          yield* AWS.Lambda.Permission("DriftPermission", {
+            action: "lambda:InvokeFunction",
+            functionName: fn.functionName,
+            principal: "events.amazonaws.com",
+          });
+          return { fn, mapping };
+        }),
+      );
+      const actions = yield* driftActions(stack);
+      expect(Object.values(actions).every((action) => action === "unchanged")).toBe(true);
+
+      yield* Lambda.updateEventSourceMapping({
+        UUID: mapping.uuid,
+        Enabled: false,
+        BatchSize: 9,
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceInUseException",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      const permission = yield* driftOf(stack, "DriftPermission");
+      yield* Lambda.removePermission({
+        FunctionName: fn.functionName,
+        StatementId: permission!.attr!.statementId,
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftMapping", "drifted");
+      expect(drifted?.attr?.configuration).toMatchObject({ enabled: false, batchSize: 9 });
+      expect((yield* waitForDrift(stack, "DriftPermission", "missing"))?.action).toBe("missing");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftMapping?.action).toBe("repaired");
+      expect(repaired.resources.DriftPermission?.action).toBe("recreated");
+      const after = yield* driftActions(stack);
+      expect(Object.values(after).every((action) => action === "unchanged")).toBe(true);
+      const restored = yield* Lambda.getEventSourceMapping({ UUID: mapping.uuid });
+      expect(restored.State).toBe("Enabled");
+      expect(restored.BatchSize).toBe(5);
+
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 300_000,
   },
 );

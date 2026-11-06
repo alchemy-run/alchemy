@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class KeyspaceNotReady extends Data.TaggedError("KeyspaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface KeyspaceProps {
   /**
@@ -42,8 +48,18 @@ export interface Keyspace extends Resource<
     replicationStrategy: string;
   },
   never,
-  Providers
+  Providers,
+  KeyspaceLookup
 > {}
+
+/**
+ * Props for {@link Keyspace.lookup}: find a keyspace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KeyspaceLookup {
+  /** The keyspace name of the existing keyspace. */
+  keyspaceName: string;
+}
 
 /**
  * An Amazon Keyspaces (for Apache Cassandra) keyspace — the top-level
@@ -63,6 +79,16 @@ export interface Keyspace extends Resource<
  *   keyspaceName: "app_data",
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing keyspace
+ * `Keyspace.lookup` references a keyspace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing keyspace
+ * ```typescript
+ * const existing = AWS.Keyspaces.Keyspace.lookup({ keyspaceName: "my-keyspace" });
  * ```
  *
  * @resource
@@ -98,7 +124,7 @@ export const KeyspaceProvider = () =>
       const readKeyspace = Effect.fn(function* (name: string) {
         return yield* keyspaces
           .getKeyspace({ keyspaceName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
@@ -118,6 +144,17 @@ export const KeyspaceProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ keyspaceName: name }) {
+          const found = yield* readKeyspace(name);
+          if (found === undefined) return undefined;
+          const attrs = {
+            keyspaceName: found.keyspaceName,
+            keyspaceArn: found.resourceArn,
+            replicationStrategy: found.replicationStrategy,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -157,7 +194,7 @@ export const KeyspaceProvider = () =>
             observed = yield* readKeyspace(name).pipe(
               Effect.flatMap((k) =>
                 k === undefined
-                  ? Effect.fail(new Error(`Keyspace '${name}' not found`))
+                  ? Effect.fail(new KeyspaceNotReady({ message: `Keyspace '${name}' not found` }))
                   : Effect.succeed(k),
               ),
               Effect.retry({
@@ -209,7 +246,9 @@ export const KeyspaceProvider = () =>
             Effect.flatMap((k) =>
               k === undefined
                 ? Effect.void
-                : Effect.fail(new Error(`Keyspace '${name}' still deleting`)),
+                : Effect.fail(
+                    new KeyspaceNotReady({ message: `Keyspace '${name}' still deleting` }),
+                  ),
             ),
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),

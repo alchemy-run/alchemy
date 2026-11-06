@@ -1,8 +1,8 @@
 import * as Docker from "@alchemy.run/docker";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });

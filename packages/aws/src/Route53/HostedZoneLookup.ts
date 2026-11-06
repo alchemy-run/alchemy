@@ -1,5 +1,11 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+
+export class HostedZoneLookupInvalidProps extends Data.TaggedError("HostedZoneLookupInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Find the most specific PUBLIC Route 53 hosted zone containing
@@ -48,12 +54,11 @@ export const resolveHostedZoneId = Effect.fn("resolveHostedZoneId")(function* (
   }
   const inferred = yield* findPublicHostedZoneId(domainName);
   if (inferred === undefined) {
-    return yield* Effect.fail(
-      new Error(
+    return yield* new HostedZoneLookupInvalidProps({
+      message:
         `No public Route 53 hosted zone in this account contains "${domainName}" — ` +
-          `create the zone first or pass "hostedZoneId" explicitly.`,
-      ),
-    );
+        `create the zone first or pass "hostedZoneId" explicitly.`,
+    });
   }
   return inferred;
 });

@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
@@ -107,8 +108,23 @@ export interface LoadBalancer extends Resource<
     attributes?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 > {}
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type LoadBalancerLookup =
+  | {
+      /** The ARN of the existing load balancer. */
+      loadBalancerArn: string;
+    }
+  | {
+      /** The name of the existing load balancer. */
+      loadBalancerName: string;
+    };
 
 /**
  * An ELBv2 (Application / Network / Gateway) load balancer.
@@ -145,6 +161,25 @@ export interface LoadBalancer extends Resource<
  *     "idle_timeout.timeout_seconds": "120",
  *     "deletion_protection.enabled": "true",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `loadBalancerArn` or
+`loadBalancerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a listener to an existing load balancer
+ * ```typescript
+ * const alb = AWS.ELBv2.LoadBalancer.lookup({ loadBalancerName: "public" });
+ *
+ * yield* AWS.ELBv2.Listener("Https", {
+ *   loadBalancerArn: alb.loadBalancerArn,
+ *   port: 443,
+ *   protocol: "HTTPS",
+ *   certificateArn: cert.certificateArn,
+ *   targetGroupArn: targets.targetGroupArn,
  * });
  * ```
  *
@@ -216,6 +251,30 @@ export const LoadBalancerProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const described = yield* elbv2
+            .describeLoadBalancers(
+              "loadBalancerArn" in props
+                ? { LoadBalancerArns: [props.loadBalancerArn] }
+                : { Names: [props.loadBalancerName] },
+            )
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
+          const loadBalancer = described?.LoadBalancers?.[0];
+          if (!loadBalancer?.LoadBalancerArn) return undefined;
+          const tags = yield* readElbTags(loadBalancer.LoadBalancerArn);
+          return {
+            loadBalancerArn: loadBalancer.LoadBalancerArn as LoadBalancerArn,
+            loadBalancerName: loadBalancer.LoadBalancerName! as LoadBalancerName,
+            tags,
+            dnsName: loadBalancer.DNSName!,
+            canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
+            vpcId: loadBalancer.VpcId!,
+            scheme: loadBalancer.Scheme!,
+            type: loadBalancer.Type!,
+            securityGroups: sortedSecurityGroups(loadBalancer),
+            subnets: sortedSubnets(loadBalancer),
+          };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) {
             return undefined;
@@ -224,9 +283,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               LoadBalancerArns: [output.loadBalancerArn],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
             return undefined;
@@ -237,8 +294,15 @@ export const LoadBalancerProvider = () =>
           if (attributes === null) {
             return undefined;
           }
+          const tags = yield* readElbTags(output.loadBalancerArn).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
+            return undefined;
+          }
           return {
             ...output,
+            tags,
             dnsName: loadBalancer.DNSName!,
             canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
             vpcId: loadBalancer.VpcId!,
@@ -327,9 +391,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           let loadBalancer = described?.LoadBalancers?.[0];
 
           const subnetMappings = news.subnetMappings?.map((m) => ({
@@ -456,9 +518,8 @@ export const LoadBalancerProvider = () =>
           const final =
             (yield* elbv2
               .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
-              .pipe(
-                Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-              ))?.LoadBalancers?.[0] ?? loadBalancer;
+              .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined)))
+              ?.LoadBalancers?.[0] ?? loadBalancer;
 
           yield* session.note(loadBalancerArn);
           return {

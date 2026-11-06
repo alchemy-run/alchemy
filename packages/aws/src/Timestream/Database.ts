@@ -5,12 +5,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
+
+export class TimestreamDatabaseUnexpectedResponse extends Data.TaggedError(
+  "TimestreamDatabaseUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DatabaseArn = `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}`;
 
@@ -58,8 +66,18 @@ export interface Database extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 > {}
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatabaseLookup {
+  /** The database name of the existing database. */
+  databaseName: string;
+}
 
 /**
  * An Amazon Timestream for LiveAnalytics database — the top-level container for
@@ -90,6 +108,16 @@ export interface Database extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const existing = AWS.Timestream.Database.lookup({ databaseName: "my-database" });
+ * ```
+ *
  * @resource
  */
 export const Database = Resource<Database>("AWS.Timestream.Database");
@@ -109,14 +137,14 @@ const toTagRecord = (
 const readDatabase = Effect.fn(function* (databaseName: string) {
   const response = yield* withWriteEndpoint(
     TSW.describeDatabase({ DatabaseName: databaseName }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.Database) {
     return undefined;
   }
   const database = response.Database;
   const tagsResponse = yield* withWriteEndpoint(
     TSW.listTagsForResource({ ResourceARN: database.Arn! }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -158,6 +186,11 @@ export const DatabaseProvider = () =>
             });
             return hydrated.filter((attrs): attrs is Database["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ databaseName }) {
+          const state = yield* readDatabase(databaseName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, olds ?? {}));
           const state = yield* readDatabase(databaseName);
@@ -199,9 +232,9 @@ export const DatabaseProvider = () =>
             yield* session.note(`Creating database ${databaseName}...`);
             state = yield* readDatabase(databaseName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created database ${databaseName}`),
-              );
+              return yield* new TimestreamDatabaseUnexpectedResponse({
+                message: `failed to read created database ${databaseName}`,
+              });
             }
           }
 
@@ -239,9 +272,9 @@ export const DatabaseProvider = () =>
 
           const final = yield* readDatabase(databaseName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled database ${databaseName}`),
-            );
+            return yield* new TimestreamDatabaseUnexpectedResponse({
+              message: `failed to read reconciled database ${databaseName}`,
+            });
           }
           return final;
         }),

@@ -1,8 +1,8 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as firewalls from "@distilled.cloud/hetzner/firewalls";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -10,8 +10,6 @@ import * as Schedule from "effect/Schedule";
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const sshRule: Hetzner.FirewallRule = {
   direction: "in",
@@ -40,7 +38,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update rules and labels, and delete a firewall",
   (stack) =>
     Effect.gen(function* () {
@@ -129,7 +127,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed firewall",
   (stack) =>
     Effect.gen(function* () {

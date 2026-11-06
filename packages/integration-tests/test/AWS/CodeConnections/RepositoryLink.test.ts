@@ -2,8 +2,8 @@ import * as AWS from "@alchemy.run/aws";
 import { Connection } from "@alchemy.run/aws/CodeConnections/Connection";
 import { RepositoryLink } from "@alchemy.run/aws/CodeConnections/RepositoryLink";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as codeconnections from "@distilled.cloud/aws/codeconnections";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -103,7 +103,7 @@ export const EnvironmentsKeyvaluemap = Resource<EnvironmentsKeyvaluemap>(
 export class EnvironmentsKeyvaluemapNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeyvaluemapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, keyvaluemapId: string) =>
@@ -204,7 +204,7 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeyvaluemapNotResolved({ name });
+        return yield* new EnvironmentsKeyvaluemapNotResolved({ resourceName: name });
       }
 
       if ((current.maskedValues === true) !== desiredMasked) {

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccountSettings } from "@alchemy.run/aws/SES";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -72,9 +72,11 @@ const restoreSendingEnabled = (enabled: boolean) =>
 // region. It cannot be isolated to a throwaway region: `AWS.providers()`
 // merges `Region.fromEnvironment` into the provider layer itself, so a
 // `Region` provided around the test body never reaches the provider's SDK
-// calls. Containment is therefore `exclusive` (no other test runs in-process
-// while this one holds the lock) plus a finalizer that restores the captured
-// value on failure and interruption as well as success.
+// calls. Containment is therefore the `aws:ses-account` label, which every
+// test that sends through SES holds too, plus a finalizer that restores the
+// captured value on failure and interruption as well as success. A whole-run
+// `exclusive: true` would instead stall every other test behind the slowest
+// one in flight (MWAA, ElastiCache: 20+ minutes).
 test.provider(
   "toggles account-level sending in place",
   (stack) =>
@@ -99,6 +101,6 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );

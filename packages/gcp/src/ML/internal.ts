@@ -17,20 +17,20 @@ export const MAX_NAME_LENGTH = 63;
 export const MAX_DESCRIPTION_LENGTH = 8000;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.ML.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.ML.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class VersionNotReady extends Data.TaggedError("GCP.ML.VersionNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class VersionFailed extends Data.TaggedError("GCP.ML.VersionFailed")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
@@ -274,17 +274,15 @@ export const replaceOnIdentity = (input: {
 
 export const getModel = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : ml
-        .getProjectsModels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : ml.getProjectsModels({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getVersion = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ml
         .getProjectsModelsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed([] as A[]);
 
@@ -339,7 +337,7 @@ export const waitUntilGone = <A, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ML.ResourceStillExists",
@@ -356,7 +354,7 @@ export const waitUntilExists = <A, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ML.ResourceNotResolved",
@@ -375,7 +373,7 @@ export const waitUntilVersionReady = (
   getVersion(name).pipe(
     Effect.filterOrFail(
       (version): version is ml.GoogleCloudMlV1__Version => version !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (version) => {
@@ -384,7 +382,7 @@ export const waitUntilVersionReady = (
       },
       (version) =>
         new VersionNotReady({
-          name,
+          resourceName: name,
           state: version.state ?? "",
         }),
     ),
@@ -392,7 +390,7 @@ export const waitUntilVersionReady = (
       versionState(version) === "FAILED"
         ? Effect.fail(
             new VersionFailed({
-              name,
+              resourceName: name,
               message: version.errorMessage ?? "version failed",
             }),
           )

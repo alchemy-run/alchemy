@@ -14,7 +14,6 @@ import {
   listProjectEnvironments,
   missingToUndefined,
   organizationIdOf,
-  parseOrgEnv,
   segmentAfter,
   stripRevision,
   toResourceId,
@@ -172,7 +171,7 @@ export const EnvironmentsKeystoresAlias = Resource<EnvironmentsKeystoresAlias>(
 export class EnvironmentsKeystoresAliasNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeystoresAliasNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const keystoreIdOf = (value: string) => segmentAfter(value, "keystores") ?? lastSegment(value);
@@ -361,7 +360,7 @@ export const EnvironmentsKeystoresAliasProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeystoresAliasNotResolved({ name });
+        return yield* new EnvironmentsKeystoresAliasNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organizationId, environmentId, keystoreId);

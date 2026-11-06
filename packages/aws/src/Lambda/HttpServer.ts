@@ -18,7 +18,7 @@ import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import { withInvocationDeadline } from "./InvocationDeadline.ts";
+import { type InvocationTimeoutError, withInvocationDeadline } from "./InvocationDeadline.ts";
 
 export const isFunctionURLEvent = (event: any): event is LambdaFunctionURLEvent =>
   event.requestContext?.http?.method !== undefined;
@@ -39,7 +39,7 @@ export const isAlbEvent = (event: any): event is ALBEvent =>
   typeof event?.httpMethod === "string" && event?.requestContext?.elb !== undefined;
 
 // `HttpMiddleware.tracer` records the request on the `http.server` span only
-// when the request finishes. A span the deadline flush ends early would ship
+// when the request finishes. A span the backstop flush ends early would ship
 // without it, so record the method and path up front.
 const annotateRequestSpan = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -65,14 +65,16 @@ export const makeFunctionHttpHandler = <Req>(
   // exporter installed the span is exported when the invocation scope
   // flushes.
   //
-  // The invocation deadline flush sits INSIDE the span so it can find the
-  // `http.server` root span in context and end it — with
-  // `InvocationTimeoutError` as its status — before draining the exporters.
-  // The dispatcher's outer guard stands down when this one takes the
-  // deadline; see `withInvocationDeadline`.
+  // The invocation deadline sits INSIDE the span, so a request that runs
+  // past the Function's `timeout` is interrupted within it: the `http.server`
+  // span ends with `InvocationTimeoutError`, with every child span ended by
+  // the interruption. No response is sent: the dispatcher holds the
+  // invocation until Lambda's own timeout answers it. The dispatcher's outer
+  // guard stands down when this one takes the deadline; see
+  // `withInvocationDeadline`.
   const safeHandler = handler.pipe(
     Http.safeHttpEffect,
-    withInvocationDeadline,
+    withInvocationDeadline(),
     annotateRequestSpan,
     HttpMiddleware.tracer,
   );
@@ -81,7 +83,7 @@ export const makeFunctionHttpHandler = <Req>(
   ):
     | Effect.Effect<
         ALBResult | APIGatewayProxyResult | LambdaFunctionURLResult | FunctionURLStream,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >
     | undefined => {
@@ -91,7 +93,7 @@ export const makeFunctionHttpHandler = <Req>(
         url: webRequest.url,
         remoteAddress: Option.some(event.requestContext.http.sourceIp),
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap((response): Effect.Effect<LambdaFunctionURLResult | FunctionURLStream> =>
@@ -101,7 +103,7 @@ export const makeFunctionHttpHandler = <Req>(
         ),
       ) as Effect.Effect<
         LambdaFunctionURLResult | FunctionURLStream,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
@@ -110,7 +112,7 @@ export const makeFunctionHttpHandler = <Req>(
       const request = HttpServerRequest.fromWeb(webRequest).modify({
         url: webRequest.url,
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         // The ALB result shape is the API Gateway v1 result shape (statusCode,
@@ -120,7 +122,7 @@ export const makeFunctionHttpHandler = <Req>(
         Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         ALBResult,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }
@@ -130,13 +132,13 @@ export const makeFunctionHttpHandler = <Req>(
         url: webRequest.url,
         remoteAddress: Option.fromNullishOr(event.requestContext?.identity?.sourceIp),
       });
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures; generic Exclude on R can't be proven statically
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- safeHandler handles failures other than the invocation deadline; generic Exclude on R can't be proven statically
       return safeHandler.pipe(
         Effect.provideService(HttpServerRequest.HttpServerRequest, request),
         Effect.flatMap(toApiGatewayProxyResult),
       ) as Effect.Effect<
         APIGatewayProxyResult,
-        never,
+        InvocationTimeoutError,
         Exclude<Effect.Services<typeof handler>, HttpServerRequest.HttpServerRequest | Scope>
       >;
     }

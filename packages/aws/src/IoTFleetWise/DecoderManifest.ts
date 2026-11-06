@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class DecoderManifestUnexpectedResponse extends Data.TaggedError(
+  "DecoderManifestUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DecoderManifestProps {
   /**
@@ -79,8 +87,18 @@ export interface DecoderManifest extends Resource<
     modelManifestArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DecoderManifestLookup
 > {}
+
+/**
+ * Props for {@link DecoderManifest.lookup}: find a decoder manifest this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DecoderManifestLookup {
+  /** The decoder manifest name of the existing decoder manifest. */
+  decoderManifestName: string;
+}
 
 /**
  * An AWS IoT FleetWise decoder manifest — the decoding rules (network
@@ -122,6 +140,16 @@ export interface DecoderManifest extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing decoder manifest
+ * `DecoderManifest.lookup` references a decoder manifest Alchemy doesn't manage (created in the
+ * console or by another stack), found by `decoderManifestName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing decoder manifest
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.DecoderManifest.lookup({ decoderManifestName: "my-decoder-manifest" });
+ * ```
+ *
  * @resource
  */
 export const DecoderManifest = Resource<DecoderManifest>("AWS.IoTFleetWise.DecoderManifest");
@@ -138,7 +166,7 @@ export const DecoderManifestProvider = () =>
       const readManifest = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getDecoderManifest({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -146,7 +174,11 @@ export const DecoderManifestProvider = () =>
         return yield* readManifest(name).pipe(
           Effect.flatMap((manifest) =>
             manifest === undefined
-              ? Effect.fail(new Error(`Decoder manifest '${name}' not found`))
+              ? Effect.fail(
+                  new DecoderManifestUnexpectedResponse({
+                    message: `Decoder manifest '${name}' not found`,
+                  }),
+                )
               : Effect.succeed(manifest),
           ),
           retryObservation,
@@ -188,6 +220,13 @@ export const DecoderManifestProvider = () =>
           if (news.modelManifestArn !== olds.modelManifestArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ decoderManifestName: name }) {
+          const found = yield* readManifest(name);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

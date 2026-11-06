@@ -1,5 +1,5 @@
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -118,7 +118,7 @@ export const ReasoningEnginesSession = Resource<ReasoningEnginesSession>(
 export class ReasoningEnginesSessionNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -147,17 +147,17 @@ const toAttrs = (session: aiplatform.GoogleCloudAiplatformV1Session, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEnginesSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((session) =>
       session
         ? Effect.succeed(session)
-        : Effect.fail(new ReasoningEnginesSessionNotResolved({ name })),
+        : Effect.fail(new ReasoningEnginesSessionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.ReasoningEnginesSessionNotResolved",
@@ -218,7 +218,7 @@ export const ReasoningEnginesSessionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const sessionId = yield* toResourceId(id, olds?.sessionId, output?.sessionId);
       const name =
@@ -226,7 +226,9 @@ export const ReasoningEnginesSessionProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -268,7 +270,7 @@ export const ReasoningEnginesSessionProvider = () =>
               sessionState: news.sessionState,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -281,7 +283,7 @@ export const ReasoningEnginesSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReasoningEnginesSessionNotResolved({ name });
+        return yield* new ReasoningEnginesSessionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -325,7 +327,7 @@ export const ReasoningEnginesSessionProvider = () =>
         .deleteProjectsLocationsReasoningEnginesSessions({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

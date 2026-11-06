@@ -336,6 +336,25 @@ describe("handleWebSocket", () => {
     expect(message).toBe("ack");
   });
 
+  test("forwards an upgrade another listener only guards with a no-op error handler", async () => {
+    harness.upstreamWss.on("connection", (ws) => ws.send("ack"));
+    // Vite 8.3.5's HMR listener does this for every upgrade it doesn't handle.
+    harness.clientServer.on("upgrade", (_request, socket) => {
+      socket.on("error", function noop() {});
+      socket.on("error", () => {});
+    });
+
+    const client = new WebSocket(`ws://127.0.0.1:${harness.clientPort}/ws`);
+    const message = await new Promise<string>((resolve, reject) => {
+      client.on("message", (data) => {
+        resolve(data.toString());
+        client.close();
+      });
+      client.on("error", reject);
+    });
+    expect(message).toBe("ack");
+  });
+
   // https://github.com/alchemy-run/alchemy/issues/2191
   describe("leaves an upgrade another plugin accepts to that plugin", () => {
     const refuseUpgrades = () => {

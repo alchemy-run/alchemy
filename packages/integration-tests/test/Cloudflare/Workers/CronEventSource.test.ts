@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { ProvidedServiceCron } from "./fixtures/cron/cron-worker.ts";
 import Stack from "./fixtures/cron/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -28,8 +29,8 @@ test.provider(
       const { workerName, crons } = yield* stack;
       const { accountId } = yield* yield* CloudflareEnvironment;
       const { schedules } = yield* workers.getScriptSchedule({ accountId, scriptName: workerName });
-      expect(crons).toEqual(["* * * * *"]);
-      expect(schedules.map(({ cron }) => cron)).toEqual(crons);
+      expect(crons).toEqual(["* * * * *", ProvidedServiceCron]);
+      expect(schedules.map(({ cron }) => cron).sort()).toEqual([...crons].sort());
       yield* scratch.destroy();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },

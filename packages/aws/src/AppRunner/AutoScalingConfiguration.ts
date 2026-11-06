@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
+
+export class AutoScalingConfigurationUnexpectedResponse extends Data.TaggedError(
+  "AutoScalingConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Derive the revision-less "name partial" ARN
@@ -84,8 +92,18 @@ export interface AutoScalingConfiguration extends Resource<
     maxSize: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  AutoScalingConfigurationLookup
 > {}
+
+/**
+ * Props for {@link AutoScalingConfiguration.lookup}: find an auto scaling configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AutoScalingConfigurationLookup {
+  /** The auto scaling configuration name of the existing auto scaling configuration. */
+  autoScalingConfigurationName: string;
+}
 
 /**
  * An AWS App Runner auto scaling configuration.
@@ -115,6 +133,16 @@ export interface AutoScalingConfiguration extends Resource<
  *   },
  *   autoScalingConfigurationArn: scaling.autoScalingConfigurationArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing auto scaling configuration
+ * `AutoScalingConfiguration.lookup` references an auto scaling configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `autoScalingConfigurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing auto scaling configuration
+ * ```typescript
+ * const existing = AWS.AppRunner.AutoScalingConfiguration.lookup({ autoScalingConfigurationName: "my-auto-scaling-configuration" });
  * ```
  *
  * @resource
@@ -149,7 +177,7 @@ export const AutoScalingConfigurationProvider = () =>
           .describeAutoScalingConfiguration({
             AutoScalingConfigurationArn: summary.AutoScalingConfigurationArn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const config = described?.AutoScalingConfiguration;
         return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
@@ -160,11 +188,9 @@ export const AutoScalingConfigurationProvider = () =>
           !config.AutoScalingConfigurationArn ||
           config.AutoScalingConfigurationRevision === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(
-              "App Runner auto scaling configuration is missing its name, ARN, or revision",
-            ),
-          );
+          return yield* new AutoScalingConfigurationUnexpectedResponse({
+            message: "App Runner auto scaling configuration is missing its name, ARN, or revision",
+          });
         }
         return {
           autoScalingConfigurationName: config.AutoScalingConfigurationName,
@@ -186,6 +212,12 @@ export const AutoScalingConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ autoScalingConfigurationName: name }) {
+          const config = yield* findLatest(name);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.autoScalingConfigurationName ?? (yield* toName(id, olds ?? {}));
           const config = yield* findLatest(name);
@@ -289,7 +321,7 @@ export const AutoScalingConfigurationProvider = () =>
                     .pipe(
                       Effect.flatMap((r) => toAttrs(r.AutoScalingConfiguration)),
                       // Tolerate a delete race — drop the item.
-                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },
               ),

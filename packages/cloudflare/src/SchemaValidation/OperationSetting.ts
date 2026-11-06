@@ -245,7 +245,7 @@ const getOperationSetting = (zoneId: string, operationId: string) =>
             mitigationAction: setting.mitigationAction as OperationMitigationAction,
           },
     ),
-    Effect.catchTag("OperationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OperationNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

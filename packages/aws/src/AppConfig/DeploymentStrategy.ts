@@ -69,8 +69,18 @@ export interface DeploymentStrategy extends Resource<
     deploymentStrategyArn: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentStrategyLookup
 > {}
+
+/**
+ * Props for {@link DeploymentStrategy.lookup}: find a deployment strategy this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentStrategyLookup {
+  /** The id of the existing deployment strategy. */
+  deploymentStrategyId: string;
+}
 
 /**
  * An AWS AppConfig deployment strategy — defines how a configuration version
@@ -98,6 +108,16 @@ export interface DeploymentStrategy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing deployment strategy
+ * `DeploymentStrategy.lookup` references a deployment strategy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deploymentStrategyId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment strategy
+ * ```typescript
+ * const existing = AWS.AppConfig.DeploymentStrategy.lookup({ deploymentStrategyId: "..." });
+ * ```
+ *
  * @resource
  */
 export const DeploymentStrategy = Resource<DeploymentStrategy>("AWS.AppConfig.DeploymentStrategy");
@@ -114,7 +134,7 @@ export const DeploymentStrategyProvider = () =>
       const readStrategy = Effect.fn(function* (deploymentStrategyId: string) {
         return yield* appconfig
           .getDeploymentStrategy({ DeploymentStrategyId: deploymentStrategyId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -137,6 +157,19 @@ export const DeploymentStrategyProvider = () =>
           if ((olds?.replicateTo ?? "NONE") !== (news?.replicateTo ?? "NONE")) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ deploymentStrategyId }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const strategy = yield* readStrategy(deploymentStrategyId);
+          if (strategy?.Id === undefined) return undefined;
+          const arn = deploymentStrategyArn(region, accountId, strategy.Id);
+          const attrs = {
+            deploymentStrategyId: strategy.Id,
+            deploymentStrategyName: strategy.Name!,
+            deploymentStrategyArn: arn,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

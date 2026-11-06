@@ -186,11 +186,11 @@ export type LakesZone = Resource<
 export const LakesZone = Resource<LakesZone>("GCP.Dataplex.LakesZone");
 
 export class LakesZoneNotResolved extends Data.TaggedError("GCP.Dataplex.LakesZoneNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LakesZoneStillExists extends Data.TaggedError("GCP.Dataplex.LakesZoneStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lakeOf = (lake: string, project: string, location: string) =>
@@ -238,20 +238,20 @@ const toAttrs = (zone: dataplex.GoogleCloudDataplexV1Zone, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataplex
         .getProjectsLocationsLakesZones({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (zone): zone is dataplex.GoogleCloudDataplexV1Zone => zone !== undefined,
-      () => new LakesZoneNotResolved({ name }),
+      () => new LakesZoneNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (zone) => !isPendingState(zone.state),
-      () => new DataplexNotResolved({ name }),
+      () => new DataplexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -267,7 +267,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((zone) =>
-      zone === undefined ? Effect.void : Effect.fail(new LakesZoneStillExists({ name })),
+      zone === undefined
+        ? Effect.void
+        : Effect.fail(new LakesZoneStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.LakesZoneStillExists",
@@ -377,7 +379,7 @@ export const LakesZoneProvider = () =>
               discoverySpec: desiredDiscovery,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -385,7 +387,7 @@ export const LakesZoneProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LakesZoneNotResolved({ name });
+        return yield* new LakesZoneNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -430,8 +432,8 @@ export const LakesZoneProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
           }),
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            BadRequest: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            BadRequest: () => Effect.undefined,
           }),
         );
       if (operation !== undefined) {

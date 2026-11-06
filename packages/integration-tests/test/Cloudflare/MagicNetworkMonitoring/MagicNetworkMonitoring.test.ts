@@ -1,11 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -75,18 +76,18 @@ describe.sequential(
 
           const config = yield* stack.deploy(
             Cloudflare.MagicNetworkMonitoring.Config("Config", {
-              name: "alchemy-mnm-test",
+              name: testName("alchemy-mnm-test"),
               defaultSampling: 1,
             }),
           );
 
           expect(config.accountId).toEqual(accountId);
-          expect(config.name).toEqual("alchemy-mnm-test");
+          expect(config.name).toEqual(testName("alchemy-mnm-test"));
           expect(config.defaultSampling).toEqual(1);
           expect(config.routerIps).toEqual([]);
 
           const live = yield* getConfig(accountId);
-          expect(live?.name).toEqual("alchemy-mnm-test");
+          expect(live?.name).toEqual(testName("alchemy-mnm-test"));
           expect(live?.defaultSampling).toEqual(1);
 
           // Update the name label + sampling in place (same singleton).
@@ -96,27 +97,27 @@ describe.sequential(
           // fields are exercised here.
           const updated = yield* stack.deploy(
             Cloudflare.MagicNetworkMonitoring.Config("Config", {
-              name: "alchemy-mnm-test-v2",
+              name: testName("alchemy-mnm-test-v2"),
               defaultSampling: 100,
             }),
           );
 
           expect(updated.accountId).toEqual(accountId);
-          expect(updated.name).toEqual("alchemy-mnm-test-v2");
+          expect(updated.name).toEqual(testName("alchemy-mnm-test-v2"));
           expect(updated.defaultSampling).toEqual(100);
 
           const liveUpdated = yield* getConfig(accountId);
-          expect(liveUpdated?.name).toEqual("alchemy-mnm-test-v2");
+          expect(liveUpdated?.name).toEqual(testName("alchemy-mnm-test-v2"));
           expect(liveUpdated?.defaultSampling).toEqual(100);
 
           // Redeploying identical props is a no-op.
           const noop = yield* stack.deploy(
             Cloudflare.MagicNetworkMonitoring.Config("Config", {
-              name: "alchemy-mnm-test-v2",
+              name: testName("alchemy-mnm-test-v2"),
               defaultSampling: 100,
             }),
           );
-          expect(noop.name).toEqual("alchemy-mnm-test-v2");
+          expect(noop.name).toEqual(testName("alchemy-mnm-test-v2"));
 
           yield* stack.destroy();
           yield* expectConfigGone(accountId);
@@ -155,7 +156,7 @@ describe.sequential(
             stack.deploy(
               Effect.gen(function* () {
                 const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Config", {
-                  name: "alchemy-mnm-rule-test",
+                  name: testName("alchemy-mnm-rule-test"),
                   defaultSampling: 1,
                 });
                 // Rules cannot exist without the account config — sequence the

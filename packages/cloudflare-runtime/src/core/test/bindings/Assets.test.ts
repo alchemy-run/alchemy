@@ -89,6 +89,51 @@ layer(localRuntimeLayer)("Assets binding", (it) => {
     }),
   );
 
+  // Adapted from Miniflare's `test/plugins/assets/index.spec.ts` (#15998).
+  for (const { name, basePath, path, status } of [
+    {
+      name: "serves an in-prefix asset under a non-root basePath",
+      basePath: "/subpath",
+      path: "/subpath/.well-known/security.txt",
+      status: 200,
+    },
+    {
+      name: "returns 404 for an off-prefix request under a non-root basePath",
+      basePath: "/subpath",
+      path: "/.well-known/security.txt",
+      status: 404,
+    },
+    {
+      name: "normalizes a relative basePath in the Asset Worker",
+      basePath: "relative/path",
+      path: "/relative/path/.well-known/security.txt",
+      status: 200,
+    },
+  ]) {
+    it.effect(name, () =>
+      Effect.gen(function* () {
+        const worker = yield* startTestWorker({
+          name: "assets-base-path",
+          compatibilityDate: "2026-04-29",
+          compatibilityFlags: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default { fetch() { return new Response("worker", { status: 404 }); } };`,
+            },
+          ],
+          assets: { directory: ASSETS_DIRECTORY, basePath },
+          bindings: [],
+        });
+        const res = yield* worker.fetch(path, { redirect: "manual" });
+        const text = yield* Effect.promise(() => res.text());
+        expect(res.status).toBe(status);
+        if (status === 200) expect(text).toBe("Contact: mailto:security@example.com\n");
+      }),
+    );
+  }
+
   it.effect("Assets.binding fails with ConfigError when no assets are configured", () =>
     Effect.gen(function* () {
       const error = yield* startTestWorker({

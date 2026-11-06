@@ -180,8 +180,18 @@ export interface Canary extends Resource<
     engineArn: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  CanaryLookup
 > {}
+
+/**
+ * Props for {@link Canary.lookup}: find a canary this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CanaryLookup {
+  /** The name of the existing canary. */
+  canaryName: string;
+}
 
 /**
  * A CloudWatch Synthetics canary — a scripted probe that monitors your
@@ -240,6 +250,17 @@ export interface Canary extends Resource<
  *   artifactS3Location: "s3://my-artifacts/probe",
  *   executionRoleArn: role.roleArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing canary
+ * `Canary.lookup` references a canary Alchemy doesn't manage (created in the
+ * console or by another stack), found by `canaryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing canary
+ * ```typescript
+ * const checkout = AWS.Synthetics.Canary.lookup({ canaryName: "checkout" });
+ * const canaryArn = checkout.canaryArn;
  * ```
  *
  * @resource
@@ -364,7 +385,7 @@ export const CanaryProvider = () =>
       const getCanaryOrUndefined = Effect.fn(function* (canaryName: string) {
         return yield* synthetics.getCanary({ Name: canaryName }).pipe(
           Effect.map((r) => r.Canary),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -711,7 +732,7 @@ export const CanaryProvider = () =>
         for (let attempt = 0; attempt < 30; attempt++) {
           const remaining = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (remaining === undefined) return;
           yield* Effect.sleep("1 second");
         }
@@ -803,6 +824,25 @@ export const CanaryProvider = () =>
             return items;
           }),
 
+        lookup: Effect.fn(function* ({ canaryName }) {
+          const canary = yield* getCanaryOrUndefined(canaryName);
+          if (canary === undefined) return undefined;
+          const attrs: Canary["Attributes"] = {
+            canaryName,
+            canaryArn: yield* canaryArnOf(canaryName),
+            canaryId: canary.Id ?? "",
+            executionRoleArn: canary.ExecutionRoleArn ?? "",
+            artifactS3Location: canary.ArtifactS3Location
+              ? parseArtifactLocation(canary.ArtifactS3Location).artifactS3Location
+              : "",
+            runtimeVersion: canary.RuntimeVersion ?? "",
+            // The execution role names the role a declared canary records.
+            roleName: canary.ExecutionRoleArn?.split("/").at(-1),
+            configHash: undefined,
+            engineArn: canary.EngineArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const canaryName = output?.canaryName ?? (yield* createCanaryName(id, olds ?? {}));
           const canary = yield* getCanaryOrUndefined(canaryName);

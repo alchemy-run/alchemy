@@ -311,7 +311,7 @@ const matchesObserved = (
 const observeAutomation = (accountId: string, automationId: string) =>
   workers.getObservabilityIssueAutomation({ accountId, automationId }).pipe(
     Effect.map(({ automation }) => automation),
-    Effect.catchTag("ObservabilityIssueAutomationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ObservabilityIssueAutomationNotFound", () => Effect.undefined),
   );
 
 const findAutomationByName = (accountId: string, name: string) =>

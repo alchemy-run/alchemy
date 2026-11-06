@@ -2,15 +2,20 @@ import * as eks from "@distilled.cloud/aws/eks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class AddonOperationFailed extends Data.TaggedError("AddonOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AddonProps {
   /**
@@ -142,7 +147,7 @@ const readAddon = Effect.fn(function* ({
       clusterName,
       addonName,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   const addon = response?.addon;
   if (!addon?.addonArn || !addon.addonName || !addon.clusterName) {
@@ -170,13 +175,6 @@ export const AddonProvider = () =>
   Provider.effect(
     Addon,
     Effect.gen(function* () {
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       return {
         stables: ["addonArn"],
         // Add-ons are keyed by (clusterName, addonName) and `listAddons`
@@ -239,6 +237,7 @@ export const AddonProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const addonName = news.addonName;
           const desiredTags = {
@@ -251,6 +250,10 @@ export const AddonProvider = () =>
             clusterName,
             addonName,
           });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForAddonActive({ clusterName, addonName });
+          }
 
           // Ensure — create if missing. Tolerate `ResourceInUseException`
           // as a race with a peer reconciler: re-read and continue with
@@ -267,7 +270,7 @@ export const AddonProvider = () =>
                 podIdentityAssociations: news.podIdentityAssociations,
                 namespaceConfig: news.namespaceConfig,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -297,7 +300,7 @@ export const AddonProvider = () =>
               resolveConflicts: news.resolveConflicts,
               configurationValues: news.configurationValues,
               podIdentityAssociations: news.podIdentityAssociations,
-              clientRequestToken: yield* toClientRequestToken(id, "update"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             state = yield* waitForAddonActive({
               clusterName,
@@ -354,40 +357,36 @@ const waitForAddonActive = Effect.fn(function* ({
     clusterName,
     addonName,
   }).pipe(
-    Effect.flatMap((addon) => {
-      if (!addon) {
-        return Effect.fail(
-          new AddonNotReady({
+    Effect.flatMap(
+      Effect.fnUntraced(function* (addon) {
+        if (!addon) {
+          return yield* new AddonNotReady({
             clusterName,
             addonName,
             status: undefined,
-          }),
-        );
-      }
+          });
+        }
 
-      switch (addon.status) {
-        case "ACTIVE":
-          return Effect.succeed(addon);
-        case "CREATE_FAILED":
-        case "UPDATE_FAILED":
-        case "DELETE_FAILED":
-          return Effect.fail(
-            new Error(
-              `Addon '${clusterName}/${addonName}' entered terminal status '${addon.status}'`,
-            ),
-          );
-        default:
-          return Effect.fail(
-            new AddonNotReady({
+        switch (addon.status) {
+          case "ACTIVE":
+            return addon;
+          case "CREATE_FAILED":
+          case "UPDATE_FAILED":
+          case "DELETE_FAILED":
+            return yield* new AddonOperationFailed({
+              message: `Addon '${clusterName}/${addonName}' entered terminal status '${addon.status}'`,
+            });
+          default:
+            return yield* new AddonNotReady({
               clusterName,
               addonName,
               status: addon.status,
-            }),
-          );
-      }
-    }),
+            });
+        }
+      }),
+    ),
     Effect.retry({
-      while: (error) => error instanceof AddonNotReady,
+      while: (error) => error._tag === "AddonNotReady",
       // Flat 5s polls, ~20 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
@@ -413,7 +412,7 @@ const waitForAddonDeleted = Effect.fn(function* ({
       addon ? Effect.fail(new AddonStillExists({ clusterName, addonName })) : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error instanceof AddonStillExists,
+      while: (error) => error._tag === "AddonStillExists",
       // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),

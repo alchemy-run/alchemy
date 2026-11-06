@@ -6,6 +6,7 @@ import * as RpcProvider from "alchemy/Local/RpcProvider";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -255,7 +256,7 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     // the fresh queue is visible to the consumers API. Treat that as "no
     // consumer yet" — the caller falls through to createConsumer, which
     // retries QueueNotFound until the queue propagates.
-    Effect.catchTag("QueueNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("QueueNotFound", () => Effect.undefined),
   );
 
 export const ConsumerProviderLive = () =>
@@ -391,7 +392,7 @@ export const ConsumerProviderLive = () =>
       if (isLiveId(output?.consumerId)) {
         const fetched = yield* queues
           .getConsumer({ accountId: acct, queueId, consumerId: output.consumerId })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           observed = toObserved(fetched);
           owned = observed !== undefined;
@@ -438,9 +439,7 @@ export const ConsumerProviderLive = () =>
           const settings = yield* workers
             .getScriptScriptAndVersionSetting({ accountId: acct, scriptName })
             .pipe(
-              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined),
             );
           return settings === undefined ? undefined : new Set(settings.tags ?? []);
         });
@@ -628,7 +627,7 @@ export const ConsumerProviderLive = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
           })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           return {
             consumerId: fetched.consumerId!,
@@ -776,7 +775,7 @@ export const ConsumerProviderLocal = () =>
             consumerId:
               output?.consumerId && !isLiveId(output.consumerId)
                 ? output.consumerId
-                : `dev:${crypto.randomUUID()}`,
+                : `dev:${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`,
             queueId: news.queueId,
             scriptName: news.scriptName,
             deadLetterQueue: news.deadLetterQueue,

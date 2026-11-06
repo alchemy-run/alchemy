@@ -14,11 +14,17 @@ import {
   parseIgnoreRules,
   walkIgnoring,
 } from "alchemy/Util/Ignore";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
+
+export class BuildHashInvalidProps extends Data.TaggedError("BuildHashInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DockerBuildSource {
   context: string;
@@ -51,10 +57,14 @@ export const resolveDockerBuildPaths = Effect.fn(function* (
     : path.resolve(context, source.dockerfile);
 
   if (!(yield* fs.exists(context))) {
-    return yield* Effect.fail(new Error(`Docker build context does not exist: ${context}`));
+    return yield* new BuildHashInvalidProps({
+      message: `Docker build context does not exist: ${context}`,
+    });
   }
   if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.fail(new Error(`Dockerfile does not exist: ${dockerfile}`));
+    return yield* new BuildHashInvalidProps({
+      message: `Dockerfile does not exist: ${dockerfile}`,
+    });
   }
 
   return { context, dockerfile };

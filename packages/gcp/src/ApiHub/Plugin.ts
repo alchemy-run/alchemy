@@ -211,10 +211,10 @@ const toAttrs = (plugin: apihub.GoogleCloudApihubV1Plugin, project: string, regi
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsPlugins({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPlugins.pages({ parent, pageSize: 1000 }).pipe(
@@ -314,7 +314,7 @@ export const PluginProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -342,7 +342,7 @@ export const PluginProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

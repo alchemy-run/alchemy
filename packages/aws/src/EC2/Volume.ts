@@ -15,6 +15,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -156,8 +157,23 @@ export interface Volume extends Resource<
     state: ec2.VolumeState;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 > {}
+
+/**
+ * Props for {@link Volume.lookup}: find an EBS volume this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type VolumeLookup =
+  | {
+      /** The volume's id. */
+      volumeId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * An Elastic Block Store (EBS) volume — durable block storage you attach to an
  * EC2 instance via a {@link VolumeAttachment}. Volumes live in a single
@@ -223,6 +239,23 @@ export interface Volume extends Resource<
  * When you create a volume from a snapshot, `size` defaults to the snapshot's
  * size and can only be grown, never shrunk.
  *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in the
+ * console or by another stack), found by `volumeId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Attach an existing volume
+ * ```typescript
+ * const data = AWS.EC2.Volume.lookup({ name: "data" });
+ *
+ * yield* AWS.EC2.VolumeAttachment("Data", {
+ *   volumeId: data.volumeId,
+ *   instanceId: instance.instanceId,
+ *   device: "/dev/sdf",
+ * });
+ * ```
+ *
  * @resource
  */
 export const Volume = Resource<Volume>("AWS.EC2.Volume");
@@ -245,6 +278,25 @@ export const VolumeProvider = () =>
         return Array.from(pages)
           .flatMap((page) => page.Volumes ?? [])
           .find((volume) => volume.State !== "deleting" && volume.State !== "deleted");
+      });
+
+      // Try the cached volume id first, then the ownership-tag lookup. A
+      // volume that is deleting or deleted counts as missing.
+      const observeVolume = Effect.fn(function* (
+        id: string,
+        instanceId: string,
+        volumeId: string | undefined,
+      ) {
+        if (volumeId) {
+          const lookup = yield* ec2
+            .describeVolumes({ VolumeIds: [volumeId] })
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
+          const found = lookup.Volumes?.[0];
+          if (found && found.State !== "deleting" && found.State !== "deleted") {
+            return found;
+          }
+        }
+        return yield* findVolumeByInstanceTags(id, instanceId);
       });
 
       return {
@@ -275,6 +327,31 @@ export const VolumeProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeVolumes(
+              "volumeId" in props
+                ? { VolumeIds: [props.volumeId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
+          const match = yield* single(
+            "AWS.EC2.Volume",
+            "volumeId" in props ? props.volumeId : `Name=${props.name}`,
+            (found.Volumes ?? []).filter((x) => x.State !== "deleted" && x.State !== "deleting"),
+            (x) => x.VolumeId,
+          );
+          if (!match?.VolumeId) return undefined;
+          return toVolumeAttributes(match, region, accountId);
+        }),
+
+        read: Effect.fn(function* ({ id, instanceId, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const volume = yield* observeVolume(id, instanceId, output?.volumeId);
+          return volume ? toVolumeAttributes(volume, region, accountId) : undefined;
+        }),
+
         reconcile: Effect.fn(function* ({ id, instanceId, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
@@ -286,43 +363,52 @@ export const VolumeProvider = () =>
 
           // 1. OBSERVE — cloud state is authoritative; output is only an id
           //    cache. A volume in a terminal state is treated as missing.
-          let volume: ec2.Volume | undefined;
-          if (output?.volumeId) {
-            const lookup = yield* ec2
-              .describeVolumes({ VolumeIds: [output.volumeId] })
-              .pipe(
-                Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })),
-              );
-            const found = lookup.Volumes?.[0];
-            if (found && found.State !== "deleting" && found.State !== "deleted") {
-              volume = found;
-            }
-          }
-          if (volume === undefined) {
-            volume = yield* findVolumeByInstanceTags(id, instanceId);
-          }
+          let volume = yield* observeVolume(id, instanceId, output?.volumeId);
 
           // 2. ENSURE — create the volume when missing, then wait until it is
-          //    available.
+          //    available. The ClientToken is this generation plus the last
+          //    volume it created, so a create retried after a lost reply
+          //    returns the first volume, and a recreate after the volume was
+          //    deleted sends a new token.
           if (volume === undefined) {
-            const created = yield* ec2.createVolume({
-              AvailabilityZone: news.availabilityZone,
-              Size: news.size,
-              VolumeType: news.volumeType ?? "gp3",
-              Iops: news.iops,
-              Throughput: news.throughput,
-              Encrypted: news.encrypted ?? (news.kmsKeyId !== undefined ? true : undefined),
-              KmsKeyId: news.kmsKeyId,
-              SnapshotId: news.snapshotId,
-              MultiAttachEnabled: news.multiAttachEnabled,
-              TagSpecifications: [
-                {
-                  ResourceType: "volume",
-                  Tags: createTagsList(desiredTags),
-                },
-              ],
-              DryRun: false,
-            });
+            const create = (clientToken: string | undefined) =>
+              ec2.createVolume({
+                AvailabilityZone: news.availabilityZone,
+                Size: news.size,
+                VolumeType: news.volumeType ?? "gp3",
+                Iops: news.iops,
+                Throughput: news.throughput,
+                Encrypted: news.encrypted ?? (news.kmsKeyId !== undefined ? true : undefined),
+                KmsKeyId: news.kmsKeyId,
+                SnapshotId: news.snapshotId,
+                MultiAttachEnabled: news.multiAttachEnabled,
+                ClientToken: clientToken,
+                TagSpecifications: [
+                  {
+                    ResourceType: "volume",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              });
+            // EC2 refuses a token whose volume was deleted, which a recreate
+            // with no saved volume id (Drift.repair) runs into. Step to the
+            // next token in a fixed sequence, so a retry after a lost reply
+            // walks the same sequence and returns the same volume.
+            const token = `${instanceId}-${output?.volumeId ?? "initial"}`;
+            const createFrom = (
+              attempt: number,
+            ): Effect.Effect<
+              ec2.Volume,
+              Effect.Error<ReturnType<typeof create>>,
+              Effect.Services<ReturnType<typeof create>>
+            > =>
+              create(attempt === 0 ? token : `${token}-${attempt}`).pipe(
+                Effect.catchTag("IdempotentVolumeDeleted", (e) =>
+                  attempt < 8 ? createFrom(attempt + 1) : Effect.fail(e),
+                ),
+              );
+            const created = yield* createFrom(0);
             const volumeId = created.VolumeId! as VolumeId;
             yield* session.note(`Volume created: ${volumeId}`);
             volume = yield* waitForVolumeAvailable(volumeId, session);
@@ -443,6 +529,14 @@ const toVolumeAttributes = (
   };
 };
 
+class VolumeNotFound extends Data.TaggedError("VolumeNotFound")<{
+  volumeId: string;
+}> {}
+
+class VolumeFailed extends Data.TaggedError("VolumeFailed")<{
+  volumeId: string;
+}> {}
+
 class VolumeNotReady extends Data.TaggedError("VolumeNotReady")<{
   volumeId: string;
   state: string;
@@ -462,18 +556,18 @@ const waitForVolumeAvailable = (volumeId: string, session?: ScopedPlanStatusSess
     const result = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });
     const volume = result.Volumes?.[0];
     if (!volume) {
-      return yield* Effect.fail(new Error(`Volume ${volumeId} not found`));
+      return yield* new VolumeNotFound({ volumeId });
     }
     if (volume.State === "available" || volume.State === "in-use") {
       return volume;
     }
     if (volume.State === "error") {
-      return yield* Effect.fail(new Error(`Volume ${volumeId} entered error state`));
+      return yield* new VolumeFailed({ volumeId });
     }
     return yield* new VolumeNotReady({ volumeId, state: volume.State! });
   }).pipe(
     Effect.retry({
-      while: (e) => e instanceof VolumeNotReady,
+      while: (e) => e._tag === "VolumeNotReady",
       schedule: Schedule.max([
         Schedule.fixed(2000),
         Schedule.recurs(30), // max ~60s
@@ -511,7 +605,7 @@ const waitForVolumeDeleted = (volumeId: string, session: ScopedPlanStatusSession
     });
   }).pipe(
     Effect.retry({
-      while: (e) => e instanceof VolumeStillExists,
+      while: (e) => e._tag === "VolumeStillExists",
       schedule: Schedule.max([
         Schedule.fixed(2000),
         // DeleteVolume is accepted immediately but describe can keep

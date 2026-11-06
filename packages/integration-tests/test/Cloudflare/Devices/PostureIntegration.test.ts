@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
@@ -37,9 +37,7 @@ test.provider.skipIf(external)(
       // validation step (dummy Access creds would fail earlier).
       const { token } = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.Access.ServiceToken("ProbeToken", {
-            name: "alchemy-test-posture-probe-token",
-          });
+          const token = yield* Cloudflare.Access.ServiceToken("ProbeToken", {});
           return { token };
         }),
       );
@@ -92,11 +90,8 @@ test.provider.skipIf(!external)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.Access.ServiceToken("S2sToken", {
-            name: "alchemy-test-posture-s2s-token",
-          });
+          const token = yield* Cloudflare.Access.ServiceToken("S2sToken", {});
           const integration = yield* Cloudflare.Devices.DevicePostureIntegration("Custom", {
-            name: "alchemy-test-posture-integration",
             type: "custom_s2s",
             interval: "10m",
             config: {
@@ -184,11 +179,8 @@ test.provider.skipIf(!external)(
 
       const { integration } = yield* stack.deploy(
         Effect.gen(function* () {
-          const token = yield* Cloudflare.Access.ServiceToken("ListS2sToken", {
-            name: "alchemy-test-posture-list-token",
-          });
+          const token = yield* Cloudflare.Access.ServiceToken("ListS2sToken", {});
           const integration = yield* Cloudflare.Devices.DevicePostureIntegration("ListCustom", {
-            name: "alchemy-test-posture-list-integration",
             type: "custom_s2s",
             interval: "10m",
             config: {

@@ -43,7 +43,7 @@ export const certificatesWriteClient = (
       return yield* authorize(
         machines
           .createAppAcmeCertificate({ app_name: yield* appName, hostname })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
       );
     }),
     upload: Effect.fn("Fly.Certificates.upload")(function* (request) {
@@ -78,7 +78,7 @@ export const certificatesWriteClient = (
       return yield* authorize(
         machines
           .getAppCertificate({ app_name: yield* appName, hostname })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
     }),
     remove: Effect.fn("Fly.Certificates.remove")(function* (hostname) {

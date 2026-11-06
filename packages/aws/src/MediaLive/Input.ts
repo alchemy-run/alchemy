@@ -109,8 +109,23 @@ export interface Input extends Resource<
     securityGroups: string[];
   },
   never,
-  Providers
+  Providers,
+  InputLookup
 > {}
+
+/**
+ * Props for {@link Input.lookup}: find an input this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type InputLookup =
+  | {
+      /** The id of the existing input. */
+      inputId: string;
+    }
+  | {
+      /** The name of the existing input. */
+      name: string;
+    };
 
 /**
  * An AWS Elemental MediaLive input — the ingest endpoint or source locator a
@@ -151,6 +166,16 @@ export interface Input extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing input
+ * `Input.lookup` references an input Alchemy doesn't manage (created in the
+ * console or by another stack), found by `inputId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing input
+ * ```typescript
+ * const camera = AWS.MediaLive.Input.lookup({ name: "camera-1" });
+ * ```
+ *
  * @resource
  */
 export const Input = Resource<Input>("AWS.MediaLive.Input");
@@ -181,7 +206,7 @@ export const InputProvider = () =>
       const getInput = Effect.fn(function* (inputId: string) {
         const input = yield* medialive
           .describeInput({ InputId: inputId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         if (input === undefined || isGone(input.State)) return undefined;
         return yield* ensureIdentified(input, "DescribeInput Id/Arn");
       });
@@ -233,12 +258,20 @@ export const InputProvider = () =>
             ),
           ),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* (props) {
+          const input =
+            "inputId" in props ? yield* getInput(props.inputId) : yield* findByName(props.name);
+          return input === undefined ? undefined : toAttrs(input);
+        }),
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const input =
             output?.inputId !== undefined
               ? yield* getInput(output.inputId)
               : yield* findByName(yield* createName(id, olds ?? {}));
           if (input === undefined) return undefined;
+          // A create-first replacement finds the input it is replacing by name:
+          // that is not the replacement.
+          if (output === undefined && input.Id === previous?.inputId) return undefined;
           const attrs = toAttrs(input);
           return (yield* hasAlchemyTags(id, toTagRecord(input.Tags))) ? attrs : Unowned(attrs);
         }),
@@ -293,7 +326,15 @@ export const InputProvider = () =>
             const sameStringSet = (
               a: readonly (string | undefined)[],
               b: readonly (string | undefined)[],
-            ) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+            ) => {
+              // Default sort order (UTF-16 code units); `undefined` sorts last
+              // without reaching the comparator.
+              const byCodeUnit = (x: string | undefined, y: string | undefined) =>
+                (x ?? "") < (y ?? "") ? -1 : (x ?? "") > (y ?? "") ? 1 : 0;
+              return (
+                JSON.stringify([...a].sort(byCodeUnit)) === JSON.stringify([...b].sort(byCodeUnit))
+              );
+            };
             const nameDrift = input.Name !== name;
             const roleDrift = news.roleArn !== undefined && input.RoleArn !== news.roleArn;
             const sgDrift = !sameStringSet(

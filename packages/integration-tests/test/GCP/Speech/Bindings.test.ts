@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as speech from "@distilled.cloud/gcp/speech_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import SpeechBindingsHost, { Hints, Ships } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -39,7 +39,7 @@ const projectRoles = () =>
       ),
     );
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Speech Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:speech", "provider:gcp:run", "live"],

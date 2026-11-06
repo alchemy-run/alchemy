@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Neon from "@alchemy.run/neon";
 import * as SQL from "@alchemy.run/sql/Postgres";
+import type * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -88,7 +89,7 @@ const PostgresRoutes = Effect.gen(function* () {
     // PUT /users/values — multi-row `sql.updateValues` (not supported on
     // sqlite/D1, so it lives here rather than in the shared routes).
     if (request.method === "PUT" && request.url === "/users/values") {
-      const rows = (yield* request.json) as UserRow[];
+      const rows = (yield* request.json) as Arr.NonEmptyReadonlyArray<UserRow>;
       // `updateValues` binds every value as text — cast the join key back
       // to int so `integer = text` doesn't reject the statement.
       yield* sql`

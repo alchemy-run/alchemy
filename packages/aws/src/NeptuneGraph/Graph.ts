@@ -11,6 +11,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class NeptuneGraphGraphUnexpectedResponse extends Data.TaggedError(
+  "NeptuneGraphGraphUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GraphProps {
   /**
    * Name of the graph (lowercase letters, numbers, and hyphens; must start
@@ -93,8 +100,23 @@ export interface Graph extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GraphLookup
 > {}
+
+/**
+ * Props for {@link Graph.lookup}: find a graph this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GraphLookup =
+  | {
+      /** The id of the existing graph. */
+      graphId: string;
+    }
+  | {
+      /** The name of the existing graph. */
+      graphName: string;
+    };
 
 /**
  * An Amazon Neptune Analytics graph — a serverless, memory-optimized graph
@@ -135,6 +157,17 @@ export interface Graph extends Resource<
  *   queryString: "MATCH (n) RETURN count(n) AS n",
  *   language: "OPEN_CYPHER",
  * });
+ * ```
+ *
+ * ### Looking up an existing graph
+ * `Graph.lookup` references a graph Alchemy doesn't manage (created in the
+ * console or by another stack), found by `graphId` or `graphName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing graph
+ * ```typescript
+ * const social = AWS.NeptuneGraph.Graph.lookup({ graphName: "social" });
+ * const endpoint = social.endpoint;
  * ```
  *
  * @resource
@@ -200,7 +233,7 @@ export const GraphProvider = () =>
       const getGraph = Effect.fn(function* (graphId: string) {
         return yield* neptunegraph
           .getGraph({ graphIdentifier: graphId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Graph names are unique per account/region — resolve a graph by name
@@ -226,7 +259,7 @@ export const GraphProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* neptunegraph
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return toTagRecord(response?.tags);
       });
 
@@ -311,6 +344,14 @@ export const GraphProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const graph = yield* observeGraph(
+            "graphId" in props ? props.graphId : undefined,
+            "graphName" in props ? props.graphName : "",
+          );
+          if (graph === undefined) return undefined;
+          return toAttrs({ graph, tags: yield* readTags(graph.arn) });
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.graphName ??
@@ -344,10 +385,12 @@ export const GraphProvider = () =>
                 deletionProtection: news.deletionProtection,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             const graphId = created?.id ?? (yield* findGraphByName(name))?.id;
             if (graphId === undefined) {
-              return yield* Effect.fail(new Error(`Failed to create graph '${name}'`));
+              return yield* new NeptuneGraphGraphUnexpectedResponse({
+                message: `Failed to create graph '${name}'`,
+              });
             }
             observed = yield* waitForGraph(graphId);
           } else {
@@ -419,14 +462,14 @@ export const GraphProvider = () =>
                 graphIdentifier: output.graphId,
                 deletionProtection: false,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
           yield* neptunegraph
             .deleteGraph({
               graphIdentifier: output.graphId,
               skipSnapshot: true,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(

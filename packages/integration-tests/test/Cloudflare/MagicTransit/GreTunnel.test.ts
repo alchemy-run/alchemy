@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -113,7 +114,7 @@ test.provider(
 
       const tunnel = yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("ListGre", {
-          name: "alch-gre-list",
+          name: testName("alch-gre-list"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.20",
           interfaceAddress: "10.213.20.20/31",
@@ -122,7 +123,7 @@ test.provider(
 
       const all = yield* provider.list();
       expect(all.some((t) => t.tunnelId === tunnel.tunnelId)).toBe(true);
-      expect(all.some((t) => t.name === "alch-gre-list")).toBe(true);
+      expect(all.some((t) => t.name === testName("alch-gre-list"))).toBe(true);
 
       yield* stack.destroy();
       yield* expectGone(tunnel.accountId, tunnel.tunnelId);
@@ -143,7 +144,7 @@ test.provider.skipIf(!entitled)(
 
       const tunnel = yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("Gre", {
-          name: "alch-gre-test1",
+          name: testName("alch-gre-test1"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",
           interfaceAddress: "10.213.10.10/31",
@@ -155,20 +156,20 @@ test.provider.skipIf(!entitled)(
 
       expect(tunnel.tunnelId).toBeTruthy();
       expect(tunnel.accountId).toEqual(accountId);
-      expect(tunnel.name).toEqual("alch-gre-test1");
+      expect(tunnel.name).toEqual(testName("alch-gre-test1"));
       expect(tunnel.cloudflareGreEndpoint).toEqual(cfEndpoint);
       expect(tunnel.customerGreEndpoint).toEqual("198.51.100.10");
       expect(tunnel.interfaceAddress).toEqual("10.213.10.10/31");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getTunnel(accountId, tunnel.tunnelId);
-      expect(live.greTunnel?.name).toEqual("alch-gre-test1");
+      expect(live.greTunnel?.name).toEqual(testName("alch-gre-test1"));
       expect(live.greTunnel?.description).toEqual("alchemy gre tunnel test");
 
       // Update mutable props in place — same tunnelId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("Gre", {
-          name: "alch-gre-test1",
+          name: testName("alch-gre-test1"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",
           interfaceAddress: "10.213.10.10/31",
@@ -186,7 +187,7 @@ test.provider.skipIf(!entitled)(
       // The tunnel name is its routing identity — changing it replaces.
       const replaced = yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("Gre", {
-          name: "alch-gre-test2",
+          name: testName("alch-gre-test2"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.10",
           interfaceAddress: "10.213.10.10/31",
@@ -194,7 +195,7 @@ test.provider.skipIf(!entitled)(
       );
 
       expect(replaced.tunnelId).not.toEqual(tunnel.tunnelId);
-      expect(replaced.name).toEqual("alch-gre-test2");
+      expect(replaced.name).toEqual(testName("alch-gre-test2"));
       yield* expectGone(accountId, tunnel.tunnelId);
 
       yield* stack.destroy();

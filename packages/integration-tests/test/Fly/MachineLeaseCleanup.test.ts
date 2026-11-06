@@ -1,9 +1,9 @@
 import * as Fly from "@alchemy.run/fly";
 import { makeMachineLeases } from "@alchemy.run/fly/leases";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Retry from "@distilled.cloud/fly-io/Retry";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -12,8 +12,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Scope from "effect/Scope";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { sanitizeExecFailure } from "./fixtures/exec-lease.ts";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 test.provider(
   "native lease cleanup waits for an in-flight renewal before releasing authority",

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -272,7 +272,7 @@ const toAttrs = (group: compute.NodeGroup, project: string): NodeGroup["Attribut
 const getByName = (project: string, zone: string, nodeGroup: string) =>
   compute
     .getNodeGroups({ project, zone, nodeGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, zone: string, nodeGroupName: string) =>
   getByName(project, zone, nodeGroupName).pipe(
@@ -342,7 +342,7 @@ export const NodeGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const nodeGroupName = yield* toName(id, olds?.nodeGroupName, output?.nodeGroupName);
       const zone = normalizeZone(olds?.zone ?? output?.zone);
@@ -350,7 +350,9 @@ export const NodeGroupProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "nodeGroupName");
     }),
 
     list: () =>

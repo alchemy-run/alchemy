@@ -1,14 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -17,8 +18,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // A gateway allows only one provider config per (providerSlug, alias). The
 // two cases in this file run concurrently (test.provider), so they each get
 // their OWN gateway to avoid colliding on the same slug+alias.
-const LIFECYCLE_GATEWAY_ID = "alchemy-test-aigw-pc";
-const LIST_GATEWAY_ID = "alchemy-test-aigw-pc-list";
+const LIFECYCLE_GATEWAY_ID = testName("alchemy-test-aigw-pc");
+const LIST_GATEWAY_ID = testName("alchemy-test-aigw-pc-list");
 const PROVIDER_SLUG = "openai";
 const ALIAS = "default";
 // Cloudflare requires the Secrets Store secret backing a provider config to

@@ -163,7 +163,7 @@ export const EnvironmentsTargetserver = Resource<EnvironmentsTargetserver>(
 export class EnvironmentsTargetserverNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsTargetserverNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, targetserverId: string) =>
@@ -326,7 +326,7 @@ export const EnvironmentsTargetserverProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsTargetserverNotResolved({ name });
+        return yield* new EnvironmentsTargetserverNotResolved({ resourceName: name });
       }
 
       const hostChanged = !sameText(current.host, news.host);

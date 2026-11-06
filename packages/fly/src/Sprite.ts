@@ -318,18 +318,18 @@ export const Sprite: Platform<Sprite, SpriteServices, SpriteShape, SpriteRuntime
 );
 
 export class SpriteNotCreated extends Data.TaggedError("Fly.SpriteNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SpriteExecFailed extends Data.TaggedError("Fly.SpriteExecFailed")<{
-  name: string;
+  resourceName: string;
   cmd: string;
   exitCode: number | undefined;
   stderr: string | undefined;
 }> {}
 
 class SpritePending extends Data.TaggedError("Fly.SpritePending")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toStatus = (status: string | undefined): SpriteStatus =>
@@ -368,12 +368,14 @@ const ownershipLabels = (id: string) =>
   });
 
 const getByName = (name: string) =>
-  sprites.getSprite({ name }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  sprites.getSprite({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForSprite = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((found) =>
-      found !== undefined ? Effect.succeed(found) : Effect.fail(new SpritePending({ name })),
+      found !== undefined
+        ? Effect.succeed(found)
+        : Effect.fail(new SpritePending({ resourceName: name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "Fly.SpritePending",
@@ -458,7 +460,7 @@ const runExec = (input: { name: string; cmd: string[]; env?: string[] }) =>
     );
     if ((result.exit_code ?? 0) !== 0) {
       return yield* new SpriteExecFailed({
-        name: input.name,
+        resourceName: input.name,
         cmd: input.cmd.join(" "),
         exitCode: result.exit_code,
         stderr: result.stderr,
@@ -576,12 +578,12 @@ export const SpriteProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = yield* resolveSpriteName(id, olds?.name, output?.name);
           const found = yield* (
-            output?.name !== undefined ? getByName(output.name) : Effect.succeed(undefined)
+            output?.name !== undefined ? getByName(output.name) : Effect.undefined
           ).pipe(
             Effect.flatMap((existing) =>
               existing !== undefined ? Effect.succeed(existing) : getByName(name),
             ),
-            Effect.catchTag("SpritesNotEnabled", () => Effect.succeed(undefined)),
+            Effect.catchTag("SpritesNotEnabled", () => Effect.undefined),
           );
           if (found === undefined) return undefined;
           const attrs = toAttrs(found, name, output?.code.hash ?? "");
@@ -628,7 +630,7 @@ export const SpriteProvider = () =>
           }
 
           if (current === undefined) {
-            return yield* new SpriteNotCreated({ name });
+            return yield* new SpriteNotCreated({ resourceName: name });
           }
           // Narrowed once so the `NotFound` fallbacks below keep the
           // non-optional type instead of widening back to `| undefined`.

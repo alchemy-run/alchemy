@@ -48,6 +48,6 @@ export const GitHubEnv: Config.Config<GitHubEnv | undefined> = Config.Boolean(
           ),
           pr: Config.Number("PULL_REQUEST").pipe(Config.option, Config.map(Option.getOrUndefined)),
         })
-      : Effect.succeed(undefined),
+      : Effect.undefined,
   ),
 );

@@ -2,9 +2,9 @@ import * as AWS from "@alchemy.run/aws";
 import { Database, Table } from "@alchemy.run/aws/Timestream";
 import { withQueryEndpoint, withWriteEndpoint } from "@alchemy.run/aws/Timestream/internal";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as TSW from "@distilled.cloud/aws/timestream-write";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

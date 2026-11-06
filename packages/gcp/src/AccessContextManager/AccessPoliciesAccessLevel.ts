@@ -158,7 +158,7 @@ export const AccessPoliciesAccessLevel = Resource<AccessPoliciesAccessLevel>(
 export class AccessPoliciesAccessLevelNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAccessLevelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (level: acm.AccessLevel): AccessPoliciesAccessLevel["Attributes"] => {
@@ -180,7 +180,7 @@ const toAttrs = (level: acm.AccessLevel): AccessPoliciesAccessLevel["Attributes"
 const getByName = (name: string) =>
   acm
     .getAccessPoliciesAccessLevels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listLevels = (policy: string) =>
   collectPages(
@@ -266,7 +266,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
               custom: news.custom,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -279,7 +279,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesAccessLevelNotResolved({ name });
+        return yield* new AccessPoliciesAccessLevelNotResolved({ resourceName: name });
       }
 
       const titleChanged = (current.title ?? "") !== desiredTitle;
@@ -311,7 +311,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesAccessLevelNotResolved({ name });
+        return yield* new AccessPoliciesAccessLevelNotResolved({ resourceName: name });
       }
 
       return toAttrs(current);
@@ -320,7 +320,7 @@ export const AccessPoliciesAccessLevelProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPoliciesAccessLevels({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

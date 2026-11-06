@@ -149,20 +149,20 @@ export const MirroringDeployment = Resource<MirroringDeployment>(
 export class MirroringDeploymentNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringDeploymentFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringDeploymentStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringDeploymentStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -196,21 +196,22 @@ const toAttrs = (deployment: networksecurity.MirroringDeployment, project: strin
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsMirroringDeployments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (deployment): deployment is networksecurity.MirroringDeployment => deployment !== undefined,
-      () => new MirroringDeploymentNotResolved({ name }),
+      () => new MirroringDeploymentNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (deployment) => deployment.state !== "DELETE_FAILED",
-      (deployment) => new MirroringDeploymentFailed({ name, state: deployment.state }),
+      (deployment) =>
+        new MirroringDeploymentFailed({ resourceName: name, state: deployment.state }),
     ),
     Effect.filterOrFail(
       (deployment) => !isPendingState(deployment.state),
-      () => new MirroringDeploymentNotResolved({ name }),
+      () => new MirroringDeploymentNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentNotResolved",
@@ -224,7 +225,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((deployment) =>
       deployment === undefined
         ? Effect.void
-        : Effect.fail(new MirroringDeploymentStillExists({ name })),
+        : Effect.fail(new MirroringDeploymentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.MirroringDeploymentStillExists",
@@ -349,7 +350,7 @@ export const MirroringDeploymentProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -358,7 +359,7 @@ export const MirroringDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MirroringDeploymentNotResolved({ name });
+        return yield* new MirroringDeploymentNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -398,7 +399,7 @@ export const MirroringDeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, {

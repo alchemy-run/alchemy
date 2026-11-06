@@ -73,7 +73,12 @@ export interface BaseBranchProps {
    * Adding a file is an in-place update. Editing or removing an
    * already-applied file replaces a non-production branch (re-forked from
    * its parent) and fails on a current or desired production branch — add
-   * a forward migration instead.
+   * a forward migration instead. Renaming an applied file without changing
+   * its contents keeps it applied and replaces nothing.
+   *
+   * History is linear: a new file must sort after every applied one, or
+   * the deploy fails with `NonLinearMigrationHistoryError`. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
 
@@ -412,7 +417,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
             return output ? attrs : Unowned(attrs);
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -440,7 +445,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           database: databaseName,
           branch: observedBranchName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create. The parent must be ready before
       // the child can fork from it. PostgreSQL short cluster sizes need

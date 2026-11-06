@@ -2,12 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as pageShield from "@distilled.cloud/cloudflare/page-shield";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -110,7 +111,7 @@ test.provider(
       // zone, skipping unentitled `Forbidden` zones) and return a
       // well-typed array — empty when no policies exist.
       if (entitledZoneId) {
-        const description = "alchemy-pageshield-list";
+        const description = testName("alchemy-pageshield-list");
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             yield* Cloudflare.PageShield.Settings("PageShield", {
@@ -149,7 +150,7 @@ test.provider.skipIf(!entitledZoneId)(
   (stack) =>
     Effect.gen(function* () {
       const zoneId = entitledZoneId!;
-      const description = "alchemy-pageshield-policy-lifecycle";
+      const description = testName("alchemy-pageshield-policy-lifecycle");
 
       yield* stack.destroy();
 

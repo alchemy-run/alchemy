@@ -6,11 +6,26 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class FargateProfileOperationFailed extends Data.TaggedError(
+  "FargateProfileOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class FargateProfileUnexpectedResponse extends Data.TaggedError(
+  "FargateProfileUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FargateProfileProps {
   /**
@@ -65,8 +80,20 @@ export interface FargateProfile extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FargateProfileLookup
 > {}
+
+/**
+ * Props for {@link FargateProfile.lookup}: find a Fargate profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FargateProfileLookup {
+  /** The cluster the profile belongs to. */
+  clusterName: string;
+  /** The name of the existing profile. */
+  fargateProfileName: string;
+}
 
 /**
  * An Amazon EKS Fargate profile — declares which pods (by namespace + labels)
@@ -102,6 +129,16 @@ export interface FargateProfile extends Resource<
  *     { namespace: "batch", labels: { compute: "fargate" } },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing Fargate profile
+ * `FargateProfile.lookup` references a Fargate profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName` and `fargateProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Fargate profile
+ * ```typescript
+ * const system = AWS.EKS.FargateProfile.lookup({ clusterName: "platform", fargateProfileName: "system" });
  * ```
  *
  * @resource
@@ -151,13 +188,6 @@ export const FargateProfileProvider = () =>
           ? Effect.succeed(props.fargateProfileName)
           : createPhysicalName({ id, maxLength: 63 });
 
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       const readProfile = Effect.fn(function* ({
         clusterName,
         fargateProfileName,
@@ -167,7 +197,7 @@ export const FargateProfileProvider = () =>
       }) {
         const described = yield* eks
           .describeFargateProfile({ clusterName, fargateProfileName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const profile = described?.fargateProfile;
         if (
           !profile?.fargateProfileArn ||
@@ -182,22 +212,24 @@ export const FargateProfileProvider = () =>
 
       const waitForProfileActive = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
-          Effect.flatMap((state) => {
-            if (!state) {
-              return Effect.fail(new FargateProfileNotReady({ status: undefined }));
-            }
-            if (state.status === "ACTIVE") {
-              return Effect.succeed(state);
-            }
-            if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
-              return Effect.fail(
-                new Error(`EKS Fargate profile '${fargateProfileName}' entered ${state.status}`),
-              );
-            }
-            return Effect.fail(new FargateProfileNotReady({ status: state.status }));
-          }),
+          Effect.flatMap(
+            Effect.fnUntraced(function* (state) {
+              if (!state) {
+                return yield* new FargateProfileNotReady({ status: undefined });
+              }
+              if (state.status === "ACTIVE") {
+                return state;
+              }
+              if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
+                return yield* new FargateProfileOperationFailed({
+                  message: `EKS Fargate profile '${fargateProfileName}' entered ${state.status}`,
+                });
+              }
+              return yield* new FargateProfileNotReady({ status: state.status });
+            }),
+          ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileNotReady,
+            while: (error) => error._tag === "EKS.FargateProfileNotReady",
             schedule: waitSchedule,
           }),
         );
@@ -205,10 +237,10 @@ export const FargateProfileProvider = () =>
       const waitForProfileDeleted = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new FargateProfileStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new FargateProfileStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileStillExists,
+            while: (error) => error._tag === "EKS.FargateProfileStillExists",
             schedule: waitSchedule,
           }),
         );
@@ -267,6 +299,8 @@ export const FargateProfileProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName, fargateProfileName }) =>
+          readProfile({ clusterName, fargateProfileName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
             | string
@@ -279,6 +313,7 @@ export const FargateProfileProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const fargateProfileName = yield* toProfileName(id, news);
           const desiredTags = {
@@ -301,20 +336,17 @@ export const FargateProfileProvider = () =>
                 selectors: news.selectors,
                 subnets: news.subnets as string[] | undefined,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(
                 Effect.catchTag("ResourceInUseException", () =>
                   Effect.fail(new FargateProfileBusy()),
                 ),
                 Effect.retry({
-                  while: (error) => error instanceof FargateProfileBusy,
+                  while: (error) => error._tag === "EKS.FargateProfileBusy",
                   schedule: busySchedule,
                 }),
-                Effect.catchIf(
-                  (error) => error instanceof FargateProfileBusy,
-                  () => Effect.void,
-                ),
+                Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
               );
 
             yield* session.note(`Creating EKS Fargate profile ${fargateProfileName}...`);
@@ -341,11 +373,9 @@ export const FargateProfileProvider = () =>
 
           const final = yield* readProfile({ clusterName, fargateProfileName });
           if (!final) {
-            return yield* Effect.fail(
-              new Error(
-                `EKS Fargate profile '${fargateProfileName}' could not be read after reconcile`,
-              ),
-            );
+            return yield* new FargateProfileUnexpectedResponse({
+              message: `EKS Fargate profile '${fargateProfileName}' could not be read after reconcile`,
+            });
           }
           return final;
         }),
@@ -363,13 +393,10 @@ export const FargateProfileProvider = () =>
                 ResourceInUseException: () => Effect.fail(new FargateProfileBusy()),
               }),
               Effect.retry({
-                while: (error) => error instanceof FargateProfileBusy,
+                while: (error) => error._tag === "EKS.FargateProfileBusy",
                 schedule: busySchedule,
               }),
-              Effect.catchIf(
-                (error) => error instanceof FargateProfileBusy,
-                () => Effect.void,
-              ),
+              Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
             );
           yield* waitForProfileDeleted(output.clusterName, output.fargateProfileName);
         }),

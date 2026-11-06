@@ -2,12 +2,12 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -16,6 +16,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -882,7 +883,7 @@ export default { async fetch() { return new Response("v4"); } };
           // leave the worker behind, and `putScript` would then reject the
           // `newSqliteClasses` migration ("class already exists"), so purge any
           // leftover first.
-          const physicalName = "alchemy-test-do-adopt";
+          const physicalName = testName("alchemy-test-do-adopt");
 
           yield* workers
             .deleteScript({ accountId, scriptName: physicalName, force: true })

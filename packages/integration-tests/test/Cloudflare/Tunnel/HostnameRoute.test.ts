@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -17,8 +18,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // cases run CONCURRENTLY, so each owns a DISTINCT hostname (and tunnel):
 // sharing one hostname makes the two deploys race to route it to their own
 // tunnel and the loser fails with `HostnameRouteAlreadyRouted`.
-const HOSTNAME = "alchemy-test-hr.alchemy-test-2.us";
-const LIST_HOSTNAME = "alchemy-test-hr-list.alchemy-test-2.us";
+const HOSTNAME = `${testName("alchemy-test-hr")}.alchemy-test-2.us`;
+const LIST_HOSTNAME = `${testName("alchemy-test-hr-list")}.alchemy-test-2.us`;
 
 // Read a hostname route out-of-band, mapping "gone" (404 or a tombstoned
 // deletedAt) to undefined.

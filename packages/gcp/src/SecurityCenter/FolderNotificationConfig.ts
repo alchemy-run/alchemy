@@ -148,10 +148,10 @@ const toAttrs = (config: scc.NotificationConfig, folder: string, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getFoldersNotificationConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderNotificationConfigProvider = () =>
   Provider.succeed(FolderNotificationConfig, {
@@ -221,7 +221,7 @@ export const FolderNotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritycenterNotResolved({ name });
+        return yield* new SecuritycenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

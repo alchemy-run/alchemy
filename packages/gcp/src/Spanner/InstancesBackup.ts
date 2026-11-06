@@ -3,7 +3,9 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -169,23 +171,25 @@ export type InstancesBackup = Resource<
 export const InstancesBackup = Resource<InstancesBackup>("GCP.Spanner.InstancesBackup");
 
 export class BackupNotResolved extends Data.TaggedError("GCP.Spanner.BackupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupNotReady extends Data.TaggedError("GCP.Spanner.BackupNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class BackupStillExists extends Data.TaggedError("GCP.Spanner.BackupStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, backupId: string | undefined, existing?: string) =>
   toPhysicalId(id, backupId, existing, MAX_BACKUP_ID_LENGTH);
 
 const defaultExpireTime = () =>
-  Effect.sync(() => new Date(Date.now() + DEFAULT_EXPIRE_MS).toISOString());
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    DateTime.formatIso(DateTime.makeUnsafe(now + DEFAULT_EXPIRE_MS)),
+  );
 
 const encryptionKey = (config: BackupEncryptionConfig | undefined) =>
   JSON.stringify({
@@ -228,7 +232,7 @@ const toAttrs = (backup: spanner.Backup, project: string): InstancesBackup["Attr
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -236,7 +240,7 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.BackupNotResolved",
@@ -249,13 +253,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (backup): backup is spanner.Backup => backup !== undefined,
-      () => new BackupNotResolved({ name }),
+      () => new BackupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (backup) => !isBusy(backup.state),
       (backup) =>
         new BackupNotReady({
-          name,
+          resourceName: name,
           state: backup.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -271,14 +275,16 @@ const waitUntilReady = (name: string) =>
 const refreshOrFail = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ resourceName: name })),
     ),
   );
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined
+        ? Effect.void
+        : Effect.fail(new BackupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.BackupStillExists",
@@ -397,7 +403,7 @@ export const InstancesBackupProvider = () =>
               versionTime: news.versionTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.done === true) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

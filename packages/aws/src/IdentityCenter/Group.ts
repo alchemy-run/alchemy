@@ -2,9 +2,15 @@ import * as identitystore from "@distilled.cloud/aws/identitystore";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { listGroups, resolveIdentityStoreId, retryIdentityCenter, unredact } from "./common.ts";
+
+export class GroupUnexpectedResponse extends Data.TaggedError("GroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface GroupProps {
   /**
@@ -44,8 +50,27 @@ export interface Group extends Resource<
     updatedAt: Date | undefined;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in an Identity Center identity store.
+ */
+export type GroupLookup =
+  | {
+      /** The identity store the group belongs to. */
+      identityStoreId: string;
+      /** The id of the existing group. */
+      groupId: string;
+    }
+  | {
+      /** The identity store the group belongs to. */
+      identityStoreId: string;
+      /** The display name of the existing group. */
+      displayName: string;
+    };
 
 /**
  * A group in the IAM Identity Center identity store.
@@ -56,6 +81,17 @@ export interface Group extends Resource<
  *   displayName: "platform-engineers",
  *   description: "Platform engineering team",
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `identityStoreId` with `groupId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const engineers = AWS.IdentityCenter.Group.lookup({ identityStoreId, displayName: "Engineers" });
+ * const groupId = engineers.groupId;
  * ```
  *
  * @resource
@@ -80,9 +116,7 @@ export const GroupProvider = () =>
             const rows = yield* Effect.forEach(
               groups,
               (group) =>
-                group.GroupId
-                  ? readGroupById(identityStoreId, group.GroupId)
-                  : Effect.succeed(undefined),
+                group.GroupId ? readGroupById(identityStoreId, group.GroupId) : Effect.undefined,
               { concurrency: 10 },
             );
             return rows.filter((row): row is Group["Attributes"] => row !== undefined);
@@ -92,6 +126,14 @@ export const GroupProvider = () =>
           if (olds?.identityStoreId !== news.identityStoreId) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          return "groupId" in props
+            ? yield* readGroupById(props.identityStoreId, props.groupId)
+            : yield* readGroupByDisplayName({
+                identityStoreId: props.identityStoreId,
+                displayName: props.displayName,
+              });
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (output?.groupId && output.identityStoreId) {
@@ -137,9 +179,9 @@ export const GroupProvider = () =>
               }));
 
             if (!existing) {
-              return yield* Effect.fail(
-                new Error(`group '${news.displayName}' not found after create`),
-              );
+              return yield* new GroupUnexpectedResponse({
+                message: `group '${news.displayName}' not found after create`,
+              });
             }
 
             yield* session.note(existing.groupId);
@@ -180,9 +222,9 @@ export const GroupProvider = () =>
 
             const updated = yield* readGroupById(existing.identityStoreId, existing.groupId);
             if (!updated) {
-              return yield* Effect.fail(
-                new Error(`group '${existing.groupId}' not found after update`),
-              );
+              return yield* new GroupUnexpectedResponse({
+                message: `group '${existing.groupId}' not found after update`,
+              });
             }
             yield* session.note(updated.groupId);
             return updated;
@@ -212,7 +254,7 @@ const readGroupById = Effect.fn(function* (identityStoreId: string, groupId: str
         IdentityStoreId: identityStoreId,
         GroupId: groupId,
       })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
   );
 
   if (!response?.GroupId || !response.IdentityStoreId) {

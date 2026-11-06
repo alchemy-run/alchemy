@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -15,7 +16,6 @@ import {
   type ActionState,
   type RanActionState,
 } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { Bucket, TestLayers } from "./test.resources";
 
 const TEST_STACK = "task-test";

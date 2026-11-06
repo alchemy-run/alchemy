@@ -16,13 +16,13 @@ export const MAX_NAME_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationRequired extends Data.TaggedError(
@@ -143,7 +143,7 @@ export const waitForOperation = (
 export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new ResourceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -155,7 +155,9 @@ export const waitUntilExists = <A, E, R>(get: Effect.Effect<A | undefined, E, R>
 export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,
@@ -168,14 +170,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 const tryResolveOrganizationId = (project: string) =>
   Effect.gen(function* () {

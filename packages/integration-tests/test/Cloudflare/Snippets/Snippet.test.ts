@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -19,8 +20,8 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 // Deterministic per-test snippet names (snippet names only allow
 // [a-zA-Z0-9_]). Same value on every run — never derived from
 // Date.now()/random.
-const NAME_EXPLICIT = "alchemy_snippet_explicit_test";
-const NAME_REPLACED = "alchemy_snippet_replaced_test";
+const NAME_EXPLICIT = testName("alchemy_snippet_explicit_test", "_");
+const NAME_REPLACED = testName("alchemy_snippet_replaced_test", "_");
 
 const codeV1 = `
 export default {
@@ -166,7 +167,7 @@ test.provider(
   },
 );
 
-const NAME_LIST = "alchemy_snippet_list_test";
+const NAME_LIST = testName("alchemy_snippet_list_test", "_");
 
 // `list()` fans out over every zone in the account; zones with zero
 // snippets answer `{ "result": null }`, which decodes as an empty list.

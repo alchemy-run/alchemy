@@ -2,14 +2,14 @@
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import { expect, it } from "@alchemy.run/test";
+import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as NukeRoute from "@/Alchemist/routes/nuke.ts";
-import { renderApply } from "@/Cli/commands/render.ts";
+import * as Alchemist from "@/Alchemist/index.ts";
 import {
   AnsweredPrompt,
   Alert,
@@ -33,7 +33,7 @@ import {
 } from "@/Cli/components/ui/index.ts";
 import { Menu } from "@/Cli/components/ui/Interactive.tsx";
 import { tabsWindow } from "@/Cli/components/ui/Layout.tsx";
-import { ApprovePlan } from "@/Cli/components/view/ApprovePlan.tsx";
+import { ApprovePlan, approvePlanScreen } from "@/Cli/components/view/ApprovePlan.tsx";
 import { formatView } from "@/Cli/components/view/Format.tsx";
 import {
   NukeProgress,
@@ -65,6 +65,7 @@ import {
   type StateExplorerSource,
 } from "@/Cli/components/view/StateExplorer.tsx";
 import { isInProgress } from "@/Cli/components/view/statusStyle.ts";
+import { emit } from "@/Events.ts";
 import {
   Interaction,
   NonInteractiveTerminal,
@@ -75,7 +76,10 @@ import {
   type View,
 } from "@/Interaction.ts";
 import type { ProviderService } from "@/Provider.ts";
-import { Cli, Progress } from "@/Report.ts";
+import { renderApply } from "@/Report.ts";
+import { Cli } from "@/Report.ts";
+import { makePlainConsoleSink } from "@/Util/ConsoleSink.ts";
+import { type LogRecord, recordOf } from "@/Util/LogRecord.ts";
 import { makeResourceLogger, makeResourceOutput } from "@/Util/ResourceOutput.ts";
 import { spinnerFramesFor } from "@/Util/Theme.ts";
 import { deleteNode, noopNode, planWith, updateNode } from "./PlanTestNodes.ts";
@@ -108,6 +112,10 @@ class CaptureStream extends PassThrough {
 class InputStream extends PassThrough {
   readonly isTTY = true;
   isRaw = false;
+  /** Answer the OSC 7501 support query like a terminal that shows program status. */
+  constructor(readonly supportsProgramStatus = false) {
+    super();
+  }
   private resolveReady: (() => void) | undefined;
   readonly ready = new Promise<void>((resolve) => {
     this.resolveReady = resolve;
@@ -131,7 +139,7 @@ class InputStream extends PassThrough {
       // Raw mode starts before Sigil finishes querying the terminal. Answer
       // its device query, then allow input handlers to attach before typing.
       setImmediate(() => {
-        this.write("\x1b[?1;2c");
+        this.write(`${this.supportsProgramStatus ? "\x1b]7501;?\x1b\\" : ""}\x1b[?1;2c`);
         setImmediate(() => this.resolveReady?.());
       });
     });
@@ -166,16 +174,19 @@ const renderStatic = (
   options?: { columns?: number; colors?: boolean; unicode?: boolean },
 ) => Effect.sync(() => formatStatic(view, options));
 
-/** The plain renderer over a captured stdout. */
+/** The plain renderer over a captured stdout and stderr. */
 const makeStatic = () => {
   const stdout = new CaptureStream();
+  const stderr = new CaptureStream();
   const service = makeNonInteractive({
     // SAFETY: CaptureStream implements the writable stream surface consumed here.
     stdout: stdout as unknown as NodeJS.WriteStream,
+    // SAFETY: CaptureStream implements the writable stream surface consumed here.
+    stderr: stderr as unknown as NodeJS.WriteStream,
     colors: false,
     unicode: true,
   });
-  return { service, stdout };
+  return { service, stdout, stderr };
 };
 
 const makeExplorerSource = () => {
@@ -315,6 +326,20 @@ it(
 );
 
 it(
+  "prints deeply nested stack outputs in full",
+  () => {
+    const output = formatStatic(
+      stackOutputsView({ api: { worker: { bindings: { kv: { id: "ns-1" } } } } }),
+      { columns: 120 },
+    );
+
+    expect(output).not.toContain("[Object]");
+    expect(output).toContain("kv: { id: 'ns-1' }");
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
   "renders detailed plans as nested YAML",
   () => {
     const { service } = makeStatic();
@@ -363,10 +388,10 @@ it(
     expect(keybarLine).toContain("Starting dev stack");
 
     tree.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "Worker",
       id: "Worker",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "updating",
     });
     tree.setBusy(false);
@@ -417,10 +442,10 @@ it(
     };
     const tree = new PlanTree(plan, { mode: "apply", label: "Destroying stack", busy: true });
     tree.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "Resource0",
       id: "Resource0",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "deleted",
     });
 
@@ -466,10 +491,10 @@ it(
     expect(output).toContain("no change");
 
     tree.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "Worker",
       id: "Worker",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "updating",
     });
     output = render();
@@ -477,10 +502,10 @@ it(
     expect(output).toContain("Deploying stack (0/1)");
 
     tree.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "Worker",
       id: "Worker",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "updated",
     });
     expect(tree.progress()).toEqual({ completed: 1, failures: 0, total: 1 });
@@ -507,10 +532,10 @@ it(
       busy: true,
     });
     tree.emit({
-      _tag: "apply.resource.status",
+      type: "apply.resource.status",
       fqn: "Worker",
       id: "Worker",
-      type: "Test.Resource",
+      resourceType: "Test.Resource",
       status: "fail",
       message: "worker failed",
     });
@@ -536,10 +561,10 @@ it.effect(
         busy: true,
       });
       tree.emit({
-        _tag: "apply.resource.status",
+        type: "apply.resource.status",
         fqn: "Worker",
         id: "Worker",
-        type: "Test.Resource",
+        resourceType: "Test.Resource",
         status: "updated",
       });
       const live = yield* service.live(<Plan tree={tree} />);
@@ -591,6 +616,33 @@ it.effect(
       expect(hiddenOutput).toContain("Dev stack ready (0/1)");
       expect(hiddenOutput).toContain("p show plan/output");
       yield* live.close;
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "shows the total apply time once the session settles",
+  () =>
+    Effect.gen(function* () {
+      for (const [outcome, label] of [
+        ["success", "Stack deployed"],
+        ["failure", "Deploy failed"],
+      ] as const) {
+        const { service, stdout } = yield* makeLive();
+        const cli = sigilCli().pipe(Layer.provide(Layer.succeed(Interaction, service)));
+        yield* Effect.gen(function* () {
+          const { startApplySession } = yield* Cli;
+          const session = yield* startApplySession(
+            planWith([updateNode({ version: 1 }, { version: 2 })]),
+          );
+          expect(stripVTControlCharacters(stdout.output)).not.toContain(label);
+          yield* session.done(outcome);
+          yield* Effect.promise(() => stdout.waitFor(label));
+          expect(stripVTControlCharacters(stdout.output)).toMatch(
+            new RegExp(`${label} \\(0/1\\) \\(\\d+(ms|\\.\\ds)\\)`),
+          );
+        }).pipe(Effect.provide(cli));
+      }
     }),
   { tags: ["unit", "local"] },
 );
@@ -973,6 +1025,8 @@ const makeLive = (
     const service = makeNonInteractive({
       // SAFETY: CaptureStream implements the writable stream surface consumed here.
       stdout: stdout as unknown as NodeJS.WriteStream,
+      // SAFETY: CaptureStream implements the writable stream surface consumed here.
+      stderr: stderr as unknown as NodeJS.WriteStream,
       colors: overrides.colors ?? false,
       unicode: overrides.unicode ?? true,
     });
@@ -1219,15 +1273,15 @@ it.effect(
   "progress handles are updateable and settle only once",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       const progress = yield* service.progress({ label: "Deploying" });
       yield* progress.update({ label: "Uploading", detail: "2/3" });
       yield* progress.succeed("Deployed");
       yield* progress.fail("must not print");
 
-      expect(stdout.output).toContain("Deploying");
-      expect(stdout.output).toContain("Deployed");
-      expect(stdout.output).not.toContain("must not print");
+      expect(stderr.output).toContain("Deploying");
+      expect(stderr.output).toContain("Deployed");
+      expect(stderr.output).not.toContain("must not print");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1381,7 +1435,7 @@ it.effect(
   "progress settles into success and failure status output",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       yield* Effect.scoped(
         Effect.gen(function* () {
           const first = yield* service.progress({ label: "Resolve credentials" });
@@ -1391,10 +1445,10 @@ it.effect(
         }),
       );
 
-      expect(stdout.output).toContain("Resolve credentials");
-      expect(stdout.output).toContain("Apply resource");
-      expect(stdout.output).toContain("✓");
-      expect(stdout.output).toContain("×");
+      expect(stderr.output).toContain("Resolve credentials");
+      expect(stderr.output).toContain("Apply resource");
+      expect(stderr.output).toContain("✓");
+      expect(stderr.output).toContain("×");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1403,14 +1457,14 @@ it.effect(
   "task collapses success and failure into status output",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = makeStatic();
+      const { service, stderr } = makeStatic();
       yield* service.task({ label: "Resolve credentials" }, Effect.succeed("credentials"));
       yield* service.task({ label: "Apply resource" }, Effect.fail("nope")).pipe(Effect.ignore);
 
-      expect(stdout.output).toContain("Resolve credentials");
-      expect(stdout.output).toContain("Apply resource");
-      expect(stdout.output).toContain("✓");
-      expect(stdout.output).toContain("×");
+      expect(stderr.output).toContain("Resolve credentials");
+      expect(stderr.output).toContain("Apply resource");
+      expect(stderr.output).toContain("✓");
+      expect(stderr.output).toContain("×");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1449,24 +1503,95 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
-it(
-  "uses one resource-prefixed pipeline for chunked stdout and stderr",
+it.effect(
+  "the JSON renderer logs messages as records and prints nothing",
   () => {
-    const lines: string[] = [];
-    const output = makeResourceOutput("www", { log: (...args) => lines.push(args.join(" ")) });
+    const records: Array<LogRecord> = [];
+    const logger = Logger.make<unknown, void>((options) => {
+      records.push(recordOf(options));
+    });
+    const stdout = new CaptureStream();
+    const service = makeNonInteractive({
+      // SAFETY: CaptureStream implements the writable stream surface consumed here.
+      stdout: stdout as unknown as NodeJS.WriteStream,
+      json: true,
+    });
+    return Effect.gen(function* () {
+      yield* service.output.info({ message: "Tailing", detail: "local" });
+      yield* service.output.warning("Drift detected");
+      yield* service.output.print(stackOutputsView({ url: "https://example.com" }));
+      yield* service.task({ label: "Logging in" }, Effect.void);
+      expect(stdout.output).toBe("");
+      expect(
+        records.map(({ level, kind, attributes, data }) => ({ level, kind, attributes, data })),
+      ).toEqual([
+        {
+          level: "info",
+          kind: "log",
+          attributes: { detail: "local" },
+          data: { message: "Tailing", cause: null },
+        },
+        {
+          level: "warn",
+          kind: "log",
+          attributes: {},
+          data: { message: "Drift detected", cause: null },
+        },
+        {
+          level: "info",
+          kind: "log",
+          attributes: {},
+          data: { message: "Logging in", cause: null },
+        },
+        {
+          level: "info",
+          kind: "log",
+          attributes: {},
+          data: { message: "Logging in", cause: null },
+        },
+      ]);
+    }).pipe(Effect.provide(Logger.layer([logger])));
+  },
+  { tags: ["unit", "local"] },
+);
 
-    output.stdout.push("first\nsec");
-    output.stdout.push("ond\r");
-    output.stderr.push("failed");
-    output.stdout.flush();
-    output.stderr.flush();
-
-    const prefix = "[www]";
-    expect(lines.map(stripVTControlCharacters)).toEqual([
-      `${prefix} first`,
-      `${prefix} second`,
-      `${prefix} failed`,
-    ]);
+it.effect(
+  "logs chunked resource stdout and stderr as tagged records",
+  () => {
+    const records: Array<LogRecord> = [];
+    const logger = Logger.make<unknown, void>((options) => {
+      records.push(recordOf(options));
+    });
+    return Effect.gen(function* () {
+      const output = yield* makeResourceOutput("www");
+      output.stdout.push("first\nsec");
+      output.stdout.push("ond\r");
+      output.stderr.push("\x1b[33mfailed\x1b[39m");
+      output.stdout.flush();
+      output.stderr.flush();
+      expect(
+        records.map(({ level, kind, attributes, data }) => ({ level, kind, attributes, data })),
+      ).toEqual([
+        {
+          level: "info",
+          kind: "output",
+          attributes: { fqn: "www" },
+          data: { stream: "stdout", text: "first" },
+        },
+        {
+          level: "info",
+          kind: "output",
+          attributes: { fqn: "www" },
+          data: { stream: "stdout", text: "second" },
+        },
+        {
+          level: "info",
+          kind: "output",
+          attributes: { fqn: "www" },
+          data: { stream: "stderr", text: "\x1b[33mfailed\x1b[39m" },
+        },
+      ]);
+    }).pipe(Effect.provide(Logger.layer([logger])));
   },
   { tags: ["unit", "local"] },
 );
@@ -1474,19 +1599,20 @@ it(
 it.effect(
   "routes effectful resource output through the configured logger",
   () => {
-    const entries: Array<{ level: string; message: unknown }> = [];
-    const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
-      entries.push({ level: logLevel, message });
+    const records: Array<LogRecord> = [];
+    const logger = Logger.make<unknown, void>((options) => {
+      records.push(recordOf(options));
     });
     const output = makeResourceLogger("www");
 
     return Effect.gen(function* () {
       yield* output("stdout", "[MDX] generated files");
       yield* output("stderr", "vite diagnostic");
-      expect(entries).toEqual([
-        { level: "Info", message: ["[www] [MDX] generated files"] },
-        { level: "Info", message: ["[www] vite diagnostic"] },
-      ]);
+      expect(
+        records.map((record) =>
+          record.kind === "output" ? `${record.attributes.fqn}: ${record.data.text}` : record.kind,
+        ),
+      ).toEqual(["www: [MDX] generated files", "www: vite diagnostic"]);
     }).pipe(Effect.provide(Logger.layer([logger])));
   },
   { tags: ["unit", "local"] },
@@ -1499,7 +1625,7 @@ it.effect(
       const { service, stdout } = yield* makeLive({ captureConsole: true });
       const live = yield* service.live(<Text>Building</Text>);
 
-      const output = makeResourceOutput("www", globalThis.console);
+      const output = yield* makeResourceOutput("www");
       output.stderr.push("[FILE_NAME_CONFLICT] warning\n");
       output.stderr.flush();
       yield* live.close;
@@ -1507,7 +1633,11 @@ it.effect(
       const rendered = stripVTControlCharacters(stdout.output);
       expect(rendered).toContain(`[www] [FILE_NAME_CONFLICT] warning`);
       expect(rendered).not.toContain("×");
-    }),
+    }).pipe(
+      Effect.provide(Logger.layer([makePlainConsoleSink({ colors: false })])),
+      // The CLI logs through the process console, which the renderer captures.
+      Effect.provideService(Console.Console, globalThis.console),
+    ),
   { tags: ["unit", "local"] },
 );
 
@@ -1645,6 +1775,74 @@ it.effect(
       yield* Effect.sync(() => stdin.write("\r"));
 
       expect(yield* Fiber.join(fiber)).toBe("http://localhost:4566");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+/** A searchable picker over more accounts than one window shows. */
+const manyAccounts = Array.from({ length: 60 }, (_, index) => ({
+  value: `id-${index + 1}`,
+  label: `Account ${String(index + 1).padStart(2, "0")}`,
+  description: `id-${index + 1}`,
+}));
+
+const selectManyAccounts = (keys: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const stdin = new InputStream();
+    const { service, stdout } = yield* makeLive({ stdin });
+    const fiber = yield* service.prompt
+      .select({ message: "Select an account", searchable: true, options: manyAccounts })
+      .pipe(Effect.forkChild);
+    yield* Effect.promise(() => stdin.ready);
+    yield* Effect.promise(() => stdout.waitFor("60 choices"));
+    for (const key of keys) {
+      yield* Effect.sync(() => stdin.write(key));
+      yield* Effect.sleep("5 millis");
+    }
+    // Let the throttled frame for the last key land before Enter.
+    yield* Effect.sleep("100 millis");
+    yield* Effect.sync(() => stdin.write("\r"));
+    return { value: yield* Fiber.join(fiber), output: stripVTControlCharacters(stdout.output) };
+  });
+
+it.live(
+  "scrolls a long select to its last choice with the arrow keys",
+  () =>
+    Effect.gen(function* () {
+      const { value, output } = yield* selectManyAccounts(Array(59).fill("\x1b[B"));
+      expect(value).toBe("id-60");
+      expect(output).toContain("Account 60");
+      expect(output).toMatch(/↓ \d+ more/);
+      expect(output).toMatch(/↑ \d+ more/);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.live(
+  "pages and jumps through a long select",
+  () =>
+    Effect.gen(function* () {
+      // A 24-row terminal shows 16 choices, so each PageDown moves 16.
+      const paged = yield* selectManyAccounts(["\x1b[6~", "\x1b[6~", "\x1b[6~"]);
+      expect(paged.value).toBe("id-49");
+      // End jumps to the last choice and Home back to the first.
+      expect((yield* selectManyAccounts(["\x1b[F"])).value).toBe("id-60");
+      expect((yield* selectManyAccounts(["\x1b[F", "\x1b[H"])).value).toBe("id-1");
+      // Up from the first choice wraps to the last.
+      expect((yield* selectManyAccounts(["\x1b[A"])).value).toBe("id-60");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.live(
+  "filters a long select to a choice outside the first window",
+  () =>
+    Effect.gen(function* () {
+      const byName = yield* selectManyAccounts(["Account 47"]);
+      expect(byName.value).toBe("id-47");
+      expect(byName.output).toContain("1 of 60");
+      // Descriptions (the account id) are searchable too.
+      expect((yield* selectManyAccounts(["id-53"])).value).toBe("id-53");
     }),
   { tags: ["unit", "local"] },
 );
@@ -1888,7 +2086,7 @@ it.effect(
 
       const output = stripVTControlCharacters(stdout.output);
       expect(output).toContain("Code ABCD-EFGH");
-      expect(output).toContain("copy code");
+      expect(output).toContain("copy URL");
 
       yield* Effect.sync(() => stdin.write("\x1b"));
       const failure = yield* Fiber.join(fiber);
@@ -2103,6 +2301,7 @@ it.effect(
   "uses append-only progress when input is disabled on a TTY",
   () => {
     const stdout = new CaptureStream(true);
+    const stderr = new CaptureStream(true);
     return Effect.gen(function* () {
       const cli = yield* Interaction;
       const progress = yield* cli.progress({ label: "Deploying" });
@@ -2110,14 +2309,15 @@ it.effect(
       yield* progress.succeed("Deployed");
 
       expect(cli.terminal.input).toBe(false);
-      expect(stdout.output).toContain("Deploying\n");
-      expect(stdout.output).toContain("Deployed\n");
-      expect(stdout.output).not.toContain("\u001B[");
+      expect(stderr.output).toContain("Deploying\n");
+      expect(stderr.output).toContain("Deployed\n");
+      expect(stderr.output).not.toContain("\u001B[");
     }).pipe(
       Effect.provide(
         interactionLayer({
           input: false,
           stdout: stdout as unknown as NodeJS.WriteStream,
+          stderr: stderr as unknown as NodeJS.WriteStream,
           captureConsole: false,
         }),
       ),
@@ -2130,7 +2330,7 @@ it.effect(
   "renders the same semantic and component output without terminal input",
   () =>
     Effect.gen(function* () {
-      const { service, stdout } = yield* makeLive({ input: false, unicode: false });
+      const { service, stdout, stderr } = yield* makeLive({ input: false, unicode: false });
 
       yield* service.output.info("Resolving credentials");
       yield* service.output.success({ message: "Authenticated", detail: "cloudflare" });
@@ -2143,14 +2343,18 @@ it.effect(
       );
       yield* service.output.print(<Status>React output</Status>);
 
-      expect(stdout.output).toContain("Resolving credentials\n");
-      expect(stdout.output).toContain("Authenticated");
-      expect(stdout.output).toContain("cloudflare");
-      expect(stdout.output).toContain("Token expires soon");
-      expect(stdout.output).toContain("Authentication failed");
+      expect(stderr.output).toContain("Resolving credentials\n");
+      expect(stderr.output).toContain("Authenticated");
+      expect(stderr.output).toContain("cloudflare");
+      expect(stderr.output).toContain("Token expires soon");
+      expect(stderr.output).toContain("Authentication failed");
       expect(stdout.output).toContain("Attention");
       expect(stdout.output).toContain("Manual action required");
       expect(stdout.output).toContain("React output");
+      // Status lines are progress, views are results: piping stdout carries
+      // only the results.
+      expect(stdout.output).not.toContain("Resolving credentials");
+      expect(stderr.output).not.toContain("React output");
     }),
   { tags: ["unit", "local"] },
 );
@@ -2389,10 +2593,10 @@ it.effect(
     Effect.gen(function* () {
       const { service } = makeStatic();
       const store = new NukeProgressStore();
-      store.emit({ _tag: "nuke.scan.started", total: 2 });
-      store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Fast" });
-      store.emit({ _tag: "nuke.scan.provider.started", provider: "Test.Slow" });
-      store.emit({ _tag: "nuke.scan.provider.completed", provider: "Test.Fast", resources: 3 });
+      store.emit({ type: "nuke.scan.started", total: 2 });
+      store.emit({ type: "nuke.scan.provider.started", provider: "Test.Fast" });
+      store.emit({ type: "nuke.scan.provider.started", provider: "Test.Slow" });
+      store.emit({ type: "nuke.scan.provider.completed", provider: "Test.Fast", resources: 3 });
       const output = yield* renderStatic(<NukeProgress store={store} />);
       expect(output).toContain("1/2");
       expect(output).toContain("3 resources found");
@@ -2415,9 +2619,9 @@ it.effect(
       const tree = new PlanTree(
         nukePlan(
           [
-            { providerId: "Test.B", displayName: "same-name" },
-            { providerId: "Test.A", displayName: "same-name" },
-            { providerId: "Test.A", displayName: "same-name" },
+            { key: "b/0", providerId: "Test.B", displayName: "same-name" },
+            { key: "a/1", providerId: "Test.A", displayName: "same-name" },
+            { key: "a/2", providerId: "Test.A", displayName: "same-name" },
           ],
           { mode: "live" },
         ),
@@ -2425,29 +2629,29 @@ it.effect(
       );
       tree.setLabel("Deleting resources · pass 2");
       tree.emit({
-        _tag: "apply.resource.status",
-        fqn: "nuke/2",
+        type: "apply.resource.status",
+        fqn: "a/2",
         id: "Test.A",
-        type: "Test.A",
+        resourceType: "Test.A",
         status: "deleted",
       });
       tree.emit({
-        _tag: "apply.resource.status",
-        fqn: "nuke/1",
+        type: "apply.resource.status",
+        fqn: "a/1",
         id: "Test.A",
-        type: "Test.A",
+        resourceType: "Test.A",
         status: "fail",
         message: "blocked",
       });
       tree.emit({
-        _tag: "apply.resource.status",
-        fqn: "nuke/0",
+        type: "apply.resource.status",
+        fqn: "b/0",
         id: "Test.B",
-        type: "Test.B",
+        resourceType: "Test.B",
         status: "deleting",
       });
-      expect(tree.snapshot().tasks.get("nuke/2")?.status).toBe("deleted");
-      expect(tree.snapshot().tasks.get("nuke/1")?.status).toBe("fail");
+      expect(tree.snapshot().tasks.get("a/2")?.status).toBe("deleted");
+      expect(tree.snapshot().tasks.get("a/1")?.status).toBe("fail");
       expect(tree.progress()).toEqual({ completed: 2, total: 3, failures: 1 });
       const output = yield* renderStatic(<Plan tree={tree} />);
       expect(output).toContain("pass 2");
@@ -2471,23 +2675,25 @@ it.effect(
       };
       const resources = [
         {
+          key: "t102",
           providerId: "Test.Parent",
           displayName: "parent",
           attributes: {},
           provider: { ...provider, nuke: undefined },
         },
         {
+          key: "t103",
           providerId: "Test.Child",
           displayName: "same-name",
           attributes: {},
           provider: { ...provider, delete: () => Effect.fail("cannot delete child") },
         },
-        { providerId: "Test.Child", displayName: "same-name", attributes: {}, provider },
+        { key: "t5", providerId: "Test.Child", displayName: "same-name", attributes: {}, provider },
       ];
-      const result = yield* NukeRoute.execute({
+      const result = yield* Alchemist.Nuke.execute({
         scan: { resources, mode: "live", context: Context.empty(), failures: [] },
         resources,
-        strategy: { _tag: "coordinated" },
+        strategy: { type: "coordinated" },
       }).pipe(renderNukeDelete(resources, "live"), Effect.provideService(Interaction, service));
       expect(result.deleted).toHaveLength(1);
       expect(result.failed).toHaveLength(1);
@@ -2507,8 +2713,7 @@ it.effect(
     Effect.gen(function* () {
       const { service, stdout } = yield* makeLive();
       yield* Effect.gen(function* () {
-        const report = yield* Progress;
-        yield* report({ _tag: "nuke.scan.started", total: 2 });
+        yield* emit({ type: "nuke.scan.started", total: 2 });
         yield* Effect.fail("scan failed");
       }).pipe(renderNukeScan(), Effect.provideService(Interaction, service), Effect.result);
       expect(stdout.output).toContain("\u001B[?25h");
@@ -2568,9 +2773,9 @@ it.effect(
     Effect.gen(function* () {
       const { service } = makeStatic();
       const targets = [
-        { providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
-        { providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
-        { providerId: "AWS.S3.Bucket", displayName: "" },
+        { key: "t6", providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
+        { key: "t7", providerId: "Cloudflare.R2.Bucket", displayName: "same/name" },
+        { key: "t8", providerId: "AWS.S3.Bucket", displayName: "" },
       ];
       const plan = nukePlan(targets, { mode: "live" });
       const tree = new PlanTree(plan, { viewport: "full" });
@@ -2608,10 +2813,13 @@ it.effect(
         { yes: true, dryRun: false },
       ]) {
         const { service, stdout } = makeStatic();
-        const result = yield* reviewNuke([{ providerId: "AWS.S3.Bucket", displayName: "bucket" }], {
-          ...options,
-          mode: "local",
-        }).pipe(Effect.provideService(Interaction, service));
+        const result = yield* reviewNuke(
+          [{ key: "t9", providerId: "AWS.S3.Bucket", displayName: "bucket" }],
+          {
+            ...options,
+            mode: "local",
+          },
+        ).pipe(Effect.provideService(Interaction, service));
         expect(result).toBe(true);
         expect(stdout.output).toContain("1 to delete");
         expect(stdout.output).toContain("AWS.S3.Bucket");
@@ -2627,11 +2835,14 @@ it.live(
     Effect.gen(function* () {
       const stdin = new InputStream();
       const { service, stdout } = yield* makeLive({ stdin });
-      const review = yield* reviewNuke([{ providerId: "AWS.S3.Bucket", displayName: "bucket" }], {
-        mode: "local",
-        yes: false,
-        dryRun: false,
-      }).pipe(Effect.provideService(Interaction, service), Effect.forkChild);
+      const review = yield* reviewNuke(
+        [{ key: "t10", providerId: "AWS.S3.Bucket", displayName: "bucket" }],
+        {
+          mode: "local",
+          yes: false,
+          dryRun: false,
+        },
+      ).pipe(Effect.provideService(Interaction, service), Effect.forkChild);
       yield* Effect.promise(flushEffects);
       yield* Effect.raceFirst(
         Effect.promise(() => stdout.waitFor("Cancel")),
@@ -2653,12 +2864,12 @@ it.effect(
     Effect.gen(function* () {
       const { service } = makeStatic();
       const targets = [
-        { providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
-        { providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
-        { providerId: "AWS.S3.Bucket", displayName: "photos" },
-        { providerId: "AWS.S3.Bucket", displayName: "backups" },
-        { providerId: "Test.Unknown", displayName: "unknown" },
-        { providerId: "Test.Unknown", displayName: "" },
+        { key: "t11", providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
+        { key: "t12", providerId: "AWS.ApiGateway.GatewayResponse", displayName: "api-123" },
+        { key: "t13", providerId: "AWS.S3.Bucket", displayName: "photos" },
+        { key: "t14", providerId: "AWS.S3.Bucket", displayName: "backups" },
+        { key: "t15", providerId: "Test.Unknown", displayName: "unknown" },
+        { key: "t16", providerId: "Test.Unknown", displayName: "" },
       ];
       const plan = nukePlan(targets, { mode: "live" });
       expect(plan.rows).toHaveLength(6);
@@ -2675,61 +2886,307 @@ it.effect(
 );
 
 it.effect(
-  "logs nuke errors immediately through the configured Effect logger",
+  "presents nuke errors as soon as they are emitted",
   () =>
     Effect.gen(function* () {
       for (const input of [true, false]) {
         const { service } = yield* makeLive({ input });
-        const entries: Array<{ level: string; message: unknown }> = [];
-        const logger = Logger.make<unknown, void>(({ logLevel, message }) => {
-          entries.push({ level: logLevel, message });
+        const lines: string[] = [];
+        // Handlers run on their own fiber, in order, as soon as it is scheduled.
+        const presented = (count: number) =>
+          Effect.yieldNow.pipe(Effect.repeat({ until: () => lines.length >= count, times: 100 }));
+        const console = Object.assign(Object.create(globalThis.console), {
+          log: (...args: unknown[]) =>
+            lines.push(stripVTControlCharacters(args.join(" ")).replace(/^\[[\d:.]+\] /, "")),
         });
         yield* Effect.gen(function* () {
-          const report = yield* Progress;
-          yield* report({ _tag: "nuke.scan.started", total: 2 });
-          yield* report({
-            _tag: "nuke.scan.provider.completed",
+          yield* emit({ type: "nuke.scan.started", total: 2 });
+          yield* emit({
+            type: "nuke.scan.provider.completed",
             provider: "Test.Failed",
             resources: 0,
             error: "denied during scan",
           });
           // Check before the operation returns: errors must not wait for completion.
-          expect(entries).toEqual([
-            { level: "Warn", message: ["Test.Failed: denied during scan"] },
-          ]);
-          yield* report({
-            _tag: "nuke.resource.failed",
+          yield* presented(1);
+          expect(lines).toEqual(["WARN: Test.Failed: denied during scan"]);
+          yield* emit({
+            type: "nuke.resource.failed",
             provider: "Test.Resource",
             resource: "example",
             message: "denied during delete",
           });
-          expect(entries[1]).toEqual({
-            level: "Warn",
-            message: ["Test.Resource example: denied during delete"],
-          });
-          yield* report({
-            _tag: "nuke.scan.provider.completed",
+          yield* presented(2);
+          expect(lines[1]).toEqual("WARN: Test.Resource example: denied during delete");
+          yield* emit({
+            type: "nuke.scan.provider.completed",
             provider: "Test.Ready",
             resources: 1,
           });
-          yield* report({
-            _tag: "nuke.resource.deleted",
+          yield* emit({
+            type: "nuke.resource.deleted",
             provider: "Test.Ready",
             resource: "gone",
           });
         }).pipe(
           renderNukeScan(),
           Effect.provideService(Interaction, service),
-          Effect.provide(Logger.layer([logger])),
+          Effect.provideService(Console.Console, console),
         );
-        expect(entries).toHaveLength(input ? 2 : 4);
+        expect(lines).toHaveLength(input ? 2 : 4);
         if (!input) {
-          expect(entries.slice(2)).toEqual([
-            { level: "Info", message: ["scanned Test.Ready (1)"] },
-            { level: "Info", message: ["deleted Test.Ready gone"] },
+          expect(lines.slice(2)).toEqual([
+            "INFO: scanned Test.Ready (1)",
+            "INFO: deleted Test.Ready gone",
           ]);
         }
       }
     }),
+  { tags: ["unit", "local"] },
+);
+
+const programStatus = (pairs: string, msg: string) =>
+  `7501;${pairs}:app=alchemy:msg=${Buffer.from(msg).toString("base64")}`;
+
+it.effect(
+  "reports a prompt as blocked to terminals that show program status",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      const blocked = programStatus("state=blocked:kind=question", "New profile name");
+      yield* Effect.promise(() => stdout.waitFor(blocked));
+
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      // Answering withdraws the record.
+      yield* Effect.promise(() => stdout.waitFor("7501;state=clear"));
+      expect(stdout.output.indexOf("7501;state=clear")).toBeGreaterThan(
+        stdout.output.indexOf(blocked),
+      );
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "reports a plan approval as blocked on permission",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+      const plan = planWith([], [deleteNode({}, "Resource")]);
+
+      const fiber = yield* service.prompt.screen(approvePlanScreen(plan)).pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() =>
+        stdout.waitFor(programStatus("state=blocked:kind=permission", "Deploy?")),
+      );
+      yield* Effect.sync(() => stdin.write("n"));
+      expect(yield* Fiber.join(fiber)).toBe(false);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "sends no program status to terminals that don't confirm support",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("New profile name"));
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      expect(stdout.output).not.toContain("7501;state=");
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "truncates a long progress detail instead of wrapping the row",
+  () => {
+    const output = formatStatic(
+      <TaskRow
+        icon="⋮"
+        label="SandboxContainer (Cloudflare.Container)"
+        detail={`#11 pushing manifest for registry.cloudflare.com/${"a".repeat(80)}\nsecond line`}
+      >
+        <Text>pre-creating</Text>
+      </TaskRow>,
+      { columns: 80 },
+    );
+
+    expect(output.split("\n")).toHaveLength(1);
+    expect(output).toContain("SandboxContainer (Cloudflare.Container) · #11 pushing manifest");
+    expect(output).toContain("…");
+    expect(output.endsWith("pre-creating")).toBe(true);
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "wraps a failure detail in its own column",
+  () => {
+    const output = formatStatic(
+      <TaskRow icon="×" label="Worker" detail={"x ".repeat(60).trim()} detailOverflow="wrap">
+        <Text>fail</Text>
+      </TaskRow>,
+      { columns: 40 },
+    );
+    const lines = output.split("\n");
+
+    expect(lines.length).toBeGreaterThan(1);
+    // The label and status stay intact on the first line.
+    expect(lines[0]).toMatch(/^× Worker · x.* fail$/);
+  },
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "keeps a prompt's blocked status while the deploy behind it progresses",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream(true);
+      const { service, stdout } = yield* makeLive({ stdin });
+      const tree = new PlanTree(
+        planWith([updateNode({ v: 1 }, { v: 2 }, "A"), updateNode({ v: 1 }, { v: 2 }, "B")]),
+        { mode: "apply", label: "Deploying stack", busy: true },
+      );
+      const live = yield* service.live(<Plan tree={tree} />);
+      const fiber = yield* service.prompt
+        .text({ message: "New profile name" })
+        .pipe(Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      const blocked = programStatus("state=blocked:kind=question", "New profile name");
+      yield* Effect.promise(() => stdout.waitFor(blocked));
+
+      const progressedAt = stdout.output.length;
+      tree.emit({
+        type: "apply.resource.status",
+        fqn: "A",
+        id: "A",
+        resourceType: "Test.Resource",
+        status: "updated",
+      });
+      yield* Effect.promise(flushEffects);
+      yield* Effect.promise(flushEffects);
+      // The terminal keeps showing the prompt, not the deploy's progress.
+      expect(stdout.output.slice(progressedAt)).not.toContain("7501;state=working");
+
+      yield* Effect.sync(() => stdin.write("dev"));
+      yield* settleInput;
+      yield* Effect.sync(() => stdin.write("\r"));
+      yield* Fiber.join(fiber);
+      // Once answered, the deploy's latest progress is reported again.
+      yield* Effect.promise(() =>
+        stdout.waitFor(programStatus("state=working:progress=50", "Deploying stack")),
+      );
+      yield* live.close;
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "truncates a long label before hiding a row's status or failure",
+  () => {
+    const output = formatStatic(
+      <TaskRow
+        icon="×"
+        label="VeryLongResourceName (Cloudflare.Worker)"
+        detail={<Text color="red">failure message must be visible</Text>}
+        detailOverflow="wrap"
+      >
+        <Text>fail</Text>
+      </TaskRow>,
+      { columns: 40 },
+    );
+    const lines = output.split("\n");
+
+    expect(lines[0]).toContain("…");
+    expect(lines[0]?.endsWith("fail")).toBe(true);
+    // The failure wraps within its own column, beside the truncated label.
+    const message = lines
+      .map((line, index) =>
+        index === 0 ? line.slice(line.indexOf("· ") + 2, -"fail".length) : line,
+      )
+      .join(" ")
+      .replaceAll(/\s+/g, " ")
+      .trim();
+    expect(message).toBe("failure message must be visible");
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "keeps a nested failure row's trailing cells whole in a narrow terminal",
+  () => {
+    for (const columns of [40, 30]) {
+      const output = formatStatic(
+        <TaskRow
+          icon="×"
+          label="Worker"
+          depth={3}
+          detail="failure message must be visible"
+          detailOverflow="wrap"
+        >
+          <Text>(local)</Text>
+          <Text>fail</Text>
+          <Text>(1.2s)</Text>
+        </TaskRow>,
+        { columns },
+      );
+      const lines = output.split("\n");
+
+      expect(lines.every((line) => line.length <= columns)).toBe(true);
+      expect(lines[0]?.endsWith("(local) fail (1.2s)")).toBe(true);
+      const words = output.replaceAll("(local) fail (1.2s)", " ").replaceAll(/[×·…]|W\S*/g, " ");
+      expect(words.split(/\s+/).filter(Boolean).join(" ")).toBe("failure message must be visible");
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "keeps a failure row's status and whole message in a narrow terminal",
+  () => {
+    for (const columns of [30, 20]) {
+      const output = formatStatic(
+        <TaskRow
+          icon="×"
+          label="Worker"
+          detail="failure message must be visible"
+          detailOverflow="wrap"
+        >
+          <Text>fail</Text>
+        </TaskRow>,
+        { columns },
+      );
+      const lines = output.split("\n");
+
+      expect(lines.every((line) => line.length <= columns)).toBe(true);
+      expect(lines[0]?.endsWith("fail")).toBe(true);
+      const words = output.replaceAll(/\bfail\s*$/gm, "").replaceAll(/[×·…]|Wor\S*/g, " ");
+      expect(words.split(/\s+/).filter(Boolean)).toEqual([
+        "failure",
+        "message",
+        "must",
+        "be",
+        "visible",
+      ]);
+    }
+  },
   { tags: ["unit", "local"] },
 );

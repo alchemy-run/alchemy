@@ -21,6 +21,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -173,7 +174,7 @@ export type Certificate = Resource<
 export const Certificate = Resource<Certificate>("Hetzner.Certificate");
 
 export class CertificateNotResolved extends Data.TaggedError("Hetzner.CertificateNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateIssuancePending extends Data.TaggedError(
@@ -237,7 +238,7 @@ const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\
 const getById = (id: number) =>
   Hetzner.certificates.getCertificate({ id }).pipe(
     Effect.map(({ certificate }) => certificate),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -327,7 +328,7 @@ const ensureCreated = Effect.fn(function* ({
             domain_names: news.domainNames,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)))
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined))
       : yield* Hetzner.certificates
           .createCertificate({
             name,
@@ -336,7 +337,7 @@ const ensureCreated = Effect.fn(function* ({
             private_key: news.privateKey,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
   if (created === undefined) {
     return undefined;
@@ -398,7 +399,7 @@ export const CertificateProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const existing = yield* observe({
         id: output?.id,
@@ -406,6 +407,16 @@ export const CertificateProvider = () =>
         logicalId: id,
       });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -447,7 +458,7 @@ export const CertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateNotResolved({ name });
+        return yield* new CertificateNotResolved({ resourceName: name });
       }
 
       if (asType(current.type) === "managed") {

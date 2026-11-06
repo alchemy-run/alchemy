@@ -60,8 +60,18 @@ export interface ReferenceStore extends Resource<
     creationTime: string;
   },
   never,
-  Providers
+  Providers,
+  ReferenceStoreLookup
 > {}
+
+/**
+ * Props for {@link ReferenceStore.lookup}: find a reference store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReferenceStoreLookup {
+  /** The id of the existing reference store. */
+  referenceStoreId: string;
+}
 
 /**
  * An Amazon HealthOmics reference store — a container for reference genomes
@@ -98,6 +108,16 @@ export interface ReferenceStore extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing reference store
+ * `ReferenceStore.lookup` references a reference store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `referenceStoreId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing reference store
+ * ```typescript
+ * const existing = AWS.Omics.ReferenceStore.lookup({ referenceStoreId: "..." });
+ * ```
+ *
  * @resource
  */
 export const ReferenceStore = Resource<ReferenceStore>("AWS.Omics.ReferenceStore");
@@ -125,11 +145,19 @@ export const ReferenceStoreProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ referenceStoreId }) {
+          const found = yield* omics
+            .getReferenceStore({ id: referenceStoreId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output?.referenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getReferenceStore({ id: output.referenceStoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -164,9 +192,7 @@ export const ReferenceStoreProvider = () =>
               ? undefined
               : yield* omics
                   .getReferenceStore({ id: output.referenceStoreId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE — create if missing. The store name is not a unique key, so
           // there is no AlreadyExists race to tolerate here.

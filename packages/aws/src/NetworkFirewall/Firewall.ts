@@ -83,8 +83,18 @@ export interface Firewall extends Resource<
     endpointIds: string[];
   },
   never,
-  Providers
+  Providers,
+  FirewallLookup
 > {}
+
+/**
+ * Props for {@link Firewall.lookup}: find a firewall this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FirewallLookup {
+  /** The firewall name of the existing firewall. */
+  firewallName: string;
+}
 
 /**
  * An AWS Network Firewall firewall — provisions managed firewall endpoints
@@ -117,6 +127,16 @@ export interface Firewall extends Resource<
  *   vpcId: vpc.vpcId,
  *   subnetMappings: [{ SubnetId: subnet.subnetId }],
  * });
+ * ```
+ *
+ * ### Looking up an existing firewall
+ * `Firewall.lookup` references a firewall Alchemy doesn't manage (created in the
+ * console or by another stack), found by `firewallName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall
+ * ```typescript
+ * const existing = AWS.NetworkFirewall.Firewall.lookup({ firewallName: "my-firewall" });
  * ```
  *
  * @resource
@@ -187,7 +207,7 @@ export const FirewallProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* nfw
           .describeFirewall({ FirewallName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded readiness wait. Endpoint provisioning typically completes in
@@ -221,12 +241,19 @@ export const FirewallProvider = () =>
                   Effect.map((r) =>
                     r.Firewall !== undefined ? toAttrs(r.Firewall, r.FirewallStatus) : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
             return items.filter((item): item is Firewall["Attributes"] => item !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ firewallName: name }) {
+          const found = yield* describe(name);
+          if (found?.Firewall === undefined) return undefined;
+          const attrs = toAttrs(found.Firewall, found.FirewallStatus);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.firewallName ?? (yield* createName(id, olds ?? {}));
@@ -377,7 +404,7 @@ export const FirewallProvider = () =>
           const name = output.firewallName;
           const observed = yield* nfw
             .describeFirewall({ FirewallName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (observed === undefined) return;
 
           // Clear delete protection first — DeleteFirewall requires it off.
@@ -404,7 +431,7 @@ export const FirewallProvider = () =>
           yield* Effect.gen(function* () {
             const remaining = yield* nfw
               .describeFirewall({ FirewallName: name })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             if (remaining !== undefined) {
               return yield* new FirewallNotDeleted({
                 message: `firewall '${name}' still deleting (status: ${remaining.FirewallStatus?.Status})`,

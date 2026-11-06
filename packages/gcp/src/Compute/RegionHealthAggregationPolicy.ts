@@ -176,7 +176,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       healthAggregationPolicy: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, policyName: string) =>
   getByName(project, region, policyName).pipe(
@@ -293,7 +293,7 @@ export const RegionHealthAggregationPolicyProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, policyName);
       }
 
@@ -351,6 +351,6 @@ export const RegionHealthAggregationPolicyProvider = () =>
           healthAggregationPolicy: output.policyName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

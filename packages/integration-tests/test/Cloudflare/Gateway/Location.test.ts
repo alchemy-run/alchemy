@@ -1,14 +1,19 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+// Skipped: the testing account isn't entitled to Gateway Locations; every
+// create fails with `Unauthorized` ("This account does not have access to this
+// feature"). Re-enable on an account with the Zero Trust Gateway entitlement.
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -34,7 +39,7 @@ const expectGone = (accountId: string, locationId: string) =>
     }),
   );
 
-test.provider(
+test.provider.skip(
   "create, verify, and destroy a location",
   (stack) =>
     Effect.gen(function* () {
@@ -44,20 +49,20 @@ test.provider(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("BasicLocation", {
-          name: "alchemy-zt-location-basic",
+          name: testName("alchemy-zt-location-basic"),
           ecsSupport: false,
         }),
       );
 
       expect(location.locationId).toBeTruthy();
       expect(location.accountId).toEqual(accountId);
-      expect(location.name).toEqual("alchemy-zt-location-basic");
+      expect(location.name).toEqual(testName("alchemy-zt-location-basic"));
       expect(location.clientDefault).toBe(false);
       // Cloudflare assigns a stable DoH subdomain to every location.
       expect(location.dohSubdomain).toBeTruthy();
 
       const live = yield* getLocation(accountId, location.locationId);
-      expect(live.name).toEqual("alchemy-zt-location-basic");
+      expect(live.name).toEqual(testName("alchemy-zt-location-basic"));
       expect(live.dohSubdomain).toEqual(location.dohSubdomain);
 
       yield* stack.destroy();
@@ -66,7 +71,7 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:gateway", "live"] },
 );
 
-test.provider(
+test.provider.skip(
   "update name and ecsSupport in place (same id)",
   (stack) =>
     Effect.gen(function* () {
@@ -76,7 +81,7 @@ test.provider(
 
       const initial = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update",
+          name: testName("alchemy-zt-location-update"),
           ecsSupport: false,
         }),
       );
@@ -84,7 +89,7 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update-v2",
+          name: testName("alchemy-zt-location-update-v2"),
           ecsSupport: true,
         }),
       );
@@ -93,17 +98,17 @@ test.provider(
       // server-assigned DoH subdomain is stable across updates.
       expect(updated.locationId).toEqual(initial.locationId);
       expect(updated.dohSubdomain).toEqual(initial.dohSubdomain);
-      expect(updated.name).toEqual("alchemy-zt-location-update-v2");
+      expect(updated.name).toEqual(testName("alchemy-zt-location-update-v2"));
       expect(updated.ecsSupport).toBe(true);
 
       const live = yield* getLocation(accountId, updated.locationId);
-      expect(live.name).toEqual("alchemy-zt-location-update-v2");
+      expect(live.name).toEqual(testName("alchemy-zt-location-update-v2"));
       expect(live.ecsSupport).toBe(true);
 
       // Redeploying identical props is a no-op (still the same location).
       const noop = yield* stack.deploy(
         Cloudflare.Gateway.Location("UpdateLocation", {
-          name: "alchemy-zt-location-update-v2",
+          name: testName("alchemy-zt-location-update-v2"),
           ecsSupport: true,
         }),
       );
@@ -115,7 +120,7 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:gateway", "live"] },
 );
 
-test.provider(
+test.provider.skip(
   "recreates after out-of-band delete",
   (stack) =>
     Effect.gen(function* () {
@@ -125,7 +130,7 @@ test.provider(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("HealLocation", {
-          name: "alchemy-zt-location-heal",
+          name: testName("alchemy-zt-location-heal"),
           ecsSupport: false,
         }),
       );
@@ -142,7 +147,7 @@ test.provider(
       // missing and recreate it instead of failing on a 404.
       const healed = yield* stack.deploy(
         Cloudflare.Gateway.Location("HealLocation", {
-          name: "alchemy-zt-location-heal",
+          name: testName("alchemy-zt-location-heal"),
           ecsSupport: true,
         }),
       );
@@ -162,7 +167,7 @@ test.provider(
 // then enumerate every Gateway location in the account via the typed
 // provider and assert the deployed one is present in the exhaustively
 // paginated result.
-test.provider(
+test.provider.skip(
   "list enumerates deployed gateway locations",
   (stack) =>
     Effect.gen(function* () {
@@ -170,7 +175,7 @@ test.provider(
 
       const location = yield* stack.deploy(
         Cloudflare.Gateway.Location("ListLocation", {
-          name: "alchemy-zt-location-list",
+          name: testName("alchemy-zt-location-list"),
           ecsSupport: false,
         }),
       );
@@ -181,7 +186,7 @@ test.provider(
       // The deployed location appears with the exact `read` Attributes shape.
       const found = all.find((l) => l.locationId === location.locationId);
       expect(found).toBeDefined();
-      expect(found?.name).toEqual("alchemy-zt-location-list");
+      expect(found?.name).toEqual(testName("alchemy-zt-location-list"));
       expect(found?.accountId).toEqual(location.accountId);
 
       yield* stack.destroy();

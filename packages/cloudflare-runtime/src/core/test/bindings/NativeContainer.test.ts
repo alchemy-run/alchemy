@@ -1,8 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
-import { isDockerAvailable } from "../helpers/docker.ts";
+import { docker } from "../helpers/docker.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 const script = `
@@ -30,8 +29,13 @@ export class Sandbox extends DurableObject {
       const restored = await (await container.exec(["cat", "/workspace-file"])).output();
       return new Response(restored.stdout);
     }
+    // Only the test's own paths may touch the container: local tools (T3 Code,
+    // VS Code port detection) probe fresh localhost listeners with \`GET /\`,
+    // and a catch-all that restarts the container races the test's requests.
+    const image = path === "/builtin" ? "cloudflare/debian-trixie" : container.images[path.slice(1)];
+    if (image === undefined) return new Response("Not Found", { status: 404 });
     await container.destroy();
-    container.start({ image: path === "/builtin" ? "cloudflare/debian-trixie" : container.images[path.slice(1)], entrypoint: ["sleep", "infinity"], enableInternet: false });
+    container.start({ image, entrypoint: ["sleep", "infinity"], enableInternet: false });
     const process = await container.exec(["sh", "-c", "printf hello; printf error >&2; exit 7"]);
     const output = await process.output();
     return Response.json({ stdout: new TextDecoder().decode(output.stdout), stderr: new TextDecoder().decode(output.stderr), exitCode: output.exitCode });
@@ -40,14 +44,11 @@ export class Sandbox extends DurableObject {
 export default { fetch(request, env) { return env.SANDBOX.getByName("workspace").fetch(request); } };
 `;
 
-const DOCKER_BIN = process.env.DOCKER_BIN ?? "docker";
-const docker = (...args: string[]) =>
-  Effect.sync(() =>
-    execFileSync(DOCKER_BIN, args, { encoding: "utf8" })
-      .split("\n")
-      .filter((line) => line.trim() !== ""),
+const dockerLines = (...args: string[]) =>
+  docker(...args).pipe(
+    Effect.map((stdout) => stdout.split("\n").filter((line) => line.trim() !== "")),
   );
-const workerContainers = docker(
+const workerContainers = dockerLines(
   "ps",
   "--all",
   "--format",
@@ -55,14 +56,14 @@ const workerContainers = docker(
   "--filter",
   "name=^workerd-native-container-",
 );
-const snapshotImages = docker(
+const snapshotImages = dockerLines(
   "images",
   "--quiet",
   "--filter",
   "reference=workerd-container-snap-*",
 );
 
-it.live.skipIf(!isDockerAvailable())(
+it.live(
   "native container images: selects named images, executes processes, restores a snapshot, and removes every container on shutdown",
   () =>
     Effect.gen(function* () {

@@ -102,7 +102,7 @@ export const AuthorizedViewSet = Resource<AuthorizedViewSet>(
 export class AuthorizedViewSetNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, authorizedViewSetId: string) =>
@@ -124,10 +124,10 @@ const toAttrs = (set: cci.GoogleCloudContactcenterinsightsV1AuthorizedViewSet, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAuthorizedViewSets.pages({ parent, pageSize: 100 }).pipe(
@@ -216,7 +216,7 @@ export const AuthorizedViewSetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AuthorizedViewSetNotResolved({ name });
+        return yield* new AuthorizedViewSetNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

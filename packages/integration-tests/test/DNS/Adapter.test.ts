@@ -15,6 +15,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Hetzner from "@alchemy.run/hetzner";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as cfdns from "@distilled.cloud/cloudflare/dns";
 import * as HetznerErrors from "@distilled.cloud/hetzner";
@@ -22,13 +23,13 @@ import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as hetznerZones from "@distilled.cloud/hetzner/zones";
 import * as DNS from "alchemy/DNS";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../names.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), AWS.providers(), Hetzner.providers()),
@@ -43,8 +44,6 @@ const TARGET_1 = "example.net";
 const TARGET_2 = "example.org";
 const TXT_1 = "dns-adapter=v1";
 const TXT_2 = "dns-adapter=v2";
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -220,13 +219,13 @@ const failureOf = <A, E, R, T>(
 // ---------------------------------------------------------------------------
 
 const CF = {
-  cname: `dns-adapter-cname.${CF_ZONE}`,
-  addresses: `dns-adapter-addr.${CF_ZONE}`,
-  proxied: `dns-adapter-proxied.${CF_ZONE}`,
-  setA: `dns-adapter-set-a.${CF_ZONE}`,
-  setB: `dns-adapter-set-b.${CF_ZONE}`,
-  txt: `dns-adapter-txt.${CF_ZONE}`,
-  recordCname: `dns-adapter-rec-cname.${CF_ZONE}`,
+  cname: `${testName("dns-adapter-cname")}.${CF_ZONE}`,
+  addresses: `${testName("dns-adapter-addr")}.${CF_ZONE}`,
+  proxied: `${testName("dns-adapter-proxied")}.${CF_ZONE}`,
+  setA: `${testName("dns-adapter-set-a")}.${CF_ZONE}`,
+  setB: `${testName("dns-adapter-set-b")}.${CF_ZONE}`,
+  txt: `${testName("dns-adapter-txt")}.${CF_ZONE}`,
+  recordCname: `${testName("dns-adapter-rec-cname")}.${CF_ZONE}`,
 };
 
 const cloudflareProgram = (version: 1 | 2) =>
@@ -320,7 +319,7 @@ describe("Cloudflare.DNS adapter", () => {
 // Route 53 — a hosted zone delegated from the Cloudflare test zone
 // ---------------------------------------------------------------------------
 
-const R53_ZONE = `dns-adapter-r53.${CF_ZONE}`;
+const R53_ZONE = `${testName("dns-adapter-r53")}.${CF_ZONE}`;
 const R53 = {
   origin: `origin.${R53_ZONE}`,
   www: `www.${R53_ZONE}`,
@@ -329,6 +328,9 @@ const R53 = {
   setB: `set-b.${R53_ZONE}`,
   txt: `txt.${R53_ZONE}`,
   recordCname: `rec-cname.${R53_ZONE}`,
+  dualSetA: `dual-set-a.${R53_ZONE}`,
+  dualSetB: `dual-set-b.${R53_ZONE}`,
+  upgrade: `upgrade.${R53_ZONE}`,
 };
 
 const route53Program = (cfZoneId: string, version: 1 | 2) =>
@@ -351,14 +353,26 @@ const route53Program = (cfZoneId: string, version: 1 | 2) =>
 
     // A dual-stack Route 53 alias at a record in the same zone — a real
     // AWS alias target that needs no billable resource.
-    yield* dns.alias("Www", {
-      name: R53.www,
-      ipv6: true,
-      target: {
-        hostname: Output.map(origin.records, () => R53.origin),
-        route53Alias: { hostedZoneId: zone.id, evaluateTargetHealth: false },
-      },
+    const originAlias = {
+      hostname: Output.map(origin.records, () => R53.origin),
+      route53Alias: { hostedZoneId: zone.id, evaluateTargetHealth: false },
+    };
+    yield* dns.alias("Www", { name: R53.www, ipv6: true, target: originAlias });
+    // An alias that turns dual-stack on redeploy: `Upgrade` becomes
+    // `Upgrade-A` + `Upgrade-AAAA`, and deleting the old `Upgrade` must
+    // leave the `A` record the new one now holds.
+    yield* dns.alias("Upgrade", {
+      name: R53.upgrade,
+      ipv6: version === 2,
+      target: originAlias,
     });
+    // A dual-stack alias set: declared and bound names get `A` and `AAAA`.
+    const dualSet = yield* dns.aliasSet("DualSet", {
+      names: version === 1 ? [R53.dualSetA] : [],
+      ipv6: true,
+      target: originAlias,
+    });
+    yield* dualSet.bind`BoundDualSite`({ names: [R53.dualSetB] });
     yield* dns.alias("Cname", {
       name: R53.cname,
       target: { hostname: target },
@@ -442,6 +456,15 @@ describe("AWS.Route53 adapter", () => {
           expect(yield* route53Values(zoneId, name, "CNAME")).toEqual([TARGET_1]);
         }
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_1]);
+        for (const name of [R53.dualSetA, R53.dualSetB]) {
+          for (const type of ["A", "AAAA"] as const) {
+            expect(
+              normalize((yield* route53Set(zoneId, name, type))?.AliasTarget?.DNSName ?? ""),
+            ).toBe(R53.origin);
+          }
+        }
+        expect((yield* route53Set(zoneId, R53.upgrade, "A"))?.AliasTarget).toBeDefined();
+        expect(yield* route53Set(zoneId, R53.upgrade, "AAAA")).toBeUndefined();
 
         // Authoritative answers from the zone's own nameservers.
         const servers = yield* nameServerAddresses(zone.nameServers);
@@ -460,6 +483,20 @@ describe("AWS.Route53 adapter", () => {
         expect(yield* route53Values(zoneId, R53.setB, "CNAME")).toEqual([TARGET_2]);
         expect(yield* route53Values(zoneId, R53.txt, "TXT")).toEqual([TXT_2]);
         expect(yield* route53Values(zoneId, R53.recordCname, "CNAME")).toEqual([]);
+        // The dropped declared name leaves both families; the bound one keeps both.
+        expect(yield* route53Set(zoneId, R53.dualSetA, "A")).toBeUndefined();
+        expect(yield* route53Set(zoneId, R53.dualSetA, "AAAA")).toBeUndefined();
+        for (const type of ["A", "AAAA"] as const) {
+          expect(
+            normalize((yield* route53Set(zoneId, R53.dualSetB, type))?.AliasTarget?.DNSName ?? ""),
+          ).toBe(R53.origin);
+          // The upgraded alias holds both, with the old `A` generation gone.
+          expect(
+            normalize((yield* route53Set(zoneId, R53.upgrade, type))?.AliasTarget?.DNSName ?? ""),
+          ).toBe(R53.origin);
+        }
+        yield* waitForAuthoritative(servers, R53.dualSetB, "AAAA", ["2001:db8::20"]);
+        yield* waitForAuthoritative(servers, R53.upgrade, "AAAA", ["2001:db8::20"]);
         // The alias follows its target's new address.
         yield* waitForAuthoritative(servers, R53.www, "A", ["192.0.2.21"]);
         yield* waitForAuthoritative(servers, R53.cname, "CNAME", [TARGET_2]);
@@ -487,8 +524,8 @@ describe("AWS.Route53 adapter", () => {
 // delegated or not, so the records are verified against them directly.
 // ---------------------------------------------------------------------------
 
-const HZ_SUBZONE = `dns-adapter-hz.${CF_ZONE}`;
-const HZ_ZONE = "dns-adapter-hz-alchemy-test.us";
+const HZ_SUBZONE = `${testName("dns-adapter-hz")}.${CF_ZONE}`;
+const HZ_ZONE = `${testName("dns-adapter-hz")}.us`;
 const HZ = {
   cname: `cname.${HZ_ZONE}`,
   addresses: `addr.${HZ_ZONE}`,
@@ -552,7 +589,7 @@ const waitUntilHetznerZoneGone = (zoneId: number) =>
   );
 
 describe("Hetzner.DNS adapter", () => {
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "alias, aliasSet (+ bound names) and records converge in a Hetzner zone",
     (stack) =>
       Effect.gen(function* () {
@@ -599,7 +636,7 @@ describe("Hetzner.DNS adapter", () => {
     },
   );
 
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "a CNAME alias at the pinned zone apex dies with DnsAdapterError",
     (stack) =>
       Effect.gen(function* () {
@@ -639,7 +676,7 @@ describe("Hetzner.DNS adapter", () => {
     { tags: ["provider:dns", "provider:hetzner:dns", "live"] },
   );
 
-  test.provider.skipIf(!hasHetznerCreds)(
+  test.provider(
     "Hetzner DNS rejects a sub-zone of the Cloudflare test zone (why the zone is not delegated)",
     (stack) =>
       Effect.gen(function* () {

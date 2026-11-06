@@ -2,16 +2,17 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Drift from "alchemy/Drift";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { expectUrlAbsent, expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -29,7 +30,7 @@ const zoneName =
 // Deterministic per-test path prefixes on the zone apex. Each test owns a
 // disjoint prefix so reruns and parallel runs never collide, and the same
 // patterns are reused on every run (never derive names from Date.now()).
-const routeSuffix = `alchemy-worker-route-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const routeSuffix = `alchemy-worker-route-${stageSuffix()}`;
 
 const workerMarker = "Hello from TestWorker";
 

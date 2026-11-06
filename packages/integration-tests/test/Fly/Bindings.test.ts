@@ -1,7 +1,7 @@
 import * as Fly from "@alchemy.run/fly";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -20,8 +20,10 @@ import {
   SignKey,
   Site,
 } from "./fixtures/bindings-shared.ts";
+import { flyApi } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: flyApi,
   providers: Fly.providers(),
 });
 

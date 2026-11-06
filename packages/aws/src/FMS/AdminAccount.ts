@@ -84,7 +84,7 @@ export { AdminAccountResource as AdminAccount };
 // been designated — collapse to `undefined`.
 const getAdmin = pinFms(fms.getAdminAccount({})).pipe(
   Effect.map((r) => r as fms.GetAdminAccountResponse | undefined),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
 );
 
 export const AdminAccountProvider = () =>

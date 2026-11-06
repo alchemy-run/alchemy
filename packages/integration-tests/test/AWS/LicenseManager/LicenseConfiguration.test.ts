@@ -2,11 +2,11 @@ import * as AWS from "@alchemy.run/aws";
 import { LicenseConfiguration } from "@alchemy.run/aws/LicenseManager";
 import type { LicenseConfigurationProps } from "@alchemy.run/aws/LicenseManager/LicenseConfiguration";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as licensemanager from "@distilled.cloud/aws/license-manager";
 import * as sts from "@distilled.cloud/aws/sts";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

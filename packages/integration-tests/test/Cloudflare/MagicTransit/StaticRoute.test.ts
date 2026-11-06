@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -97,7 +98,7 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("ListRouteGre", {
-          name: "alch-gre-listroute1",
+          name: testName("alch-gre-listroute1"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.31",
           interfaceAddress: "10.213.14.10/31",
@@ -139,7 +140,7 @@ test.provider.skipIf(!entitled)(
       // A static route's nexthop must live on a Magic tunnel interface.
       const tunnel = yield* stack.deploy(
         Cloudflare.MagicTransit.GreTunnel("RouteGre", {
-          name: "alch-gre-route1",
+          name: testName("alch-gre-route1"),
           cloudflareGreEndpoint: cfEndpoint,
           customerGreEndpoint: "198.51.100.30",
           interfaceAddress: "10.213.12.10/31",

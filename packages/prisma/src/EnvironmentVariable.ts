@@ -12,6 +12,7 @@ import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
@@ -26,6 +27,18 @@ import {
 } from "./internal/Refs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+export class EnvironmentVariableConflict extends Data.TaggedError("EnvironmentVariableConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EnvironmentVariableInvalidProps extends Data.TaggedError(
+  "EnvironmentVariableInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EnvironmentVariableProps {
   /**
@@ -141,11 +154,9 @@ const ENV_VALUE_MAX_BYTES = 8 * 1024;
 const validateEnvironmentVariableKey = (key: string) =>
   Effect.gen(function* () {
     if (key.length < 1 || key.length > 256 || !ENV_KEY_PATTERN.test(key)) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
-        ),
-      );
+      return yield* new EnvironmentVariableInvalidProps({
+        message: `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
+      });
     }
   });
 
@@ -154,17 +165,15 @@ const validateEnvironmentVariableWrite = (key: string, value: Redacted.Redacted<
     yield* validateEnvironmentVariableKey(key);
     const raw = Redacted.value(value);
     if (raw.length === 0) {
-      return yield* Effect.fail(
-        new Error(`Prisma environment variable '${key}' value must be non-empty.`),
-      );
+      return yield* new EnvironmentVariableInvalidProps({
+        message: `Prisma environment variable '${key}' value must be non-empty.`,
+      });
     }
     const byteLength = yield* Effect.sync(() => new TextEncoder().encode(raw).byteLength);
     if (byteLength > ENV_VALUE_MAX_BYTES) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma environment variable '${key}' value exceeds ${ENV_VALUE_MAX_BYTES} bytes.`,
-        ),
-      );
+      return yield* new EnvironmentVariableInvalidProps({
+        message: `Prisma environment variable '${key}' value exceeds ${ENV_VALUE_MAX_BYTES} bytes.`,
+      });
     }
   });
 
@@ -217,9 +226,9 @@ const findVariable = (
       const matches = variables.filter((variable) => variable.branchId === (branchId ?? null));
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Multiple Prisma environment variables match '${key}' in the requested scope; refusing to select one arbitrarily.`,
-            ),
+            new EnvironmentVariableConflict({
+              message: `Multiple Prisma environment variables match '${key}' in the requested scope; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -268,9 +277,9 @@ const ensureVariableIdentity = (
   variable.key === expected.key
     ? Effect.void
     : Effect.fail(
-        new Error(
-          `Prisma environment variable '${variable.id}' has immutable identity project '${variable.projectId}', branch '${variable.branchId ?? "null"}', class '${variable.class}', key '${variable.key}', but this resource requires project '${expected.projectId}', branch '${expected.branchId ?? "null"}', class '${expected.class}', key '${expected.key}'. Refusing to update or delete a mismatched secret.`,
-        ),
+        new EnvironmentVariableConflict({
+          message: `Prisma environment variable '${variable.id}' has immutable identity project '${variable.projectId}', branch '${variable.branchId ?? "null"}', class '${variable.class}', key '${variable.key}', but this resource requires project '${expected.projectId}', branch '${expected.branchId ?? "null"}', class '${expected.class}', key '${expected.key}'. Refusing to update or delete a mismatched secret.`,
+        }),
       );
 
 const ProviderLive = () =>
@@ -335,7 +344,7 @@ const ProviderLive = () =>
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findVariableInProject;
           if (!variable) return undefined;
@@ -350,9 +359,9 @@ const ProviderLive = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           if (news.branchId !== undefined && news.class !== "preview") {
-            return yield* Effect.fail(
-              new Error('Prisma branch-scoped environment variables must use class: "preview".'),
-            );
+            return yield* new EnvironmentVariableInvalidProps({
+              message: 'Prisma branch-scoped environment variables must use class: "preview".',
+            });
           }
           yield* validateEnvironmentVariableWrite(news.key, news.value);
           const projectId = yield* resolveProjectId(news.project);
@@ -364,7 +373,7 @@ const ProviderLive = () =>
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const value = news.value;
@@ -386,9 +395,9 @@ const ProviderLive = () =>
               })),
               Effect.catchTag("Conflict", () =>
                 Effect.fail(
-                  new Error(
-                    `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
-                  ),
+                  new EnvironmentVariableConflict({
+                    message: `Prisma environment variable '${news.key}' appeared after the adoption check. Refusing to overwrite its secret; rerun with adoption enabled if it is the intended variable.`,
+                  }),
                 ),
               ),
             );
@@ -416,7 +425,7 @@ const ProviderLive = () =>
             envVarId: output.environmentVariableId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!variable) return;
           yield* ensureVariableIdentity(variable, {

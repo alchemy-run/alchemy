@@ -232,7 +232,7 @@ type ObservedPortal = {
 const observePortal = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpPortal({ accountId, id })
-    .pipe(Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("McpPortalNotFound", () => Effect.undefined));
 
 const createPortalId = (id: string, portalId: string | undefined) =>
   Effect.gen(function* () {

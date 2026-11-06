@@ -1,9 +1,9 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Provider from "@/Provider";
 import { Random, RandomProvider } from "@/Random";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: RandomProvider(),

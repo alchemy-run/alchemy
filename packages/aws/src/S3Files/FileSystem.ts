@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { PolicyDocument } from "../IAM/Policy.ts";
@@ -96,8 +97,18 @@ export interface FileSystem extends Resource<
     prefix?: string;
   },
   never,
-  Providers
+  Providers,
+  FileSystemLookup
 > {}
+
+/**
+ * Props for {@link FileSystem.lookup}: find a file system this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FileSystemLookup {
+  /** The id of the existing file system. */
+  fileSystemId: string;
+}
 
 /**
  * An Amazon S3 File System — POSIX-style file system access over an S3
@@ -160,6 +171,16 @@ export interface FileSystem extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing file system
+ * `FileSystem.lookup` references a file system Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fileSystemId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing file system
+ * ```typescript
+ * const shared = AWS.S3Files.FileSystem.lookup({ fileSystemId });
+ * ```
+ *
  * @resource
  */
 export const FileSystem = Resource<FileSystem>("AWS.S3Files.FileSystem");
@@ -188,7 +209,7 @@ export const FileSystemProvider = () =>
       const observe = (fileSystemId: string) =>
         s3files
           .getFileSystem({ fileSystemId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observedTags = (fileSystemId: string) =>
         s3files.listTagsForResource.items({ resourceId: fileSystemId }).pipe(
@@ -263,7 +284,7 @@ export const FileSystemProvider = () =>
       ) {
         const current = yield* s3files.getFileSystemPolicy({ fileSystemId }).pipe(
           Effect.map((r) => r.policy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         const desiredJson = desired !== undefined ? JSON.stringify(desired) : undefined;
         if (desiredJson !== undefined) {
@@ -296,6 +317,10 @@ export const FileSystemProvider = () =>
               status: fs.status,
             }));
           }),
+        lookup: Effect.fn(function* ({ fileSystemId }) {
+          const found = yield* observe(fileSystemId);
+          return found === undefined ? undefined : yield* toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.fileSystemId !== undefined
@@ -317,7 +342,8 @@ export const FileSystemProvider = () =>
           // fall through: engine default update (tags + policy sync)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
@@ -343,7 +369,7 @@ export const FileSystemProvider = () =>
                 clientToken,
                 tags: toTagList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             live =
               created?.fileSystemId !== undefined
                 ? yield* observe(created.fileSystemId)

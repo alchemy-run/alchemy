@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

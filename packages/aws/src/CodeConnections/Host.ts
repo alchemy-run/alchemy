@@ -83,8 +83,23 @@ export interface Host extends Resource<
     providerEndpoint: string;
   },
   never,
-  Providers
+  Providers,
+  HostLookup
 > {}
+
+/**
+ * Props for {@link Host.lookup}: find a host this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type HostLookup =
+  | {
+      /** The ARN of the existing host. */
+      hostArn: string;
+    }
+  | {
+      /** The name of the existing host. */
+      hostName: string;
+    };
 
 /**
  * An AWS CodeConnections host — the infrastructure representation of a
@@ -128,6 +143,17 @@ export interface Host extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing host
+ * `Host.lookup` references a host Alchemy doesn't manage (created in the
+ * console or by another stack), found by `hostArn` or `hostName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing host
+ * ```typescript
+ * const github = AWS.CodeConnections.Host.lookup({ hostName: "github" });
+ * const hostArn = github.hostArn;
+ * ```
+ *
  * @resource
  */
 export const Host = Resource<Host>("AWS.CodeConnections.Host");
@@ -169,7 +195,7 @@ export const HostProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* codeconnections
           .getHost({ HostArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response === undefined
           ? undefined
           : ({ ...response, HostArn: arn } satisfies codeconnections.Host);
@@ -207,6 +233,12 @@ export const HostProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "hostArn" in props ? yield* getByArn(props.hostArn) : yield* findByName(props.hostName);
+          if (found?.HostArn === undefined) return undefined;
+          return toAttrs(found, found.Name ?? ("hostName" in props ? props.hostName : ""));
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.hostName ?? (yield* toName(id, olds ?? {}));
           const host = output?.hostArn ? yield* getByArn(output.hostArn) : yield* findByName(name);

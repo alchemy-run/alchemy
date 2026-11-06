@@ -210,7 +210,7 @@ const toAttrs = (item: vmwareengine.NetworkPeering, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsNetworkPeerings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NetworkPeeringProvider = () =>
   Provider.succeed(NetworkPeering, {
@@ -320,7 +320,7 @@ export const NetworkPeeringProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -329,7 +329,7 @@ export const NetworkPeeringProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -370,7 +370,7 @@ export const NetworkPeeringProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

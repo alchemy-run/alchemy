@@ -1,3 +1,4 @@
+import type * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -104,7 +105,7 @@ export const makeSqlRoutes = (options: SqlRoutesOptions): SqlRoutes => {
       // POST /users/batch — multi-row `sql.insert(rows)`, counted back with
       // `sql.literal` (raw select-list text).
       if (request.method === "POST" && path === "/users/batch") {
-        const rows = (yield* request.json) as UserRow[];
+        const rows = (yield* request.json) as Arr.NonEmptyReadonlyArray<UserRow>;
         yield* sql`INSERT INTO ${sql(table)} ${sql.insert(rows)}`;
         const [count] = yield* sql<{
           n: number;

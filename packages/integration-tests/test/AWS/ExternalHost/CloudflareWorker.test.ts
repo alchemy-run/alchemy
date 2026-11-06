@@ -1,9 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -100,6 +101,32 @@ describe(
         expectOk(body);
         expect(body.result.bodies).toContain("sqs-roundtrip");
       }),
+      { timeout: 180_000 },
+    );
+
+    test.provider(
+      "the minted key may assume only the Worker's Role",
+      (_stack) =>
+        Effect.gen(function* () {
+          const body = yield* call("/identity");
+          expectOk(body);
+          const roleArn: string = body.result.roleArn;
+          const roleName = roleArn.split("/").pop()!;
+          const { Role } = yield* iam.getRole({ RoleName: roleName });
+          const trust = JSON.parse(decodeURIComponent(Role.AssumeRolePolicyDocument!));
+          const userArn: string = [trust.Statement].flat()[0].Principal.AWS;
+          const userName = userArn.split("/").pop()!;
+          const policy = yield* iam.getUserPolicy({ UserName: userName, PolicyName: "AssumeRole" });
+          const document = JSON.parse(decodeURIComponent(policy.PolicyDocument));
+          const statements = [document.Statement].flat().map((statement) => ({
+            Effect: statement.Effect,
+            Action: [statement.Action].flat(),
+            Resource: [statement.Resource].flat(),
+          }));
+          expect(statements).toEqual([
+            { Effect: "Allow", Action: ["sts:AssumeRole"], Resource: [roleArn] },
+          ]);
+        }),
       { timeout: 180_000 },
     );
 

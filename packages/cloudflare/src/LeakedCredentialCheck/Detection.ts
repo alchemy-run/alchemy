@@ -290,8 +290,8 @@ const getDetection = (zoneId: string, detectionId: string) =>
   lcc.getDetection({ zoneId, detectionId }).pipe(
     Effect.map((d): ObservedDetection | undefined => d),
     Effect.catchTags({
-      DetectionNotFound: () => Effect.succeed(undefined),
-      LeakedCredentialChecksDisabled: () => Effect.succeed(undefined),
+      DetectionNotFound: () => Effect.undefined,
+      LeakedCredentialChecksDisabled: () => Effect.undefined,
     }),
   );
 
@@ -312,7 +312,7 @@ const findByExpressions = (
           (d.username ?? undefined) === username && (d.password ?? undefined) === password,
       ),
     ),
-    Effect.catchTag("LeakedCredentialChecksDisabled", () => Effect.succeed(undefined)),
+    Effect.catchTag("LeakedCredentialChecksDisabled", () => Effect.undefined),
   );
 
 const toAttributes = (

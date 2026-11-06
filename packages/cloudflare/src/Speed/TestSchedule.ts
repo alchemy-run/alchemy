@@ -203,7 +203,7 @@ export const TestScheduleProvider = () =>
                       observed ? toAttributes(observed, zone.id, url, region) : undefined,
                     ),
                     // Plan-gated zone rejects the schedule route; skip it.
-                    Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+                    Effect.catchTag("Forbidden", () => Effect.undefined),
                   ),
                 { concurrency: 10 },
               ),
@@ -330,7 +330,7 @@ interface ObservedSchedule {
 const getSchedule = (zoneId: string, url: string, region: TestRegion) =>
   speed.getSchedule({ zoneId, url, region }).pipe(
     Effect.map((s): ObservedSchedule | undefined => s),
-    Effect.catchTag("TestScheduleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TestScheduleNotFound", () => Effect.undefined),
   );
 
 /**

@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class GeofenceCollectionUnexpectedResponse extends Data.TaggedError(
+  "GeofenceCollectionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface GeofenceCollectionProps {
   /**
@@ -48,8 +56,18 @@ export interface GeofenceCollection extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GeofenceCollectionLookup
 > {}
+
+/**
+ * Props for {@link GeofenceCollection.lookup}: find a geofence collection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GeofenceCollectionLookup {
+  /** The collection name of the existing geofence collection. */
+  collectionName: string;
+}
 
 /**
  * An Amazon Location Service geofence collection. A geofence collection stores
@@ -72,6 +90,16 @@ export interface GeofenceCollection extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing geofence collection
+ * `GeofenceCollection.lookup` references a geofence collection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `collectionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing geofence collection
+ * ```typescript
+ * const existing = AWS.Location.GeofenceCollection.lookup({ collectionName: "my-geofence-collection" });
+ * ```
+ *
  * @resource
  */
 export const GeofenceCollection = Resource<GeofenceCollection>("AWS.Location.GeofenceCollection");
@@ -85,7 +113,7 @@ const createCollectionName = (id: string, props: { collectionName?: string | und
 const readCollection = Effect.fn(function* (collectionName: string) {
   const found = yield* location
     .describeGeofenceCollection({ CollectionName: collectionName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     collectionName: found.CollectionName,
@@ -119,6 +147,11 @@ export const GeofenceCollectionProvider = () =>
               (attrs): attrs is GeofenceCollection["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ collectionName }) {
+          const state = yield* readCollection(collectionName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const collectionName =
             output?.collectionName ?? (yield* createCollectionName(id, olds ?? {}));
@@ -152,9 +185,9 @@ export const GeofenceCollectionProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readCollection(collectionName);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created geofence collection ${collectionName}`),
-              );
+              return yield* new GeofenceCollectionUnexpectedResponse({
+                message: `failed to read created geofence collection ${collectionName}`,
+              });
             }
           }
 
@@ -183,9 +216,9 @@ export const GeofenceCollectionProvider = () =>
 
           const final = yield* readCollection(collectionName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled geofence collection ${collectionName}`),
-            );
+            return yield* new GeofenceCollectionUnexpectedResponse({
+              message: `failed to read reconciled geofence collection ${collectionName}`,
+            });
           }
           return final;
         }),

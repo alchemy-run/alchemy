@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -64,7 +64,8 @@ test.provider(
             location: "us-central1",
             baseModel: "gemini-2.5-flash",
             supervisedTuningSpec: {
-              trainingDatasetUri: "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
+              trainingDatasetUri:
+                "gs://cloud-samples-data/ai-platform/generative_ai/gemini/text/sft_train_data.jsonl",
             },
           });
         }),

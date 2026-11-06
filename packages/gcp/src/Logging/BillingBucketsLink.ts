@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -128,7 +128,7 @@ export const BillingBucketsLink = Resource<BillingBucketsLink>("GCP.Logging.Bill
 export class BillingBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (
@@ -186,19 +186,19 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (link === undefined || isDeleted(link)) {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new BillingBucketsLinkNotResolved({ name });
+      return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -212,7 +212,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new BillingBucketsLinkNotResolved({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new BillingBucketsLinkNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BillingBucketsLinkNotResolved",
@@ -248,7 +250,7 @@ export const BillingBucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const billingAccountId = yield* resolveBillingAccountId(
         olds?.billingAccountId,
         output?.billingAccountId,
@@ -261,7 +263,9 @@ export const BillingBucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location, bucketId);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -336,7 +340,7 @@ export const BillingBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BillingBucketsLinkNotResolved({ name });
+        return yield* new BillingBucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, billingAccountId, location, bucketId);

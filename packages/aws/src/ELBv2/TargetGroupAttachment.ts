@@ -148,7 +148,7 @@ export const TargetGroupAttachmentProvider = () =>
       // registered targets, so presence in the response means registered.
       const health = yield* elbv2
         .describeTargetHealth({ TargetGroupArn: output.targetGroupArn })
-        .pipe(Effect.catchTag(["TargetGroupNotFoundException"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["TargetGroupNotFoundException"], () => Effect.undefined));
       const registered = health?.TargetHealthDescriptions?.some(
         (d) =>
           d.Target?.Id === output.targetId &&
@@ -202,7 +202,7 @@ export const TargetGroupAttachmentProvider = () =>
       // Observe — is the target already registered?
       const health = yield* elbv2
         .describeTargetHealth({ TargetGroupArn: targetGroupArn })
-        .pipe(Effect.catchTag(["InvalidTargetException"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["InvalidTargetException"], () => Effect.undefined));
       const registered = health?.TargetHealthDescriptions?.some(
         (d) =>
           d.Target?.Id === news.targetId &&

@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Index, View } from "@alchemy.run/aws/ResourceExplorer";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as re2 from "@distilled.cloud/aws/resource-explorer-2";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

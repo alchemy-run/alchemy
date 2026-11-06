@@ -108,8 +108,18 @@ export interface TrustAnchor extends Resource<
     enabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  TrustAnchorLookup
 > {}
+
+/**
+ * Props for {@link TrustAnchor.lookup}: find a trust anchor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TrustAnchorLookup {
+  /** The id of the existing trust anchor. */
+  trustAnchorId: string;
+}
 
 /**
  * An IAM Roles Anywhere trust anchor. A trust anchor establishes trust
@@ -150,6 +160,16 @@ export interface TrustAnchor extends Resource<
  *     { event: "CA_CERTIFICATE_EXPIRY", threshold: "30 days" },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing trust anchor
+ * `TrustAnchor.lookup` references a trust anchor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `trustAnchorId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing trust anchor
+ * ```typescript
+ * const existing = AWS.RolesAnywhere.TrustAnchor.lookup({ trustAnchorId: "..." });
  * ```
  *
  * @resource
@@ -235,11 +255,18 @@ export const TrustAnchorProvider = () =>
       const getById = (trustAnchorId: string) =>
         rolesanywhere.getTrustAnchor({ trustAnchorId }).pipe(
           Effect.map((r) => r.trustAnchor),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {
         stables: ["trustAnchorId", "trustAnchorArn"],
+
+        lookup: Effect.fn(function* ({ trustAnchorId }) {
+          const found = yield* getById(trustAnchorId);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = output?.trustAnchorId
@@ -324,7 +351,7 @@ export const TrustAnchorProvider = () =>
                 trustAnchorId: live.trustAnchorId!,
                 notificationSettingKeys: resetKeys,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             live = reset?.trustAnchor ?? live;
           }
 

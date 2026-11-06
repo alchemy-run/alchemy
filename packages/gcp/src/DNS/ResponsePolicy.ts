@@ -1,5 +1,5 @@
 import * as dns from "@distilled.cloud/gcp/dns_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -198,7 +198,7 @@ const toAttrs = (policy: dns.ResponsePolicy, project: string) => ({
 const getByName = (project: string, responsePolicyName: string) =>
   dns
     .getResponsePolicies({ project, responsePolicy: responsePolicyName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRules = (project: string, responsePolicyName: string) =>
   Effect.gen(function* () {
@@ -254,7 +254,7 @@ export const ResponsePolicyProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const responsePolicyName = yield* toResponsePolicyName(
         id,
@@ -264,7 +264,9 @@ export const ResponsePolicyProvider = () =>
       const existing = yield* getByName(env.project, responsePolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "responsePolicyName");
     }),
 
     list: () =>

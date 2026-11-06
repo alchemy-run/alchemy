@@ -253,7 +253,7 @@ export const OccurrenceProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const name = output?.name;
       if (name !== undefined && name.length > 0) {

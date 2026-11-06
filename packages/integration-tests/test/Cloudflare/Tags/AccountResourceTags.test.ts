@@ -1,23 +1,24 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic names — the same on every run (never Date.now()/random).
-const KV_TITLE_CRUD = "alchemy-account-tags-crud";
-const KV_TITLE_REPLACE_A = "alchemy-account-tags-replace-a";
-const KV_TITLE_REPLACE_B = "alchemy-account-tags-replace-b";
+const KV_TITLE_CRUD = testName("alchemy-account-tags-crud");
+const KV_TITLE_REPLACE_A = testName("alchemy-account-tags-replace-a");
+const KV_TITLE_REPLACE_B = testName("alchemy-account-tags-replace-b");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
@@ -228,7 +229,7 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:tags", "live"] },
 );
 
-const KV_TITLE_LIST = "alchemy-account-tags-list";
+const KV_TITLE_LIST = testName("alchemy-account-tags-list");
 
 test.provider(
   "list enumerates account-wide tagged resources",

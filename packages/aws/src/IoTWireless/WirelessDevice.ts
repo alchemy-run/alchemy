@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readIotWirelessTags, sameShape, syncIotWirelessTags } from "./internal.ts";
+
+export class WirelessDeviceUnexpectedResponse extends Data.TaggedError(
+  "WirelessDeviceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * LoRaWAN OTAA v1.1 activation keys. The root keys (`AppKey`, `NwkKey`) are
@@ -301,7 +309,7 @@ export const WirelessDeviceProvider = () =>
       const getBy = (identifier: string, type: iotw.WirelessDeviceIdType) =>
         iotw
           .getWirelessDevice({ Identifier: identifier, IdentifierType: type })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observe = Effect.fn(function* (
         output: WirelessDevice["Attributes"] | undefined,
@@ -324,9 +332,9 @@ export const WirelessDeviceProvider = () =>
 
       const toAttrs = Effect.fn(function* (device: iotw.GetWirelessDeviceResponse, name: string) {
         if (device.Id === undefined || device.Arn === undefined) {
-          return yield* Effect.fail(
-            new Error(`IoT Wireless device '${name}' returned without Id/Arn`),
-          );
+          return yield* new WirelessDeviceUnexpectedResponse({
+            message: `IoT Wireless device '${name}' returned without Id/Arn`,
+          });
         }
         return {
           wirelessDeviceId: device.Id,
@@ -416,16 +424,16 @@ export const WirelessDeviceProvider = () =>
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             device =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessDeviceId")
                 : yield* observe(undefined, news);
           }
           if (device === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless device '${name}' not found after create`),
-            );
+            return yield* new WirelessDeviceUnexpectedResponse({
+              message: `IoT Wireless device '${name}' not found after create`,
+            });
           }
           const attrs = yield* toAttrs(device, name);
 
@@ -471,9 +479,9 @@ export const WirelessDeviceProvider = () =>
           // 4. RETURN fresh attributes.
           const final = yield* getBy(attrs.wirelessDeviceId, "WirelessDeviceId");
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`IoT Wireless device '${name}' vanished during update`),
-            );
+            return yield* new WirelessDeviceUnexpectedResponse({
+              message: `IoT Wireless device '${name}' vanished during update`,
+            });
           }
           yield* session.note(attrs.wirelessDeviceId);
           return yield* toAttrs(final, name);

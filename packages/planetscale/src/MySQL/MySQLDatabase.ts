@@ -303,7 +303,7 @@ export const MySQLDatabaseProvider = () =>
               };
             }),
           ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -327,7 +327,7 @@ export const MySQLDatabaseProvider = () =>
           organization,
           database: observedName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create.
       if (!observed) {

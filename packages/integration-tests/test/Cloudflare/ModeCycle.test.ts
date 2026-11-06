@@ -1,13 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import { inDev } from "../test.resources.ts";

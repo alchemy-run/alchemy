@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -153,13 +154,13 @@ export type LineageEvent = ProcessesRunsLineageEvent;
 export class ProcessesRunsLineageEventNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ProcessesRunsLineageEventNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (run: string, lineageEventId: string) =>
   `${run}/lineageEvents/${lineageEventId}`;
 
-const nowIso = () => Effect.sync(() => new Date().toISOString());
+const nowIso = () => Effect.map(DateTime.now, DateTime.formatIso);
 
 const runOf = (run: string, process: string | undefined, project: string, location: string) => {
   if (run.includes("/")) return run.replace(/\/+$/, "");
@@ -227,17 +228,17 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcessesRunsLineageEvents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getProcess = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcesses({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const identityFingerprint = (news: {
   startTime?: string;
@@ -350,7 +351,7 @@ export const ProcessesRunsLineageEventProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessesRunsLineageEventNotResolved({ name });
+        return yield* new ProcessesRunsLineageEventNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

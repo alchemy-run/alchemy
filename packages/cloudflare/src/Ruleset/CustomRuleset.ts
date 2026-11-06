@@ -187,7 +187,7 @@ export const CustomRulesetProvider = () =>
           })
           .pipe(
             Effect.map((ruleset) => toCustomRulesetAttributes(output.accountId, ruleset)),
-            Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("RulesetNotFound", () => Effect.undefined),
           );
       }
       // Cold lookup — no persisted state. Find the ruleset by its
@@ -207,7 +207,7 @@ export const CustomRulesetProvider = () =>
       if (match === undefined) return undefined;
       const ruleset = yield* rulesets
         .getRulesetForAccount({ accountId, rulesetId: match.id })
-        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
       if (ruleset === undefined) return undefined;
       return Unowned(toCustomRulesetAttributes(accountId, ruleset));
     }),
@@ -227,7 +227,7 @@ export const CustomRulesetProvider = () =>
                 accountId,
                 rulesetId: output.rulesetId,
               })
-              .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)))
+              .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined))
           : undefined;
 
       // 2. Ensure — create when missing.
@@ -294,7 +294,7 @@ export const CustomRulesetProvider = () =>
         (summary) =>
           rulesets.getRulesetForAccount({ accountId, rulesetId: summary.id }).pipe(
             Effect.map((ruleset) => toCustomRulesetAttributes(accountId, ruleset)),
-            Effect.catchTag(["RulesetNotFound", "Forbidden"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["RulesetNotFound", "Forbidden"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

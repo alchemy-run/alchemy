@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -116,8 +117,23 @@ export interface Application extends Resource<
     state?: string;
   },
   {},
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The name of the existing application. */
+      applicationName: string;
+    };
 
 /**
  * An Amazon EMR Serverless application — a serverless Spark or Hive
@@ -178,6 +194,16 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.EMRServerless.Application.lookup({ applicationName: "analytics" });
+ * ```
+ *
  * @resource
  */
 export const Application = Resource<Application>("AWS.EMRServerless.Application");
@@ -215,7 +241,7 @@ export const ApplicationProvider = () =>
       const observeById = Effect.fn(function* (applicationId: string) {
         return yield* emr.getApplication({ applicationId }).pipe(
           Effect.map((response) => response.application),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -286,6 +312,14 @@ export const ApplicationProvider = () =>
               }));
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "applicationId" in props ? props.applicationId : undefined,
+            "applicationName" in props ? props.applicationName : "",
+          );
+          if (found === undefined) return undefined;
+          return toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.applicationName ?? (yield* createName(id, olds ?? {}));
           const application = yield* observe(output?.applicationId, name);
@@ -340,7 +374,7 @@ export const ApplicationProvider = () =>
               })
               .pipe(
                 // a concurrent reconciler already created it — observe instead
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const applicationId =
               created?.applicationId ?? (yield* observeByName(name))?.applicationId;
@@ -402,7 +436,8 @@ export const ApplicationProvider = () =>
             yield* awaitApplicationStopped(application.applicationId);
             // Fresh token per update: distinct desired states must never be
             // deduplicated against each other.
-            const updateToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const updateToken = yield* random.uuidV4();
             const updated = yield* emr.updateApplication({
               applicationId: application.applicationId,
               clientToken: updateToken,
@@ -423,7 +458,7 @@ export const ApplicationProvider = () =>
             .getApplication({ applicationId: output.applicationId })
             .pipe(
               Effect.map((response) => response.application),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (application === undefined || application.state === "TERMINATED") {
             return;
@@ -435,7 +470,7 @@ export const ApplicationProvider = () =>
             });
           }
           yield* awaitApplicationStopped(application.applicationId).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* emr
             .deleteApplication({ applicationId: output.applicationId })

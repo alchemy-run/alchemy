@@ -19,8 +19,28 @@ export type Store = Resource<
     accountId: string;
   },
   never,
-  Providers
+  Providers,
+  StoreLookup
 >;
+
+/**
+ * Props for {@link Store.lookup}: find a Secrets Store this stack doesn't
+ * manage, by its id or its name.
+ */
+export type StoreLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing store.
+       */
+      storeId: string;
+    }
+  | {
+      /**
+       * The name of the existing store (an account's default store is
+       * `default_secrets_store`).
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Secrets Store, a per-account container for secrets that
@@ -45,6 +65,18 @@ export type Store = Resource<
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore", {
  *   name: "production-secrets",
+ * });
+ * ```
+ *
+ * ### Looking up an existing Store
+ * `Store.lookup` reads a store Alchemy doesn't manage, found by `storeId`
+ * or `name`, so secrets can be looked up inside it. It is read during
+ * plan/deploy and never created or deleted.
+ *
+ * **Example:** The account's default store
+ * ```typescript
+ * const store = Cloudflare.SecretsStore.Store.lookup({
+ *   name: "default_secrets_store",
  * });
  * ```
  *
@@ -75,6 +107,16 @@ export const StoreProviderLive = () =>
         accountId: acct,
       };
     }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const match = yield* secretsStore.listStores.items({ accountId }).pipe(
+        Stream.filter((s) => ("storeId" in props ? s.id === props.storeId : s.name === props.name)),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
+      if (!match) return undefined;
+      return { storeId: match.id, storeName: match.name, accountId };
+    }),
     reconcile: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -103,7 +145,7 @@ export const StoreProviderLive = () =>
           // account's default Secrets Store.
           name: "default_secrets_store",
         })
-        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.undefined));
 
       if (response) {
         return {

@@ -606,7 +606,6 @@ function decodeRange(raw: R2Range | undefined): R2Range | undefined {
   };
 }
 
-// oxlint-disable-next-line no-explicit-any -- trusted wire format from workerd
 function decodeBindingRequest(raw: any): R2BindingRequest {
   switch (raw.method) {
     case "head":

@@ -117,7 +117,7 @@ export const Tensorboard = Resource<Tensorboard>("GCP.AIPlatform.Tensorboard");
 export class TensorboardNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.TensorboardNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -147,15 +147,17 @@ const toAttrs = (board: aiplatform.GoogleCloudAiplatformV1Tensorboard, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboards({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((board) =>
-      board ? Effect.succeed(board) : Effect.fail(new TensorboardNotResolved({ name })),
+      board
+        ? Effect.succeed(board)
+        : Effect.fail(new TensorboardNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.TensorboardNotResolved",
@@ -182,7 +184,7 @@ const findByDisplayName = (parent: string, displayName: string, project: string)
     Stream.filter((board) => board.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? toAttrs(option.value, project) : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const TensorboardProvider = () =>
@@ -258,7 +260,7 @@ export const TensorboardProvider = () =>
               isDefault: desiredDefault ? true : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created, {
             alreadyExistsOk: true,
@@ -278,7 +280,7 @@ export const TensorboardProvider = () =>
 
       if (current === undefined) {
         return yield* new TensorboardNotResolved({
-          name: output?.name ?? `${parent}/tensorboards/-`,
+          resourceName: output?.name ?? `${parent}/tensorboards/-`,
         });
       }
 
@@ -320,7 +322,7 @@ export const TensorboardProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsTensorboards({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

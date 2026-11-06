@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -279,7 +279,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, networkAttachment: string) =>
   compute
     .getNetworkAttachments({ project, region, networkAttachment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, networkAttachmentName: string) =>
   getByName(project, region, networkAttachmentName).pipe(
@@ -369,7 +369,7 @@ export const NetworkAttachmentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const networkAttachmentName = yield* toName(
         id,
@@ -381,7 +381,9 @@ export const NetworkAttachmentProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, networkAttachmentName);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "networkAttachmentName");
     }),
 
     list: () =>

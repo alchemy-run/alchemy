@@ -18,7 +18,7 @@ import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./inte
  * no profile detail and the profile cannot be found by name afterwards.
  */
 export class ProfileMissing extends Data.TaggedError("ProfileMissing")<{
-  readonly name: string;
+  readonly resourceName: string;
 }> {}
 
 /**
@@ -134,8 +134,18 @@ export interface Profile extends Resource<
     enabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  ProfileLookup
 > {}
+
+/**
+ * Props for {@link Profile.lookup}: find a profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProfileLookup {
+  /** The id of the existing profile. */
+  profileId: string;
+}
 
 /**
  * An IAM Roles Anywhere profile — the list of IAM roles that the Roles
@@ -191,6 +201,16 @@ export interface Profile extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing profile
+ * ```typescript
+ * const existing = AWS.RolesAnywhere.Profile.lookup({ profileId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Profile = Resource<Profile>("AWS.RolesAnywhere.Profile");
@@ -231,7 +251,7 @@ export const ProfileProvider = () =>
       const getById = (profileId: string) =>
         rolesanywhere.getProfile({ profileId }).pipe(
           Effect.map((r) => r.profile),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {
@@ -246,6 +266,13 @@ export const ProfileProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ profileId }) {
+          const found = yield* getById(profileId);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -283,7 +310,7 @@ export const ProfileProvider = () =>
             });
             live = created.profile ?? (yield* findByName(name));
             if (live === undefined) {
-              return yield* new ProfileMissing({ name });
+              return yield* new ProfileMissing({ resourceName: name });
             }
           } else {
             // 3. Sync — converge the mutable aspects (name, roleArns,
@@ -359,9 +386,7 @@ export const ProfileProvider = () =>
                   profileId: profile.profileId!,
                   certificateField: previous.certificateField,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               profile = cleaned?.profile ?? profile;
             }
           }

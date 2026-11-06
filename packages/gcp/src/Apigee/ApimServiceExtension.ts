@@ -165,7 +165,7 @@ export const ApimServiceExtension = Resource<ApimServiceExtension>(
 export class ApimServiceExtensionNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApimServiceExtensionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, extensionId: string) =>
@@ -209,7 +209,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApimServiceExtensions({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const ApimServiceExtensionProvider = () =>
   Provider.succeed(ApimServiceExtension, {
@@ -308,7 +308,7 @@ export const ApimServiceExtensionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApimServiceExtensionNotResolved({ name });
+        return yield* new ApimServiceExtensionNotResolved({ resourceName: name });
       }
 
       const needsUpdate =
@@ -334,9 +334,7 @@ export const ApimServiceExtensionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsApimServiceExtensions({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

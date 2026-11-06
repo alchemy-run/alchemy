@@ -143,8 +143,31 @@ export interface EventBus extends Resource<
     description?: string;
   },
   never,
-  Providers
+  Providers,
+  EventBusLookup
 > {}
+
+/**
+ * Props for {@link EventBus.lookup}: find an event bus this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface EventBusLookup {
+  /** The name of the existing event bus. *
+   * ### Looking up an existing event bus
+   * `EventBus.lookup` references an event bus Alchemy doesn't manage (created in the
+   * console or by another stack), found by `eventBusName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Publish to an existing event bus
+   * ```typescript
+   * const orders = AWS.EventBridge.EventBus.lookup({ eventBusName: "orders" });
+   *
+   * // init
+   * const putEvents = yield* AWS.EventBridge.PutEvents(orders);
+   * ```
+   */
+  eventBusName: string;
+}
 export const EventBus = Resource<EventBus>("AWS.EventBridge.EventBus");
 
 export const EventBusProvider = () =>
@@ -179,6 +202,17 @@ export const EventBusProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ eventBusName }) {
+          const described = yield* eventbridge
+            .describeEventBus({ Name: eventBusName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Arn || !described.Name) return undefined;
+          return {
+            eventBusName: described.Name,
+            eventBusArn: described.Arn as EventBusArn,
+            description: described.Description,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const eventBusName = output?.eventBusName ?? (yield* createEventBusName(id, olds ?? {}));
           const region = output ? regionOfEventBusArn(output.eventBusArn) : olds?.region;
@@ -188,9 +222,7 @@ export const EventBusProvider = () =>
                 .describeEventBus({
                   Name: eventBusName,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
               if (!described?.Arn || !described.Name) {
                 return undefined;
@@ -261,9 +293,7 @@ export const EventBusProvider = () =>
                 .describeEventBus({
                   Name: eventBusName,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
               // Ensure — create the bus if missing. Tolerate
               // `ResourceAlreadyExistsException` as a race with a peer
@@ -287,9 +317,7 @@ export const EventBusProvider = () =>
                   .describeEventBus({
                     Name: eventBusName,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               }
 
               // Sync mutable bus configuration — `updateEventBus` overwrites

@@ -359,7 +359,7 @@ const isMissingLocation = isMissingStripeResource;
 const getById = (location: string) =>
   GetTerminalLocation({ location }).pipe(
     Effect.map(asLocation),
-    Effect.catchIf(isMissingLocation, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingLocation, () => Effect.undefined),
   );
 
 const listAllLocations = Effect.fn(function* () {

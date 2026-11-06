@@ -234,7 +234,7 @@ const toAttrs = (source: eventarc.GoogleApiSource, project: string, region: stri
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsGoogleApiSources({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GoogleApiSourceProvider = () =>
   Provider.succeed(GoogleApiSource, {
@@ -340,7 +340,7 @@ export const GoogleApiSourceProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -400,7 +400,7 @@ export const GoogleApiSourceProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

@@ -6,9 +6,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { otelDatasetHeader } from "./OtelHeaders.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatasetUnexpectedResponse extends Data.TaggedError("DatasetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type DatasetKind =
   | "otel:metrics:v1"
@@ -178,9 +184,9 @@ export const DatasetProvider = () =>
 
       const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
-          return yield* Effect.fail(
-            new Error(`Axiom dataset "${dataset.name}" is missing its edge deployment metadata`),
-          );
+          return yield* new DatasetUnexpectedResponse({
+            message: `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
+          });
         }
         const { apiBaseUrl } = yield* credentials;
         const apiRoot = apiBaseUrl.replace(/\/$/, "");
@@ -247,7 +253,7 @@ export const DatasetProvider = () =>
           // here mutation is safe.
           const datasetId = output?.id ?? news.name;
           const observed = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
           // Ensure — POST creates the dataset. Tolerate Conflict/
@@ -310,7 +316,7 @@ export const DatasetProvider = () =>
           const datasetId = output?.id ?? olds?.name;
           if (!datasetId) return undefined;
           const existing = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!existing) return undefined;
           const ownership = parseMarker(existing.description);

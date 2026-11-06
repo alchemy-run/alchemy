@@ -13,6 +13,21 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { syncMqTags, toTagRecord } from "./internal.ts";
 
+export class BrokerConflict extends Data.TaggedError("BrokerConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class BrokerOperationFailed extends Data.TaggedError("BrokerOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class BrokerUnexpectedResponse extends Data.TaggedError("BrokerUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * An ActiveMQ or RabbitMQ user provisioned on the broker at creation.
  */
@@ -192,8 +207,23 @@ export interface Broker extends Resource<
     consoleUrl: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BrokerLookup
 > {}
+
+/**
+ * Props for {@link Broker.lookup}: find a broker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BrokerLookup =
+  | {
+      /** The id of the existing broker. */
+      brokerId: string;
+    }
+  | {
+      /** The name of the existing broker. */
+      brokerName: string;
+    };
 
 /**
  * An Amazon MQ broker — a managed message broker running Apache ActiveMQ or
@@ -287,6 +317,17 @@ export interface Broker extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing broker
+ * `Broker.lookup` references a broker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `brokerId` or `brokerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Consume from an existing broker
+ * ```typescript
+ * const broker = AWS.MQ.Broker.lookup({ brokerName: "orders" });
+ * const brokerArn = broker.brokerArn;
+ * ```
+ *
  * @resource
  */
 export const Broker = Resource<Broker>("AWS.MQ.Broker");
@@ -325,7 +366,7 @@ export const BrokerProvider = () =>
       const readBroker = Effect.fn(function* (brokerId: string) {
         return yield* mq
           .describeBroker({ BrokerId: brokerId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       /** Find a live broker by name (listBrokers has no name filter). */
@@ -457,6 +498,14 @@ export const BrokerProvider = () =>
             return { action: "replace" } as const;
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const broker =
+            "brokerId" in props
+              ? yield* readBroker(props.brokerId)
+              : yield* findByName(props.brokerName);
+          return broker === undefined ? undefined : toAttrs(broker);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const broker = output?.brokerId
             ? yield* readBroker(output.brokerId)
@@ -528,9 +577,9 @@ export const BrokerProvider = () =>
                     if (existing?.BrokerId) {
                       return { BrokerId: existing.BrokerId };
                     }
-                    return yield* Effect.fail(
-                      new Error(`MQ broker '${name}' create conflicted but no broker was found`),
-                    );
+                    return yield* new BrokerConflict({
+                      message: `MQ broker '${name}' create conflicted but no broker was found`,
+                    });
                   }),
                 ),
               );
@@ -538,22 +587,24 @@ export const BrokerProvider = () =>
           }
 
           if (observed?.BrokerId === undefined) {
-            return yield* Effect.fail(new Error(`MQ broker '${name}' could not be reconciled`));
+            return yield* new BrokerUnexpectedResponse({
+              message: `MQ broker '${name}' could not be reconciled`,
+            });
           }
           const brokerId = observed.BrokerId;
 
           // Wait (bounded) for the broker to settle before mutating it.
           const settled = yield* waitForSettled(brokerId);
           if (settled === undefined) {
-            return yield* Effect.fail(
-              new Error(`MQ broker '${name}' disappeared while reconciling`),
-            );
+            return yield* new BrokerUnexpectedResponse({
+              message: `MQ broker '${name}' disappeared while reconciling`,
+            });
           }
           observed = settled;
           if (observed.BrokerState === "CREATION_FAILED") {
-            return yield* Effect.fail(
-              new Error(`MQ broker '${name}' failed to create (state: CREATION_FAILED)`),
-            );
+            return yield* new BrokerOperationFailed({
+              message: `MQ broker '${name}' failed to create (state: CREATION_FAILED)`,
+            });
           }
 
           // 3. Sync mutable settings — compute an updateBroker request with

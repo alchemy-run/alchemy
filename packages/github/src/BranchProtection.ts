@@ -1,9 +1,10 @@
-import type { Octokit as GitHubClient } from "@octokit/rest";
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface BranchProtectionProps {
@@ -284,7 +285,7 @@ export interface BranchProtection extends Resource<
  * restrictions and dismissal restrictions are only available on
  * organization-owned repositories.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied
+ * Authentication is resolved via the GitHub `Credentials` service supplied
  * by `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token
  * needs `repo` scope and admin access to the repository.
  *
@@ -373,34 +374,12 @@ interface ProtectionPayload {
   lock_branch?: { enabled?: boolean };
 }
 
-type UpdateBranchProtectionParams = NonNullable<
-  Parameters<GitHubClient["rest"]["repos"]["updateBranchProtection"]>[0]
->;
-
-type RequiredStatusCheck = {
-  context: string;
-  app_id?: number;
-};
-
-/** The status-check body GitHub accepts: `contexts` or `checks`, never both. */
-type RequiredStatusChecks =
-  | { strict: boolean; contexts: string[] }
-  | { strict: boolean; checks: RequiredStatusCheck[] }
-  | null;
-
-type BranchProtectionUpdate = Omit<UpdateBranchProtectionParams, "required_status_checks"> & {
-  required_status_checks: RequiredStatusChecks;
-};
-
-// OpenAPI requires `contexts` on this body and lists `checks` as optional.
-// GitHub rejects a request that sends both. The route stays a `string` so
-// `request` accepts the body that is serialized. `BranchProtectionUpdate`
-// still checks every other field against the endpoint.
-const UPDATE_BRANCH_PROTECTION: string = "PUT /repos/{owner}/{repo}/branches/{branch}/protection";
+type RequiredStatusChecks = Repos.UpdateBranchProtectionRequest["required_status_checks"];
 
 const requiredStatusChecksOf = (
   checks: BranchProtectionProps["requiredStatusChecks"],
 ): RequiredStatusChecks => {
+  // `contexts` or `checks`, never both: GitHub rejects a body with both.
   if (checks === undefined) return null;
   const strict = checks.strict ?? false;
   if (checks.checks === undefined) {
@@ -414,9 +393,6 @@ const requiredStatusChecksOf = (
     })),
   };
 };
-
-const putBranchProtection = (octokit: GitHubClient, params: BranchProtectionUpdate) =>
-  octokit.request(UPDATE_BRANCH_PROTECTION, params);
 
 const attrsOf = (
   branch: string,
@@ -453,217 +429,150 @@ export const BranchProtectionProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news }) {
+        const branch = { owner: news.owner, repo: news.repository, branch: news.branch };
 
-      // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
-      // values (or `null`) for every aspect so removed props converge back
-      // to their defaults rather than being left as-is.
-      const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
-      const reviews = news.requiredPullRequestReviews;
-      const restrictions = news.restrictions;
+        // Ensure & Sync — the PUT is a full upsert of the rule. Send explicit
+        // values (or `null`) for every aspect so removed props converge back
+        // to their defaults rather than being left as-is.
+        const requiredStatusChecks = requiredStatusChecksOf(news.requiredStatusChecks);
+        const reviews = news.requiredPullRequestReviews;
+        const restrictions = news.restrictions;
 
-      yield* Effect.tryPromise({
-        try: () =>
-          putBranchProtection(octokit, {
-            owner: news.owner,
-            repo: news.repository,
-            branch: news.branch,
-            required_status_checks: requiredStatusChecks,
-            enforce_admins: news.enforceAdmins ?? false,
-            required_pull_request_reviews:
-              reviews === undefined
-                ? null
-                : {
-                    dismiss_stale_reviews: reviews.dismissStaleReviews ?? false,
-                    require_code_owner_reviews: reviews.requireCodeOwnerReviews ?? false,
-                    required_approving_review_count: reviews.requiredApprovingReviewCount ?? 0,
-                    require_last_push_approval: reviews.requireLastPushApproval ?? false,
-                    ...(reviews.dismissalRestrictions === undefined
-                      ? {}
-                      : {
-                          dismissal_restrictions: {
-                            users: reviews.dismissalRestrictions.users ?? [],
-                            teams: reviews.dismissalRestrictions.teams ?? [],
-                            apps: reviews.dismissalRestrictions.apps ?? [],
-                          },
-                        }),
-                    ...(reviews.bypassPullRequestAllowances === undefined
-                      ? {}
-                      : {
-                          bypass_pull_request_allowances: {
-                            users: reviews.bypassPullRequestAllowances.users ?? [],
-                            teams: reviews.bypassPullRequestAllowances.teams ?? [],
-                            apps: reviews.bypassPullRequestAllowances.apps ?? [],
-                          },
-                        }),
-                  },
-            restrictions:
-              restrictions === undefined
-                ? null
-                : {
-                    users: restrictions.users ?? [],
-                    teams: restrictions.teams ?? [],
-                    apps: restrictions.apps ?? [],
-                  },
-            required_linear_history: news.requiredLinearHistory ?? false,
-            allow_force_pushes: news.allowForcePushes ?? false,
-            allow_deletions: news.allowDeletions ?? false,
-            block_creations: news.blockCreations ?? false,
-            required_conversation_resolution: news.requiredConversationResolution ?? false,
-            lock_branch: news.lockBranch ?? false,
-            allow_fork_syncing: news.allowForkSyncing ?? false,
-          }),
-        catch: (e) => e as Error,
-      });
-
-      // Sync — required signatures live behind dedicated endpoints that the
-      // top-level PUT does not touch. Diff the observed flag against the
-      // desired one and only call the API on a real change.
-      const observed = yield* Effect.tryPromise({
-        try: async () => {
-          const { data } = await octokit.rest.repos.getBranchProtection({
-            owner: news.owner,
-            repo: news.repository,
-            branch: news.branch,
-          });
-          return data as ProtectionPayload;
-        },
-        catch: (e) => e as Error,
-      });
-
-      const desiredSignatures = news.requiredSignatures ?? false;
-      const observedSignatures = observed.required_signatures?.enabled ?? false;
-      if (desiredSignatures !== observedSignatures) {
-        yield* Effect.tryPromise({
-          try: async () => {
-            if (desiredSignatures) {
-              await octokit.rest.repos.createCommitSignatureProtection({
-                owner: news.owner,
-                repo: news.repository,
-                branch: news.branch,
-              });
-            } else {
-              await octokit.rest.repos.deleteCommitSignatureProtection({
-                owner: news.owner,
-                repo: news.repository,
-                branch: news.branch,
-              });
-            }
-          },
-          catch: (e) => e as Error,
+        yield* Repos.updateBranchProtection({
+          ...branch,
+          required_status_checks: requiredStatusChecks,
+          enforce_admins: news.enforceAdmins ?? false,
+          required_pull_request_reviews:
+            reviews === undefined
+              ? null
+              : {
+                  dismiss_stale_reviews: reviews.dismissStaleReviews ?? false,
+                  require_code_owner_reviews: reviews.requireCodeOwnerReviews ?? false,
+                  required_approving_review_count: reviews.requiredApprovingReviewCount ?? 0,
+                  require_last_push_approval: reviews.requireLastPushApproval ?? false,
+                  ...(reviews.dismissalRestrictions === undefined
+                    ? {}
+                    : {
+                        dismissal_restrictions: {
+                          users: reviews.dismissalRestrictions.users ?? [],
+                          teams: reviews.dismissalRestrictions.teams ?? [],
+                          apps: reviews.dismissalRestrictions.apps ?? [],
+                        },
+                      }),
+                  ...(reviews.bypassPullRequestAllowances === undefined
+                    ? {}
+                    : {
+                        bypass_pull_request_allowances: {
+                          users: reviews.bypassPullRequestAllowances.users ?? [],
+                          teams: reviews.bypassPullRequestAllowances.teams ?? [],
+                          apps: reviews.bypassPullRequestAllowances.apps ?? [],
+                        },
+                      }),
+                },
+          restrictions:
+            restrictions === undefined
+              ? null
+              : {
+                  users: restrictions.users ?? [],
+                  teams: restrictions.teams ?? [],
+                  apps: restrictions.apps ?? [],
+                },
+          required_linear_history: news.requiredLinearHistory ?? false,
+          allow_force_pushes: news.allowForcePushes ?? false,
+          allow_deletions: news.allowDeletions ?? false,
+          block_creations: news.blockCreations ?? false,
+          required_conversation_resolution: news.requiredConversationResolution ?? false,
+          lock_branch: news.lockBranch ?? false,
+          allow_fork_syncing: news.allowForkSyncing ?? false,
         });
-      }
 
-      return attrsOf(news.branch, {
-        ...observed,
-        required_signatures: { enabled: desiredSignatures },
-      });
-    }),
+        // Sync — required signatures live behind dedicated endpoints that the
+        // top-level PUT does not touch. Diff the observed flag against the
+        // desired one and only call the API on a real change.
+        const observed: ProtectionPayload = yield* Repos.getBranchProtection(branch);
+
+        const desiredSignatures = news.requiredSignatures ?? false;
+        const observedSignatures = observed.required_signatures?.enabled ?? false;
+        if (desiredSignatures !== observedSignatures) {
+          yield* desiredSignatures
+            ? Repos.createCommitSignatureProtection(branch)
+            : Repos.deleteCommitSignatureProtection(branch);
+        }
+
+        return attrsOf(news.branch, {
+          ...observed,
+          required_signatures: { enabled: desiredSignatures },
+        });
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Refresh from the live rule. A 404 means either the branch is no longer
     // protected or the branch/repository is gone — both are "missing".
-    read: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      return yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.rest.repos.getBranchProtection({
-              owner: olds.owner,
-              repo: olds.repository,
-              branch: olds.branch,
-            });
-            return attrsOf(olds.branch, data as ProtectionPayload);
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    read: Effect.fn(
+      function* ({ olds }) {
+        return yield* Repos.getBranchProtection({
+          owner: olds.owner,
+          repo: olds.repository,
+          branch: olds.branch,
+        }).pipe(
+          Effect.map((protection) => attrsOf(olds.branch, protection)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
 
     // Enumerate every protected branch across the repositories the token can
     // see — protection rules are keyed by {owner, repository, branch} with no
     // account-wide list endpoint, so walk the repos like the Environment
     // provider does and fetch the rule for each protected branch.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
-        (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const branches = await octokit.paginate(octokit.rest.repos.listBranches, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  protected: true,
-                  per_page: 100,
-                });
-                const rules: BranchProtection["Attributes"][] = [];
-                for (const branch of branches) {
-                  try {
-                    const { data } = await octokit.rest.repos.getBranchProtection({
-                      owner: repo.owner.login,
-                      repo: repo.name,
-                      branch: branch.name,
-                    });
-                    rules.push(attrsOf(branch.name, data as ProtectionPayload));
-                  } catch (error: any) {
-                    // Protection may be removed between the list and the
-                    // get, or the branch may be governed by a ruleset only.
-                    if (error.status !== 404) throw error;
-                  }
-                }
-                return rules;
-              } catch (error: any) {
-                // Repos without branch protection support (plan limits) or
-                // where the token lacks access reject with 403/404 — skip
-                // them rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+        (repo) => {
+          const scope = { owner: repo.owner.login, repo: repo.name };
+          return Stream.runCollect(
+            Repos.listBranches.items({ ...scope, protected: true, per_page: 100 }),
+          ).pipe(
+            Effect.flatMap((branches) =>
+              Effect.forEach(branches, (branch) =>
+                Repos.getBranchProtection({ ...scope, branch: branch.name }).pipe(
+                  Effect.map((protection) => [attrsOf(branch.name, protection)]),
+                  // Protection may be removed between the list and the get, or
+                  // the branch may be governed by a ruleset only.
+                  Effect.catchTag("NotFound", () => Effect.succeed([])),
+                ),
+              ),
+            ),
+            Effect.map((rules) => rules.flat()),
+            // Repos without branch protection support (plan limits) or where
+            // the token lacks access reject with 403/404 — skip them rather
+            // than failing the whole enumeration.
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          );
+        },
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.deleteBranchProtection({
-              owner: olds.owner,
-              repo: olds.repository,
-              branch: olds.branch,
-            });
-          } catch (error: any) {
-            // Already unprotected, or the branch/repository is gone.
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    delete: Effect.fn(
+      function* ({ olds }) {
+        yield* Repos.deleteBranchProtection({
+          owner: olds.owner,
+          repo: olds.repository,
+          branch: olds.branch,
+        }).pipe(
+          // Already unprotected, or the branch/repository is gone.
+          Effect.catchTag("NotFound", () => Effect.void),
+        );
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });

@@ -4,9 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AlchemyContext } from "../AlchemyContext.ts";
-import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { AuthProvidersLive } from "../Auth/Registry.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
@@ -58,7 +58,7 @@ export const layer = (
   Layer.mergeAll(
     ProfileStoreLive,
     CredentialsStoreLive,
-    Layer.succeed(AuthProviders, {}),
+    AuthProvidersLive,
     loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
       Effect.map((base) => withProfileOverride(base, environment.profile)),
       ConfigProvider.layer,

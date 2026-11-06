@@ -110,7 +110,7 @@ export const makeLocalState = () =>
 
     const ensure = (dir: string) =>
       created.has(dir)
-        ? Effect.succeed(void 0)
+        ? Effect.void
         : fs
             .makeDirectory(dir, { recursive: true })
             .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
@@ -134,14 +134,12 @@ export const makeLocalState = () =>
           recover,
         ),
       getReplacedResources: Effect.fn(function* (request) {
-        return (yield* Effect.all(
-          (yield* state.list(request)).map((fqn) =>
-            state.get({
-              stack: request.stack,
-              stage: request.stage,
-              fqn,
-            }),
-          ),
+        return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
+          state.get({
+            stack: request.stack,
+            stage: request.stage,
+            fqn,
+          }),
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>

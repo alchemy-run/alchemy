@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -438,7 +438,7 @@ const samePolicy = (
 const getByName = (project: string, zone: string, autoscaler: string) =>
   compute
     .getAutoscalers({ project, zone, autoscaler })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, zone: string, autoscalerName: string) =>
   getByName(project, zone, autoscalerName).pipe(
@@ -452,7 +452,7 @@ const waitPresent = (project: string, zone: string, autoscalerName: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.AutoscalerNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.AutoscalerNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, zone: string, autoscalerName: string) =>
@@ -492,7 +492,7 @@ export const AutoscalerProvider = () =>
       };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const autoscalerName = yield* toName(id, olds?.autoscalerName, output?.autoscalerName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
@@ -500,7 +500,9 @@ export const AutoscalerProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "autoscalerName");
     }),
 
     list: () =>
@@ -552,7 +554,7 @@ export const AutoscalerProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -608,7 +610,7 @@ export const AutoscalerProvider = () =>
           autoscaler: output.autoscalerName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

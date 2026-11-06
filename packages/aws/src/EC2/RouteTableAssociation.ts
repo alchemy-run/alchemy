@@ -4,12 +4,34 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { RouteTableId } from "./RouteTable.ts";
 import type { SubnetId } from "./Subnet.ts";
+
+export class RouteTableAssociationUnexpectedResponse extends Data.TaggedError(
+  "RouteTableAssociationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RouteTableAssociationOperationFailed extends Data.TaggedError(
+  "RouteTableAssociationOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RouteTableAssociationNotReady extends Data.TaggedError(
+  "RouteTableAssociationNotReady",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RouteTableAssociationId<ID extends string = string> = `rtbassoc-${ID}`;
 export const RouteTableAssociationId = <ID extends string>(
@@ -194,6 +216,44 @@ export const RouteTableAssociationProvider = () =>
           // Route table change can be done via ReplaceRouteTableAssociation
         }),
 
+        // A subnet (or gateway) has at most one route table association, so
+        // look it up by the subnet/gateway rather than the association id: a
+        // route table swapped out of band gets a new association id, which
+        // drift then reports as a changed route table (and repair swaps
+        // back) instead of a missing association.
+        read: Effect.fn(function* ({ olds, output }) {
+          const subnetId = output?.subnetId ?? olds?.subnetId;
+          const gatewayId = output?.gatewayId ?? olds?.gatewayId;
+          if (subnetId === undefined && gatewayId === undefined) return undefined;
+          const lookup = yield* ec2.describeRouteTables({
+            Filters: [
+              subnetId !== undefined
+                ? { Name: "association.subnet-id", Values: [subnetId] }
+                : { Name: "association.gateway-id", Values: [gatewayId!] },
+            ],
+          });
+          const assoc = (lookup.RouteTables ?? [])
+            .flatMap((rt) => rt.Associations ?? [])
+            .find(
+              (a) =>
+                a.Main !== true &&
+                (subnetId !== undefined ? a.SubnetId === subnetId : a.GatewayId === gatewayId) &&
+                a.AssociationState?.State !== "disassociated" &&
+                a.AssociationState?.State !== "disassociating",
+            );
+          if (!assoc?.RouteTableAssociationId || !assoc.RouteTableId) return undefined;
+          return {
+            associationId: assoc.RouteTableAssociationId as RouteTableAssociationId,
+            routeTableId: assoc.RouteTableId as RouteTableId,
+            subnetId: assoc.SubnetId as SubnetId | undefined,
+            gatewayId: assoc.GatewayId,
+            associationState: {
+              state: assoc.AssociationState?.State ?? "associated",
+              statusMessage: assoc.AssociationState?.StatusMessage,
+            },
+          };
+        }),
+
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // Observe — try the cached associationId first; if the association
           // was disassociated out-of-band, fall through to AssociateRouteTable.
@@ -265,10 +325,8 @@ export const RouteTableAssociationProvider = () =>
               routeTableId: news.routeTableId as RouteTableId,
               subnetId: news.subnetId as SubnetId | undefined,
               gatewayId: news.gatewayId as string | undefined,
-              associationState: {
-                state: result.AssociationState?.State ?? "associated",
-                statusMessage: result.AssociationState?.StatusMessage,
-              },
+              // Waited for above; matches what `read` observes.
+              associationState: { state: "associated" as const },
             };
           }
 
@@ -294,10 +352,8 @@ export const RouteTableAssociationProvider = () =>
               routeTableId: news.routeTableId as RouteTableId,
               subnetId: news.subnetId as SubnetId | undefined,
               gatewayId: news.gatewayId as string | undefined,
-              associationState: {
-                state: result.AssociationState?.State ?? "associated",
-                statusMessage: result.AssociationState?.StatusMessage,
-              },
+              // Waited for above; matches what `read` observes.
+              associationState: { state: "associated" as const },
             };
           }
 
@@ -357,7 +413,9 @@ const waitForAssociationState = (
 
       const routeTable = result.RouteTables?.[0];
       if (!routeTable) {
-        return yield* Effect.fail(new Error("Route table not found"));
+        return yield* new RouteTableAssociationUnexpectedResponse({
+          message: "Route table not found",
+        });
       }
 
       const association = routeTable.Associations?.find(
@@ -366,7 +424,9 @@ const waitForAssociationState = (
 
       if (!association) {
         // Association might not exist yet, retry
-        return yield* Effect.fail(new Error("Association not found"));
+        return yield* new RouteTableAssociationUnexpectedResponse({
+          message: "Association not found",
+        });
       }
 
       if (association.AssociationState?.State === targetState) {
@@ -374,15 +434,15 @@ const waitForAssociationState = (
       }
 
       if (association.AssociationState?.State === "failed") {
-        return yield* Effect.fail(
-          new Error(`Association failed: ${association.AssociationState.StatusMessage}`),
-        );
+        return yield* new RouteTableAssociationOperationFailed({
+          message: `Association failed: ${association.AssociationState.StatusMessage}`,
+        });
       }
 
       // Still in progress, fail to trigger retry
-      return yield* Effect.fail(
-        new Error(`Association state: ${association.AssociationState?.State}`),
-      );
+      return yield* new RouteTableAssociationNotReady({
+        message: `Association state: ${association.AssociationState?.State}`,
+      });
     }),
     {
       schedule: Schedule.max([Schedule.fixed(1000), Schedule.recurs(30)]).pipe(

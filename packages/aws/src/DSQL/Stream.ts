@@ -4,10 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as EStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class StreamNotReady extends Data.TaggedError("StreamNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface StreamProps {
   /**
@@ -156,7 +162,7 @@ export const StreamProvider = () =>
       const readStream = Effect.fn(function* (clusterIdentifier: string, streamIdentifier: string) {
         return yield* dsql
           .getStream({ clusterIdentifier, streamIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded readiness wait — stream creation typically completes in one
@@ -169,7 +175,9 @@ export const StreamProvider = () =>
         return yield* readStream(clusterIdentifier, streamIdentifier).pipe(
           Effect.flatMap((stream) => {
             if (stream === undefined) {
-              return Effect.fail(new Error(`DSQL stream '${streamIdentifier}' not found`));
+              return Effect.fail(
+                new StreamNotReady({ message: `DSQL stream '${streamIdentifier}' not found` }),
+              );
             }
             if (stream.status === "FAILED") {
               return Effect.die(
@@ -179,9 +187,9 @@ export const StreamProvider = () =>
             }
             if (stream.status !== "ACTIVE") {
               return Effect.fail(
-                new Error(
-                  `DSQL stream '${streamIdentifier}' not active (status: ${stream.status})`,
-                ),
+                new StreamNotReady({
+                  message: `DSQL stream '${streamIdentifier}' not active (status: ${stream.status})`,
+                }),
               );
             }
             return Effect.succeed(stream);
@@ -325,7 +333,11 @@ export const StreamProvider = () =>
             Effect.flatMap((stream) =>
               stream === undefined || stream.status === "DELETED"
                 ? Effect.void
-                : Effect.fail(new Error(`DSQL stream '${output.streamId}' still ${stream.status}`)),
+                : Effect.fail(
+                    new StreamNotReady({
+                      message: `DSQL stream '${output.streamId}' still ${stream.status}`,
+                    }),
+                  ),
             ),
             Effect.retry({
               while: (e): boolean => e instanceof Error,

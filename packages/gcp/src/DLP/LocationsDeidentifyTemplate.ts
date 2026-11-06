@@ -122,7 +122,7 @@ export const LocationsDeidentifyTemplate = Resource<LocationsDeidentifyTemplate>
 export class LocationsDeidentifyTemplateNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDeidentifyTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -146,10 +146,10 @@ const toAttrs = (template: dlp.GooglePrivacyDlpV2DeidentifyTemplate, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDeidentifyTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsDeidentifyTemplateProvider = () =>
   Provider.succeed(LocationsDeidentifyTemplate, {
@@ -227,7 +227,7 @@ export const LocationsDeidentifyTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDeidentifyTemplateNotResolved({ name });
+        return yield* new LocationsDeidentifyTemplateNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

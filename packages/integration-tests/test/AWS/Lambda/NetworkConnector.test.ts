@@ -2,11 +2,11 @@ import * as AWS from "@alchemy.run/aws";
 import { SecurityGroup, Subnet, Vpc } from "@alchemy.run/aws/EC2";
 import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

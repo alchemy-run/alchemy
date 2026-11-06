@@ -2,7 +2,7 @@ import * as Predicate from "effect/Predicate";
 import * as EffectRecord from "effect/Record";
 import * as Redacted from "effect/Redacted";
 
-export type Primitive = never | undefined | null | boolean | number | string | bigint | symbol;
+export type Primitive = undefined | null | boolean | number | string | bigint | symbol;
 
 export const isPrimitive = (value: any): value is Primitive =>
   value === undefined ||
@@ -92,7 +92,7 @@ type UnwrapRedacted<T> =
 
 export const unwrapRedacted = <T>(value: T): UnwrapRedacted<T> => {
   if (Redacted.isRedacted(value)) {
-    return unwrapRedacted(Redacted.value(value)) as UnwrapRedacted<T>;
+    return value.pipe(Redacted.value, unwrapRedacted) as UnwrapRedacted<T>;
   }
   if (Array.isArray(value)) {
     return value.map(unwrapRedacted) as UnwrapRedacted<T>;

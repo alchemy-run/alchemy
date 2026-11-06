@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -25,7 +26,7 @@ const entitledZoneId = process.env.CLOUDFLARE_TEST_WAITING_ROOM_ZONE_ID;
 const entitledZoneHost = process.env.CLOUDFLARE_TEST_WAITING_ROOM_HOST ?? zoneName;
 
 // Deterministic per-test room names — reused on every run.
-const NAME_LIFECYCLE = "alchemy-waitingroom-lifecycle";
+const NAME_LIFECYCLE = testName("alchemy-waitingroom-lifecycle");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -201,7 +202,6 @@ test.provider(
           Effect.gen(function* () {
             return yield* Cloudflare.WaitingRoom.WaitingRoom("ListRoom", {
               zoneId: entitledZoneId,
-              name: "alchemy-waitingroom-list",
               host: entitledZoneHost,
               path: "/alchemy-list",
               totalActiveUsers: 200,

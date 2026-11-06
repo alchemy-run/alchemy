@@ -24,6 +24,8 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -327,7 +329,7 @@ export type Server = Resource<
 export const Server = Resource<Server>("Hetzner.Server");
 
 export class ServerNotResolved extends Data.TaggedError("Hetzner.ServerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /**
@@ -335,7 +337,7 @@ export class ServerNotResolved extends Data.TaggedError("Hetzner.ServerNotResolv
  * `userData`) exceeds Hetzner's 32 KiB user-data limit.
  */
 export class ServerUserDataTooLarge extends Data.TaggedError("Hetzner.ServerUserDataTooLarge")<{
-  name: string;
+  resourceName: string;
   bytes: number;
   limit: number;
 }> {}
@@ -531,7 +533,7 @@ const buildUserData = Effect.fn(function* (input: { name: string; userData: stri
   const bytes = yield* Effect.sync(() => Buffer.byteLength(doc, "utf8"));
   if (bytes > MAX_USER_DATA_BYTES) {
     return yield* new ServerUserDataTooLarge({
-      name: input.name,
+      resourceName: input.name,
       bytes,
       limit: MAX_USER_DATA_BYTES,
     });
@@ -657,7 +659,7 @@ const ensureDeployKey = Effect.fn(function* (input: {
 const getById = (id: number) =>
   Hetzner.servers.getServer({ id }).pipe(
     Effect.map(({ server }) => server),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -872,14 +874,14 @@ export const ServerProvider = () =>
         // Cloud-init runs once, on first boot — a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameRef(news.serverType, output.serverType, output.serverTypeId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const imageId = output.imageId;
         const imageMatches =
@@ -887,15 +889,25 @@ export const ServerProvider = () =>
             ? true
             : imageId !== undefined && news.image === String(imageId);
         if (!imageMatches) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id ?? previous?.serverId,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = {
         ...toAttrs(found),
         privateKey: output?.privateKey,
@@ -971,7 +983,7 @@ export const ServerProvider = () =>
               schedule: Schedule.spaced("5 seconds"),
               times: 8,
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             // The deploy key is a side-effect, not a stack resource. If
             // createServer fails after minting it (quota skip, timeout),
             // nothing is persisted for Server.delete to clean up.
@@ -985,7 +997,7 @@ export const ServerProvider = () =>
         } else {
           const hit = yield* getByName(name);
           if (hit === undefined) {
-            return yield* new ServerNotResolved({ name });
+            return yield* new ServerNotResolved({ resourceName: name });
           }
           current = yield* waitUntilReady(hit.id);
         }
@@ -1071,7 +1083,7 @@ export const ServerProvider = () =>
         }
 
         const deleted = yield* Hetzner.servers.deleteServer({ id: current.id }).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({ while: retryable, times: 8, schedule: backoff }),
         );
         if (deleted?.action) {

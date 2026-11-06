@@ -224,11 +224,11 @@ export type Endpoint = Resource<
 export const Endpoint = Resource<Endpoint>("GCP.AIPlatform.Endpoint");
 
 export class EndpointNotResolved extends Data.TaggedError("GCP.AIPlatform.EndpointNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EndpointStillExists extends Data.TaggedError("GCP.AIPlatform.EndpointStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, endpointId: string) =>
@@ -348,7 +348,7 @@ const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1Endpoint, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Look an endpoint up by name. An endpoint is invisible while its create
@@ -372,7 +372,9 @@ const getSettled = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint ? Effect.succeed(endpoint) : Effect.fail(new EndpointNotResolved({ name })),
+      endpoint
+        ? Effect.succeed(endpoint)
+        : Effect.fail(new EndpointNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointNotResolved",
@@ -384,7 +386,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((endpoint) =>
-      endpoint === undefined ? Effect.void : Effect.fail(new EndpointStillExists({ name })),
+      endpoint === undefined
+        ? Effect.void
+        : Effect.fail(new EndpointStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.EndpointStillExists",
@@ -509,7 +513,7 @@ export const EndpointProvider = () =>
             endpointId,
             body: toCreateBody(news, endpointId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -517,7 +521,7 @@ export const EndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointNotResolved({ name });
+        return yield* new EndpointNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -614,7 +618,7 @@ export const EndpointProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsEndpoints({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

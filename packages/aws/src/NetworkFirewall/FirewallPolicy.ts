@@ -52,8 +52,18 @@ export interface FirewallPolicy extends Resource<
     firewallPolicyId: string;
   },
   never,
-  Providers
+  Providers,
+  FirewallPolicyLookup
 > {}
+
+/**
+ * Props for {@link FirewallPolicy.lookup}: find a firewall policy this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FirewallPolicyLookup {
+  /** The firewall policy name of the existing firewall policy. */
+  firewallPolicyName: string;
+}
 
 /**
  * An AWS Network Firewall policy — defines a firewall's traffic inspection
@@ -92,6 +102,16 @@ export interface FirewallPolicy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing firewall policy
+ * `FirewallPolicy.lookup` references a firewall policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `firewallPolicyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall policy
+ * ```typescript
+ * const existing = AWS.NetworkFirewall.FirewallPolicy.lookup({ firewallPolicyName: "my-firewall-policy" });
+ * ```
+ *
  * @resource
  */
 export const FirewallPolicy = Resource<FirewallPolicy>("AWS.NetworkFirewall.FirewallPolicy");
@@ -122,18 +142,26 @@ export const FirewallPolicyProvider = () =>
               (meta) =>
                 nfw.describeFirewallPolicy({ FirewallPolicyArn: meta.Arn }).pipe(
                   Effect.map((r) => toAttrs(r.FirewallPolicyResponse)),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
             return items.filter((item): item is FirewallPolicy["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* ({ firewallPolicyName: name }) {
+          const found = yield* nfw
+            .describeFirewallPolicy({ FirewallPolicyName: name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found.FirewallPolicyResponse);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.firewallPolicyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.FirewallPolicyResponse);
           const tags = nfwTagsToRecord(found.FirewallPolicyResponse.Tags);
@@ -160,7 +188,7 @@ export const FirewallPolicyProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeFirewallPolicy({ FirewallPolicyName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {

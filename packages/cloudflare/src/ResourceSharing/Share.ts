@@ -132,7 +132,26 @@ export type ShareAttributes = {
   modified: string;
 };
 
-export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers>;
+export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Providers, ShareLookup>;
+
+/**
+ * Props for {@link Share.lookup}: find a share this account sent and this
+ * stack doesn't manage, by its id or its name.
+ */
+export type ShareLookup =
+  | {
+      /**
+       * The id of the existing share.
+       */
+      shareId: string;
+    }
+  | {
+      /**
+       * The name of the existing share. Names are not unique; the first share
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare resource share — shares account-level configuration (gateway
@@ -169,6 +188,21 @@ export type Share = Resource<TypeId, ShareProps, ShareAttributes, never, Provide
  *   resources: [
  *     { resourceType: "gateway-policy", resourceId: policy.ruleId },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing share
+ * `Share.lookup` references a share this account sent that Alchemy doesn't
+ * manage (created in the dashboard or by another stack), found by `shareId`
+ * or `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Add a recipient to an existing share
+ * ```typescript
+ * const share = Cloudflare.ResourceSharing.Share.lookup({ name: "security-baseline" });
+ * yield* Cloudflare.ResourceSharing.ShareRecipient("Partner", {
+ *   shareId: share.shareId,
+ *   accountId: "<recipient-account-id>",
  * });
  * ```
  *
@@ -215,6 +249,14 @@ export const ShareProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "shareId" in props
+          ? yield* getShare(accountId, props.shareId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -390,7 +432,7 @@ const getShare = (accountId: string, shareId: string) =>
     Effect.map((share): ObservedShare | undefined =>
       share.status === "deleted" ? undefined : share,
     ),
-    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareNotFound", () => Effect.undefined),
   );
 
 /**

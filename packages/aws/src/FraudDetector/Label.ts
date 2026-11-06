@@ -36,8 +36,18 @@ export interface Label extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  LabelLookup
 > {}
+
+/**
+ * Props for {@link Label.lookup}: find a label this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LabelLookup {
+  /** The name of the existing label. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector label — a classification (e.g. `fraud`, `legit`)
@@ -51,6 +61,16 @@ export interface Label extends Resource<
  *   description: "confirmed fraudulent event",
  * });
  * const legit = yield* FraudDetector.Label("legit", {});
+ * ```
+ *
+ * ### Looking up an existing label
+ * `Label.lookup` references a label Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing label
+ * ```typescript
+ * const existing = AWS.FraudDetector.Label.lookup({ name: "my-label" });
  * ```
  *
  * @resource
@@ -69,7 +89,7 @@ export const LabelProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getLabels({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.labels?.[0];
       });
 
@@ -88,6 +108,13 @@ export const LabelProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const label = yield* get(name);
+          if (label === undefined) return undefined;
+          const attrs = toAttrs(label);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

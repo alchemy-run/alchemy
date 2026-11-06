@@ -123,7 +123,7 @@ export const AgentPool = Resource<AgentPool>("GCP.StorageTransfer.AgentPool");
 export class AgentPoolNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.AgentPoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toBandwidth = (
@@ -223,7 +223,7 @@ export const AgentPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentPoolNotResolved({ name });
+        return yield* new AgentPoolNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== desiredDisplayName;

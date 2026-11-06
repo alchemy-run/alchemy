@@ -1,7 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -176,17 +176,21 @@ describe(
               expect(response.message).toContain("not verified");
             }
           }),
+        { exclusive: "aws:ses-account" },
       );
 
-      test.provider("sandbox: templated send is rejected with the same typed tag", (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/send-template?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
-            ),
-          ).pipe(Effect.flatMap((r) => r.json))) as { messageId?: string; error?: string };
-          expect(["MessageRejected", "SendingPausedException"]).toContain(response.error);
-        }),
+      test.provider(
+        "sandbox: templated send is rejected with the same typed tag",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* send(
+              HttpClientRequest.post(
+                `${baseUrl}/send-template?from=${encodeURIComponent(UNVERIFIED_FROM)}`,
+              ),
+            ).pipe(Effect.flatMap((r) => r.json))) as { messageId?: string; error?: string };
+            expect(["MessageRejected", "SendingPausedException"]).toContain(response.error);
+          }),
+        { exclusive: "aws:ses-account" },
       );
 
       test.provider(
@@ -216,6 +220,7 @@ describe(
               expect(response.message).toContain("not verified");
             }
           }),
+        { exclusive: "aws:ses-account" },
       );
 
       // `SendEmail` is identity-scoped: the binding grants ses:SendEmail only on
@@ -245,6 +250,7 @@ describe(
             expect(["AccessDeniedException", "SendingPausedException"]).toContain(response.error);
             expect(response.messageId).toBeUndefined();
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -272,36 +278,43 @@ describe(
               expect(response.results?.[0]?.status).toBe("MESSAGE_REJECTED");
             }
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
     describe("RenderEmailTemplate", () => {
-      test.provider("renders the bound template server-side with personalization data", (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(HttpClientRequest.post(`${baseUrl}/render-template`)).pipe(
-            Effect.flatMap((r) => r.json),
-          )) as { rendered?: string; error?: string };
-          expect(response.error).toBeUndefined();
-          expect(response.rendered).toContain("Hello, Ada!");
-        }),
+      test.provider(
+        "renders the bound template server-side with personalization data",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/render-template`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { rendered?: string; error?: string };
+            expect(response.error).toBeUndefined();
+            expect(response.rendered).toContain("Hello, Ada!");
+          }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
     describe("GetAccount", () => {
-      test.provider("reads the account's sending status and quota", (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* send(HttpClientRequest.get(`${baseUrl}/account`)).pipe(
-            Effect.flatMap((r) => r.json),
-          )) as {
-            sendingEnabled?: boolean;
-            productionAccess?: boolean;
-            max24HourSend?: number;
-            error?: string;
-          };
-          expect(response.error).toBeUndefined();
-          expect(typeof response.sendingEnabled).toBe("boolean");
-          expect(typeof response.productionAccess).toBe("boolean");
-        }),
+      test.provider(
+        "reads the account's sending status and quota",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = (yield* send(HttpClientRequest.get(`${baseUrl}/account`)).pipe(
+              Effect.flatMap((r) => r.json),
+            )) as {
+              sendingEnabled?: boolean;
+              productionAccess?: boolean;
+              max24HourSend?: number;
+              error?: string;
+            };
+            expect(response.error).toBeUndefined();
+            expect(typeof response.sendingEnabled).toBe("boolean");
+            expect(typeof response.productionAccess).toBe("boolean");
+          }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -346,6 +359,7 @@ describe(
             expect(list.error).toBeUndefined();
             expect(Array.isArray(list.emails)).toBe(true);
           }),
+        { exclusive: "aws:ses-account" },
       );
 
       // Full write lifecycle needs production access (the sandbox blocks
@@ -436,6 +450,7 @@ describe(
             expect(response.error).toBe("MessageRejected");
             expect(response.messageId).toBeUndefined();
           }),
+        { exclusive: "aws:ses-account" },
       );
 
       test.provider.skipIf(!BOUNCE_MESSAGE_ID)(
@@ -450,6 +465,7 @@ describe(
             expect(response.error).toBeUndefined();
             expect(response.messageId).toBeTruthy();
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -491,6 +507,7 @@ describe(
             expect(CVE_REQUEST_TAGS).toContain(response.error);
             expect(response.messageId).toBeUndefined();
           }),
+        { exclusive: "aws:ses-account" },
       );
 
       // The real send goes through a SECOND binding, scoped by reference to the
@@ -518,6 +535,7 @@ describe(
             expect(response.error).toBeUndefined();
             expect(response.messageId).toBeTruthy();
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -535,19 +553,22 @@ describe(
           any
         >;
 
-      test.provider("a well-formed but unknown message id is rejected with a typed tag", (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* insights();
+      test.provider(
+        "a well-formed but unknown message id is rejected with a typed tag",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = yield* insights();
 
-          // No real send backs the fabricated MessageId, so SES rejects it —
-          // NotFoundException, or BadRequestException when VDM is disabled on
-          // the account. AccessDenied would mean ses:GetMessageInsights never
-          // reached the role.
-          expect(response.error).not.toBe("AccessDeniedException");
-          expect(REQUEST_TAGS).toContain(response.error);
-          expect(response.messageId).toBeUndefined();
-          if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
-        }),
+            // No real send backs the fabricated MessageId, so SES rejects it —
+            // NotFoundException, or BadRequestException when VDM is disabled on
+            // the account. AccessDenied would mean ses:GetMessageInsights never
+            // reached the role.
+            expect(response.error).not.toBe("AccessDeniedException");
+            expect(REQUEST_TAGS).toContain(response.error);
+            expect(response.messageId).toBeUndefined();
+            if (VDM_ENABLED) expect(response.error).toBe("NotFoundException");
+          }),
+        { exclusive: "aws:ses-account" },
       );
 
       test.provider.skipIf(!VDM_ENABLED)(
@@ -565,6 +586,7 @@ describe(
             expect(response.error).toBe("BadRequestException");
             expect(response.messageId).toBeUndefined();
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -578,21 +600,24 @@ describe(
           any
         >;
 
-      test.provider("a midnight-aligned window reaches SES through the binding", (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* metricData();
+      test.provider(
+        "a midnight-aligned window reaches SES through the binding",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = yield* metricData();
 
-          // With VDM enabled SES returns a (possibly empty) Results array;
-          // without it the account is rejected with BadRequestException. Both
-          // prove the IAM action and payload marshalling are wired — but
-          // neither may be an authorization failure.
-          expect(response.error).not.toBe("AccessDeniedException");
-          if (response.error === undefined) {
-            expect(typeof response.results).toBe("number");
-          } else {
-            expect(REQUEST_TAGS).toContain(response.error);
-          }
-        }),
+            // With VDM enabled SES returns a (possibly empty) Results array;
+            // without it the account is rejected with BadRequestException. Both
+            // prove the IAM action and payload marshalling are wired — but
+            // neither may be an authorization failure.
+            expect(response.error).not.toBe("AccessDeniedException");
+            if (response.error === undefined) {
+              expect(typeof response.results).toBe("number");
+            } else {
+              expect(REQUEST_TAGS).toContain(response.error);
+            }
+          }),
+        { exclusive: "aws:ses-account" },
       );
 
       test.provider.skipIf(!VDM_ENABLED)(
@@ -603,6 +628,7 @@ describe(
             expect(response.error).toBeUndefined();
             expect(typeof response.results).toBe("number");
           }),
+        { exclusive: "aws:ses-account" },
       );
 
       test.provider.skipIf(!VDM_ENABLED)(
@@ -619,6 +645,7 @@ describe(
             expect(response.error).not.toBe("AccessDeniedException");
             expect(response.error).toBe("BadRequestException");
           }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -650,16 +677,20 @@ describe(
               expect(REQUEST_TAGS).toContain(response.error);
             }
           }),
+        { exclusive: "aws:ses-account" },
       );
 
-      test.provider("a domain the account does not own is rejected with a typed tag", (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* domainStatistics("not-our-domain.alchemy-test.example.com");
+      test.provider(
+        "a domain the account does not own is rejected with a typed tag",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = yield* domainStatistics("not-our-domain.alchemy-test.example.com");
 
-          expect(response.error).not.toBe("AccessDeniedException");
-          expect(REQUEST_TAGS).toContain(response.error);
-          expect(response.days).toBeUndefined();
-        }),
+            expect(response.error).not.toBe("AccessDeniedException");
+            expect(REQUEST_TAGS).toContain(response.error);
+            expect(response.days).toBeUndefined();
+          }),
+        { exclusive: "aws:ses-account" },
       );
     });
 
@@ -681,13 +712,16 @@ describe(
       // BlacklistReport exactly like a well-formed IP the account does not own,
       // so a "malformed input" test here would assert the same thing as the
       // success test. One unconditional test is the honest coverage.
-      test.provider("returns a blacklist report for the requested IPs", (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* blacklistReports();
+      test.provider(
+        "returns a blacklist report for the requested IPs",
+        (_stack) =>
+          Effect.gen(function* () {
+            const response = yield* blacklistReports();
 
-          expect(response.error).toBeUndefined();
-          expect(Array.isArray(response.ips)).toBe(true);
-        }),
+            expect(response.error).toBeUndefined();
+            expect(Array.isArray(response.ips)).toBe(true);
+          }),
+        { exclusive: "aws:ses-account" },
       );
     });
   },

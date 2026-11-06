@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
 import { toWireDays, toWireHours } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
@@ -13,6 +14,18 @@ import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { withWriteEndpoint } from "./internal.ts";
+
+export class TimestreamTableInvalidProps extends Data.TaggedError("TimestreamTableInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class TimestreamTableUnexpectedResponse extends Data.TaggedError(
+  "TimestreamTableUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type TableArn =
   `arn:aws:timestream:${RegionID}:${AccountID}:database/${string}/table/${string}`;
@@ -99,8 +112,20 @@ export interface Table extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TableLookup {
+  /** The database the table belongs to. */
+  databaseName: string;
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon Timestream for LiveAnalytics table — a time-series store inside a
@@ -164,6 +189,16 @@ export interface Table extends Resource<
  * };
  * ```
  *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName` and `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const metrics = AWS.Timestream.Table.lookup({ databaseName: "telemetry", tableName: "metrics" });
+ * ```
+ *
  * @resource
  */
 export const Table = Resource<Table>("AWS.Timestream.Table");
@@ -197,14 +232,14 @@ const toWireRetention = (
 const readTable = Effect.fn(function* (databaseName: string, tableName: string) {
   const response = yield* withWriteEndpoint(
     TSW.describeTable({ DatabaseName: databaseName, TableName: tableName }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.Table) {
     return undefined;
   }
   const table = response.Table;
   const tagsResponse = yield* withWriteEndpoint(
     TSW.listTagsForResource({ ResourceARN: table.Arn! }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -256,6 +291,7 @@ export const TableProvider = () =>
             );
             return hydrated.filter((attrs): attrs is Table["Attributes"] => attrs !== undefined);
           }),
+        lookup: ({ databaseName, tableName }) => readTable(databaseName, tableName),
         read: Effect.fn(function* ({ id, olds, output }) {
           const databaseName = output?.databaseName ?? olds?.databaseName;
           if (!databaseName) return undefined;
@@ -276,7 +312,9 @@ export const TableProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news?.databaseName) {
-            return yield* Effect.fail(new Error("Timestream Table requires a databaseName"));
+            return yield* new TimestreamTableInvalidProps({
+              message: "Timestream Table requires a databaseName",
+            });
           }
           const { accountId, region } = yield* AWSEnvironment.current;
           const databaseName = news.databaseName;
@@ -308,7 +346,9 @@ export const TableProvider = () =>
             yield* session.note(`Creating table ${tableName}...`);
             state = yield* readTable(databaseName, tableName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created table ${tableName}`));
+              return yield* new TimestreamTableUnexpectedResponse({
+                message: `failed to read created table ${tableName}`,
+              });
             }
           }
 
@@ -354,7 +394,9 @@ export const TableProvider = () =>
 
           const final = yield* readTable(databaseName, tableName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled table ${tableName}`));
+            return yield* new TimestreamTableUnexpectedResponse({
+              message: `failed to read reconciled table ${tableName}`,
+            });
           }
           return final;
         }),

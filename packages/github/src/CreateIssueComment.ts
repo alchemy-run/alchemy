@@ -1,17 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Issues from "@distilled.cloud/github/issues";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface CreateIssueCommentRequest extends EndpointParameters<
-  RestEndpointMethodTypes["issues"]["createComment"]["parameters"]
+export interface CreateIssueCommentRequest extends Omit<
+  Issues.CreateCommentRequest,
+  "owner" | "repo"
 > {}
 
-export type CreateIssueCommentResponse =
-  RestEndpointMethodTypes["issues"]["createComment"]["response"]["data"];
+export type CreateIssueCommentResponse = Issues.IssueComment;
 
 /**
  * Comment on an issue or pull request (`issues.createComment`). Pass a pull
@@ -38,7 +36,7 @@ export interface CreateIssueComment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateIssueCommentRequest,
-    ) => Effect.Effect<CreateIssueCommentResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<CreateIssueCommentResponse, Issues.CreateCommentError, RuntimeContext>
   >
 > {}
 

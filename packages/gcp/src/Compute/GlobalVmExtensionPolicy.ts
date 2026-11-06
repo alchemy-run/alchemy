@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -269,7 +270,7 @@ const needsUpdate = (
 const getByName = (project: string, globalVmExtensionPolicy: string) =>
   compute
     .getGlobalVmExtensionPolicies({ project, globalVmExtensionPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, policyName: string) =>
   getByName(project, policyName).pipe(
@@ -340,7 +341,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, policyName);
       }
@@ -383,7 +384,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
               schedule: Schedule.spaced("2 seconds"),
               times: 8,
             }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -399,7 +400,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (observed === undefined) return;
       const retryUuid =
         observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
-          ? yield* Effect.sync(() => crypto.randomUUID())
+          ? yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))
           : undefined;
       yield* requestDelete(retryUuid);
       // Deletion is itself a rollout; the policy stays readable until the

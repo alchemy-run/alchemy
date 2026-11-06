@@ -26,8 +26,18 @@ export interface Domain extends Resource<
     domainArn: string;
   },
   {},
-  Providers
+  Providers,
+  DomainLookup
 > {}
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DomainLookup {
+  /** The name of the existing domain. */
+  domainName: string;
+}
 
 /**
  * An Amazon SimpleDB domain — the container for SimpleDB items and
@@ -52,6 +62,16 @@ export interface Domain extends Resource<
  * const domain = yield* AWS.SimpleDB.Domain("MyDomain", {
  *   domainName: "my-application-data",
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const existing = AWS.SimpleDB.Domain.lookup({ domainName: "..." });
  * ```
  *
  * @resource
@@ -85,7 +105,7 @@ export const DomainProvider = () =>
       const observeDomain = Effect.fn(function* (name: string) {
         return yield* sdb
           .domainMetadata({ DomainName: name })
-          .pipe(Effect.catchTag("NoSuchDomain", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchDomain", () => Effect.undefined));
       });
 
       return Domain.Provider.of({
@@ -100,6 +120,18 @@ export const DomainProvider = () =>
               domainArn: domainArn(region, accountId, name),
             }));
           }),
+
+        lookup: Effect.fn(function* ({ domainName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const metadata = yield* observeDomain(name);
+          if (metadata === undefined) {
+            return undefined;
+          }
+          return {
+            domainName: name,
+            domainArn: domainArn(region, accountId, name),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

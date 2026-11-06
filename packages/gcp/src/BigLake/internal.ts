@@ -19,7 +19,7 @@ export const listLocations = (region: string): string[] => [...new Set(["us-cent
 export const MAX_ID_LENGTH = 63;
 
 export class BiglakeNotResolved extends Data.TaggedError("GCP.BigLake.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -237,14 +237,14 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : effect({ name }).pipe(
           Effect.catchIf(
             (
               error,
             ): error is Extract<E, { readonly _tag: "NotFound" | "BigLakeResourceNotFound" }> =>
               isMissing(error),
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 

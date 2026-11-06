@@ -6,8 +6,8 @@ import {
   retryWhileMpConflict,
 } from "@alchemy.run/aws/MediaPackageV2/internal";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

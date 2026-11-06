@@ -333,7 +333,7 @@ export const PlaybackConfigurationProvider = () =>
         mediatailor.getPlaybackConfiguration({ Name: name }).pipe(
           Effect.map((config): mediatailor.GetPlaybackConfigurationResponse | undefined => config),
           // Typed synthetic tag for a missing playback configuration.
-          Effect.catchTag("PlaybackConfigurationNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("PlaybackConfigurationNotFound", () => Effect.undefined),
         );
 
       const desiredRequest = (

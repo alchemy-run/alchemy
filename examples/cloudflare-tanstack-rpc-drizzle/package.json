@@ -34,6 +34,7 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

@@ -137,8 +137,9 @@ export const CustomTopicsProvider = () =>
             }),
             // AI Security is entitlement-gated and zones may be partial
             // or deleted out-of-band — skip any zone we can't read.
-            Effect.catchTag(["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"],
+              () => Effect.undefined,
             ),
           ),
         { concurrency: 10 },
@@ -162,7 +163,7 @@ export const CustomTopicsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
         // Zone deleted out-of-band — the singleton is gone with it.
-        Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
+        Effect.catchTag("ZoneNotAuthorized", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The list is a singleton that always exists (default empty) —
@@ -211,8 +212,8 @@ export const CustomTopicsProvider = () =>
       // nothing we can restore.
       const observed = yield* aiSecurity.getCustomTopic({ zoneId }).pipe(
         Effect.catchTags({
-          ZoneNotAuthorized: () => Effect.succeed(undefined),
-          AiSecurityNotEntitled: () => Effect.succeed(undefined),
+          ZoneNotAuthorized: () => Effect.undefined,
+          AiSecurityNotEntitled: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return;

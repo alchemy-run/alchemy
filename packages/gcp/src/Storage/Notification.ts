@@ -1,7 +1,7 @@
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -269,7 +269,7 @@ const getById = (bucketName: string, notificationId: string) =>
       bucket: bucketName,
       notification: notificationId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listNotifications({ bucket: bucketName }).pipe(
@@ -317,7 +317,7 @@ const ensureGcsServiceIdentity = (project: string, email: string) =>
       .generateServiceIdentityServices({
         parent: `projects/${projectNumber}/services/storage.googleapis.com`,
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation === undefined) return;
     yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
       budget: "2 minutes",
@@ -387,7 +387,7 @@ export const NotificationProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (!bucketName) return undefined;
@@ -404,7 +404,7 @@ export const NotificationProvider = () =>
       const owned =
         (existing.id !== undefined && existing.id === output?.notificationId) ||
         (yield* hasAlchemyLabels(id, tagRecord(existing.custom_attributes)));
-      return owned ? attrs : Unowned(attrs);
+      return owned ? attrs : unownedUnlessPrevious(attrs, previous, "notificationId");
     }),
 
     list: () =>
@@ -442,7 +442,7 @@ export const NotificationProvider = () =>
         return pages.flat();
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = news.bucketName;
       const payloadFormat = news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;

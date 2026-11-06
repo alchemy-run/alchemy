@@ -180,20 +180,20 @@ export const InstancesInstancePartition = Resource<InstancesInstancePartition>(
 export class InstancePartitionNotResolved extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstancePartitionNotReady extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstancePartitionStillExists extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, instancePartitionId: string | undefined, existing?: string) =>
@@ -253,14 +253,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesInstancePartitions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((partition) =>
       partition
         ? Effect.succeed(partition)
-        : Effect.fail(new InstancePartitionNotResolved({ name })),
+        : Effect.fail(new InstancePartitionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstancePartitionNotResolved",
@@ -273,13 +273,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (partition): partition is spanner.InstancePartition => partition !== undefined,
-      () => new InstancePartitionNotResolved({ name }),
+      () => new InstancePartitionNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (partition) => (partition.state ?? "STATE_UNSPECIFIED") === "READY",
       (partition) =>
         new InstancePartitionNotReady({
-          name,
+          resourceName: name,
           state: partition.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -297,7 +297,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((partition) =>
       partition === undefined
         ? Effect.void
-        : Effect.fail(new InstancePartitionStillExists({ name })),
+        : Effect.fail(new InstancePartitionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstancePartitionStillExists",
@@ -434,7 +434,7 @@ export const InstancesInstancePartitionProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

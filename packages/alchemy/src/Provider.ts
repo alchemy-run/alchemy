@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
+import type { Unresolved } from "./AdoptPolicy.ts";
 import type { Artifacts } from "./Artifacts.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
@@ -36,6 +37,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
     TailReq = never,
     LogsReq = never,
     ListReq = never,
+    LookupReq = never,
   >(
     service: Omit<
       ProviderService<
@@ -47,7 +49,8 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "Type"
     >,
@@ -60,7 +63,8 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >;
 }
 
@@ -100,6 +104,7 @@ export interface ProviderService<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > {
   /**
    * The version of the provider.
@@ -268,7 +273,26 @@ export interface ProviderService<
     olds: Props<Res>;
     // what is the ARN?
     output: Res["Attributes"] | undefined; // current state -> synced state
+    /**
+     * When the engine checks the identity a replacement will claim, the
+     * attributes of the generation it replaces. A provider that can't tell
+     * our resource from a foreign one by ownership metadata alone (e.g. an
+     * explicitly named resource without tags) reports a resource that is
+     * this previous generation as owned, not `Unowned`.
+     */
+    previous?: Res["Attributes"];
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
+  /**
+   * Find a resource this stack does not manage by the key the resource
+   * declares as its `Lookup` type (e.g. a Worker's `name`), and return its
+   * attributes, or `undefined` when nothing matches. Backs
+   * `Resource.lookup(props)`.
+   *
+   * Read-only: it never creates, updates or claims the resource, and the
+   * engine never writes a state row for it, so `destroy` cannot touch it.
+   * It is always called on the live provider.
+   */
+  lookup?(props: Res["Lookup"]): Effect.Effect<Res["Attributes"] | undefined, any, LookupReq>;
   /**
    * Properties that are always stable across any update.
    */
@@ -300,9 +324,16 @@ export interface ProviderService<
    * It receives the same raw props as `precreate` and must derive the same
    * identity. Report what exists there the way {@link read} does: `undefined`
    * when nothing does, its attributes when it belongs to this
-   * stack/stage/logical-id, and `Unowned(attrs)` otherwise. The attributes
-   * may be partial, but should include the {@link stables} the provider can
-   * observe, so the engine recognizes a previous generation of this resource.
+   * stack/stage/logical-id, and `Unowned(attrs)` otherwise. Return
+   * `Unresolved` when the identity depends on props that have not resolved
+   * yet: the engine then checks the resolved identity before `reconcile`.
+   *
+   * The attributes may be partial. During a replacement, `previous` holds
+   * the attributes of the generation being replaced: report a resource that
+   * is that generation as owned. The engine compares no attributes itself.
+   *
+   * Without {@link read}, the engine also calls `observe` with resolved props
+   * to check an identity before `reconcile` claims it.
    *
    * Opt-in: implement it whenever `precreate` can write to a resource that
    * already exists. Without it, such a cycle precreates unchecked.
@@ -316,7 +347,9 @@ export interface ProviderService<
     fqn: string;
     news: Props<Res>;
     instanceId: string;
-  }): Effect.Effect<Partial<Res["Attributes"]> | undefined, any, PrecreateReq>;
+    /** During a replacement, the attributes of the generation being replaced. */
+    previous?: Res["Attributes"];
+  }): Effect.Effect<Partial<Res["Attributes"]> | Unresolved | undefined, any, PrecreateReq>;
   precreate?(input: {
     id: string;
     /**
@@ -415,6 +448,7 @@ export type ProviderServiceInput<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > = Omit<
   ProviderService<
     Res,
@@ -425,7 +459,8 @@ export type ProviderServiceInput<
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
   "list"
 > &
@@ -440,7 +475,8 @@ export type ProviderServiceInput<
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "list"
     >
@@ -460,6 +496,7 @@ export const effect = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   eff: Effect.Effect<
@@ -472,7 +509,8 @@ export const effect = <
       DeleteReq,
       TailReq,
       LogsReq,
-      ListReq
+      ListReq,
+      LookupReq
     >,
     never,
     Req
@@ -481,7 +519,7 @@ export const effect = <
   Provider<R>,
   never,
   Exclude<
-    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
+    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq | LookupReq,
     LifecycleServices
   >
 > =>
@@ -504,6 +542,7 @@ export const succeed = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any, any>,
   service: ProviderServiceInput<
@@ -515,12 +554,16 @@ export const succeed = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
 ): Layer.Layer<
   Provider<R>,
   never,
-  Exclude<ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq, LifecycleServices>
+  Exclude<
+    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq | LookupReq,
+    LifecycleServices
+  >
 > =>
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {
@@ -575,15 +618,15 @@ export const collection = <
     const context = yield* Effect.context();
 
     const providers = Object.fromEntries(
-      yield* Effect.all(
-        resources.map((resource) =>
+      yield* Effect.forEach(
+        resources,
+        (resource) =>
           "Provider" in resource
             ? resource.Provider.pipe(Effect.map((provider) => [resource.Type, provider] as const))
             : Effect.succeed([
                 (resource as { key: string }).key,
                 context.mapUnsafe.get((resource as { key: string }).key),
               ] as const),
-        ),
         { concurrency: "unbounded" },
       ),
     );

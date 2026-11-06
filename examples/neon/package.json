@@ -36,6 +36,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

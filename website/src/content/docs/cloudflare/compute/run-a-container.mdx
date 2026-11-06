@@ -4,6 +4,7 @@ description: Run a long-lived container alongside a Durable Object, expose RPC m
 sidebar:
   order: 11
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Some workloads need a long-lived process — a sandboxed shell, a
 database client, a binary you can't compile to wasm. In this part
@@ -359,9 +360,7 @@ export default Cloudflare.Worker(
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The first deploy uploads the container image to Cloudflare and
 provisions the registry — expect it to take a minute or two longer
@@ -378,7 +377,7 @@ stdout in the response:
 ```diff lang="typescript"
 // test/integ.test.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as HttpBody from "effect/http/HttpBody";

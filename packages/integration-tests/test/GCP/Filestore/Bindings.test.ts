@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as file from "@distilled.cloud/gcp/file_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import FilestoreBindingsHost, { Nfs, Nightly } from "./fixtures/bindings-host.ts";
 import FilestoreSnapshotBindingsHost, { Snap, ZonalNfs } from "./fixtures/snapshot-host.ts";
 
@@ -51,7 +51,7 @@ const hostProjectRoles = (account: string) =>
 
 const expectedRoles = [{ role: "roles/file.viewer", condition: undefined }];
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "Filestore Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:filestore", "provider:gcp:run", "live"],
@@ -127,7 +127,7 @@ describe.skipIf(!dockerAvailable || !runLifecycle)(
   },
 );
 
-describe.skipIf(!dockerAvailable || !runSnapshot)(
+describe.skipIf(!runSnapshot)(
   "Filestore Bindings (enterprise quota)",
   {
     tags: ["provider:gcp", "provider:gcp:filestore", "provider:gcp:run", "live"],

@@ -164,7 +164,7 @@ export const ReplicationSetProvider = () =>
         if (arn === undefined) return undefined;
         return yield* incidents.getReplicationSet({ arn }).pipe(
           Effect.map((r) => ({ ...r.replicationSet, arn })),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

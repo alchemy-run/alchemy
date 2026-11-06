@@ -58,7 +58,7 @@ export const lookupProjectBillingAccountId = (project: string) =>
     Effect.map((info) =>
       info.billingAccountName ? billingAccountIdOf(info.billingAccountName) : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const resolveBillingAccountId = (
@@ -134,11 +134,11 @@ export const projectScope = (project: string) =>
 
 export const getBudget = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : billingbudgets.getBillingAccountsBudgets({ name }).pipe(
         // Missing budgets return 403 "The caller does not have permission"
         // rather than 404 (typed as BudgetNotFound).
-        Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "BudgetNotFound"], () => Effect.undefined),
       );
 
 export const listBudgets = (parent: string, scope?: string) =>

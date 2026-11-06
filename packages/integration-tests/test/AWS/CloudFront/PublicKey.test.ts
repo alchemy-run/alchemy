@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { PublicKey } from "@alchemy.run/aws/CloudFront";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

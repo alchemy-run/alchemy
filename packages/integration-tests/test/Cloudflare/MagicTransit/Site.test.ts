@@ -1,12 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -97,7 +98,6 @@ test.provider(
 
       const site = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("ListSite", {
-          name: "alchemy-magic-site-list",
           description: "alchemy magic site list test",
         }),
       );
@@ -124,7 +124,7 @@ test.provider.skipIf(!entitled)(
 
       const site = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("Site", {
-          name: "alchemy-magic-site",
+          name: testName("alchemy-magic-site"),
           description: "alchemy magic site test",
           location: { lat: "37.7749", lon: "-122.4194" },
         }),
@@ -132,18 +132,17 @@ test.provider.skipIf(!entitled)(
 
       expect(site.siteId).toBeTruthy();
       expect(site.accountId).toEqual(accountId);
-      expect(site.name).toEqual("alchemy-magic-site");
+      expect(site.name).toEqual(testName("alchemy-magic-site"));
       expect(site.description).toEqual("alchemy magic site test");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getSite(accountId, site.siteId);
-      expect(live.name).toEqual("alchemy-magic-site");
+      expect(live.name).toEqual(testName("alchemy-magic-site"));
 
       const wan = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSiteWan("Wan", {
           siteId: site.siteId,
           physport: 1,
-          name: "alchemy-site-wan",
           priority: 10,
         }),
       );
@@ -154,7 +153,6 @@ test.provider.skipIf(!entitled)(
         Cloudflare.MagicTransit.MagicSiteLan("Lan1", {
           siteId: site.siteId,
           physport: 2,
-          name: "alchemy-site-lan1",
           vlanTag: 10,
           staticAddressing: { address: "192.168.10.1/24" },
         }),
@@ -163,7 +161,6 @@ test.provider.skipIf(!entitled)(
         Cloudflare.MagicTransit.MagicSiteLan("Lan2", {
           siteId: site.siteId,
           physport: 3,
-          name: "alchemy-site-lan2",
           vlanTag: 20,
           staticAddressing: { address: "192.168.20.1/24" },
         }),
@@ -174,7 +171,7 @@ test.provider.skipIf(!entitled)(
       const acl = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSiteAcl("Acl", {
           siteId: site.siteId,
-          name: "alchemy-site-acl",
+          name: testName("alchemy-site-acl"),
           lan1: { lanId: lan1.lanId, ports: [443] },
           lan2: { lanId: lan2.lanId },
           protocols: ["tcp"],
@@ -182,12 +179,12 @@ test.provider.skipIf(!entitled)(
       );
       expect(acl.aclId).toBeTruthy();
       expect(acl.siteId).toEqual(site.siteId);
-      expect(acl.name).toEqual("alchemy-site-acl");
+      expect(acl.name).toEqual(testName("alchemy-site-acl"));
 
       // Update the site description in place — same siteId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicTransit.MagicSite("Site", {
-          name: "alchemy-magic-site",
+          name: testName("alchemy-magic-site"),
           description: "alchemy magic site test v2",
           location: { lat: "37.7749", lon: "-122.4194" },
         }),

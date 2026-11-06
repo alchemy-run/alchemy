@@ -1,10 +1,18 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOrganizations } from "./common.ts";
+
+export class OrganizationResourcePolicyUnexpectedResponse extends Data.TaggedError(
+  "OrganizationResourcePolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface OrganizationResourcePolicyProps {
   /**
@@ -78,7 +86,7 @@ const readResourcePolicy = () =>
   retryOrganizations(
     organizations.describeResourcePolicy({}).pipe(
       Effect.map((response) => response.ResourcePolicy),
-      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.undefined),
       Effect.map((policy) => {
         const summary = policy?.ResourcePolicySummary;
         return summary?.Id && summary.Arn
@@ -135,9 +143,9 @@ export const OrganizationResourcePolicyProvider = () =>
           }
 
           if (!state) {
-            return yield* Effect.fail(
-              new Error("organization resource policy not found after reconcile"),
-            );
+            return yield* new OrganizationResourcePolicyUnexpectedResponse({
+              message: "organization resource policy not found after reconcile",
+            });
           }
 
           yield* session.note(state.resourcePolicyArn);

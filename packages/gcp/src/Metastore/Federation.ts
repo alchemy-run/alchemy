@@ -211,12 +211,12 @@ const toAttrs = (item: metastore.Federation, project: string, region: string) =>
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : metastore
         .getProjectsLocationsFederations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listOwned = (project: string, region: string) =>
+const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
     listLabeledPages(
       metastore.listProjectsLocationsFederations.pages({
@@ -268,7 +268,7 @@ export const FederationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const items = yield* listOwned(env.project, env.region);
+        const items = yield* listOwned(env.project);
         return items.map((item) => toAttrs(item, env.project, env.region));
       }),
 
@@ -302,7 +302,7 @@ export const FederationProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -321,7 +321,7 @@ export const FederationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -350,7 +350,7 @@ export const FederationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -365,7 +365,7 @@ export const FederationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

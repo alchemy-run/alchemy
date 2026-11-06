@@ -80,7 +80,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           if (!execution.interrupted) return Effect.void;
           instance.interrupted = true;
           instance.suspended = false;
-          return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
+          return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
         }),
         Workflow.intoResult,
         Effect.provide(
@@ -130,14 +130,14 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           yield* wake(key);
         }
         if (options.discard) return undefined;
-        return execution.result ?? new Workflow.Suspended({});
+        return execution.result ?? Workflow.Suspended.make({});
       }) as Effect.Effect<any>,
 
     poll: (workflow, executionId) =>
       Effect.sync(() => {
         const execution = executions.get(keyOf(workflow._tag, executionId));
         if (!execution) return Option.none();
-        return Option.some(execution.result ?? new Workflow.Suspended({}));
+        return Option.some(execution.result ?? Workflow.Suspended.make({}));
       }),
 
     interrupt: (workflow, executionId) =>

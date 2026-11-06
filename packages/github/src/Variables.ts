@@ -51,14 +51,12 @@ export interface VariablesProps {
  * @product Actions
  */
 export const Variables = ({ owner, repository, environment, variables }: VariablesProps) =>
-  Effect.all(
-    Object.entries(variables).map(([name, value]) =>
-      Variable(name, {
-        owner,
-        repository,
-        environment,
-        name,
-        value,
-      }),
-    ),
+  Effect.forEach(Object.entries(variables), ([name, value]) =>
+    Variable(name, {
+      owner,
+      repository,
+      environment,
+      name,
+      value,
+    }),
   );

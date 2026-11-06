@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -8,7 +9,6 @@ import * as SQS from "@distilled.cloud/aws/sqs";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import { isResourceState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

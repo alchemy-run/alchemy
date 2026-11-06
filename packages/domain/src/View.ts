@@ -2,13 +2,17 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import { evolveView, type LocalViewInput } from "./internal.ts";
+import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -22,15 +26,19 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
 }> {}
 
 /**
- * Raised by `query(key, { atLeast })` when the view has not applied the
- * receipt's events before the timeout.
+ * Raised by a read `atLeast` a write when the view, stream or projection
+ * (named in `view`) has not handled the write's events before the timeout. A
+ * client receives it like a rejection.
  */
-export class ConsistencyTimeout extends Data.TaggedError("ConsistencyTimeout")<{
-  readonly view: string;
-  readonly key: string;
-  readonly stream: string;
-  readonly version: number;
-}> {}
+export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
+  "ConsistencyTimeout",
+  {
+    view: Schema.String,
+    key: Schema.String,
+    stream: Schema.String,
+    version: Schema.Number,
+  },
+) {}
 
 /** A handler, or one handler per named route. */
 type Handlers = {
@@ -45,10 +53,11 @@ type Handlers = {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: string;
   readonly definition: {
     readonly from: ReadonlyArray<Aggregate.Any | Any>;
-    readonly key: Aggregate.Any;
+    readonly key: Key.Any;
     readonly state?: Schema.Top;
     readonly initial?: unknown;
     readonly keyOf?: Handlers;
@@ -56,7 +65,10 @@ export interface Any extends Context.Key<unknown, unknown> {
     readonly events?: ReadonlyArray<Event.Any>;
     readonly emit?: Handlers;
     readonly computed?: { readonly [name: string]: ((state: never) => unknown) | undefined };
+    readonly version?: number;
   } & Read.AnyContract;
+  /** The key of its Layer, which provides its `validate`. */
+  readonly Validator: Context.Key<unknown, Read.Implementation>;
   /** Type-level only: the view's state. */
   readonly "~state": unknown;
   /** Type-level only: the events the view emits. */
@@ -85,7 +97,7 @@ export type SourceEvent<S> = S extends Aggregate.Any
   : S extends Any
     ? EventOf<S>
     : never;
-/** The aggregate whose refs identify a source's instances. */
+/** The key that identifies a source's instances: an aggregate, or a view's key. */
 export type SourceKey<S> = S extends Aggregate.Any ? S : S extends Any ? KeyOf<S> : never;
 /** What a source attaches to each event: a view's state after it, nothing for an aggregate. */
 export type SourceState<S> = S extends Any ? StateOf<S> | null : undefined;
@@ -100,7 +112,7 @@ export type Input<S> = S extends unknown
       ? {
           readonly name: NameOf<S>;
           readonly event: E;
-          readonly source: Aggregate.Ref<SourceKey<S>>;
+          readonly source: Key.RefOf<SourceKey<S>>;
           readonly state: SourceState<S>;
         }
       : never
@@ -130,7 +142,7 @@ export type StateType<S> = S extends Schema.Top ? S["Type"] : null;
 export type Output<
   From extends ReadonlyArray<unknown>,
   Events extends ReadonlyArray<Event.Any>,
-> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.Inst<Events[number]>;
+> = Events extends readonly [] ? Inputs<From>["event"] : Aggregate.InstanceOf<Events[number]>;
 
 /**
  * Where an input is delivered and what handlers receive alongside it.
@@ -147,9 +159,9 @@ export interface Routing<I> {
 /**
  * The context passed to `evolve` and `emit` handlers.
  */
-export interface HandlerContext<Key extends Aggregate.Any, I> {
-  /** The view instance being updated. */
-  readonly key: Aggregate.Ref<Key>;
+export interface HandlerContext<Key extends Key.Any, I> {
+  /** The view instance being updated: a ref, or the value of a Schema key. */
+  readonly key: Key.RefOf<Key>;
   /** The source instance the event came from. */
   readonly source: Routing<I>["source"];
   /** For a view source: its state after the event. */
@@ -160,7 +172,7 @@ export interface HandlerContext<Key extends Aggregate.Any, I> {
 }
 
 /** The context passed to `emit` handlers. */
-export interface EmitContext<Key extends Aggregate.Any, I, St> extends HandlerContext<Key, I> {
+export interface EmitContext<Key extends Key.Any, I, St> extends HandlerContext<Key, I> {
   /** This view's state before the event. */
   readonly before: St;
   /** This view's state after the event (`null` if it was deleted). */
@@ -168,15 +180,13 @@ export interface EmitContext<Key extends Aggregate.Any, I, St> extends HandlerCo
 }
 
 /** Picks the key an input goes to, or `undefined` for none. */
-export type KeyFn<Key extends Aggregate.Any, I> = (
-  routing: Routing<I>,
-) => Aggregate.Ref<Key> | undefined;
-type EvolveFn<St, Key extends Aggregate.Any, I> = (
+export type KeyFn<Key extends Key.Any, I> = (routing: Routing<I>) => Key.RefOf<Key> | undefined;
+type EvolveFn<St, Key extends Key.Any, I> = (
   state: St,
   event: Routing<I>["event"],
   context: HandlerContext<Key, I>,
 ) => St | null;
-type EmitFn<St, Key extends Aggregate.Any, I, Out> = (
+type EmitFn<St, Key extends Key.Any, I, Out> = (
   event: Routing<I>["event"],
   context: EmitContext<Key, I, St>,
 ) => Out | ReadonlyArray<Out> | undefined;
@@ -189,22 +199,27 @@ export type Routed<F> = F | { readonly [route: string]: F };
  */
 export interface Definition<
   From extends ReadonlyArray<Source>,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   S extends Schema.Top | undefined,
   Events extends ReadonlyArray<Event.Any>,
   Computed extends Record<string, unknown>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> extends Read.Contract<Aggregate.Ref<Key>, StateType<S> | null, Ms, Rejects> {
+> extends Read.Contract<Ms, Rejects> {
   /** The aggregates and views this view consumes. */
   readonly from: From;
-  /** The aggregate whose refs key this view's instances. */
+  /**
+   * What keys this view's instances: an aggregate, whose refs key them, or a
+   * string Schema (such as an org id), whose values key them with no
+   * aggregate behind them.
+   */
   readonly key: Key;
   /**
    * Which instance each input updates, keyed by event tag or source name. May
-   * be omitted for a source keyed by the same aggregate (the source is the
-   * key). Return an object of named routes to update several instances; each
-   * route then gets its own `evolve` and `emit` handler.
+   * be omitted for a source keyed by the same aggregate or Schema (the source
+   * is the key). Return a ref (an aggregate key) or a value (a Schema key), or
+   * an object of named routes to update several instances; each route then
+   * gets its own `evolve` and `emit` handler.
    */
   readonly keyOf?: {
     readonly [K in HandlerKey<From>]?: Routed<KeyFn<Key, InputFor<From, K>>>;
@@ -232,11 +247,25 @@ export interface Definition<
    */
   readonly emit?: {
     readonly [K in HandlerKey<From>]?: Routed<
-      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.Inst<Events[number]>>
+      EmitFn<StateType<S>, Key, InputFor<From, K>, Aggregate.InstanceOf<Events[number]>>
     >;
   };
   /** Values derived from state when read. */
   readonly computed?: ComputedFns<StateType<S>, Computed>;
+  /**
+   * Bump it whenever you change what the view computes (`evolve`, `emit`,
+   * `keyOf`, `state`, the events or sources it reads): every key is computed
+   * again from the history, and so is every view and projection that reads
+   * this one. Only ever increase it.
+   *
+   * A view keyed by the one aggregate it reads is rebuilt in place: the deploy
+   * waits for nothing, and each key re-reads its own instance's events the
+   * first time it is touched. Any other view is rebuilt from the history
+   * before the deploy finishes.
+   *
+   * @default 0
+   */
+  readonly version?: number;
 }
 
 /** Derived-value functions of a view. */
@@ -261,7 +290,7 @@ export interface Entry<S, E, Id = string> {
 export interface Page<Entry> {
   readonly entries: ReadonlyArray<Entry>;
   /** Pass as `after` to continue; `null` when there are no more entries. */
-  readonly cursor: string | null;
+  readonly cursor: number | null;
 }
 
 /**
@@ -273,27 +302,56 @@ export interface WatchOptions<S> {
 }
 
 /**
+ * How much of the history recorded before a view or projection (or before its
+ * current version) has reached it. A consumer added to a model that already
+ * has events, or rebuilt by bumping its version, receives that history first.
+ */
+export interface History {
+  /** Every event recorded before it has reached it: its answers cover the whole history. */
+  readonly complete: boolean;
+}
+
+/**
  * The read API of a view, obtained with `yield* MyView`.
  */
-export interface Host<S, Key extends Aggregate.Any, E> {
+export interface Host<S, Key extends Key.Any, E> {
+  /**
+   * Whether the history recorded before this view, or before its current
+   * version, has reached it. Until it has, its answers cover only part of
+   * the history: a screen can say so, or hold its reads until it is complete.
+   */
+  readonly history: Effect.Effect<History>;
   /** Read the current state of a key. `none` if it does not exist. */
-  readonly query: (
-    key: Aggregate.Ref<Key>,
+  readonly get: (
+    key: Key.RefOf<Key>,
     options?: {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
   ) => Effect.Effect<Option.Option<S>, ConsistencyTimeout>;
+  /**
+   * Read the current state of a key together with its cursor: the `seq` of
+   * the last event the key emitted when the state was read. Pass the cursor
+   * to `events` as `after` to follow every later change once.
+   */
+  readonly snapshot: (
+    key: Key.RefOf<Key>,
+    options?: {
+      /** Wait until the view has applied this write (a command's `stream` and `version`). */
+      readonly atLeast?: { readonly stream: string; readonly version: number };
+      readonly timeout?: Duration.Input;
+    },
+  ) => Effect.Effect<Read.Snapshot<S | null>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     where: Filter<S>,
     options: { readonly timeout: Duration.Input },
   ) => Effect.Effect<S, WaitTimeout>;
   /** The current state, then every change. */
   readonly watch: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     options?: WatchOptions<S>,
   ) => Stream.Stream<Option.Option<S>>;
   /**
@@ -303,27 +361,27 @@ export interface Host<S, Key extends Aggregate.Any, E> {
    */
   readonly watchEach: <P, Err, R>(
     parent: Stream.Stream<P, Err, R>,
-    keysOf: (parent: P) => ReadonlyArray<Aggregate.Ref<Key>>,
+    keysOf: (parent: P) => ReadonlyArray<Key.RefOf<Key>>,
     options?: WatchOptions<S>,
-  ) => Stream.Stream<readonly [P, ReadonlyArray<readonly [Aggregate.Ref<Key>, S]>], Err, R>;
+  ) => Stream.Stream<readonly [P, ReadonlyArray<readonly [Key.RefOf<Key>, S]>], Err, R>;
   /**
    * Every event the key emitted, with the state after it: history (from
    * `after`, a cursor or entry `seq`), then live.
    */
   readonly events: (
-    key: Aggregate.Ref<Key>,
-    options?: { readonly after?: string; readonly where?: Filter<E> },
-  ) => Stream.Stream<Entry<S, E, Aggregate.IdOf<Key>>>;
+    key: Key.RefOf<Key>,
+    options?: { readonly after?: number; readonly where?: Filter<E> },
+  ) => Stream.Stream<Entry<S, E, Key.IdOf<Key>>>;
   /** A page of the key's emitted events, oldest first unless `order` is `"desc"`. */
   readonly list: (
-    key: Aggregate.Ref<Key>,
+    key: Key.RefOf<Key>,
     options?: {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
-  ) => Effect.Effect<Page<Entry<S, E, Aggregate.IdOf<Key>>>>;
+  ) => Effect.Effect<Page<Entry<S, E, Key.IdOf<Key>>>>;
 }
 
 /**
@@ -391,15 +449,62 @@ export interface ViewKey<Name extends string> {
  * },
  * ```
  *
+ * ### Keying by a value
+ * **Example:** One schedule per org, with no Org aggregate
+ * ```typescript
+ * key: OrgId, // a string Schema
+ * keyOf: { Tour: ({ event }) => event.orgId },
+ * ```
+ *
  * ### Validating reads
+ * The declaration lists the middleware that guards reads and the rejections
+ * they may fail with. Its Layer, one `validate` function, judges each read: on every
+ * `get`, `snapshot` and `list`, and on every change while a client watches.
+ * A view that declares either needs its Layer.
+ *
  * **Example:** Only the owner may read
  * ```typescript
- * middleware: [Session],
- * rejects: [NotOwner],
- * validate: Effect.fn(function* (_request, summary) {
- *   const actor = yield* CurrentActor;
- *   if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
- * }),
+ * export class AccountSummary extends Domain.View("AccountSummary", {
+ *   from: [Account],
+ *   key: Account,
+ *   middleware: [Session],
+ *   rejects: [NotOwner],
+ *   state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+ *   initial: { owner: null, balance: 0 },
+ *   evolve: { MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }) },
+ * }) {}
+ *
+ * export const AccountSummaryLive = AccountSummary.toLayer(
+ *   Effect.succeed(
+ *     Effect.fn(function* (_request, summary) {
+ *       const actor = yield* CurrentActor;
+ *       if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
+ * ### Annotating views
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * An Api's read tools, CLI help and OpenAPI document show its `description`
+ * after the sentence for each call.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class AccountSummary extends Domain.View(
+ *   "AccountSummary",
+ *   {
+ *     from: [Account],
+ *     key: Account,
+ *     state: Schema.Struct({ balance: Schema.Int }),
+ *     initial: { balance: 0 },
+ *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
+ *   },
+ *   { description: "An account's balance." },
+ * ) {}
  * ```
  *
  * @primitive
@@ -407,7 +512,7 @@ export interface ViewKey<Name extends string> {
 export const make = <
   const Name extends string,
   const From extends ReadonlyArray<Source>,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   S extends Schema.Top | undefined = undefined,
   const Events extends ReadonlyArray<Event.Any> = readonly [],
   Computed extends Record<string, unknown> = {},
@@ -416,6 +521,7 @@ export const make = <
 >(
   name: Name,
   definition: Definition<From, Key, S, Events, Computed, Ms, Rejects>,
+  annotations: Annotations = {},
 ): ViewClass<
   Name,
   Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -428,8 +534,19 @@ export const make = <
   const Tag = Context.Service<ViewKey<Name>, Host<StateType<S>, Key, Output<From, Events>>>()(
     `alchemy/Domain/View/${name}`,
   );
+  const Validator = Context.Service<Read.ValidatorKey<Name>, Read.Implementation>()(
+    `alchemy/Domain/View/${name}/Validator`,
+  );
   return class extends Tag {
+    static readonly Validator = Validator;
+    static toLayer<E, R>(build: Effect.Effect<Read.AnyValidate, E, R>) {
+      return Layer.effect(
+        Validator,
+        Effect.map(build, (validate): Read.Implementation => ({ validate })),
+      );
+    }
     static readonly kind = "View" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly viewName: Name = name;
     static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
       definition;
@@ -437,6 +554,10 @@ export const make = <
     static readonly State = definition.state;
     /** Derived values, computed from a state when read. */
     static readonly computed = definition.computed ?? {};
+    /** Apply one input to one key's state, as the server's view does. */
+    static evolve(state: unknown, input: LocalViewInput) {
+      return evolveView({ definition }, state, input);
+    }
   } as unknown as ViewClass<
     Name,
     Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -448,6 +569,27 @@ export const make = <
   >;
 };
 
+/** One source input, with the source's state optional (aggregates attach none). */
+type LocalSourceInput<I> = I extends {
+  readonly name: infer N;
+  readonly event: infer E;
+  readonly source: infer R;
+  readonly state: infer S;
+}
+  ? { readonly name: N; readonly event: E; readonly source: R; readonly state?: S }
+  : never;
+
+/** What {@link ViewClass.evolve} applies: a source input, its envelope, and the key. */
+export type LocalInput<Def, Key extends Key.Any> = (Def extends {
+  readonly from: infer From extends ReadonlyArray<unknown>;
+}
+  ? LocalSourceInput<Inputs<From>>
+  : never) & {
+  readonly envelope: Aggregate.Envelope;
+  /** The key to update: defaults to what `keyOf` returns, or to the source. */
+  readonly key?: Key.RefOf<Key>;
+};
+
 /**
  * The class type returned by {@link make}.
  */
@@ -456,17 +598,55 @@ export interface ViewClass<
   Def,
   S extends Schema.Top | undefined,
   St,
-  Key extends Aggregate.Any,
+  Key extends Key.Any,
   Computed,
   Out,
 > extends Context.ServiceClass<ViewKey<Name>, string, Host<St, Key, Out>> {
   readonly kind: "View";
+  readonly annotations: Annotations;
   readonly viewName: Name;
   readonly definition: Def;
   /** The view's state schema. */
   readonly State: S;
   /** Derived values, computed from a state when read. */
   readonly computed: Computed;
+  /** The key of its Layer, which provides its `validate`. */
+  readonly Validator: Context.Key<Read.ValidatorKey<Name>, Read.Implementation>;
+  /**
+   * Provide the view's `validate`, one function: who may read each key. The construction
+   * Effect runs once and may resolve services; `validate` itself may only
+   * need what the view's middleware provides. Required when the view
+   * declares `middleware` or `rejects`.
+   */
+  toLayer<E, R>(
+    build: Effect.Effect<
+      Read.Validate<Key.RefOf<Key>, St | null, Read.MiddlewareOf<Def>, Read.RejectsOf<Def>>,
+      E,
+      R
+    >,
+  ): Layer.Layer<Read.ValidatorKey<Name>, E, R>;
+  /**
+   * Apply one input (an event of a source) to one key's state, with this
+   * view's own `keyOf` and `evolve`: the state the server's view will hold
+   * after it. Use it with the events of `Aggregate.predict` to show a view's
+   * next state before the server answers. `key` defaults to what `keyOf`
+   * returns, or to the source; it is required for a view with routes.
+   *
+   * **Example:** The next balance of a predicted withdrawal
+   * ```typescript
+   * const next = outcome.events.reduce(
+   *   (state, event, i) =>
+   *     AccountSummary.evolve(state, {
+   *       name: "Account",
+   *       event,
+   *       source: Account.ref(id),
+   *       envelope: outcome.envelopes[i],
+   *     }),
+   *   summary,
+   * );
+   * ```
+   */
+  evolve(state: St | null, input: LocalInput<Def, Key>): St | null;
   readonly "~state": St;
   readonly "~events": Out;
 }

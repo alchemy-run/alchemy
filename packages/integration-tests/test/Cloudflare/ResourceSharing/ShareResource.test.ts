@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -98,7 +98,6 @@ test.provider(
 
         const share = yield* stack.deploy(
           Cloudflare.ResourceSharing.Share("ListEntryShare", {
-            name: "alchemy-list-entry-share",
             recipients: [{ accountId: recipientAccountId }],
             resources: [{ resourceType: "gateway-policy", resourceId: policyA.ruleId }],
           }),

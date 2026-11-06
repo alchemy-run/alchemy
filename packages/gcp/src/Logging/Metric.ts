@@ -237,7 +237,7 @@ export type Metric = Resource<
 export const Metric = Resource<Metric>("GCP.Logging.Metric");
 
 export class MetricNotResolved extends Data.TaggedError("GCP.Logging.MetricNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -459,7 +459,7 @@ const toBody = (
 const getByName = (metricName: string) =>
   logging
     .getProjectsMetrics({ metricName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MetricProvider = () =>
   Provider.succeed(Metric, {
@@ -544,7 +544,7 @@ export const MetricProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetricNotResolved({ name: metricName });
+        return yield* new MetricNotResolved({ resourceName: metricName });
       }
 
       const needsUpdate =

@@ -197,7 +197,7 @@ export const OrganizationSink = Resource<OrganizationSink>("GCP.Logging.Organiza
 export class OrganizationSinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, sinkId: string) => `${organization}/sinks/${sinkId}`;
@@ -266,7 +266,7 @@ const toAttrs = (sink: logging.LogSink, organization: string, project: string) =
 const getByName = (name: string) =>
   logging
     .getOrganizationsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,
@@ -360,7 +360,7 @@ export const OrganizationSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationSinkNotResolved({ name });
+        return yield* new OrganizationSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

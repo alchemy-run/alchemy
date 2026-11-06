@@ -385,7 +385,7 @@ WantedBy=multi-user.target
             Schedule.spaced(Duration.seconds(5)),
           ]),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (volume === undefined) continue;
 
@@ -444,9 +444,9 @@ WantedBy=multi-user.target
             AttachPending: () =>
               Hetzner.volumes.getVolume({ id: volumeId }).pipe(
                 Effect.map(({ volume }) => volume),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               ),
-            NotFound: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
           }),
         );
       }

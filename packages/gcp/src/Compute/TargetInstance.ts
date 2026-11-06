@@ -262,7 +262,7 @@ const toAttrs = (target: compute.TargetInstance, project: string) => {
 const getByName = (project: string, zone: string, targetInstance: string) =>
   compute
     .getTargetInstances({ project, zone, targetInstance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitTargetGone = (project: string, zone: string, targetInstanceName: string) =>
   getByName(project, zone, targetInstanceName).pipe(
@@ -416,7 +416,7 @@ export const TargetInstanceProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* requireTarget(env.project, zone, targetInstanceName);
       }
@@ -462,7 +462,7 @@ export const TargetInstanceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitZoneOperation(env.project, zone, operation, {

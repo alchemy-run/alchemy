@@ -102,7 +102,7 @@ export const IdentityMappingStore = Resource<IdentityMappingStore>(
 export class IdentityMappingStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.IdentityMappingStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -126,10 +126,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsIdentityMappingStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isAlchemyId = (storeId: string) => storeId.startsWith("alch");
 
@@ -237,7 +237,7 @@ export const IdentityMappingStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IdentityMappingStoreNotResolved({ name });
+        return yield* new IdentityMappingStoreNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -248,7 +248,7 @@ export const IdentityMappingStoreProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsIdentityMappingStores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

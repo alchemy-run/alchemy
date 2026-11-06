@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyEndpointNotReady extends Data.TaggedError("DBProxyEndpointNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyEndpointProps {
   /**
@@ -86,8 +92,20 @@ export interface DBProxyEndpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBProxyEndpointLookup
 > {}
+
+/**
+ * Props for {@link DBProxyEndpoint.lookup}: find a DB proxy endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBProxyEndpointLookup {
+  /** The proxy the endpoint belongs to. */
+  dbProxyName: string;
+  /** The name of the existing endpoint. */
+  dbProxyEndpointName: string;
+}
 
 /**
  * An additional RDS Proxy endpoint — a second DNS name on an existing
@@ -105,6 +123,16 @@ export interface DBProxyEndpoint extends Resource<
  *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
  *   targetRole: "READ_ONLY",
  * });
+ * ```
+ *
+ * ### Looking up an existing DB proxy endpoint
+ * `DBProxyEndpoint.lookup` references a DB proxy endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbProxyName` and `dbProxyEndpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB proxy endpoint
+ * ```typescript
+ * const reader = AWS.RDS.DBProxyEndpoint.lookup({ dbProxyName: "app", dbProxyEndpointName: "reader" });
  * ```
  *
  * @resource
@@ -151,7 +179,7 @@ export const DBProxyEndpointProvider = () =>
             DBProxyName: dbProxyName,
             DBProxyEndpointName: dbProxyEndpointName,
           })
-          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.undefined));
         return response?.DBProxyEndpoints?.[0];
       });
 
@@ -165,7 +193,9 @@ export const DBProxyEndpointProvider = () =>
             endpoint?.DBProxyEndpointArn
               ? Effect.succeed(endpoint)
               : Effect.fail(
-                  new Error(`DB proxy endpoint '${props.dbProxyEndpointName}' not ready`),
+                  new DBProxyEndpointNotReady({
+                    message: `DB proxy endpoint '${props.dbProxyEndpointName}' not ready`,
+                  }),
                 ),
           ),
           Effect.retry({ schedule: readinessPolicy }),
@@ -222,6 +252,10 @@ export const DBProxyEndpointProvider = () =>
           if (olds?.dbProxyName !== news.dbProxyName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbProxyName, dbProxyEndpointName }) {
+          const endpoint = yield* readEndpoint({ dbProxyName, dbProxyEndpointName });
+          return endpoint?.DBProxyEndpointArn ? toAttrs({ endpoint, tags: {} }) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const dbProxyEndpointName =

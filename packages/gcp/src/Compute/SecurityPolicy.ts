@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -363,7 +363,7 @@ const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
 const getByName = (project: string, securityPolicy: string) =>
   compute
     .getSecurityPolicies({ project, securityPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, securityPolicyName: string) =>
   getByName(project, securityPolicyName).pipe(
@@ -525,7 +525,7 @@ export const SecurityPolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const securityPolicyName = yield* toName(
         id,
@@ -535,7 +535,9 @@ export const SecurityPolicyProvider = () =>
       const existing = yield* getByName(env.project, securityPolicyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "securityPolicyName");
     }),
 
     list: () =>

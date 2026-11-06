@@ -264,7 +264,7 @@ export const JobTemplateProvider = () =>
 
       if (current === undefined) {
         return yield* new JobTemplateNotResolved({
-          name: output?.name ?? name,
+          resourceName: output?.name ?? name,
         });
       }
 

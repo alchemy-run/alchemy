@@ -1,13 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -53,33 +54,33 @@ test.provider(
       // connection settings.
       const created = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferPeer("TestPeer", {
-          name: "alchemy-dnszt-peer-test",
+          name: testName("alchemy-dnszt-peer-test"),
           ip: "192.0.2.53",
           port: 53,
         }),
       );
       expect(created.peerId).toBeDefined();
       expect(created.accountId).toEqual(accountId);
-      expect(created.name).toEqual("alchemy-dnszt-peer-test");
+      expect(created.name).toEqual(testName("alchemy-dnszt-peer-test"));
       expect(created.ip).toEqual("192.0.2.53");
       expect(created.port).toEqual(53);
 
       // Out-of-band verify via the SDK.
       const live = yield* getPeer(accountId, created.peerId);
-      expect(live.name).toEqual("alchemy-dnszt-peer-test");
+      expect(live.name).toEqual(testName("alchemy-dnszt-peer-test"));
       expect(live.ip).toEqual("192.0.2.53");
       expect(live.port).toEqual(53);
 
       // Update the connection settings in place — same physical peer.
       const updated = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferPeer("TestPeer", {
-          name: "alchemy-dnszt-peer-test-renamed",
+          name: testName("alchemy-dnszt-peer-test-renamed"),
           ip: "198.51.100.53",
           port: 5353,
         }),
       );
       expect(updated.peerId).toEqual(created.peerId);
-      expect(updated.name).toEqual("alchemy-dnszt-peer-test-renamed");
+      expect(updated.name).toEqual(testName("alchemy-dnszt-peer-test-renamed"));
       expect(updated.ip).toEqual("198.51.100.53");
       expect(updated.port).toEqual(5353);
 
@@ -110,12 +111,10 @@ test.provider(
       const { peer, tsig } = yield* stack.deploy(
         Effect.gen(function* () {
           const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("PeerTsig", {
-            name: "alchemy-dnszt-peer-tsig-test.",
             algo: "hmac-sha512.",
             secret: Redacted.make(TSIG_SECRET),
           });
           const peer = yield* Cloudflare.DNS.ZoneTransferPeer("TsigPeer", {
-            name: "alchemy-dnszt-peer-tsig-peer",
             ip: "192.0.2.54",
             tsigId: tsig.tsigId,
           });
@@ -144,7 +143,6 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferPeer("ListPeer", {
-          name: "alchemy-dnszt-peer-list",
           ip: "192.0.2.55",
           port: 53,
         }),

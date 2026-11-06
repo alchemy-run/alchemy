@@ -2,13 +2,14 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -17,10 +18,10 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test label names (Cloudflare caps them at 24 chars).
-const NAME_DEFAULT = "alch-apishield-default";
-const NAME_RENAME_A = "alch-apishield-ren-a";
-const NAME_RENAME_B = "alch-apishield-ren-b";
-const NAME_LIST = "alch-apishield-list";
+const NAME_DEFAULT = testName("alch-as-default");
+const NAME_RENAME_A = testName("alch-as-ren-a");
+const NAME_RENAME_B = testName("alch-as-ren-b");
+const NAME_LIST = testName("alch-as-list");
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;

@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -142,7 +142,7 @@ export const CollectionsEnginesControl = Resource<CollectionsEnginesControl>(
 export class CollectionsEnginesControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, controlId: string) => `${engine}/controls/${controlId}`;
@@ -165,7 +165,7 @@ const useCasesOf = (
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesControls({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
   const name = control.name ?? "";
@@ -240,7 +240,7 @@ export const CollectionsEnginesControlProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.engine ?? output?.engine;
       const childId = yield* toResourceId(id, olds?.controlId, output?.controlId);
@@ -251,7 +251,7 @@ export const CollectionsEnginesControlProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -278,7 +278,7 @@ export const CollectionsEnginesControlProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesControlNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

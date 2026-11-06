@@ -40,8 +40,18 @@ export interface Application extends Resource<
     applicationName: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApplicationLookup {
+  /** The application id of the existing application. */
+  applicationId: string;
+}
 
 /**
  * An AWS Service Catalog AppRegistry application — the top-level node that
@@ -65,6 +75,16 @@ export interface Application extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.AppRegistry.Application.lookup({ applicationId: "my-application" });
+ * ```
+ *
  * @resource
  */
 export const Application = Resource<Application>("AWS.AppRegistry.Application");
@@ -84,7 +104,7 @@ export const ApplicationProvider = () =>
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Application.Provider.of({
@@ -103,6 +123,16 @@ export const ApplicationProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ applicationId: specifier }) {
+          const found = yield* observe(specifier);
+          if (!found?.id) return undefined;
+          const attrs = {
+            applicationId: found.id,
+            applicationArn: found.arn!,
+            applicationName: found.name!,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const specifier = output?.applicationId ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(specifier);

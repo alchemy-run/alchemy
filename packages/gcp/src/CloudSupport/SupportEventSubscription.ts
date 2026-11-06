@@ -143,7 +143,7 @@ export const SupportEventSubscription = Resource<SupportEventSubscription>(
 export class SupportEventSubscriptionNotResolved extends Data.TaggedError(
   "GCP.CloudSupport.SupportEventSubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lookupName = (
@@ -308,7 +308,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new SupportEventSubscriptionNotResolved({
-          name: lookup || `${parent}/${COLLECTION}`,
+          resourceName: lookup || `${parent}/${COLLECTION}`,
         });
       }
 
@@ -321,7 +321,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new SupportEventSubscriptionNotResolved({
-          name: lookup || `${parent}/${COLLECTION}`,
+          resourceName: lookup || `${parent}/${COLLECTION}`,
         });
       }
 

@@ -316,7 +316,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   if (props.layout === "next" && !(yield* fs.exists(path.join(root, ".next", "BUILD_ID"))))
     return yield* fail("Next.js output is missing .next/BUILD_ID.");
   for (const extra of extras ?? []) {
-    if (standaloneConfig && /^next\.config\./.test(path.basename(extra.source))) continue;
+    if (standaloneConfig && path.basename(extra.source).startsWith("next.config.")) continue;
     yield* collect(extra.source);
   }
   let nextPackageRoot: string | undefined;

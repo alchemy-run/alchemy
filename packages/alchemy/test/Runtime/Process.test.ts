@@ -1,4 +1,5 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -16,7 +17,6 @@ import {
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState, State } from "@/State";
-import * as Test from "@/Test/Alchemy";
 
 // A minimal hosted Platform (like AWS.ECS.Task / AWS.EC2.Instance) whose
 // runtime context is built by the shared `createHostRuntimeContext`. Its

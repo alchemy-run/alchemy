@@ -360,7 +360,7 @@ const sameJson = (left: unknown, right: unknown) =>
 const getByName = (project: string, zone: string, reservation: string) =>
   compute
     .getReservations({ project, zone, reservation })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReservationReady = (project: string, zone: string, reservationName: string) =>
   getByName(project, zone, reservationName).pipe(
@@ -540,7 +540,7 @@ export const ReservationProvider = () =>
             zone,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -647,7 +647,7 @@ export const ReservationProvider = () =>
           reservation: output.reservationName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

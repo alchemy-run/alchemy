@@ -5,7 +5,7 @@ import type { ReadBucketClient } from "@alchemy.run/prisma/ReadBucket";
 import type { ReadWriteBucketClient } from "@alchemy.run/prisma/ReadWriteBucket";
 import type { WriteBucketClient } from "@alchemy.run/prisma/WriteBucket";
 import { describe, expect, it } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

@@ -3,12 +3,13 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { WorkerDomainConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { stageSuffix } from "../../names.ts";
 import { expectUrlContains, waitForDns } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
@@ -108,7 +109,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const mainHost = `alchemy-rdr-a-${suffix}.${customDomainZone}`;
           const oldHost = `alchemy-rdr-b-${suffix}.${customDomainZone}`;
           const aliasHost = `alchemy-rdr-c-${suffix}.${customDomainZone}`;
@@ -188,7 +189,7 @@ describe.concurrent(
       "domain string shorthand resolves to { name }",
       (stack) =>
         Effect.gen(function* () {
-          const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+          const suffix = stageSuffix();
           const host = `alchemy-shorthand-${suffix}.${customDomainZone}`;
 
           yield* stack.destroy();

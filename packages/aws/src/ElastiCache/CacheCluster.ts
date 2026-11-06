@@ -5,11 +5,24 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readElastiCacheTags, sameStringSet, tagsToWire } from "./internal.ts";
+
+export class CacheClusterNotReady extends Data.TaggedError("CacheClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CacheClusterUnexpectedResponse extends Data.TaggedError(
+  "CacheClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CacheClusterProps {
   /** Cache cluster identifier. Generated deterministically when omitted. */
@@ -54,8 +67,18 @@ export interface CacheCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CacheClusterLookup
 > {}
+
+/**
+ * Props for {@link CacheCluster.lookup}: find a cache cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CacheClusterLookup {
+  /** The id of the existing cache cluster. */
+  cacheClusterId: string;
+}
 
 /**
  * A provisioned Memcached cluster. Use {@link ReplicationGroup} for Valkey or Redis.
@@ -68,6 +91,16 @@ export interface CacheCluster extends Resource<
  *   securityGroupIds: [cacheSecurityGroup.groupId],
  *   numCacheNodes: 2,
  * });
+ * ```
+ *
+ * ### Looking up an existing cache cluster
+ * `CacheCluster.lookup` references a cache cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cacheClusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cache cluster
+ * ```typescript
+ * const existing = AWS.ElastiCache.CacheCluster.lookup({ cacheClusterId: "sessions" });
  * ```
  *
  * @resource
@@ -88,7 +121,7 @@ export const CacheClusterProvider = () =>
             CacheClusterId: name,
             ShowCacheNodeInfo: true,
           })
-          .pipe(Effect.catchTag("CacheClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("CacheClusterNotFoundFault", () => Effect.undefined));
         return response?.CacheClusters?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {
@@ -96,7 +129,9 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster?.CacheClusterStatus === "available"
               ? Effect.succeed(cluster)
-              : Effect.fail(new Error(`Cache cluster '${name}' is not available`)),
+              : Effect.fail(
+                  new CacheClusterNotReady({ message: `Cache cluster '${name}' is not available` }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
@@ -108,7 +143,11 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster === undefined
               ? Effect.void
-              : Effect.fail(new Error(`Cache cluster '${name}' is still deleting`)),
+              : Effect.fail(
+                  new CacheClusterNotReady({
+                    message: `Cache cluster '${name}' is still deleting`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
@@ -117,9 +156,9 @@ export const CacheClusterProvider = () =>
       });
       const attrs = Effect.fn(function* (cluster: elasticache.CacheCluster) {
         if (!cluster.CacheClusterId || !cluster.ARN) {
-          return yield* Effect.fail(
-            new Error("ElastiCache cache cluster is missing its id or ARN"),
-          );
+          return yield* new CacheClusterUnexpectedResponse({
+            message: "ElastiCache cache cluster is missing its id or ARN",
+          });
         }
         return {
           cacheClusterId: cluster.CacheClusterId,
@@ -151,6 +190,10 @@ export const CacheClusterProvider = () =>
             return { action: "replace" } as const;
           }
           if (replaces(olds ?? {}, news ?? {})) return { action: "replace" } as const;
+        }),
+        lookup: Effect.fn(function* ({ cacheClusterId }) {
+          const found = yield* readCluster(cacheClusterId);
+          return found?.ARN ? yield* attrs(found) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const cluster = yield* readCluster(

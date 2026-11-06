@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -300,9 +300,7 @@ const needsUpdate = (current: compute.UrlMap, desired: compute.UrlMap) =>
   !subsetEqual(current.tests, desired.tests);
 
 const getByName = (project: string, urlMap: string) =>
-  compute
-    .getUrlMaps({ project, urlMap })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  compute.getUrlMaps({ project, urlMap }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const UrlMapProvider = () =>
   Provider.succeed(UrlMap, {
@@ -318,14 +316,16 @@ export const UrlMapProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const urlMapName = yield* toName(id, olds?.urlMapName, output?.urlMapName);
       const existing = yield* getByName(env.project, urlMapName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "urlMapName");
     }),
 
     list: () =>
@@ -358,7 +358,7 @@ export const UrlMapProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, urlMapName);
       }
@@ -391,7 +391,7 @@ export const UrlMapProvider = () =>
           project: env.project,
           urlMap: output.urlMapName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

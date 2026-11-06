@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { VpcId } from "./Vpc.ts";
 
@@ -100,8 +101,23 @@ export interface VpcPeeringConnection extends Resource<
     accepterOwnerId: string;
   },
   never,
-  Providers
+  Providers,
+  VpcPeeringConnectionLookup
 > {}
+
+/**
+ * Props for {@link VpcPeeringConnection.lookup}: find a VPC peering
+ * connection this stack doesn't manage, in the ambient account and region.
+ */
+export type VpcPeeringConnectionLookup =
+  | {
+      /** The connection's id. */
+      vpcPeeringConnectionId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 
 /**
  * A VPC peering connection links two VPCs so resources in each can communicate
@@ -159,6 +175,18 @@ export interface VpcPeeringConnection extends Resource<
  * Each side needs a route pointing the other VPC's CIDR at the peering
  * connection; only then can instances reach each other over private IPs.
  *
+ * ### Looking up an existing peering connection
+ * `VpcPeeringConnection.lookup` references a peering connection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcPeeringConnectionId` or
+its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Route to a peer through an existing connection
+ * ```typescript
+ * const peering = AWS.EC2.VpcPeeringConnection.lookup({ name: "to-shared" });
+ * ```
+ *
  * @resource
  */
 export const VpcPeeringConnection = Resource<VpcPeeringConnection>("AWS.EC2.VpcPeeringConnection");
@@ -183,8 +211,8 @@ export const VpcPeeringConnectionProvider = () =>
         ec2.describeVpcPeeringConnections({ VpcPeeringConnectionIds: [pcxId] }).pipe(
           Effect.map((r) => r.VpcPeeringConnections?.[0]),
           Effect.catchTags({
-            "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
-            "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+            "InvalidVpcPeeringConnectionID.NotFound": () => Effect.undefined,
+            "InvalidVpcPeeringConnectionId.NotFound": () => Effect.undefined,
           }),
         );
 
@@ -238,6 +266,33 @@ export const VpcPeeringConnectionProvider = () =>
             );
             return items satisfies VpcPeeringConnection["Attributes"][];
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeVpcPeeringConnections(
+              "vpcPeeringConnectionId" in props
+                ? { VpcPeeringConnectionIds: [props.vpcPeeringConnectionId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTags({
+                "InvalidVpcPeeringConnectionID.NotFound": () =>
+                  Effect.succeed({ VpcPeeringConnections: [] }),
+                "InvalidVpcPeeringConnectionId.NotFound": () =>
+                  Effect.succeed({ VpcPeeringConnections: [] }),
+              }),
+            );
+          const match = yield* single(
+            "AWS.EC2.VpcPeeringConnection",
+            "vpcPeeringConnectionId" in props ? props.vpcPeeringConnectionId : `Name=${props.name}`,
+            (found.VpcPeeringConnections ?? []).filter(
+              (x) => !DEAD_STATES.has(x.Status?.Code ?? ""),
+            ),
+            (x) => x.VpcPeeringConnectionId,
+          );
+          if (!match?.VpcPeeringConnectionId) return undefined;
+          return toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
@@ -307,8 +362,8 @@ export const VpcPeeringConnectionProvider = () =>
               yield* ec2.acceptVpcPeeringConnection({ VpcPeeringConnectionId: pcxId }).pipe(
                 // A concurrent reconcile may have accepted it already.
                 Effect.catchTags({
-                  "InvalidVpcPeeringConnectionID.NotFound": () => Effect.succeed(undefined),
-                  "InvalidVpcPeeringConnectionId.NotFound": () => Effect.succeed(undefined),
+                  "InvalidVpcPeeringConnectionID.NotFound": () => Effect.undefined,
+                  "InvalidVpcPeeringConnectionId.NotFound": () => Effect.undefined,
                 }),
               );
               yield* waitFor(pcxId, "active");

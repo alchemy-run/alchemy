@@ -1,96 +1,14 @@
 import { EdgeSessionError } from "@alchemy.run/cloudflare/EdgeSession";
-import {
-  isTransientBootstrapWriteError,
-  isTransientEdgeSessionError,
-} from "@alchemy.run/cloudflare/StateStore/State";
+import { isTransientEdgeSessionError } from "@alchemy.run/cloudflare/StateStore/State";
 import { describe, expect, it } from "@alchemy.run/test";
-import { makeHttpStateStore } from "alchemy/State/HttpStateStore";
-import type { StateStoreError } from "alchemy/State/State";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as TestClock from "effect/testing/TestClock";
 
 /**
- * Predicate coverage for the retry policies added in response to
- * production failures (Axiom `prod-traces`):
- *
- * - bootstrap hoist writes failing on 401 (Secrets Store token binding
- *   not propagated yet — surfaced as EMPTY-message StateStoreErrors),
- *   404 (route propagation) and 5xx (encryption-key binding
- *   propagation).
- * - edge-preview secret reads failing with Cloudflare HTML error pages
- *   ("Secret probe returned 400/502: <!DOCTYPE html>..."), session
- *   creation flakes and transport errors ("fetch failed").
- *
- * `isTransientBootstrapWriteError` inspects the safe HTTP metadata on the
- * `StateStoreError` the real HTTP client produces, so each case drives
- * an actual `makeHttpStateStore().set` against a stubbed fetch and
- * feeds the resulting failure into the predicate.
+ * Predicate coverage for the edge-preview secret-read retry policy, added in
+ * response to production failures (Axiom `prod-traces`): reads failing with
+ * Cloudflare HTML error pages ("Secret probe returned 400/502:
+ * <!DOCTYPE html>..."), session creation flakes and transport errors
+ * ("fetch failed").
  */
-
-/** Minimal fetch signature — Bun's `typeof fetch` also demands `preconnect`. */
-type FetchStub = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-const stubHttpClient = (stub: FetchStub) =>
-  FetchHttpClient.layer.pipe(
-    Layer.provide(Layer.succeed(FetchHttpClient.Fetch, stub as typeof globalThis.fetch)),
-  );
-
-/** Run a state-store write against a stubbed transport, return its failure. */
-const failingWrite = (stub: FetchStub): Effect.Effect<StateStoreError> =>
-  Effect.gen(function* () {
-    const store = yield* makeHttpStateStore({
-      url: "https://state-store.test",
-      authToken: "token",
-      id: "test-http",
-    });
-    return yield* store
-      .set({ stack: "s", stage: "dev", fqn: "stack/scope/a", value: { hello: "world" } as never })
-      .pipe(Effect.flip);
-  }).pipe(Effect.provide(stubHttpClient(stub)), Effect.orDie);
-
-describe(
-  "isTransientBootstrapWriteError",
-  { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
-  () => {
-    it.effect("retries 401 Unauthorized (token-binding propagation) but not other 4xx", () =>
-      Effect.gen(function* () {
-        const unauthorized = yield* failingWrite(async () => new Response(null, { status: 401 }));
-        expect(isTransientBootstrapWriteError(unauthorized)).toBe(true);
-
-        const badRequest = yield* failingWrite(async () => new Response("no", { status: 400 }));
-        expect(isTransientBootstrapWriteError(badRequest)).toBe(false);
-      }),
-    );
-
-    it.effect(
-      "retries 404 (route propagation), 5xx (binding propagation) and transport failures",
-      () =>
-        Effect.gen(function* () {
-          for (const stub of [
-            async () => new Response("not found", { status: 404 }),
-            async () => new Response("secret unavailable", { status: 500 }),
-            async () => {
-              throw new TypeError("fetch failed");
-            },
-          ]) {
-            const fiber = yield* failingWrite(stub).pipe(Effect.forkChild);
-            yield* TestClock.adjust("30 seconds");
-            const error = yield* Fiber.join(fiber);
-            expect(isTransientBootstrapWriteError(error)).toBe(true);
-          }
-        }),
-      5_000,
-    );
-
-    it("does not retry errors without HTTP failure metadata", () => {
-      expect(isTransientBootstrapWriteError({ http: undefined })).toBe(false);
-    });
-  },
-);
-
 describe(
   "isTransientEdgeSessionError",
   { tags: ["unit", "provider:cloudflare", "provider:cloudflare:statestore", "local"] },
