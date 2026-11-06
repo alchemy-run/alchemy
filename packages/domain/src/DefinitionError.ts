@@ -212,15 +212,6 @@ export class UnknownRequestContext extends Data.TaggedError("UnknownRequestConte
   }
 }
 
-/** An Api exposes an aggregate that declares no `read` contract. */
-export class Unreadable extends Data.TaggedError("Unreadable")<{
-  readonly aggregate: string;
-}> {
-  override get message() {
-    return `${this.aggregate} has no \`read\` contract, so an Api cannot expose it`;
-  }
-}
-
 /** An external system declares an operation named after a static of its class. */
 export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
   readonly system: string;
@@ -237,6 +228,15 @@ export class MissingWorkflowEngine extends Data.TaggedError("MissingWorkflowEngi
 }> {
   override get message() {
     return `${this.sagas.join(", ")} need a platform that runs workflows`;
+  }
+}
+
+/** A view or stream guards its reads, but no Layer provides its `validate`. */
+export class UnvalidatedRead extends Data.TaggedError("UnvalidatedRead")<{
+  readonly entity: string;
+}> {
+  override get message() {
+    return `${this.entity} declares middleware or rejects, so it needs its Layer: provide ${this.entity}.toLayer(validate) to the model`;
   }
 }
 
@@ -362,22 +362,13 @@ export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")
   }
 }
 
-/** A query declares `visible` but is not `paged`: only the entries of a page are judged. */
-export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging")<{
-  readonly query: string;
-}> {
-  override get message() {
-    return `Query '${this.query}' declares \`visible\` but is not \`paged\`: only the entries of a page are judged`;
-  }
-}
-
-/** A query waits for a projection the Domain does not list. */
+/** A query waits for a projection, view or stream the Domain does not list. */
 export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   readonly query: string;
-  readonly projection: string;
+  readonly read: string;
 }> {
   override get message() {
-    return `${this.query} waits for ${this.projection}, which is not in the Domain`;
+    return `${this.query} waits for ${this.read}, which is not in the Domain`;
   }
 }
 
@@ -403,7 +394,6 @@ export type Reason =
   | UndeclaredEmit
   | UnknownEvent
   | UnknownRequestContext
-  | Unreadable
   | ReservedOperation
   | MissingWorkflowEngine
   | ForeignAppend
@@ -418,8 +408,8 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
-  | VisibleWithoutPaging
-  | UnknownWait;
+  | UnknownWait
+  | UnvalidatedRead;
 
 /**
  * A domain definition error, found while the kernel is built or when a

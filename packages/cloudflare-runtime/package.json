@@ -779,6 +779,7 @@
     "rolldown": "catalog:",
     "toucan-js": "catalog:",
     "tsdown": "catalog:",
+    "tsrs": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:cloudflare-test-compat",

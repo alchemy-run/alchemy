@@ -244,7 +244,7 @@ const tailDeploymentLogsWith = (
                     fail(error);
                   }),
                 ),
-                Effect.runFork,
+                Effect.runForkWith(context),
               );
             };
 

@@ -4,6 +4,7 @@ description: Send the bank's traces and logs to Axiom, follow a deposit through 
 sidebar:
   order: 7
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 The bank already records a span for every command, event, view and policy. Nothing receives them yet. In this part you send them to [Axiom](/axiom), then add the browser's spans, so one trace runs from a click to every Durable Object it reaches.
 
@@ -16,9 +17,7 @@ You need a [configured Axiom profile](/axiom/setup).
 
 ## Install the Axiom provider
 
-```sh
-bun add @alchemy.run/axiom
-```
+<PackageManagers add="@alchemy.run/axiom" />
 
 ## Let the stack create Axiom resources
 
@@ -135,9 +134,7 @@ This is the only change the bank needs. `Axiom.Telemetry` gives the Worker the d
 
 ## Follow a deposit
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Open the app, deposit, and open `bank-traces` in Axiom. The deposit is one trace:
 
@@ -166,36 +163,25 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 ## Record the amount on every withdrawal
 
 ```diff lang="typescript"
-// src/WithdrawMoney.command.ts
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { AccountId } from "./Account.id.ts";
-import { NotOpen } from "./NotOpen.rejection.ts";
-import { NotOwner } from "./NotOwner.rejection.ts";
-import { Session } from "./Session.middleware.ts";
-
-export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  amount: Schema.Int,
-  balanceAfter: Schema.Int,
-}) {}
-
-export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  balance: Schema.Int,
-  requested: Schema.Int,
-}) {}
-
-export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  middleware: [Session],
-  input: { amount: Schema.Int },
-  events: [MoneyWithdrawn],
-  rejects: [NotOpen, NotOwner, InsufficientFunds],
-  reply: { balance: Schema.Int },
-+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+// src/Account.aggregate.ts
+export class Account extends Domain.Aggregate("Account", {
+  // ...
+  decide: {
+    // ...
+    WithdrawMoney: Effect.fn(function* (account, cmd) {
++      yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
+      const open = yield* owned(account);
+      if (cmd.amount > open.balance) {
+        return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
+      }
+      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: open.balance - cmd.amount })];
+    }),
+  },
+  // ...
 }) {}
 ```
 
-Spans record nothing from a command's input unless you ask. `attributes` adds `bank.amount` to every span the withdrawal makes, so you can find large withdrawals in Axiom. Events and rejections accept `attributes` too, and a `Redacted` value is always recorded as `<redacted>`.
+Spans record nothing from a command's input unless a handler annotates it. `decide` runs inside the withdrawal's `Domain.decide Account.WithdrawMoney` span, so `bank.amount` lands on it, and you can find large withdrawals in Axiom.
 
 ## Trace the browser
 
@@ -344,9 +330,7 @@ Runtime.run(
 
 ## Follow a click
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Deposit again. The trace now starts in the browser:
 

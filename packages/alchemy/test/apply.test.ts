@@ -55,6 +55,8 @@ import {
   lookupTargets,
   ModalResource,
   modalCalls,
+  OptionalProps,
+  optionalPropsReceived,
   type ModalResourceProps,
   PhasedTarget,
   ProbeBinding,
@@ -946,6 +948,24 @@ describe("basic operations", { tags: ["unit", "local"] }, () => {
 // ("alchemy"). The recomputed key missed the real state row, so the
 // resource was deleted from the cloud yet never removed from state — resurfacing
 // as an orphan deletion on every subsequent destroy, forever.
+// Every prop of `OptionalProps` is optional, so it may be declared with none.
+// Its provider reads `news` without a default, as most real providers do.
+describe("resources declared without props", { tags: ["unit", "local"] }, () => {
+  test.provider("reach their provider with empty props, and redeploy as a noop", (stack) =>
+    Effect.gen(function* () {
+      const program = OptionalProps("NoProps");
+
+      expect((yield* stack.deploy(program)).label).toEqual("NoProps");
+      expect(optionalPropsReceived.get("NoProps")).toEqual([{ op: "reconcile", news: {} }]);
+
+      expect(actionOfPlan(yield* stack.plan(program), "NoProps")).toBe("noop");
+
+      yield* stack.destroy();
+      optionalPropsReceived.delete("NoProps");
+    }),
+  );
+});
+
 describe("FQN separator in logical ID", { tags: ["unit", "local"] }, () => {
   test.provider("destroy clears state for a top-level logical ID containing '/'", (stack) =>
     Effect.gen(function* () {
@@ -1054,6 +1074,24 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  // `kind` is also the tag every Output expression carries; reading it off
+  // a lookup must still reach the resource's attribute.
+  test.provider("a lookup's kind attribute resolves to the resource's value", (stack) =>
+    Effect.gen(function* () {
+      const name = "apply-kind";
+      lookupTargets.set(name, { name, value: "v", kind: "ip" });
+      const program = TestResource("KindConsumer", {
+        string: Output.map(LookupTarget.lookup({ name }).kind, (kind) => kind ?? "none"),
+      });
+
+      const consumer = yield* stack.deploy(program);
+      expect(consumer.string).toEqual("ip");
+
+      yield* stack.destroy();
+      lookupTargets.delete(name);
+    }),
+  );
+
   // Always a user mistake: the lookup would bind the resource with no
   // dependency, so this stack could delete or replace it under its consumer.
   test.provider("a lookup of a resource this stack manages fails the deploy", (stack) =>
@@ -1085,6 +1123,34 @@ describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
       yield* stack.destroy();
       expect(lookupTargets.has("apply-managed")).toBe(false);
     }),
+  );
+
+  // Stables are compared all together, optional ones included: a resource
+  // with the managed one's name but a different `kind` (as an identity
+  // provider of the same name in another zone) is a different resource.
+  test.provider(
+    "a lookup that differs from a managed resource only in an optional stable resolves",
+    (stack) =>
+      Effect.gen(function* () {
+        const name = "apply-optional-stable";
+        const managed = LookupTarget(name, { value: "managed" });
+        yield* stack.deploy(managed);
+        // The managed row has no `kind`; the found resource does.
+        lookupTargets.set(name, { name, value: "foreign", kind: "zone" });
+
+        const consumer = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* managed;
+            return yield* TestResource("OptionalStableConsumer", {
+              string: LookupTarget.lookup({ name }).value,
+            });
+          }),
+        );
+        expect(consumer.string).toEqual("foreign");
+
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
   );
 
   test.provider(
@@ -3042,6 +3108,313 @@ describe("retain removal policy on replace", { tags: ["unit", "local"] }, () => 
         expect(deleted).toContain("A");
         expect(yield* getState("A")).toBeUndefined();
       }),
+  );
+});
+
+describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
+  // Scratch state is durable, and the runner's trailing destroy is refused
+  // for a protected row. Unprotect whatever an earlier run left, then drain.
+  const reset = (stack: { destroy: () => Effect.Effect<any, any, any> }) =>
+    Effect.gen(function* () {
+      const state = yield* yield* State;
+      const stk = yield* Stack;
+      for (const fqn of yield* listState()) {
+        const row = (yield* state.get({ stack: stk.name, stage: stk.stage, fqn })) as
+          | ResourceState
+          | undefined;
+        if (row?.removalPolicy === "protect") {
+          yield* state.set({
+            stack: stk.name,
+            stage: stk.stage,
+            fqn,
+            value: { ...row, removalPolicy: "destroy" },
+          });
+        }
+      }
+      yield* stack.destroy();
+    });
+
+  const refusal = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.exit(effect).pipe(
+      Effect.map((exit) =>
+        Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
+      ),
+    );
+
+  test.provider("refuses a replacement before anything is applied", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+
+      const replaced: string[] = [];
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" }).pipe(RemovalPolicy.protect());
+        }).pipe(stack.deploy, hook({ create: (id) => Effect.sync(() => void replaced.push(id)) })),
+      );
+      expect(error).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+      expect(replaced).toEqual([]);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v1" });
+    }),
+  );
+
+  test.provider("refuses an orphan delete and destroy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      // Removing the declaration: the persisted policy still protects it.
+      const orphaned = yield* refusal(Effect.void.pipe(stack.deploy));
+      expect(orphaned).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      const destroyed = yield* refusal(stack.destroy());
+      expect(destroyed).toMatchObject({ _tag: "ProtectedResource" });
+      expect(yield* getState("A")).toBeDefined();
+    }),
+  );
+
+  test.provider("dropping protect() in the replacing deploy is still refused", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" });
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({ _tag: "ProtectedResource" });
+    }),
+  );
+
+  test.provider("unprotecting with its own deploy allows the replacement", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("protect() added while an old generation drains is persisted", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "a" });
+      }).pipe(stack.deploy);
+      // The replacement's old-generation delete is still in progress, so the
+      // row stays `replaced` for the next deploy.
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "a" });
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: () => Effect.fail(new Provider.DeleteInProgress({ message: "still draining" })),
+        }),
+      );
+      expect((yield* getState("A"))?.status).toEqual("replaced");
+
+      // An in-place update of the replaced row that adds protect() must
+      // persist it, or a later destroy would delete the resource.
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "b" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+      expect(yield* refusal(stack.destroy())).toMatchObject({ _tag: "ProtectedResource" });
+    }),
+  );
+
+  test.provider("protect() added while an old generation drains still lets it drain", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" });
+      }).pipe(stack.deploy);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: () => Effect.fail(new Provider.DeleteInProgress({ message: "still draining" })),
+        }),
+      );
+      expect((yield* getState("A"))?.status).toEqual("replaced");
+
+      // Same props: the plan only finishes deleting the old generation,
+      // which dependents already left. That is not a new replacement.
+      const deleted: string[] = [];
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2" }).pipe(RemovalPolicy.protect());
+      }).pipe(
+        stack.deploy,
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) => Effect.sync(() => void deleted.push(id)),
+        }),
+      );
+      expect(deleted).toEqual(["A"]);
+      const row = yield* getState("A");
+      expect(row?.status).toEqual("created");
+      expect(row?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("refuses an Action that takes over a protected resource's FQN", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusal(
+        Effect.gen(function* () {
+          yield* A({ value: "x" });
+        }).pipe(stack.deploy),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("an in-place update goes through and keeps protect", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "r", string: "v1" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+
+      const updated: string[] = [];
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "r", string: "v2" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy, hook({ update: (id) => Effect.sync(() => void updated.push(id)) }));
+      expect(updated).toEqual(["A"]);
+      const row = yield* getState("A");
+      expect(row?.props).toMatchObject({ string: "v2" });
+      expect(row?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider(
+    "protect() added to an existing resource takes effect on the noop deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* reset(stack);
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" });
+        }).pipe(stack.deploy);
+
+        const protectedDecl = Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect());
+        });
+        expect(actionOfPlan(yield* protectedDecl.pipe(stack.plan), "A")).toEqual("noop");
+        yield* protectedDecl.pipe(stack.deploy);
+        expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+        expect(yield* refusal(Effect.void.pipe(stack.deploy))).toMatchObject({
+          _tag: "ProtectedResource",
+          resources: [{ fqn: "A", action: "delete" }],
+        });
+      }),
+  );
+
+  test.provider("an adopted resource is protected from its first deploy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      const adoption = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1" }).pipe(
+          adopt(true),
+          RemovalPolicy.protect(),
+        );
+      });
+      const unowned = Effect.provide(
+        Layer.succeed(TestResourceHooks, {
+          read: () =>
+            Effect.succeed(
+              Unowned({
+                string: "",
+                stringArray: [],
+                stableString: "A",
+                stableArray: ["A"],
+                replaceString: "v1",
+                redacted: undefined,
+                redactedArray: undefined,
+              } satisfies TestResource["Attributes"]),
+            ),
+        }),
+      );
+      expect(actionOfPlan(yield* adoption.pipe(stack.plan, unowned), "A")).toEqual("adopted");
+      yield* adoption.pipe(stack.deploy, unowned);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("renaming a protected resource moves it instead of deleting it", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("Old", { string: "v1" }).pipe(RemovalPolicy.protect());
+      }).pipe(stack.deploy);
+
+      const before = yield* getState("Old");
+      const touched: string[] = [];
+      const track = (op: string) => (id: string) =>
+        Effect.sync(() => void touched.push(`${op}:${id}`));
+      yield* Effect.gen(function* () {
+        yield* TestResource("New", { string: "v1" }).pipe(
+          renamedFrom("Old"),
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy, hook({ create: track("create"), delete: track("delete") }));
+      expect(touched).toEqual([]);
+      expect(yield* getState("Old")).toBeUndefined();
+      const after = yield* getState("New");
+      expect(after?.instanceId).toEqual(before?.instanceId);
+      expect(after?.removalPolicy).toEqual("protect");
+    }),
+  );
+
+  test.provider("protect(false) keeps the enclosing policy", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { string: "v1" }).pipe(RemovalPolicy.protect(false));
+        yield* TestResource("B", { string: "v1" }).pipe(
+          RemovalPolicy.protect(Effect.succeed(false)),
+        );
+      }).pipe(RemovalPolicy.retain(), stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("retain");
+      expect((yield* getState("B"))?.removalPolicy).toEqual("retain");
+      yield* stack.destroy();
+    }),
   );
 });
 

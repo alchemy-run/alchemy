@@ -133,10 +133,7 @@ residue) so the loop survives context compaction.
 
 Note the `Full log: .alchemy/log/test/…` path at the end. Failures print
 inline with their error as soon as they happen, so start triage at the first
-failure rather than waiting for the run to finish. If nothing finishes for 10s
-the runner lists running tests — a test stuck far past its timeout is a hang
-to fix, not something to wait out. Check the "queued for an exclusive lock"
-entries in that list before calling it a hang: those tests haven't started.
+failure rather than waiting for the run to finish.
 
 Test time is the release's biggest cost, so one slow or exclusive test must
 never hold up the rest of a run. If it does, fix the runner or narrow the
@@ -264,7 +261,7 @@ slow, so after the first full plan every fixing run is targeted:
    ```
 2. **Compute the residual:** tests with a `FAIL` line and no `PASS` line, plus
    tests that never finished (a killed or stalled round) — find those by
-   diffing the runner's "still running" lists against the result lines.
+   diffing the run's test list against the result lines.
 3. **Fix agents get each failing area passing individually** (their own
    suites, `-t` for single tests in long sequential files).
 4. **One residual run** of only what's still unpassed — file paths, narrowed

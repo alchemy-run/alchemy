@@ -100,7 +100,16 @@ interface Props {
   caption?: string;
 }
 
-const { nodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+const { nodes: rawNodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+
+// A grid starts at its first used column and row, so an unused column 0 never leaves a blank strip.
+const minCol = Math.min(...rawNodes.map((n) => n.col ?? 0));
+const minRow = Math.min(...rawNodes.map((n) => n.row ?? 0));
+const nodes = rawNodes.map((n) => ({
+  ...n,
+  ...(n.col !== undefined ? { col: n.col - minCol } : {}),
+  ...(n.row !== undefined ? { row: n.row - minRow } : {}),
+}));
 
 const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
@@ -225,7 +234,8 @@ if (grid) {
 const hasBackEdge = edges.some(
   (e) => (layerOf.get(e.to) ?? 0) <= (layerOf.get(e.from) ?? 0),
 );
-const BACK_EDGE_GUTTER = 56;
+// Back edges arc 36 below the nodes (LR) or to their right (TB), so only that side gets the room.
+const BACK_EDGE_GUTTER = edges.some((e) => e.label && (layerOf.get(e.to) ?? 0) <= (layerOf.get(e.from) ?? 0)) ? 44 : 32;
 
 const gridCols = grid ? Math.max(...nodes.map((n) => n.col!)) + 1 : 0;
 const gridRows = grid ? Math.max(...nodes.map((n) => n.row!)) + 1 : 0;
@@ -236,10 +246,10 @@ const W = grid
   direction === "LR"
     ? PAD * 2 +
       layers.length * NODE_W +
-      (layers.length - 1) * COL_GAP +
-      (hasBackEdge ? BACK_EDGE_GUTTER : 0)
+      (layers.length - 1) * COL_GAP
     : PAD * 2 +
-      Math.max(...layers.map((r) => r.length * (NODE_W + COL_GAP) - COL_GAP));
+      Math.max(...layers.map((r) => r.length * (NODE_W + COL_GAP) - COL_GAP)) +
+      (hasBackEdge ? BACK_EDGE_GUTTER : 0);
 const H = grid
   ? PAD * 2 + gridRows * NODE_H_TYPED + (gridRows - 1) * GRID_ROW_GAP
   :
@@ -247,8 +257,7 @@ const H = grid
     ? PAD * 2 + tallest + (hasBackEdge ? BACK_EDGE_GUTTER : 0)
     : PAD * 2 +
       layers.length * (NODE_H_TYPED + 60) -
-      60 +
-      (hasBackEdge ? BACK_EDGE_GUTTER : 0);
+      60;
 
 // ---------- Groups ----------
 
@@ -363,6 +372,12 @@ const groupEdge = (e: EdgeIn, box: Box): Edge => {
   }
   const y = a.y + a.h / 2;
   const [x1, x2] = box.x > a.x ? [a.x + NODE_W, box.x - TIP] : [a.x, box.x + box.w + TIP];
+  if (y < box.y || y > box.y + box.h) {
+    // Beside the group but above or below it: an elbow down or up, then across into its side.
+    const by = box.y + box.h / 2;
+    const y1 = by > y ? a.y + a.h : a.y;
+    return { d: `M ${x} ${y1} L ${x} ${by} L ${x2} ${by}`, midX: (x + x2) / 2, midY: by, label: e.label, dashed: e.dashed };
+  }
   return { d: `M ${x1} ${y} L ${x2} ${y}`, midX: (x1 + x2) / 2, midY: y, label: e.label, dashed: e.dashed };
 };
 
@@ -472,6 +487,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 ---
 
 <figure class="alc-dag not-content" data-nosnippet>
+  <div class="alc-dag__panel">
   <svg
     class="alc-dag__svg"
     viewBox={`0 0 ${width} ${height}`}
@@ -610,12 +626,15 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
       </div>
     )
   }
+  </div>
   {caption && <figcaption class="alc-dag__caption">{caption}</figcaption>}
 </figure>
 
 <style>
   .alc-dag {
     margin: 1.5rem 0;
+  }
+  .alc-dag__panel {
     background: var(--alc-bg-elev-1);
     border: 1px solid var(--alc-hairline-2);
     border-radius: var(--alc-radius);
@@ -706,7 +725,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   }
 
   .alc-dag__caption {
-    margin-top: 0.5rem;
+    margin-top: 0.625rem;
     font-family: var(--alc-font-sans);
     font-size: 13px;
     color: var(--alc-fg-3);

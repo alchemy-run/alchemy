@@ -168,6 +168,24 @@ that would remove it, and prefer moving irreplaceable data behind a
 retained resource.
 :::
 
+### Protecting a resource from replacement
+
+`retain` keeps the old cloud object, but a replacement still happens:
+dependents move to the new one. For a VPC, a cluster or a key that
+seals stored data, use `protect()` instead. A plan that would replace
+or delete the resource fails before anything is applied:
+
+```typescript
+const vpc = yield* AWS.EC2.Vpc("Vpc", { cidrBlock: "10.0.0.0/16" }).pipe(
+  RemovalPolicy.protect(),
+);
+```
+
+`alchemy plan`, `deploy` and `destroy` all refuse with a
+`ProtectedResource` error naming the resource. The policy is persisted
+like any other, so removing the declaration is refused too. To replace
+or delete it on purpose, deploy it without `protect()` first.
+
 ## Idempotency and recovery
 
 State persistence can fail after the cloud operation succeeds — the
@@ -228,7 +246,7 @@ The same engine powers all of these commands:
 See the [CLI reference](/cli) for the full set of flags
 (`--yes`, `--force`, `--dry-run`, `--stage`, `--profile`, ...).
 
-Every lifecycle operation on this page is implemented per resource
+Each of these lifecycle operations is implemented per resource
 type by a [Provider](/infrastructure-as-code/provider).
 
 ## Where next

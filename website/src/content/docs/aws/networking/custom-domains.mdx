@@ -35,7 +35,7 @@ Certificates for CloudFront must be in `us-east-1`, wherever the rest of the app
 
 ## Give a resource a domain
 
-Websites, Lambda Functions and ECS load balancers take a `domain` prop. Name the domain, and Alchemy requests the certificate, validates it, attaches it and creates the records:
+Websites, Lambda Functions and ECS load balancers take a `domain` prop. Name the domain, and Alchemy requests the certificate, validates it, attaches it and creates the records, `A` and `AAAA` aliases for websites and load balancers:
 
 ```typescript title="alchemy.run.ts"
 const site = yield* AWS.Website.StaticSite("Site", {
@@ -93,18 +93,20 @@ const cert = yield* AWS.ACM.Certificate("Cert", {
 
 Deploy writes the validation records and waits until the certificate is issued, so `cert.certificateArn` is ready to use. For a regional resource outside `us-east-1`, set `region`.
 
-An alias record pointing a name at a distribution:
+Alias records pointing a name at a distribution, one per address family:
 
 ```typescript title="alchemy.run.ts"
-yield* AWS.Route53.Record("Alias", {
-  hostedZoneId: zone.id,
-  name: "app.example.com",
-  type: "A",
-  aliasTarget: { hostedZoneId: distribution.hostedZoneId, dnsName: distribution.domainName },
-});
+for (const type of ["A", "AAAA"] as const) {
+  yield* AWS.Route53.Record(`Alias-${type}`, {
+    hostedZoneId: zone.id,
+    name: "app.example.com",
+    type,
+    aliasTarget: { hostedZoneId: distribution.hostedZoneId, dnsName: distribution.domainName },
+  });
+}
 ```
 
-The alias target's `hostedZoneId` is the distribution's own, not your zone's. A REST API on API Gateway takes a `DomainName` with the certificate and a `BasePathMapping` onto its stage. See [API Gateway](/aws/apis/api-gateway).
+CloudFront serves IPv6, so without the `AAAA` record IPv6 clients get no answer for the name. The alias target's `hostedZoneId` is the distribution's own, not your zone's. A REST API on API Gateway takes a `DomainName` with the certificate and a `BasePathMapping` onto its stage. See [API Gateway](/aws/apis/api-gateway).
 
 ## Changing a domain
 

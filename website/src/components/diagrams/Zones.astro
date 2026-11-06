@@ -47,6 +47,7 @@ const COPY_W = 52;
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
     <defs>
       <marker id="alc-z-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -107,6 +108,7 @@ const COPY_W = 52;
       })
     }
   </svg>
+  </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
 </figure>
 

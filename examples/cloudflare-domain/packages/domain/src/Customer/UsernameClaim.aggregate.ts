@@ -18,10 +18,10 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
   initial: { _tag: "Free" },
   commands: [ClaimUsername],
   decide: {
-    ClaimUsername: (s, cmd) =>
-      s._tag === "Free"
+    ClaimUsername: (usernameClaim, cmd) =>
+      usernameClaim._tag === "Free"
         ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : s.customerId === cmd.customerId
+        : usernameClaim.customerId === cmd.customerId
           ? []
           : new UsernameTaken(),
   },
