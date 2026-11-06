@@ -1,4 +1,5 @@
 import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
+import { computeStaticSourceHash } from "@alchemy.run/docker/ImageSource";
 import { expect, layer } from "@alchemy.run/test";
 import { BunServices } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
@@ -305,6 +306,24 @@ layer(BunServices.layer)("Docker build hash traversal", (test) => {
         expect(yield* hashDockerBuildInputs(source, "effective")).toBe(
           "91124478d665ef48e0af2670d271511b",
         );
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
+  test.effect(
+    "image source hash ignores files the .dockerignore excludes",
+    () =>
+      Effect.gen(function* () {
+        const { root, fs, path } = yield* makeContext("docs\n");
+        yield* fs.makeDirectory(path.join(root, "docs"), { recursive: true });
+        yield* fs.writeFileString(path.join(root, "docs", "README.md"), "v1\n");
+        yield* fs.writeFileString(path.join(root, "src", "main.txt"), "v1\n");
+        const hash = computeStaticSourceHash({ context: root }, "linux/amd64");
+        const before = yield* hash;
+        yield* fs.writeFileString(path.join(root, "docs", "README.md"), "v2\n");
+        expect(yield* hash).toBe(before);
+        yield* fs.writeFileString(path.join(root, "src", "main.txt"), "v2\n");
+        expect(yield* hash).not.toBe(before);
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );

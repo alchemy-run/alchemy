@@ -1,7 +1,6 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -10,6 +9,7 @@ import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { hashDockerBuildInputs } from "./BuildHash.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -323,8 +323,8 @@ const resolveContextPaths = Effect.fn(function* (source: {
  * Content hash for the sources whose identity is computable WITHOUT running
  * a bundler:
  *
- * - `context` — hash of the build-context directory + Dockerfile content +
- *   platform.
+ * - `context` — hash of the build-context files the `.dockerignore` keeps +
+ *   Dockerfile content + platform.
  * - `image` — hash of the image reference + platform (re-mirror only when
  *   the ref changes).
  * - `main` — `undefined`: the hash comes from the bundle output, so it is
@@ -361,7 +361,10 @@ export const computeStaticSourceHash = Effect.fn(function* (
       context: source.context!,
       dockerfile: source.dockerfile,
     });
-    const contextHash = yield* hashDirectory({ cwd: context });
+    const contextHash = yield* hashDockerBuildInputs(
+      { context, dockerfile, platform: platform ?? "linux/amd64" },
+      "effective",
+    );
     const dockerfileContent = yield* fs.readFileString(dockerfile);
     return (yield* sha256Object({
       contextHash,
@@ -497,7 +500,10 @@ export const makeContainerImageSource = Effect.gen(function* () {
         dockerfile: df,
       });
       envIdentity = {
-        envContextHash: yield* hashDirectory({ cwd: context }),
+        envContextHash: yield* hashDockerBuildInputs(
+          { context, dockerfile, platform: options.platform },
+          "effective",
+        ),
         envDockerfile: yield* fs.readFileString(dockerfile),
       };
     }
