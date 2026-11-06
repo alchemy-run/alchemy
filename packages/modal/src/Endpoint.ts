@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import {
   environmentNames,
   envNameOf,
@@ -344,6 +345,13 @@ export const EndpointProvider = () =>
                 sharedEndpointNoticeAcknowledged: news.servingMode === "shared" ? true : undefined,
               })
               .pipe(
+                // An endpoint creates an App, and Modal rate-limits App
+                // creation per workspace; wait it out, as `Modal.App` does.
+                Effect.retry({
+                  while: (e) => e._tag === "TooManyRequests",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 12,
+                }),
                 Effect.catchTag("EndpointAlreadyExists", () =>
                   lookup(name, env).pipe(
                     Effect.map((found) => ({ endpointId: found?.endpointId })),
