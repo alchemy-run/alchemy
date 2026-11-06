@@ -10,6 +10,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import type { MySQLDatabase } from "./MySQL/MySQLDatabase.ts";
+import type { PostgresDatabase } from "./Postgres/PostgresDatabase.ts";
 import type { Providers } from "./Providers.ts";
 
 /** Database permissions supported by PlanetScale service tokens. */
@@ -56,11 +58,22 @@ export type ServiceTokenDatabaseAccess =
 export interface ServiceTokenProps {
   /** Name prefix. An instance suffix allows old and replacement tokens to coexist. */
   name?: string;
-  /** Organization slug. Defaults to the configured PlanetScale organization. */
+  /**
+   * Organization slug. Defaults to the database resource's organization, then
+   * to the configured PlanetScale organization.
+   */
   organization?: string;
-  /** Database name. Changing it replaces the token. */
-  database: string;
-  /** Exact database permissions. Permissions not declared here are revoked. */
+  /**
+   * The database the token is scoped to: its name, a {@link MySQLDatabase} or
+   * {@link PostgresDatabase} resource, or a `.ref(...)` to one deployed
+   * elsewhere. Changing it replaces the token.
+   */
+  database: string | MySQLDatabase | PostgresDatabase;
+  /**
+   * Exact database permissions. Permissions not declared here are revoked.
+   * PlanetScale also accepts the Vitess-only accesses (`*_vschema`,
+   * `*_topology`, `*_workflow`) on a Postgres database.
+   */
   accesses: readonly ServiceTokenDatabaseAccess[];
 }
 
@@ -112,11 +125,60 @@ export type ServiceToken = Resource<
  * the previous token. Changes to `accesses` are reconciled in place.
  *
  * ### Creating a Database Token
- * **Example:** Read recommendations and dismiss resolved recommendations
+ * **Example:** Token for a database declared in the stack
  * ```typescript
- * const token = yield* Planetscale.ServiceToken("Recommendations", {
- *   database: "app-db",
+ * const database = yield* Planetscale.MySQLDatabase("Database", {
+ *   clusterSize: "PS_10",
+ * });
+ *
+ * const token = yield* Planetscale.ServiceToken("Sync", {
+ *   database,
  *   accesses: ["read_database", "write_database"],
+ * });
+ * ```
+ *
+ * **Example:** Token for a Postgres database
+ * ```typescript
+ * const database = yield* Planetscale.PostgresDatabase("Database", {
+ *   clusterSize: "PS_10",
+ * });
+ *
+ * const token = yield* Planetscale.ServiceToken("Backups", {
+ *   database,
+ *   accesses: ["read_backups", "write_backups"],
+ * });
+ * ```
+ *
+ * **Example:** Token for an existing database by name
+ * ```typescript
+ * const token = yield* Planetscale.ServiceToken("Sync", {
+ *   database: "app-db",
+ *   accesses: ["read_database"],
+ * });
+ * ```
+ *
+ * ### Referencing a Database from Another Stack
+ * **Example:** Token for a database another stack owns
+ * ```typescript
+ * const database = yield* Planetscale.MySQLDatabase.ref("Database", {
+ *   stack: "shared-data",
+ * });
+ *
+ * const token = yield* Planetscale.ServiceToken("Sync", {
+ *   database,
+ *   accesses: ["read_deploy_request", "create_deploy_request"],
+ * });
+ * ```
+ *
+ * ### Rotating a Token
+ * **Example:** Rename the token to mint a replacement
+ * ```typescript
+ * // Changing `name` creates a new token; consumers are updated
+ * // before the previous token is revoked.
+ * const token = yield* Planetscale.ServiceToken("Sync", {
+ *   name: "sync-2026-11",
+ *   database,
+ *   accesses: ["read_database"],
  * });
  * ```
  *
@@ -143,14 +205,14 @@ export const ServiceTokenProvider = () =>
       // with an empty placeholder for the secret that was lost, so destroy
       // can revoke it.
       if (!olds) return undefined;
-      const organization = olds.organization ?? (yield* yield* Credentials).organization;
+      const organization = yield* organizationOf(olds);
       const [live] = yield* instanceTokens(organization, id, instanceId);
       return live
         ? {
             id: live.id,
             name: live.name,
             organization,
-            database: olds.database,
+            database: databaseName(olds.database),
             accesses: ordered(olds.accesses),
             token: Redacted.make(""),
           }
@@ -170,11 +232,13 @@ export const ServiceTokenProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      const organization = org ?? (yield* yield* Credentials).organization;
+      const organization =
+        org ?? databaseOrganization(news.database) ?? (yield* yield* Credentials).organization;
+      const database = databaseName(news.database);
       const name = yield* tokenName(id, instanceId, prefix);
       if (
         output.organization !== organization ||
-        output.database !== news.database ||
+        output.database !== database ||
         output.name !== name ||
         (olds && olds.name !== prefix)
       ) {
@@ -187,14 +251,15 @@ export const ServiceTokenProvider = () =>
       }
       return exactAccess(
         (yield* planetscale.listServiceTokenAccesses({ organization, id: output.id })).data,
-        news.database,
+        database,
         news.accesses,
       )
         ? undefined
         : ({ action: "update" } as const);
     }),
     reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
-      const organization = news.organization ?? (yield* yield* Credentials).organization;
+      const organization = yield* organizationOf(news);
+      const database = databaseName(news.database);
       const name = yield* tokenName(id, instanceId, news.name);
       let observed = output ? yield* getToken(output.organization, output.id) : undefined;
 
@@ -223,12 +288,12 @@ export const ServiceTokenProvider = () =>
               message: `The creation-only secret for service token ${live.id} is unavailable.`,
             });
           }
-          yield* ensureAccess(organization, live.id, news);
+          yield* ensureAccess(organization, live.id, database, news.accesses);
           return {
             id: live.id,
             name: live.name ?? name,
             organization,
-            database: news.database,
+            database,
             accesses: ordered(news.accesses),
             token,
           };
@@ -241,6 +306,28 @@ export const ServiceTokenProvider = () =>
       yield* deleteToken(output.organization, output.id);
     }),
   });
+
+// Resource references in props reach the provider as the database's
+// attributes, so a database prop is either a name or `{ name, organization }`.
+type DatabaseInput = string | { readonly name: string; readonly organization?: string };
+
+const databaseName = (database: ServiceTokenProps["database"]) => {
+  const input = database as unknown as DatabaseInput;
+  return typeof input === "string" ? input : input.name;
+};
+
+const databaseOrganization = (database: ServiceTokenProps["database"]) => {
+  const input = database as unknown as DatabaseInput;
+  return typeof input === "string" ? undefined : input.organization;
+};
+
+const organizationOf = Effect.fnUntraced(function* (props: ServiceTokenProps) {
+  return (
+    props.organization ??
+    databaseOrganization(props.database) ??
+    (yield* yield* Credentials).organization
+  );
+});
 
 const tokenName = (id: string, instanceId: string, prefix: string | undefined) =>
   createPhysicalName({ id, instanceId, prefix: prefix === undefined ? undefined : `${prefix}-` });
@@ -295,14 +382,15 @@ const exactAccess = (
 const ensureAccess = Effect.fn(function* (
   organization: string,
   id: string,
-  news: ServiceTokenProps,
+  database: string,
+  accesses: readonly ServiceTokenDatabaseAccess[],
 ) {
   const current = (yield* planetscale.listServiceTokenAccesses({ organization, id })).data;
   for (const entry of current) {
     if (
       entry.resource.type !== "Database" ||
-      entry.resource.name !== news.database ||
-      !news.accesses.some((access) => access === entry.access)
+      entry.resource.name !== database ||
+      !accesses.some((access) => access === entry.access)
     ) {
       yield* planetscale.removeServiceTokenAccess({
         organization,
@@ -312,12 +400,12 @@ const ensureAccess = Effect.fn(function* (
       });
     }
   }
-  const missing = ordered(news.accesses).filter(
+  const missing = ordered(accesses).filter(
     (access) =>
       !current.some(
         (entry) =>
           entry.resource.type === "Database" &&
-          entry.resource.name === news.database &&
+          entry.resource.name === database &&
           entry.access === access,
       ),
   );
@@ -325,15 +413,15 @@ const ensureAccess = Effect.fn(function* (
     yield* planetscale.addServiceTokenAccess({
       organization,
       id,
-      database: news.database,
+      database: database,
       access: missing,
     });
   }
   if (
     !exactAccess(
       (yield* planetscale.listServiceTokenAccesses({ organization, id })).data,
-      news.database,
-      news.accesses,
+      database,
+      accesses,
     )
   ) {
     return yield* new ServiceTokenError({
