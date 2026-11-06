@@ -16,6 +16,7 @@ import {
   type StoredValues,
 } from "alchemy/Auth/StoredAuthProvider";
 import * as Interaction from "alchemy/Interaction";
+import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -32,7 +33,7 @@ export const INFISICAL_OIDC_TOKEN_ENV = "INFISICAL_OIDC_TOKEN";
 /** Optional audience to request in the platform's OIDC token. */
 export const INFISICAL_OIDC_AUDIENCE_ENV = "INFISICAL_OIDC_AUDIENCE";
 
-const PROVIDER_NAME = "Infisical";
+export const INFISICAL_AUTH_PROVIDER_NAME = "Infisical";
 const API_TIMEOUT = Duration.seconds(30);
 
 /**
@@ -60,6 +61,8 @@ export type InfisicalAuthConfig = typeof InfisicalAuthConfigSchema.Type;
 export interface InfisicalResolvedCredentials {
   readonly token: Redacted.Redacted<string>;
   readonly apiBaseUrl: string;
+  /** When a minted access token expires, in epoch milliseconds; a pasted token has none. */
+  readonly expires?: number;
 }
 
 const apiBaseUrlField: ConfigureField = {
@@ -96,14 +99,21 @@ const accessTokenFields: ReadonlyArray<ConfigureField> = [
   apiBaseUrlField,
 ];
 
-const toCredentials = (
-  response: { readonly accessToken: string | Redacted.Redacted<string> },
+const toCredentials = Effect.fnUntraced(function* (
+  response: {
+    readonly accessToken: string | Redacted.Redacted<string>;
+    readonly expiresIn: number;
+  },
   apiBaseUrl: string | undefined,
-): InfisicalResolvedCredentials => ({
-  token: Redacted.isRedacted(response.accessToken)
-    ? response.accessToken
-    : Redacted.make(response.accessToken),
-  apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
+) {
+  const now = yield* Clock.currentTimeMillis;
+  return {
+    token: Redacted.isRedacted(response.accessToken)
+      ? response.accessToken
+      : Redacted.make(response.accessToken),
+    apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    expires: now + response.expiresIn * 1000,
+  } satisfies InfisicalResolvedCredentials;
 });
 
 /**
@@ -122,7 +132,7 @@ export const mintAccessToken = (config: {
     Retry.none,
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
-    Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
+    Effect.flatMap((response) => toCredentials(response, config.apiBaseUrl)),
     Effect.mapError((cause) =>
       AuthError.make({
         message:
@@ -148,7 +158,7 @@ export const mintAccessTokenFromOidc = (config: {
     Retry.none,
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
-    Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
+    Effect.flatMap((response) => toCredentials(response, config.apiBaseUrl)),
     Effect.mapError((cause) =>
       AuthError.make({
         message: `Infisical rejected the OIDC login for identity '${config.identityId}': ${cause.message}. Check that the identity's OIDC auth trusts this platform's issuer, subject, and audience.`,
@@ -251,7 +261,7 @@ const readEnvironment = Effect.gen(function* () {
  * credentials (recommended) or a pasted access token.
  */
 export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalResolvedCredentials>()(
-  PROVIDER_NAME,
+  INFISICAL_AUTH_PROVIDER_NAME,
   {
     configSchema: InfisicalAuthConfigSchema,
     configure: () =>
@@ -276,7 +286,11 @@ export const InfisicalAuth = AuthProviderLayer<InfisicalAuthConfig, InfisicalRes
         );
       }
       const method = input.method;
-      return validateFieldValues(PROVIDER_NAME, fieldsFor(method), input.values).pipe(
+      return validateFieldValues(
+        INFISICAL_AUTH_PROVIDER_NAME,
+        fieldsFor(method),
+        input.values,
+      ).pipe(
         Effect.map((values) => toConfig(method, values)),
         Effect.flatMap(verify),
       );
