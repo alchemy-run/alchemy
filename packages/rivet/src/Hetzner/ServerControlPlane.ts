@@ -243,6 +243,8 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
         servers.push(
           yield* Hetzner.Server(`${id}Engine${i}`, {
             serverType: props.serverType ?? "cx23",
+            // IPv4 only: a primary IP each counts against the project's limit.
+            enableIpv6: false,
             image: DOCKER_IMAGE,
             location,
             networks: [network],
@@ -294,6 +296,7 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
       });
       const edge = yield* Hetzner.Server(`${id}Edge`, {
         serverType: props.edgeServerType ?? "cx23",
+        enableIpv6: false,
         image: DOCKER_IMAGE,
         location,
         networks: [network],

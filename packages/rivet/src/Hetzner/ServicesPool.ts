@@ -68,6 +68,8 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
       for (let i = 0; i < (options.replicas ?? 1); i++) {
         yield* Hetzner.Server(`${id}Node${i}`, {
           serverType: options.serverType ?? "cx23",
+          // Services nodes only dial out, over IPv4.
+          enableIpv6: false,
           image: "docker-ce",
           location: options.location ?? "nbg1",
           firewalls: [firewall],
