@@ -323,22 +323,18 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   return { _tag: "Unknown" };
 };
 
-type ReadEntry = View.Any | Aggregate.Any | DomainStream.Any;
+type ReadEntry = View.Any | DomainStream.Any;
 type Reads<A extends Api.Any> = Extract<A["serves"][number], ReadEntry>;
 type ReadName<V extends ReadEntry> = V extends View.Any
   ? V["viewName"]
-  : V extends Aggregate.Any
-    ? V["aggregateName"]
-    : V extends DomainStream.Any
-      ? V["streamName"]
-      : never;
+  : V extends DomainStream.Any
+    ? V["streamName"]
+    : never;
 type ReadClient<V extends ReadEntry> = V extends View.Any
   ? Api.ViewClient<V>
-  : V extends Aggregate.Any
-    ? Api.AggregateClient<V>
-    : V extends DomainStream.Any
-      ? Api.StreamClient<V>
-      : never;
+  : V extends DomainStream.Any
+    ? Api.StreamClient<V>
+    : never;
 type ReadKey<V extends ReadEntry> = Parameters<ReadClient<V>["watch"]>[0];
 type StateOf<V extends ReadEntry> = Stream.Success<ReturnType<ReadClient<V>["watch"]>>["state"];
 type EntryOf<V extends ReadEntry> = Exclude<
@@ -386,7 +382,7 @@ export function make(api: Api.Any): unknown {
   const definitions = commandDefinitions(api) as Record<string, unknown>;
   const { Message } = definitions;
   for (const entry of api.serves) {
-    if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
+    if (entry.kind !== "View" && entry.kind !== "Stream") {
       continue;
     }
     const name = nameOf(entry);
@@ -415,10 +411,7 @@ export function make(api: Api.Any): unknown {
   return definitions;
 }
 
-const keySchemaOf = (entry: ReadEntry) =>
-  Schema.toType(
-    entry.kind === "Aggregate" ? entry.definition.id : Key.idSchemaOf(entry.definition.key),
-  );
+const keySchemaOf = (entry: ReadEntry) => entry.definition.key.pipe(Key.idSchemaOf, Schema.toType);
 
 /** A watch Snapshot with explicit absence for Foldkit Models. */
 export type Snapshot<State> = Readonly<{

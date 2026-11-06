@@ -5,7 +5,7 @@ description: How a stream keeps a keyed, append-only log that a projection write
 
 import DAG from "../../../components/DAG.astro";
 
-A stream is a keyed, append-only log: one ordered list of entries per key, kept for good and readable from any point. A [projection](/domain/projection) writes it; clients read it through an [Api](/domain/api), with the same middleware and `validate` as a view.
+A stream is a keyed, append-only log: one ordered list of entries per key, kept for good and readable from any point. A [projection](/domain/projection) writes it; clients read it through an [Api](/domain/api), guarded like a view.
 
 Its latest entry is its current value. So one stream answers both "what is it now?" and "tell me every change", which is what a client syncing state needs: the current value first, then everything after it.
 
@@ -151,13 +151,19 @@ Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the Dura
 
 ## Decide who may read it
 
-`validate` judges every read against the key's latest entry, and runs again on each new entry while a client watches.
+The declaration lists the `middleware` and `rejects` of its reads. Its Layer's `validate` judges every read against the key's latest entry, and runs again on each new entry while a client watches.
 
 ```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
-validate: Effect.fn(function* (_request, latest) {
-  yield* mustOwn(latest?.event.customerId ?? null);
-}),
+export const AccountCardLive = AccountCard.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
+      yield* mustOwn(latest?.event.customerId ?? null);
+    }),
+  ),
+);
 ```
+
+A stream that declares either needs its Layer, provided with the model's handlers.
 
 ## Use it as a value
 

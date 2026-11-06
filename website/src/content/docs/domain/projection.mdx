@@ -235,7 +235,7 @@ export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) 
 
 ## Serve it with a query
 
-A projection's store is yours, and a [query](/domain/query) serves it to clients: a typed method on the Api, with middleware, rejections, `validate` per request, `visible` per row, cursor paging and read-your-own-write. The example bank's ledger is the `AccountLedger` query, as private as the account it's about.
+A projection's store is yours, and a [query](/domain/query) serves it to clients: a typed method on the Api, with middleware, rejections, a handler that checks the caller, cursor paging and read-your-own-write. The example bank's ledger is the `AccountLedger` query, as private as the account it's about.
 
 ```typescript title="packages/domain/src/Ledger/AccountLedger.query.ts"
 export class AccountLedger extends Domain.Query("AccountLedger", {
@@ -245,11 +245,6 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   waitsFor: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* ({ account }) {
-    const summaries = yield* AccountSummary;
-    const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
-    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
-  }),
 }) {}
 ```
 
