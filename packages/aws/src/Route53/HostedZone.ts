@@ -212,10 +212,11 @@ export const HostedZoneProvider = () =>
               VPCRegion: props.vpc.vpcRegion as route53.VPCRegion,
               NextToken: nextToken,
             });
+            // The response omits the list entirely when the VPC has no zones.
             ids.push(
-              ...page.HostedZoneSummaries.filter((zone) => normalizeName(zone.Name) === target).map(
-                (zone) => normalizeId(zone.HostedZoneId),
-              ),
+              ...(page.HostedZoneSummaries ?? [])
+                .filter((zone) => normalizeName(zone.Name) === target)
+                .map((zone) => normalizeId(zone.HostedZoneId)),
             );
             nextToken = page.NextToken;
           } while (nextToken);
