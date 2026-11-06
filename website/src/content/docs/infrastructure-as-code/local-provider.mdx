@@ -286,14 +286,16 @@ export const Ingress = (options: { domain: string; name?: string }) => ({
 });
 ```
 
-`attach` returns the origin it answers at and follows three rules:
+`attach` returns the origin it answers at. A target is its stack, stage
+and `fqn` together, because one router serves every stack in the process.
+`attach` follows three rules:
 
-- Attaching the same `fqn` and listener again changes nothing.
-- Attaching an `fqn` to a new listener replaces its route.
+- Attaching the same target and listener again changes nothing.
+- Attaching a target to a new listener replaces its route.
 - Closing the `Scope` removes the route that call added, unless a later
-  attach for the same `fqn` took it over.
+  attach for the same target took it over.
 
-Key anything the router keeps by `fqn`, and name the route from
+Key anything the router keeps by the whole target, and name the route from
 `ingress.name`, else `target.id`. The stage is the CLI's name for it
 (`dev_alice`), which isn't a valid host label, so slugify it in hostnames.
 
