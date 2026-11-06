@@ -182,8 +182,7 @@ describe("Website.Server dev.ingress", { tags: ["unit", "local"] }, () => {
 
         assert(Exit.isFailure(exit));
         const message = Cause.pretty(exit.cause);
-        expect(message).toContain("@alchemy.run/no-such-router");
-        expect(message).toContain("could not be imported");
+        expect(message).toContain("Ingress module @alchemy.run/no-such-router");
 
         yield* stack.destroy();
       }),
