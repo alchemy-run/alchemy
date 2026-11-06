@@ -113,9 +113,11 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Kubernetes", "kubernetes", "Containers", "deployments · jobs · manifests · helm", [
     "/providers/kubernetes",
   ]),
+
   hub("Modal", "modal", "Sandboxes", "sandboxes · functions · images · volumes", [
     "/providers/modal",
   ]),
+  hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
     "/providers/cluster",

@@ -713,6 +713,60 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 - [Tokens](https://alchemy.run/turso/tokens) — Create tokens for apps that run outside your Stack.
 - [Team & organization](https://alchemy.run/turso/organization) — Invite teammates and change your Turso organization's settings.
 
+## Archil — start here
+
+Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.
+
+- [Archil](https://alchemy.run/archil) — Run commands, processes and programs serverlessly against durable disks, in Firecracker microVMs, with Alchemy. Declare disks, sandboxes, images and branches in TypeScript.
+- [What is Archil?](https://alchemy.run/archil/what-is-archil) — The concepts behind Archil — organizations and API keys, regions, disks, serverless exec, sandboxes, images, mounts, disk users, branches and egress policy — and how @alchemy.run/archil models each of them.
+- [Setup](https://alchemy.run/archil/setup) — Install the Archil provider, create an API key, and store it in a profile.
+
+## Archil — Tutorial
+
+- [Part 1: Your First Stack](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, create a Stack with an Archil disk, and deploy it.
+- [Part 2: Run a Program](https://alchemy.run/archil/tutorial/part-2) — Run an Effect HTTP program in its own Archil sandbox that stores files on the disk.
+- [Part 3: Testing](https://alchemy.run/archil/tutorial/part-3) — Deploy the stack in a test, call the program over HTTP, and check the file landed on the disk.
+- [Part 4: Stages](https://alchemy.run/archil/tutorial/part-4) — Deploy isolated copies of the stack with --stage, each with its own disk, sandbox and URL.
+- [Part 5: CI/CD](https://alchemy.run/archil/tutorial/part-5) — Deploy from GitHub Actions with a remote state store, a stage per pull request, and your Archil key as a repository secret.
+
+## Archil — Accounts & access
+
+- [Organization and keys](https://alchemy.run/archil/organization-and-keys) — How an Archil account or organization holds your disks, sandboxes and images, how an API key decides where Alchemy deploys, and what access each host gets instead of your key.
+- [Credentials and bindings](https://alchemy.run/archil/security/credentials) — What each host gets to reach Archil, deploy-time resources vs run-time clients, and who owns what your app creates.
+- [Network](https://alchemy.run/archil/security/network) — Control what a sandbox can reach, and add credentials to its requests on the way out.
+
+## Archil — Compute
+
+- [Choosing a runtime](https://alchemy.run/archil/compute/choosing-a-runtime) — Serverless exec, program sandboxes, sandboxes created at run time, and mounts on your own hosts, and when to use each.
+- [Programs](https://alchemy.run/archil/compute/programs) — Run your program in its own Archil sandbox, in the Effect or async form, at a public https URL.
+- [Sandboxes](https://alchemy.run/archil/compute/sandboxes) — Firecracker microVMs with disks mounted, declared as a dev box or created per task.
+- [Images](https://alchemy.run/archil/compute/images) — Boot sandboxes from public images, private registries, or a Dockerfile built on your machine and pushed for Archil to pull.
+
+## Archil — Frontend
+
+- [Websites](https://alchemy.run/archil/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to an Archil sandbox.
+- [Vite](https://alchemy.run/archil/frontend/vite) — Deploy a Vite SPA to Archil with Archil.Website.Vite: static assets served from its own Archil sandbox at a public https URL, and Vite's own dev server under alchemy dev.
+- [Static sites](https://alchemy.run/archil/frontend/static-site) — Deploy a static site to Archil with Archil.Website.StaticSite: run your build command and serve its output from its own Archil sandbox at a public https URL.
+- [React Router](https://alchemy.run/archil/frontend/react-router) — Deploy a React Router app to Archil with Archil.Website.ReactRouter: a program in its own Archil sandbox at a public https URL, and React Router's own dev server under alchemy dev.
+- [Foldkit](https://alchemy.run/archil/frontend/foldkit) — Deploy a Foldkit app to Archil with Archil.Website.Foldkit: a program in its own Archil sandbox at a public https URL, and Foldkit's own dev server under alchemy dev.
+- [TanStack Start](https://alchemy.run/archil/frontend/tanstack-start) — Deploy a TanStack Start app to Archil with Archil.Website.TanStackStart: a program in its own Archil sandbox at a public https URL, and TanStack Start's own dev server under alchemy dev.
+- [Next.js](https://alchemy.run/archil/frontend/nextjs) — Deploy a Next.js app to Archil with Archil.Website.Nextjs: a program in its own Archil sandbox at a public https URL, and Next.js's own dev server under alchemy dev.
+- [Vinext](https://alchemy.run/archil/frontend/vinext) — Deploy a vinext app to Archil with Archil.Website.Vinext: a program in its own Archil sandbox at a public https URL, and vinext's own dev server under alchemy dev.
+- [Nuxt](https://alchemy.run/archil/frontend/nuxt) — Deploy a Nuxt app to Archil with Archil.Website.Nuxt: a program in its own Archil sandbox at a public https URL, and Nuxt's own dev server under alchemy dev.
+- [Vocs](https://alchemy.run/archil/frontend/vocs) — Deploy a Vocs app to Archil with Archil.Website.Vocs: a program in its own Archil sandbox at a public https URL, and Vocs's own dev server under alchemy dev.
+- [SolidStart](https://alchemy.run/archil/frontend/solidstart) — Deploy a SolidStart app to Archil with Archil.Website.SolidStart: a program in its own Archil sandbox at a public https URL, and SolidStart's own dev server under alchemy dev.
+- [Astro](https://alchemy.run/archil/frontend/astro) — Deploy an Astro app to Archil with Archil.Website.Astro: a program in its own Archil sandbox at a public https URL, and Astro's own dev server under alchemy dev.
+- [SvelteKit](https://alchemy.run/archil/frontend/sveltekit) — Deploy a SvelteKit app to Archil with Archil.Website.SvelteKit: a program in its own Archil sandbox at a public https URL, and SvelteKit's own dev server under alchemy dev.
+- [Waku](https://alchemy.run/archil/frontend/waku) — Deploy a Waku app to Archil with Archil.Website.Waku: a program in its own Archil sandbox at a public https URL, and Waku's own dev server under alchemy dev.
+- [Octane](https://alchemy.run/archil/frontend/octane) — Deploy an Octane app to Archil with Archil.Website.Octane: a program in its own Archil sandbox at a public https URL, and Octane's own dev server under alchemy dev.
+
+## Archil — Storage
+
+- [Disks](https://alchemy.run/archil/storage/disks) — Create disks per user at run time, share a few at deploy time, run commands against them, and read their files by key.
+- [Mounting](https://alchemy.run/archil/storage/mounting) — Mount Archil disks in program sandboxes, your own Containers, and ECS tasks.
+- [Branches and checkpoints](https://alchemy.run/archil/storage/branches) — Seed a disk once, checkpoint it at deploy time, and copy a writable branch per session in milliseconds.
+- [Your own bucket](https://alchemy.run/archil/storage/your-own-bucket) — Keep a disk's files as ordinary objects in your own S3, R2, GCS or Azure bucket, with no keys for S3.
+
 ## Rivet
 
 Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
@@ -1064,4 +1118,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~231 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~238 KB) — only fetch it when you need to locate a specific resource's reference page.
