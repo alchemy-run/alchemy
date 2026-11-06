@@ -1,5 +1,5 @@
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { passMarker, unmovableMarker } from "@alchemy.run/cloudflare/Domain/Version";
+import { passMarker } from "@alchemy.run/cloudflare/Domain/Version";
 import { expect } from "@alchemy.run/test";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -132,37 +132,6 @@ export const backdatePasses = Effect.fn(function* (
       }),
     );
   }
-});
-
-/**
- * Record an earlier pass over `className` that left only objects it can't move,
- * as many as it lists now: with the pass the last deploy recorded, deploys stop
- * moving it (see `onlyUnmovableLeft`).
- */
-export const backdateUnmovable = Effect.fn(function* (scriptName: string, className: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const workflowName = yield* migrationWorkflow(scriptName);
-  const namespace = (yield* namespacesOf(scriptName))[className]!;
-  const instanceId = unmovableMarker(className, namespace, yield* holdingData(namespace), 1);
-  yield* workflows.createInstance({ accountId, workflowName, instanceId, params: { op: "mark" } });
-  yield* workflows.getInstance({ accountId, workflowName, instanceId, simple: true }).pipe(
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (instance) => instance.status === "complete",
-      times: 30,
-    }),
-  );
-});
-
-/** The migration runs the Worker's deploys have started: one per deploy that moved objects. */
-export const migrationRuns = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const workflowName = yield* migrationWorkflow(scriptName);
-  const ids = yield* workflows.listInstances.items({ accountId, workflowName }).pipe(
-    Stream.map((instance) => instance.id),
-    Stream.runCollect,
-  );
-  return Array.from(ids).filter((id) => id?.startsWith("mg-run-")).length;
 });
 
 /**

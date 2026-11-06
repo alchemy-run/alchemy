@@ -29,8 +29,6 @@ import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 import {
   backdatePasses,
-  backdateUnmovable,
-  migrationRuns,
   doBindings,
   movedBy,
   namespacesOf,
@@ -496,33 +494,31 @@ test.provider(
       yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
 
       // Once the move has settled, the next upload deletes the old classes. The saga's
-      // stays: the code from before versions addressed a run's objects by raw id, so
-      // the move can't learn their keys (see `moveListed`).
+      // waits for passes of its own: a run started just before the upgrade is listed
+      // nowhere until Cloudflare lists it.
       yield* backdatePasses(scriptName, Object.keys(legacy));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedNextWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({
-        "Billing.Domain": "Billing.Domain",
-        "Billing.ApproveWorkflow.BeforeVersions": "ApproveWorkflow",
-      });
-      // Once two passes far enough apart left only those objects, deploys stop moving it.
-      yield* backdateUnmovable(scriptName, "ApproveWorkflow");
-      const runs = yield* migrationRuns(scriptName);
-      // A different upload, so the Worker reconciles.
+      // Every class but the saga's is gone; the saga's may wait one more deploy, until a
+      // pass that moved all of its objects is far enough from an earlier one.
+      expect(Object.keys(yield* doBindings(scriptName))).toEqual(
+        expect.arrayContaining(["Billing.Domain"]),
+      );
+      expect(
+        Object.keys(yield* doBindings(scriptName)).filter(
+          (name) => name !== "Billing.Domain" && name !== "Billing.ApproveWorkflow.BeforeVersions",
+        ),
+      ).toEqual([]);
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedWorker };
         }),
       );
       yield* waitForVersion(url, 1);
-      expect(yield* migrationRuns(scriptName)).toBe(runs);
-      expect(Object.keys(yield* doBindings(scriptName)).sort()).toEqual([
-        "Billing.ApproveWorkflow.BeforeVersions",
-        "Billing.Domain",
-      ]);
+      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
