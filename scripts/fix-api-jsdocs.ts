@@ -25,6 +25,7 @@ const packages = [
   "infisical",
   "turso",
   "e2b",
+  "archil",
   "planetscale",
   "neon",
   "prisma",

@@ -1,3 +1,4 @@
+import * as Archil from "@alchemy.run/archil";
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
@@ -30,6 +31,7 @@ export default Alchemy.Stack(
       Stripe.providers(),
       Turso.providers(),
       E2B.providers(),
+      Archil.providers(),
     ),
     state: Cloudflare.state(),
   },
