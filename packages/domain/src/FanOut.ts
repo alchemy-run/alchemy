@@ -354,15 +354,19 @@ export const makeRelay = <P extends Pass, Item>(work: Work<P, Item>) => {
     roots: ReadonlyArray<Entry<Item>>,
     until: number,
     size: number = FRONTIER_SIZE,
+    expand: (path: string) => boolean = () => true,
   ) =>
     Effect.gen(function* () {
       let level: ReadonlyArray<Entry<Item>> = roots;
-      while (level.length < size && level.some((entry) => "path" in entry)) {
+      const listable = (entry: Entry<Item>) => "path" in entry && expand(entry.path);
+      while (level.length < size && level.some(listable)) {
         const next: Array<Entry<Item>> = [];
         const listings = yield* Effect.forEach(
           level,
           (entry): Effect.Effect<ReadonlyArray<Entry<Item>> | undefined> =>
-            "path" in entry ? listed(pass, entry.path, until) : Effect.succeed([entry]),
+            "path" in entry && listable(entry)
+              ? listed(pass, entry.path, until)
+              : Effect.succeed([entry]),
           { concurrency: RELAY_FANOUT },
         );
         for (const listing of listings) {
@@ -434,6 +438,11 @@ export interface RunWork<Plan, P extends Pass, Item> {
    * of items) sets 0, and paces them as they are.
    */
   readonly frontierSize?: number;
+  /**
+   * Which paths the root lists into its frontier (default every one). A path
+   * it leaves stays one entry: a subtree the relays list and split.
+   */
+  readonly expand?: (path: string) => boolean;
   /** Whether a run already started with `started` serves one asked for with `asked`. */
   readonly samePlan: (started: Plan, asked: Plan) => boolean;
 }
@@ -485,6 +494,7 @@ export const makeRun = <Plan, P extends Pass, Item>(
         run.roots(pass, state),
         deadline,
         run.frontierSize,
+        run.expand,
       );
       const todo: Array<Entry<Item>> = [];
       for (const entry of entries ?? [])

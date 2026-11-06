@@ -52,6 +52,10 @@ const COPY_BUDGET_MS = 20_000;
 
 /** An old object that doesn't know the move: it still runs the code from before the deploy. */
 const STALE = /not found on Durable Object/;
+/** How a forwarded call came back: answered, refused by a sealed object, or on older code. */
+type Forwarded = { readonly value: unknown } | { readonly sealed: true } | { readonly stale: true };
+/** What a sealed old object answers a forwarded call: the new object takes over and serves. */
+const SEALED = "domain object sealed: its data moved to the new object";
 /** How long an old object on older code is left alone: past the ~10s idle that moves it to new code. */
 const STALE_IDLE_MS = 15_000;
 /** How long a call waits, at most, for the old object to move to the deployed code. */
@@ -531,13 +535,14 @@ const router = (
             return true;
           case "alarm":
             return () => step(COPY_BUDGET_MS);
-          // The migration's call: move now, in this call, and answer once it's
-          // done or `waitMillis` passes. An alarm already copying carries on.
+          // The migration's call: answer once the move is done or `waitMillis`
+          // passes. The alarm does the copying, in an invocation of its own: run
+          // here, its calls would nest under the migration's, and Cloudflare
+          // limits how deep calls within a Worker go.
           case "domainMove":
             return (waitMillis: number) =>
               Effect.gen(function* () {
                 const until = (yield* Clock.currentTimeMillis) + waitMillis;
-                yield* step(waitMillis);
                 while (!owned() && (yield* Clock.currentTimeMillis) < until) {
                   yield* ensureDriven;
                   yield* Effect.sleep("100 millis");
@@ -545,19 +550,56 @@ const router = (
                 return owned();
               });
           default: {
-            // Until the move is done, the old object serves: it holds the data.
             if (LOCAL.has(prop)) return undefined;
-            const forward = forwardTo(forwarded, prop);
             // Every call makes sure the move is driven (a stalled one restarts),
             // and waits while the old object is left to move to the deployed code.
             const before = Effect.andThen(ensureDriven, holdWhileStale);
-            return typeof forward === "function"
-              ? (...args: ReadonlyArray<unknown>) =>
-                  Effect.andThen(
-                    before,
-                    (forward as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
-                  )
-              : Effect.andThen(before, forward as Effect.Effect<unknown>);
+            /** Serve here: the old object is sealed, so finish taking over first. */
+            const serveHere = (use: (member: unknown) => Effect.Effect<unknown>) =>
+              Effect.gen(function* () {
+                yield* step(COPY_BUDGET_MS);
+                if (!owned())
+                  return yield* Effect.die(
+                    new Error(`${name} is still taking over from its old object; try again`),
+                  );
+                return yield* use((instance as Record<string, unknown>)[prop]);
+              });
+            if (prop === "fetch")
+              // A sealed old object forwards to this one: never forward back.
+              return Effect.andThen(
+                before,
+                Move.moveState(raw)?.phase === "seal"
+                  ? serveHere((member) => member as Effect.Effect<unknown>)
+                  : (forwardTo(forwarded, prop) as Effect.Effect<unknown>),
+              );
+            // Until the move is done, the old object serves: it holds the data. A sealed
+            // one refuses (it would forward back here, and each call would bounce until
+            // Cloudflare's depth limit), and this object takes over and serves instead.
+            return (...args: ReadonlyArray<unknown>) =>
+              Effect.andThen(
+                before,
+                Effect.gen(function* () {
+                  if (Move.moveState(raw)?.phase === "seal")
+                    return yield* serveHere((member) =>
+                      (member as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
+                    );
+                  const answer = yield* from!.domainForward!(prop, args).pipe(
+                    Effect.map((value): Forwarded => ({ value })),
+                    Effect.catchCause((cause): Effect.Effect<Forwarded, unknown> => {
+                      const text = Cause.pretty(cause);
+                      if (text.includes(SEALED)) return Effect.succeed({ sealed: true } as const);
+                      // Code from before the deploy has no `domainForward`, and never forwards back.
+                      if (STALE.test(text)) return Effect.succeed({ stale: true } as const);
+                      return Effect.failCause(cause);
+                    }),
+                  );
+                  if ("value" in answer) return answer.value;
+                  if ("stale" in answer) return yield* from![prop]!(...args);
+                  return yield* serveHere((member) =>
+                    (member as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
+                  );
+                }),
+              );
           }
         }
       });
@@ -602,6 +644,17 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
         domainMoveSeal: () => Move.seal(raw, () => state.raw.getWebSockets()),
         domainMoveSql: (at: Move.SqlCursor | null) => Move.sqlPage(raw, at),
         domainMoveFinish: () => Move.finish(raw),
+        /** A call the new object forwards while it doesn't own the key: refused once sealed. */
+        domainForward: (prop: string, args: ReadonlyArray<unknown>) => {
+          if (Move.isSealing(raw)) return Effect.die(new Error(SEALED));
+          const member = instance[prop];
+          if (typeof member !== "function")
+            return Effect.die(new Error(`${prop} is not a method of ${route}`));
+          return Move.counted(
+            raw,
+            (member as (...a: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(...args),
+          );
+        },
       };
       return dynamic((prop) => {
         if (prop in moves) return moves[prop];
@@ -686,6 +739,10 @@ interface StoredPage {
 
 const pageKey = (target: string, n: string | number) => `mg:page:${target}:${n}`;
 const skipKey = (target: string) => `mg:skip:${target}`;
+/** The object that keeps page `n` of a run: the root takes no calls from the relay tree. */
+const pageObject = (target: string, n: number) => `page:${target}:${n}`;
+/** The object that counts a run's skipped objects. */
+const skipsObject = (target: string) => `skips:${target}`;
 
 /** How long a pass of a migration run keeps at it before the root starts another. */
 const MIGRATION_PASS_MS = 5 * 60_000;
@@ -740,82 +797,145 @@ const moveNamed = (resolver: Resolver, route: string, key: string, waitMillis: n
 /** Consumer keys a source answers per call, from its history. */
 const CONSUMERS_PAGE = 500;
 
-/**
- * Move a directory entry's object, then, for a source, every consumer object
- * its history reached: each consumer key, its scanner in the consumer's run,
- * and the stream keys a projection writes. `true` once all of them own their
- * data; an object that has moved answers at once, so asking again is cheap.
- */
+/** A source's consumer objects: a path the relays list from its history and split. */
+const CONSUMERS = "#cons:";
+
+/** A directory entry's object: `true` once it owns its data. */
 const moveEntry = (
   resolver: Resolver,
   item: Extract<MoveItem, { readonly s: string }>,
   waitMillis: number,
-) =>
+) => {
+  const entry = resolver.entry({
+    source: item.s,
+    id: item.i,
+    ...(item.g === undefined ? {} : { generation: item.g }),
+  });
+  return entry === undefined
+    ? Effect.succeed(true)
+    : moveNamed(resolver, entry.route, item.i, waitMillis);
+};
+
+/**
+ * A page of the objects a source's history reached: each consumer key, its
+ * scanner in the consumer's run, and the stream keys a projection writes.
+ * The source answers from its stored history whether or not it has moved.
+ */
+const listConsumers = (resolver: Resolver, ref: Backfill.SourceRef, after: string | undefined) =>
   Effect.gen(function* () {
-    const ref: Backfill.SourceRef = {
-      source: item.s,
-      id: item.i,
-      ...(item.g === undefined ? {} : { generation: item.g }),
-    };
     const entry = resolver.entry(ref);
-    if (entry === undefined) return true;
-    if (!(yield* moveNamed(resolver, entry.route, item.i, waitMillis))) return false;
-    if (!entry.source) return true;
-    const source = resolver.namespace.getByName(`${entry.route}/${item.i}`) as Stub;
-    let done = true;
-    for (let after = 0; ;) {
-      const page = yield* orDie<{
-        readonly consumers: ReadonlyArray<{
-          readonly target: Delivery["target"];
-          readonly key: string;
-        }>;
-        readonly next: number | null;
-      }>(source.mgConsumers!(item.i, after, CONSUMERS_PAGE));
-      const objects = new Set<string>();
-      for (const { target, key } of page.consumers) {
-        const routes = resolver.consumer(target);
-        if (routes === undefined) continue;
-        objects.add(`${routes.keys}/${key}`);
-        // A scanner of this source in the consumer's run (policies have no run).
-        if (routes.run !== routes.keys) objects.add(`${routes.run}/${resolver.scanner(ref)}`);
-        if (target.kind === "projection")
-          for (const stream of resolver.streams(target.name)) objects.add(`${stream}/${key}`);
-      }
-      const moved = yield* Effect.forEach(
-        [...objects],
-        (object) => {
-          const slash = object.indexOf("/");
-          return moveNamed(resolver, object.slice(0, slash), object.slice(slash + 1), waitMillis);
-        },
-        { concurrency: FanOut.RELAY_FANOUT },
-      );
-      if (moved.some((owned) => !owned)) {
-        done = false;
-        yield* Effect.logInfo(
-          `domain move: ${item.s}/${item.i} waits on ${[...objects].filter((_, i) => !moved[i]).join(", ")}`,
-        );
-      }
-      if (page.next === null) break;
-      after = page.next;
+    if (entry === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
+    const source = resolver.namespace.getByName(`${entry.route}/${ref.id}`) as Stub;
+    const page = yield* orDie<{
+      readonly consumers: ReadonlyArray<{
+        readonly target: Delivery["target"];
+        readonly key: string;
+      }>;
+      readonly next: number | null;
+    }>(source.mgConsumers!(ref.id, after === undefined ? 0 : Number(after), CONSUMERS_PAGE));
+    const objects = new Map<string, { readonly r: string; readonly n: string }>();
+    const add = (r: string, n: string) => objects.set(`${r}/${n}`, { r, n });
+    for (const { target, key } of page.consumers) {
+      const routes = resolver.consumer(target);
+      if (routes === undefined) continue;
+      add(routes.keys, key);
+      // A scanner of this source in the consumer's run (policies have no run).
+      if (routes.run !== routes.keys) add(routes.run, resolver.scanner(ref));
+      if (target.kind === "projection")
+        for (const stream of resolver.streams(target.name)) add(stream, key);
     }
-    return done;
+    return {
+      entries: [...objects.values()].map((ref) => ({ ref })),
+      ...(page.next === null ? {} : { next: String(page.next) }),
+    } satisfies FanOut.Listed<MoveItem>;
+  });
+
+/**
+ * What a path of a migration run lists: a directory node, a source's
+ * consumers, the consumers' runs, or a page of listed ids. Relays list paths
+ * themselves, never through the run's root: Cloudflare limits how deep calls
+ * within a Worker go, and calls into the root from deep in the tree would
+ * leave its own work deep too.
+ */
+const listPath = (classes: Classes, target: string, path: string, after: string | undefined) =>
+  Effect.gen(function* () {
+    // The model's directory: a node's own object, its child nodes and its entries.
+    if (path.startsWith(`${target}${DIRECTORY}`)) {
+      const resolver = classes.resolver;
+      if (resolver === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
+      const node = path.slice(`${target}${DIRECTORY}`.length);
+      const page = yield* orDie<Backfill.Listing>(
+        (resolver.namespace.getByName(`${resolver.directory}/node:${node}`) as Stub).list!(
+          node,
+          after,
+        ),
+      );
+      return {
+        entries: [
+          ...(after === undefined ? [{ ref: { r: resolver.directory, n: `node:${node}` } }] : []),
+          ...page.children.map((child) => ({ path: `${target}${DIRECTORY}${child}` })),
+          ...page.rows.flatMap((ref): ReadonlyArray<FanOut.Entry<MoveItem>> => {
+            const item = {
+              s: ref.source,
+              i: ref.id,
+              ...(ref.generation === undefined ? {} : { g: ref.generation }),
+            };
+            return resolver.entry(ref)?.source
+              ? [{ ref: item }, { path: `${target}${CONSUMERS}${JSON.stringify(item)}` }]
+              : [{ ref: item }];
+          }),
+        ],
+        ...(page.next === undefined ? {} : { next: page.next }),
+      } satisfies FanOut.Listed<MoveItem>;
+    }
+    // A source's consumer objects, from its history.
+    if (path.startsWith(`${target}${CONSUMERS}`)) {
+      const resolver = classes.resolver;
+      if (resolver === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
+      const item = JSON.parse(path.slice(`${target}${CONSUMERS}`.length)) as {
+        s: string;
+        i: string;
+        g?: number;
+      };
+      return yield* listConsumers(
+        resolver,
+        {
+          source: item.s,
+          id: item.i,
+          ...(item.g === undefined ? {} : { generation: item.g }),
+        },
+        after,
+      );
+    }
+    // Every consumer's run: its root records how far its history got.
+    if (path === `${target}${RUNS}`) {
+      const runs = classes.resolver?.runs() ?? [];
+      return {
+        entries: runs.map((run) => ({ ref: { r: run, n: RUN_ROOT } })),
+      } satisfies FanOut.Listed<MoveItem>;
+    }
+    // A page of listed ids, kept in an object of its own.
+    const n = Number(path.slice(path.lastIndexOf("#") + 1));
+    const page = yield* orDie<StoredPage | undefined>(
+      migrationStub(classes, pageObject(target, n)).mgPage!(target, n),
+    );
+    return {
+      entries: (page?.ids ?? []).map((id) => ({
+        ref: { c: page!.cls, ...(page!.bind ? { b: page!.bind } : {}), r: page!.route, id },
+      })),
+    } satisfies FanOut.Listed<MoveItem>;
   });
 
 /** How a migration run's relays list a page and move an object: see `FanOut`. */
 const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
   label: "move",
-  list: (pass, path, after) =>
-    orDie<FanOut.Listed<MoveItem>>(
-      migrationStub(classes, `run:${pass.target}`).mgList!(pass.target, path, after),
-    ),
+  list: (pass, path, after) => listPath(classes, pass.target, path, after),
   handle: (pass, item, waitMillis) => {
     if ("id" in item)
       return Effect.flatMap(moveListed(classes, item, waitMillis), (outcome) =>
         outcome === "skipped"
           ? Effect.as(
-              orDie(
-                migrationStub(classes, `run:${pass.target}`).mgSkip!(pass.target, item.c, item.id),
-              ),
+              orDie(migrationStub(classes, skipsObject(pass.target)).mgSkip!(pass.target, item.c)),
               true,
             )
           : Effect.succeed(outcome === "moved"),
@@ -880,15 +1000,17 @@ const migrationObject = (classes: Classes): ObjectImpl =>
             firstPhase: "move",
             nextPhase: () => "complete",
             pass: (target, _, deadline) => ({ target, deadline }),
-            // Each page is one entry: the root paces pages, and the relays spread a page's objects.
+            // The root lists the directory into its frontier, so its levels never nest relay
+            // calls (Cloudflare limits how deep calls within a Worker go). Pages and a source's
+            // consumers stay subtrees: the relays list and split them, a fan-out under each.
+            expand: (path) =>
+              !path.includes(CONSUMERS) && (path.includes(DIRECTORY) || path.endsWith(RUNS)),
             roots: (pass, state) => [
               ...state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
               ...(state.plan.walk
                 ? [{ path: `${pass.target}${DIRECTORY}` }, { path: `${pass.target}${RUNS}` }]
                 : []),
             ],
-            // Listed at the root into a few hundred entries: the directory's levels never
-            // nest relay calls (Cloudflare limits how deep calls within a Worker go).
             samePlan: (a, b) =>
               a.walk === b.walk &&
               a.pages.map((page) => `${page.cls}#${page.n}`).join(",") ===
@@ -906,64 +1028,16 @@ const migrationObject = (classes: Classes): ObjectImpl =>
         mgProgress: (target: string) =>
           Effect.gen(function* () {
             const progress = yield* run!.progress(target);
-            const skipped = (yield* storage.get<Record<string, number>>(skipKey(target))) ?? {};
+            const skipped = yield* orDie<Record<string, number>>(
+              migrationStub(classes, skipsObject(target)).mgSkipped!(target),
+            );
             return { ...progress, skipped };
           }),
-        /** What a path lists: the run's pages (its root), or a page's objects. */
+        /** What a path lists: see `listPath`. */
         mgList: (target: string, path: string, after?: string) =>
-          Effect.gen(function* () {
-            // The model's directory: a node's own object, its child nodes and its entries.
-            if (path.startsWith(`${target}${DIRECTORY}`)) {
-              const resolver = classes.resolver;
-              if (resolver === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
-              const node = path.slice(`${target}${DIRECTORY}`.length);
-              const page = yield* orDie<Backfill.Listing>(
-                (resolver.namespace.getByName(`${resolver.directory}/node:${node}`) as Stub).list!(
-                  node,
-                  after,
-                ),
-              );
-              return {
-                entries: [
-                  ...(after === undefined
-                    ? [{ ref: { r: resolver.directory, n: `node:${node}` } }]
-                    : []),
-                  ...page.children.map((child) => ({ path: `${target}${DIRECTORY}${child}` })),
-                  ...page.rows.map((ref) => ({
-                    ref: {
-                      s: ref.source,
-                      i: ref.id,
-                      ...(ref.generation === undefined ? {} : { g: ref.generation }),
-                    },
-                  })),
-                ],
-                ...(page.next === undefined ? {} : { next: page.next }),
-              } satisfies FanOut.Listed<MoveItem>;
-            }
-            // Every consumer's run: its root records how far its history got.
-            if (path === `${target}${RUNS}`) {
-              const runs = classes.resolver?.runs() ?? [];
-              return {
-                entries: runs.map((run) => ({ ref: { r: run, n: RUN_ROOT } })),
-              } satisfies FanOut.Listed<MoveItem>;
-            }
-            if (path === target) {
-              const state = yield* storage.get<{ plan: MovePlan }>(
-                `run:${encodeURIComponent(target)}`,
-              );
-              return {
-                entries: (state?.plan.pages ?? []).map((page) => ({ path: `${target}#${page.n}` })),
-              } satisfies FanOut.Listed<MoveItem>;
-            }
-            const page = yield* storage.get<StoredPage>(
-              pageKey(target, path.slice(path.lastIndexOf("#") + 1)),
-            );
-            return {
-              entries: (page?.ids ?? []).map((id) => ({
-                ref: { c: page!.cls, ...(page!.bind ? { b: page!.bind } : {}), r: page!.route, id },
-              })),
-            } satisfies FanOut.Listed<MoveItem>;
-          }),
+          listPath(classes, target, path, after),
+        /** A page of listed ids, kept in its own object (`pageObject`). */
+        mgPage: (target: string, n: number) => storage.get<StoredPage>(pageKey(target, n)),
         /** An object that can't be moved (it knows neither its name nor its key): its class is kept. */
         mgSkip: (target: string, className: string) =>
           storage.exclusive(
@@ -973,6 +1047,12 @@ const migrationObject = (classes: Classes): ObjectImpl =>
                 [skipKey(target)]: { ...skipped, [className]: (skipped[className] ?? 0) + 1 },
               });
             }),
+          ),
+        /** The skipped objects' counts by class, kept in their own object (`skipsObject`). */
+        mgSkipped: (target: string) =>
+          Effect.map(
+            storage.get<Record<string, number>>(skipKey(target)),
+            (skipped) => skipped ?? {},
           ),
         mgRelay: (name: string, pass: MovePass, entries: ReadonlyArray<FanOut.Entry<MoveItem>>) =>
           relay.run(name, pass, entries),
@@ -1003,16 +1083,23 @@ const migration = (params: MigrationParams) =>
   Effect.gen(function* () {
     if (params.op === "mark") return {};
     const env = (yield* WorkerEnvironment) as Record<string, any>;
-    const root = makeRpcStub<Stub>(
-      env[params.cls].getByName(`${MIGRATION_ROUTE}/run:${params.target}`),
-    );
+    const object = (key: string) =>
+      makeRpcStub<Stub>(env[params.cls].getByName(`${MIGRATION_ROUTE}/${key}`));
+    const root = object(`run:${params.target}`);
     const call = <A>(what: string, effect: Effect.Effect<unknown, unknown>) =>
       effect.pipe(Effect.mapError(failed(what))) as Effect.Effect<A, DomainMoveFailed>;
     if (params.op === "add") {
       for (const { n, ...page } of params.pages)
-        yield* task(`add-${n}`, call("keeping a page", root.mgAdd!(params.target, n, page)), {
-          retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
-        });
+        yield* task(
+          `add-${n}`,
+          call(
+            "keeping a page",
+            object(pageObject(params.target, n)).mgAdd!(params.target, n, page),
+          ),
+          {
+            retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
+          },
+        );
       return {};
     }
     yield* task("begin", call("starting the run", root.mgBegin!(params.target, params.plan)), {
