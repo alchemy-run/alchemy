@@ -29,6 +29,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { clearStoreCredentials } from "../StateStore/CredentialsFile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
@@ -93,10 +94,12 @@ const listVisibleAccounts: Effect.Effect<
   unknown,
   CfCredentialsModule.Credentials | HttpClient.HttpClient
 > = Effect.gen(function* () {
-  const listMemberships = yield* cfMemberships.listMemberships;
-  const membershipAccounts = yield* listMemberships({}).pipe(
-    Effect.map((response) =>
-      response.result.flatMap((membership) =>
+  // Both endpoints page at 20 by default; walk every page so users with more
+  // accounts than that can pick any of them.
+  const membershipAccounts = yield* cfMemberships.listMemberships.items({ perPage: 50 }).pipe(
+    Stream.runCollect,
+    Effect.map((memberships) =>
+      Array.from(memberships).flatMap((membership) =>
         membership.account != null &&
         (membership.status == null || membership.status === "accepted")
           ? [membership.account]
@@ -110,12 +113,13 @@ const listVisibleAccounts: Effect.Effect<
     ),
   );
   if (membershipAccounts.length > 0) return membershipAccounts;
-  const listAccounts = yield* cfAccounts.listAccounts;
-  const response = yield* listAccounts({});
-  yield* Effect.logDebug(
-    `Cloudflare: memberships listed 0 accounts; /accounts listed ${response.result.length}`,
+  const accounts = Array.from(
+    yield* cfAccounts.listAccounts.items({ perPage: 50 }).pipe(Stream.runCollect),
   );
-  return response.result;
+  yield* Effect.logDebug(
+    `Cloudflare: memberships listed 0 accounts; /accounts listed ${accounts.length}`,
+  );
+  return accounts;
 });
 
 const selectAccount = (accessToken: string) =>

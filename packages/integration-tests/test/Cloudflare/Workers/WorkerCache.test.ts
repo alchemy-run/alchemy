@@ -146,21 +146,27 @@ test.provider(
 
       // Purge by Cache-Tag through the runtime client. Retried until the
       // response parses as JSON — transient placeholders/5xx bodies throw
-      // and retry; a parsed `success: false` is a genuine failure and
-      // surfaces via the assertion.
+      // and retry — and reports success: the purge runs on a token the
+      // binding just minted, which can be rejected until it propagates. A
+      // purge still failing after the retries surfaces its errors below.
       const purged = yield* Effect.sync(() => `${worker.url}/purge?cb=${Date.now()}`).pipe(
         Effect.flatMap(fetchCached),
         Effect.flatMap((res) =>
           res.status === 200
-            ? Effect.try(() => JSON.parse(res.body) as { success: boolean })
+            ? Effect.try(() => JSON.parse(res.body) as { success: boolean; errors?: unknown })
             : Effect.fail(new Error(`Purge worker not ready: ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),
           times: 10,
         }),
+        Effect.repeat({
+          until: (result) => result.success,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
       );
-      expect(purged.success).toBe(true);
+      expect(purged).toMatchObject({ success: true });
 
       // A fresh invocation id proves the tag purge evicted the entry. The
       // marker check keeps a placeholder page (also ≠ cachedBody) from

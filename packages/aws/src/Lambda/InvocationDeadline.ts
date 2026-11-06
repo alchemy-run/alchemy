@@ -247,7 +247,10 @@ export const withInvocationDeadline: {
       }
       const remainingMs = context.getRemainingTimeInMillis();
       const graceMs =
-        options?.interrupt === false ? 0 : readTimeoutGrace(process.env[TIMEOUT_GRACE_ENV]);
+        options?.interrupt === false
+          ? 0
+          : // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the Lambda runtime's env, read per invocation; a ConfigProvider snapshot would miss it
+            readTimeoutGrace(process.env[TIMEOUT_GRACE_ENV]);
       const budgetMs = remainingMs - graceMs;
       // Leave room for the interrupt to land before the backstop; with no
       // grace the backstop carves its margin out of the budget, as before.

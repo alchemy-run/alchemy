@@ -16,7 +16,7 @@ import * as Path from "effect/Path";
 
 const { test } = Test.make({ providers: Layer.empty });
 
-describe("Alias urls", () => {
+describe("Alias urls", { tags: ["unit"] }, () => {
   it("name the port of a loopback http url", () => {
     for (const [url, port] of [
       ["http://localhost:4566", 4566],
@@ -47,7 +47,7 @@ describe("Alias urls", () => {
   });
 });
 
-describe("a running proxy's settings", () => {
+describe("a running proxy's settings", { tags: ["unit"] }, () => {
   const compatible: ProxyState = {
     pid: 4242,
     port: 443,
@@ -114,6 +114,7 @@ test(
     yield* fs.writeFileString(path.join(directory, "proxy.lan"), "192.168.1.20");
     expect(mismatches(yield* readState(directory), 443)).toHaveLength(1);
   }),
+  { tags: ["unit"] },
 );
 
 const withEnv = (env: Record<string, string>) =>
@@ -134,6 +135,7 @@ test(
     );
     expect(disabled).not.toContain("/state/portless/ca.pem");
   }),
+  { tags: ["unit"] },
 );
 
 test(
@@ -145,9 +147,10 @@ test(
     expect(yield* Portless.disabled.pipe(withEnv({}))).toBe(false);
     expect(yield* Portless.disabled.pipe(withEnv({ PORTLESS: "1" }))).toBe(false);
   }),
+  { tags: ["unit"] },
 );
 
-describe("a running proxy and LAN mode", () => {
+describe("a running proxy and LAN mode", { tags: ["unit"] }, () => {
   const loopback: ProxyState = {
     pid: 4242,
     port: 443,
@@ -177,7 +180,7 @@ describe("a running proxy and LAN mode", () => {
   });
 });
 
-describe("what a LAN proxy needs from the host", () => {
+describe("what a LAN proxy needs from the host", { tags: ["unit"] }, () => {
   const ready = { platform: "linux", address: "192.168.0.20", mdnsInstalled: true };
 
   it("is nothing when there is an address and the platform's mDNS tool", () => {
@@ -209,7 +212,7 @@ describe("what a LAN proxy needs from the host", () => {
   });
 });
 
-describe("the container that holds a port", () => {
+describe("the container that holds a port", { tags: ["unit"] }, () => {
   const ps = [
     "alchemy-floci\t0.0.0.0:4566->4566/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp",
     "postgres\t127.0.0.1:5432->5432/tcp",
@@ -231,7 +234,7 @@ describe("the container that holds a port", () => {
   });
 });
 
-describe("the errors that tell a person what to do", () => {
+describe("the errors that tell a person what to do", { tags: ["unit"] }, () => {
   it("name the exact sysctl for a Linux port that needs root", () => {
     const message = new Portless.ProxyPortUnprivileged({
       port: 443,
@@ -252,7 +255,7 @@ describe("the errors that tell a person what to do", () => {
   });
 });
 
-describe("claims", () => {
+describe("claims", { tags: ["unit"] }, () => {
   it("let one resource instance take a hostname again, and refuse another", () =>
     Effect.gen(function* () {
       const host = "claims.test.localhost";
@@ -287,4 +290,5 @@ test(
     // A process that is gone has none.
     expect(yield* processStartTime(2 ** 22 + 12345)).toBeUndefined();
   }),
+  { tags: ["unit"] },
 );

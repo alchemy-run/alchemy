@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -101,7 +102,7 @@ test.provider(
 
       const tunnel = yield* stack.deploy(
         Cloudflare.MagicTransit.IpsecTunnel("ListIpsec", {
-          name: "alch-ipsec-list1",
+          name: testName("alch-ipsec-list1"),
           cloudflareEndpoint: cfEndpoint,
           interfaceAddress: "10.213.12.10/31",
           psk: Redacted.make("alchemy-test-psk-list"),
@@ -111,7 +112,7 @@ test.provider(
       const all = yield* provider.list();
       expect(all.some((t) => t.tunnelId === tunnel.tunnelId)).toBe(true);
       const found = all.find((t) => t.tunnelId === tunnel.tunnelId)!;
-      expect(found.name).toEqual("alch-ipsec-list1");
+      expect(found.name).toEqual(testName("alch-ipsec-list1"));
       expect(found.accountId).toEqual(tunnel.accountId);
       // PSK is write-only — list never reads it back.
       expect(found.psk).toBeUndefined();
@@ -135,7 +136,7 @@ test.provider.skipIf(!entitled)(
 
       const tunnel = yield* stack.deploy(
         Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
-          name: "alch-ipsec-test1",
+          name: testName("alch-ipsec-test1"),
           cloudflareEndpoint: cfEndpoint,
           customerEndpoint: "198.51.100.20",
           interfaceAddress: "10.213.11.10/31",
@@ -146,20 +147,20 @@ test.provider.skipIf(!entitled)(
 
       expect(tunnel.tunnelId).toBeTruthy();
       expect(tunnel.accountId).toEqual(accountId);
-      expect(tunnel.name).toEqual("alch-ipsec-test1");
+      expect(tunnel.name).toEqual(testName("alch-ipsec-test1"));
       expect(tunnel.cloudflareEndpoint).toEqual(cfEndpoint);
       // The PSK is write-only — it is carried in state, never read back.
       expect(tunnel.psk && Redacted.value(tunnel.psk)).toEqual("alchemy-test-psk-1");
 
       // Out-of-band verification via the distilled API.
       const live = yield* getTunnel(accountId, tunnel.tunnelId);
-      expect(live.ipsecTunnel?.name).toEqual("alch-ipsec-test1");
+      expect(live.ipsecTunnel?.name).toEqual(testName("alch-ipsec-test1"));
       expect(live.ipsecTunnel?.description).toEqual("alchemy ipsec tunnel test");
 
       // Update mutable props in place — same tunnelId.
       const updated = yield* stack.deploy(
         Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
-          name: "alch-ipsec-test1",
+          name: testName("alch-ipsec-test1"),
           cloudflareEndpoint: cfEndpoint,
           customerEndpoint: "198.51.100.20",
           interfaceAddress: "10.213.11.10/31",
@@ -176,7 +177,7 @@ test.provider.skipIf(!entitled)(
       // The tunnel name is unique routing identity — changing it replaces.
       const replaced = yield* stack.deploy(
         Cloudflare.MagicTransit.IpsecTunnel("Ipsec", {
-          name: "alch-ipsec-test2",
+          name: testName("alch-ipsec-test2"),
           cloudflareEndpoint: cfEndpoint,
           interfaceAddress: "10.213.11.10/31",
           psk: Redacted.make("alchemy-test-psk-1"),
@@ -184,7 +185,7 @@ test.provider.skipIf(!entitled)(
       );
 
       expect(replaced.tunnelId).not.toEqual(tunnel.tunnelId);
-      expect(replaced.name).toEqual("alch-ipsec-test2");
+      expect(replaced.name).toEqual(testName("alch-ipsec-test2"));
       yield* expectGone(accountId, tunnel.tunnelId);
 
       yield* stack.destroy();

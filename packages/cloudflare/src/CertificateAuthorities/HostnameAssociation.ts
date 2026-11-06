@@ -2,8 +2,10 @@ import * as certificateAuthorities from "@distilled.cloud/cloudflare/certificate
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
@@ -117,6 +119,19 @@ export const HostnameAssociation = Resource<HostnameAssociation>(TypeId);
 export const isHostnameAssociation = (value: unknown): value is HostnameAssociation =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
+/** The hostname list still reads back non-empty after repeated clears. */
+export class HostnameAssociationNotCleared extends Data.TaggedError(
+  "HostnameAssociationNotCleared",
+)<{
+  zoneId: string;
+  mtlsCertificateId: string | undefined;
+  hostnames: string[];
+}> {
+  override get message() {
+    return `The ${this.mtlsCertificateId ?? "Managed CA"} hostname association in zone ${this.zoneId} still lists ${this.hostnames.join(", ")} after repeated clears`;
+  }
+}
+
 export const HostnameAssociationProvider = () =>
   Provider.succeed(HostnameAssociation, {
     stables: ["zoneId", "mtlsCertificateId"],
@@ -188,6 +203,17 @@ export const HostnameAssociationProvider = () =>
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
+      // A CA id that hasn't resolved yet (a certificate created in the same
+      // deploy) names no association we can observe. Reading with
+      // `undefined` would read the zone's managed-CA association instead, a
+      // different singleton, and report it as an unowned conflict.
+      if (
+        output === undefined &&
+        olds?.mtlsCertificateId !== undefined &&
+        typeof olds.mtlsCertificateId !== "string"
+      ) {
+        return undefined;
+      }
       const mtlsCertificateId =
         output !== undefined
           ? output.mtlsCertificateId
@@ -246,12 +272,38 @@ export const HostnameAssociationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // The association is a settings singleton — "delete" means clearing
-      // the hostname list. PUT of an empty list is naturally idempotent.
-      yield* certificateAuthorities.putHostnameAssociation({
-        zoneId: output.zoneId,
-        mtlsCertificateId: output.mtlsCertificateId,
-        hostnames: [],
+      // the hostname list with a PUT of an empty list, re-sent until the
+      // clear is visible: Cloudflare sometimes keeps the old list after the
+      // PUT. An association that outlives its CA survives the CA's delete,
+      // and a re-upload of the same certificate gets the same id, so the
+      // stale hostnames would come back attached to the new upload. Failing
+      // here keeps the CA (deleted after this) in place instead.
+      const clear = Effect.gen(function* () {
+        yield* certificateAuthorities.putHostnameAssociation({
+          zoneId: output.zoneId,
+          mtlsCertificateId: output.mtlsCertificateId,
+          hostnames: [],
+        });
+        const observed = yield* certificateAuthorities.getHostnameAssociation({
+          zoneId: output.zoneId,
+          mtlsCertificateId: output.mtlsCertificateId,
+        });
+        const hostnames = [...(observed.hostnames ?? [])];
+        if (hostnames.length > 0) {
+          return yield* new HostnameAssociationNotCleared({
+            zoneId: output.zoneId,
+            mtlsCertificateId: output.mtlsCertificateId,
+            hostnames,
+          });
+        }
       });
+      yield* clear.pipe(
+        Effect.retry({
+          while: (error) => error._tag === "HostnameAssociationNotCleared",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
+      );
     }),
   });
 

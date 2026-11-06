@@ -89,4 +89,5 @@ test(
     const error = yield* Effect.flip(Portless.Origin("Web", { proxy: { domain: "disabled" } }));
     expect(error._tag).toBe("OriginPortRequired");
   }).pipe(Effect.provideService(Stage, "dev_alice"), Effect.provide(disabled.config)),
+  { tags: ["unit"] },
 );

@@ -24,6 +24,7 @@ const resource = (id: string, props: object): ResourceLike => ({
   Attributes: {},
   Binding: undefined,
   Providers: undefined,
+  Lookup: undefined,
 });
 
 const state = (id: string, props: object): CreatedResourceState => ({

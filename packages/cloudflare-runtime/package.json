@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "keywords": [
     "alchemy",
@@ -779,6 +779,7 @@
     "rolldown": "catalog:",
     "toucan-js": "catalog:",
     "tsdown": "catalog:",
+    "tsrs": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:cloudflare-test-compat",

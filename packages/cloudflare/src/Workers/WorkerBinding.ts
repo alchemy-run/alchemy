@@ -16,7 +16,6 @@ import type { Database as D1Database } from "../D1/Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import type { App as FlagshipApp } from "../Flagship/App.ts";
 import type { Connection as Hyperdrive } from "../Hyperdrive/Connection.ts";
-import type { ConnectionLookup as HyperdriveLookup } from "../Hyperdrive/ConnectionLookup.ts";
 import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Stream as K2Stream } from "../K2/Stream.ts";
 import type { InstantNamespace } from "../KV/InstantNamespace.ts";
@@ -31,9 +30,8 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
-import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
 import type { AnyBindingEffect } from "./Binding.ts";
@@ -234,7 +232,6 @@ export type WorkerBindingResource =
   | LegacyPipeline
   | K2Stream
   | Hyperdrive
-  | HyperdriveLookup
   | VectorizeIndex
   | Secret
   | Worker
@@ -248,8 +245,8 @@ export type WorkerBindingResource =
   | DispatchNamespace
   | DurableObjectLike<any>
   | WorkflowLike<any>
+  | WorkflowLookup<any>
   | VpcService
-  | VpcServiceLookup
   // An account-level mTLS certificate becomes an `mtls_certificate` binding.
   | MtlsCertificate
   // A Container bound directly in `env` declares a container-backed Durable

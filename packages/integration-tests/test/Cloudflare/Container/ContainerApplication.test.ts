@@ -1581,6 +1581,51 @@ describe.concurrent(
       { timeout: 600_000 },
     );
 
+    // #2919: an image only in the local Docker (built on the machine or
+    // `docker load`ed) has no registry to pull from. Deploy publishes the
+    // local copy when the pull fails, and an image that is neither pullable
+    // nor local fails with the commands that fix it.
+    test.provider(
+      "image only in the local Docker is published from the local copy",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const docker = yield* Docker;
+          const localOnly = `alchemy-test.invalid/local-only-echo:${scratch.stage}`;
+          yield* docker.image.pull("mendhak/http-https-echo:41", "linux/amd64");
+          yield* docker.image.tag("mendhak/http-https-echo:41", localOnly);
+
+          const app = yield* scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Container("LocalOnlyImage", { image: localOnly })
+                  .Application;
+              }),
+            )
+            .pipe(Effect.ensuring(Effect.ignore(docker.image.remove(localOnly))));
+          expect(app.configuration.image).toMatch(
+            /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
+          );
+
+          const failure = yield* scratch
+            .deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Container("MissingImage", {
+                  image: `alchemy-test.invalid/missing:${scratch.stage}`,
+                }).Application;
+              }),
+            )
+            .pipe(Effect.flip);
+          const message = Cause.pretty(Cause.fail(failure));
+          expect(message).toContain("could not be pulled and is not in the local Docker");
+          expect(message).toContain("docker login");
+          expect(message).toContain("docker build --platform linux/amd64");
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
     // #1282: the image tag is `<repo>:<sourceHash>`, so any change to the
     // build inputs pushes a new tag — even when the resulting image is
     // byte-for-byte identical (a context file the Dockerfile never COPYs, a

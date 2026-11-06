@@ -20,6 +20,7 @@ export const publish = Effect.fn("DevTrust.publish")(function* () {
     ),
   );
   yield* Effect.sync(() => {
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports the CA files to every process this one spawns; Config is read-only
     process.env[DEV_TRUST_ENV] = files.join(delimiter);
   });
   return files;
@@ -53,6 +54,7 @@ export const nodeEnv = Effect.fn("DevTrust.nodeEnv")(function* () {
   // The process's own variables, not `Config`: they are what a child inherits
   // (a `.env` file's NODE_EXTRA_CA_CERTS never reaches it), as with the trace
   // parent and the log format.
+  // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads what child processes inherit, not configuration
   const trust = yield* Effect.sync(() => process.env[DEV_TRUST_ENV]);
   if (!trust) return {};
   // Without a provider's CA there is nothing to add to the caller's, which the

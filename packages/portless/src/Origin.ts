@@ -3,7 +3,7 @@ import { Stage } from "alchemy/Stage";
 import type * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HostnameInvalid, OriginPortRequired } from "./Errors.ts";
-import { hostnameOf, hostnameOrThrow, originOf, routedName } from "./internal/Hostname.ts";
+import { hostnameOf, originOf, routedName } from "./internal/Hostname.ts";
 import * as Mode from "./internal/Mode.ts";
 import { DEFAULT_PORT } from "./internal/State.ts";
 import type { Proxy } from "./Proxy.ts";
@@ -94,9 +94,13 @@ export function Origin(
       Output.asOutput(proxy.port ?? DEFAULT_PORT),
       Output.asOutput(proxy.tld ?? "localhost"),
     ).pipe(
-      // An Output maps with a pure function, so an invalid name is thrown, not failed.
-      Output.map(([name, proxyPort, tld]) =>
-        originOf(hostnameOrThrow(routedName(id, stage, name), tld), proxyPort),
+      // An Output resolves without an error channel, so an invalid name dies with the
+      // typed HostnameInvalid.
+      Output.mapEffect(([name, proxyPort, tld]) =>
+        hostnameOf(routedName(id, stage, name), tld).pipe(
+          Effect.map((hostname) => originOf(hostname, proxyPort)),
+          Effect.orDie,
+        ),
       ),
     );
   });

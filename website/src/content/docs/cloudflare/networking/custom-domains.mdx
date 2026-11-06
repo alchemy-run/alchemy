@@ -4,9 +4,10 @@ description: Serve Workers from your own domain — create or adopt a Zone, atta
 sidebar:
   order: 0
 ---
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 Every Worker gets a `workers.dev` URL by default, but production apps
-live on their own domain. This guide covers the pieces involved: the
+live on their own domain. That takes a few pieces: the
 Zone that holds your domain, the `domain` prop that attaches hostnames
 to a Worker, Routes for pattern-based dispatch, plain DNS records, and
 the account's `workers.dev` subdomain.
@@ -28,6 +29,17 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+<Fanout
+  item={{ title: "request", lines: ["GET https://api.example.com/v1/users"] }}
+  group="example.com · zone"
+  routes={[
+    { label: "custom domain", condition: ["api.example.com"], target: { label: "Api", type: "Worker" } },
+    { label: "route", condition: ["shop.example.com/*"], target: { label: "Shop", type: "Worker" }, match: false },
+    { label: "DNS record", condition: ["app.example.com → origin"], target: { label: "your server", type: "proxied origin" }, match: false },
+  ]}
+  caption="Every request to the zone arrives at Cloudflare first. A custom domain or a route decides which Worker answers it, and a hostname with neither goes to its DNS record's origin."
+/>
 
 ## Create a Zone
 
@@ -250,10 +262,14 @@ yield* Cloudflare.DNS.Record("AdminCname", {
 ```
 
 DNS records get the same adoption safety as routes: if a record with
-the same `(name, type)` already exists in the zone, Alchemy reports it
-as unowned and requires `adopt(true)` to take it over. This protects
-hand-edited records — especially apex `A`/`AAAA` and email
-DKIM/SPF records the dashboard often manages — from being clobbered.
+the same name, type and `content` (and `priority`, for MX and URI)
+already exists in the zone, Alchemy reports it as unowned and
+requires `adopt(true)` to take it over. A record with different
+content is left alone, and a new one is created beside it; only a
+CNAME, which a name holds just one of, is adopted whatever it points
+at. This protects hand-edited records — especially apex `A`/`AAAA`
+and email DKIM/SPF records the dashboard often manages — from being
+clobbered.
 
 ## Disable Workers on a path
 

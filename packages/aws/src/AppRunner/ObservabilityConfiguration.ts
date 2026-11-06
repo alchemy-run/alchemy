@@ -70,8 +70,18 @@ export interface ObservabilityConfiguration extends Resource<
     traceVendor: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ObservabilityConfigurationLookup
 > {}
+
+/**
+ * Props for {@link ObservabilityConfiguration.lookup}: find an observability configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ObservabilityConfigurationLookup {
+  /** The observability configuration name of the existing observability configuration. */
+  observabilityConfigurationName: string;
+}
 
 /**
  * An AWS App Runner observability configuration — enables AWS X-Ray tracing
@@ -104,6 +114,16 @@ export interface ObservabilityConfiguration extends Resource<
  *       observability.observabilityConfigurationArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing observability configuration
+ * `ObservabilityConfiguration.lookup` references an observability configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `observabilityConfigurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing observability configuration
+ * ```typescript
+ * const existing = AWS.AppRunner.ObservabilityConfiguration.lookup({ observabilityConfigurationName: "my-observability-configuration" });
  * ```
  *
  * @resource
@@ -208,6 +228,12 @@ export const ObservabilityConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ observabilityConfigurationName: name }) {
+          const config = yield* findLatest(name);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.observabilityConfigurationName ?? (yield* toName(id, olds ?? {}));
           const config = yield* findLatest(name);

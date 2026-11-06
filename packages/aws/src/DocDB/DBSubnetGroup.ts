@@ -63,8 +63,18 @@ export interface DBSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBSubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link DBSubnetGroup.lookup}: find a DocumentDB subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBSubnetGroupLookup {
+  /** The db subnet group name of the existing DocumentDB subnet group. */
+  dbSubnetGroupName: string;
+}
 
 /**
  * An Amazon DocumentDB subnet group — the set of VPC subnets a DocumentDB
@@ -77,6 +87,16 @@ export interface DBSubnetGroup extends Resource<
  * const subnetGroup = yield* DBSubnetGroup("DocDbSubnets", {
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing DocumentDB subnet group
+ * `DBSubnetGroup.lookup` references a DocumentDB subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbSubnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DocumentDB subnet group
+ * ```typescript
+ * const existing = AWS.DocDB.DBSubnetGroup.lookup({ dbSubnetGroupName: "my-documentdb-subnet-group" });
  * ```
  *
  * @resource
@@ -108,6 +128,21 @@ export const DBSubnetGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbSubnetGroupName }) {
+          const group = yield* readGroup(dbSubnetGroupName);
+          if (!group?.DBSubnetGroupName) return undefined;
+          return {
+            dbSubnetGroupName: group.DBSubnetGroupName,
+            dbSubnetGroupArn: group.DBSubnetGroupArn,
+            vpcId: group.VpcId,
+            subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
+              subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
+            ),
+            status: group.SubnetGroupStatus,
+            supportedNetworkTypes: group.SupportedNetworkTypes,
+            tags: {},
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

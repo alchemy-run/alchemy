@@ -91,6 +91,13 @@ export type DatabaseProps = {
    *
    * Pending migrations are detected on each deploy and applied in order as
    * part of `update`.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -130,8 +137,27 @@ export type Database = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a D1 database this stack doesn't
+ * manage, by its id or its name.
+ */
+export type DatabaseLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing database.
+       */
+      databaseId: string;
+    }
+  | {
+      /**
+       * The name of the existing database.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare D1 serverless SQL database built on SQLite.
@@ -262,6 +288,31 @@ export type Database = Resource<
  *   .run();
  * ```
  *
+ * ### Looking up an existing database
+ * `Database.lookup` binds a database Alchemy doesn't manage (created in the
+ * dashboard, with wrangler or by another stack), found by `databaseId` or
+ * `name`. It is read during plan/deploy and never created, migrated, updated
+ * or deleted.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const db = yield* Cloudflare.D1.QueryDatabase(
+ *   Cloudflare.D1.Database.lookup({ name: "app" }),
+ * );
+ * ```
+ *
+ * **Example:** By ID, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     DB: Cloudflare.D1.Database.lookup({
+ *       databaseId: "4f3a1c2e-8b7d-4e6f-9a0b-1c2d3e4f5a6b",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/d1/
  *
  * @resource
@@ -357,6 +408,36 @@ export const ProviderLive = () =>
           ),
         ),
       );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const databaseId =
+        "databaseId" in props
+          ? props.databaseId
+          : yield* d1.listDatabases.items({ accountId, name: props.name }).pipe(
+              Stream.filter((db) => db.name === props.name),
+              Stream.runHead,
+              Effect.map((match) => Option.getOrUndefined(match)?.uuid ?? undefined),
+            );
+      if (!databaseId) return undefined;
+      const db = yield* d1
+        .getDatabase({ accountId, databaseId })
+        .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.undefined));
+      if (!db) return undefined;
+      return {
+        databaseId: db.uuid ?? databaseId,
+        databaseName: db.name ?? databaseId,
+        // Distilled widened generated string enums to open unions.
+        jurisdiction: (db.jurisdiction ?? "default") as Jurisdiction,
+        readReplication: (db.readReplication ?? undefined) as
+          | { mode: "auto" | "disabled" }
+          | undefined,
+        accountId,
+        migrationsDir: undefined,
+        migrationsTable: undefined,
+        migrationsHashes: {},
+        importHashes: {},
+      };
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

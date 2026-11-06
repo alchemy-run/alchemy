@@ -8,7 +8,7 @@ import { PlatformServices } from "../Util/PlatformServices.ts";
 import { renderPlanning } from "./commands/render.ts";
 import { renderNukeDelete, renderNukeScan, reviewNuke } from "./components/view/Nuke.tsx";
 import { stackOutputsView } from "./components/view/StackOutputs.tsx";
-import { selectCliServices } from "./selectCli.ts";
+import { selectRenderer } from "./selectCli.ts";
 
 /**
  * The CLI's terminal UI for scripts that drive `alchemy/Alchemist`
@@ -35,10 +35,7 @@ export interface RenderablePlan {
  * non-interactive terminal. Provide it after `Alchemist.layer()`:
  * `Effect.provide([Alchemist.layer(), SigilRenderer.layer()])`.
  */
-export const layer = () =>
-  Layer.provideMerge(selectCliServices(), Interaction.layer()).pipe(
-    Layer.provide(PlatformServices),
-  );
+export const layer = () => selectRenderer().pipe(Layer.provide(PlatformServices));
 
 /** Planning progress (import, services, state, per-resource diffing) around a `plan` call. */
 export const planning = renderPlanning;

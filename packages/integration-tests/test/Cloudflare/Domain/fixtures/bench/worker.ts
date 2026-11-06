@@ -36,6 +36,15 @@ export class Before extends Domain.Model("Ledger", { aggregates: [Account] }) {}
 /** The second deploy adds one view, keyed by account: one consumer key per instance. */
 export class After extends Domain.Model("Ledger", { aggregates: [Account], views: [Deposits] }) {}
 
+/** The view at version 1: keyed by account, so rebuilt in place. */
+export class DepositsV1 extends Domain.View("Deposits", { ...Deposits.definition, version: 1 }) {}
+
+/** The second deploy with the view at version 1. */
+export class AfterV1 extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [DepositsV1],
+}) {}
+
 /** The second deploy of a depth run: a summary per account. */
 export class AfterSummary extends Domain.Model("Ledger", {
   aggregates: [Account],
@@ -50,7 +59,7 @@ export class AfterTotal extends Domain.Model("Ledger", {
 
 /** The view a benchmark adds in its second deploy, if any. */
 export type BenchView =
-  | { readonly kind: "deposits"; readonly view: typeof Deposits }
+  | { readonly kind: "deposits"; readonly view: typeof Deposits | typeof DepositsV1 }
   | { readonly kind: "summary"; readonly view: typeof Summary }
   | { readonly kind: "total"; readonly view: typeof BankTotal };
 
@@ -78,16 +87,16 @@ export const benchWorker = (version: string, added?: BenchView) =>
         if (path[1] === "view") {
           const key = path[2]!;
           const state: unknown = deposits
-            ? Option.getOrNull(yield* deposits.query(Account.ref(key)))
+            ? Option.getOrNull(yield* deposits.get(Account.ref(key)))
             : summary
-              ? Option.getOrNull(yield* summary.query(Account.ref(key)))
+              ? Option.getOrNull(yield* summary.get(Account.ref(key)))
               : total
-                ? Option.getOrNull(yield* total.query(key))
+                ? Option.getOrNull(yield* total.get(key))
                 : null;
           return yield* HttpServerResponse.json(state);
         }
         if (path[1] === "account") {
-          return yield* HttpServerResponse.json(yield* accounts.state(path[2]!));
+          return yield* HttpServerResponse.json(yield* accounts.get(path[2]!));
         }
         if (path[1] === "history") {
           const history = deposits
