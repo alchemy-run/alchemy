@@ -53,9 +53,9 @@ const podTrustPolicy = {
 // Full deploy test on its own Auto Mode cluster (~10 min create, ~5 min
 // delete), so it skips under `--fast`. Deploys an association, moves it to a
 // second role and back, asserts it appears in the exhaustively-paginated
-// `list()`, then tears down. Regression: every update sent the same
-// clientRequestToken, so EKS answered the move back as a retry of the first
-// move and left the association on the second role.
+// `list()`, then tears down. Two updates in a row also cover the per-request
+// clientRequestToken, though EKS applied pod identity updates even when the
+// token repeated (unlike Addon, Cluster and Nodegroup updates).
 test.provider.skipIf(!!process.env.FAST)(
   "updates the role and lists the deployed pod identity association",
   (stack) =>
