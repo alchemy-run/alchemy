@@ -1,11 +1,14 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { declareDurableObjectApplication } from "@alchemy.run/cloudflare/Containers/DurableObjectApplication";
 import { WorkerPreviewConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as containers from "@distilled.cloud/cloudflare/containers";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as path from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -150,6 +153,71 @@ describe.concurrent(
           yield* stack.destroy();
         }).pipe(logLevel),
       { timeout: 240_000 },
+    );
+
+    test.provider(
+      "Preview of a Worker with a container-backed Durable Object starts its container",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { parent, preview, application } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const parent = yield* Cloudflare.Worker("ContainerPreviewParent", {
+                script: script("container-parent"),
+              });
+              const shell = Cloudflare.Container("PreviewShell", {
+                schedulingPolicy: "durable_object",
+                image: "alpine:3.21",
+              });
+              const preview = yield* Cloudflare.Worker("ContainerPreview", {
+                main: path.resolve(import.meta.dirname, "fixtures/preview-container/worker.ts"),
+                env: {
+                  SANDBOX: Cloudflare.DurableObject("PreviewSandbox", { containers: [shell] }),
+                },
+                preview: { of: parent },
+              });
+              const application = yield* declareDurableObjectApplication(preview, "PreviewSandbox");
+              return { parent, preview, application };
+            }),
+          );
+
+          // The Preview reports its own namespace, and the class's container
+          // application is attached to it.
+          const namespaceId = preview.durableObjectNamespaces.PreviewSandbox;
+          expect(namespaceId).toBeDefined();
+          expect(application.durableObjects?.namespaceId).toEqual(namespaceId);
+
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* containers.getContainerApplication({
+            accountId,
+            applicationId: application.applicationId,
+          });
+          expect(observed.durableObjects?.namespaceId).toEqual(namespaceId);
+
+          yield* expectUrlContains(preview.url!, "alpine 3.21", {
+            label: "the Preview's Durable Object starts its container",
+            timeout: "180 seconds",
+          });
+
+          yield* stack.destroy();
+
+          const applicationGone = yield* containers
+            .getContainerApplication({ accountId, applicationId: application.applicationId })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(true)),
+            );
+          expect(applicationGone).toBe(true);
+          const previewGone = yield* workers
+            .getPreview({ accountId, workerId: parent.workerName, previewId: preview.previewId! })
+            .pipe(
+              Effect.map(() => false),
+              Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.succeed(true)),
+            );
+          expect(previewGone).toBe(true);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
     );
 
     test.provider(
