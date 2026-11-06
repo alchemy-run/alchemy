@@ -84,6 +84,12 @@ export interface SiblingTransactionResult {
   snapshot: Snapshot;
 }
 
+export interface NestedTransactionResult {
+  failure: string;
+  counts: BookkeepingCounts;
+  snapshot: Snapshot;
+}
+
 export interface BookkeepingCounts {
   schemaChecks: number;
   reconciliations: number;
@@ -673,6 +679,51 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               return result;
             }),
           ).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+        }),
+        nestedTransactions: Effect.fn(function* () {
+          let failure = "";
+          const insert = (value: string) =>
+            storage.sql.exec("INSERT INTO application_values (value) VALUES (?)", value);
+          const counts = yield* measureBookkeeping(
+            storage.transaction(
+              Effect.gen(function* () {
+                yield* storage.put("application", "outer");
+                yield* onArchive.schedule("outer", {
+                  after: "1 second",
+                  payload: { value: "outer" },
+                });
+                failure = yield* storage
+                  .transaction(
+                    Effect.gen(function* () {
+                      yield* insert("inner-failed");
+                      yield* onArchive.schedule("inner-failed", {
+                        after: "1 second",
+                        payload: { value: "inner-failed" },
+                      });
+                      return yield* new Rollback({ value: "inner-failure" });
+                    }),
+                  )
+                  .pipe(Effect.catchTag("Rollback", (error) => Effect.succeed(error.value)));
+                yield* storage.transaction(
+                  Effect.fn(function* (txn: Cloudflare.DurableObjectTransaction) {
+                    yield* insert("inner-rolled-back");
+                    yield* onSecondary.schedule("inner-rolled-back", {
+                      after: "1 second",
+                      payload: { value: "inner-rolled-back" },
+                    });
+                    yield* txn.rollback();
+                  }),
+                );
+                yield* storage.transaction(insert("inner-committed"));
+              }),
+            ),
+          );
+          const result: NestedTransactionResult = {
+            failure,
+            counts,
+            snapshot: yield* snapshot(),
+          };
+          return result;
         }),
         rollbackExplicit: Effect.fn(function* () {
           const describeOperation = <A, E>(

@@ -20,7 +20,7 @@ import * as Scope from "effect/Scope";
 import * as Tracer from "effect/Tracer";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
-import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
+import { fromDurableObjectStorage, inStorageTransaction } from "./DurableObjectStorage.ts";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 
 type InvocationServices = RuntimeContext | DurableObjectState | Scope.Scope;
@@ -217,7 +217,7 @@ const makeAlarmCallback = <Payload, E, R>(
 
     const raw = state.raw.storage;
     const transaction = <A, R>(effect: Effect.Effect<A, CallbackError, R>) =>
-      state.storage.transaction(effect).pipe(
+      inStorageTransaction(raw, effect).pipe(
         Effect.mapError((cause) =>
           cause._tag === "CallbackError"
             ? cause

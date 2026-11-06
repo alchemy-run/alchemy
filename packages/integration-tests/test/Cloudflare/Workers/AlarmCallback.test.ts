@@ -17,6 +17,7 @@ import type {
   FailedBatchResult,
   RegistrationResult,
   RollbackResult,
+  NestedTransactionResult,
   SiblingTransactionResult,
   Snapshot,
 } from "./fixtures/alarm-callback/object.ts";
@@ -273,6 +274,31 @@ describe.concurrent.each([
         { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
       );
     }
+
+    test(
+      "nested transactions undo only their own writes and jobs",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = `${url}/nested-transactions`;
+        const result = yield* json<NestedTransactionResult>(`${base}/nested-transactions`, "POST");
+        expect(result.failure).toBe("inner-failure");
+        expect(result.snapshot.application).toBe("outer");
+        expect(result.snapshot.rows).toEqual([{ value: "inner-committed" }]);
+        expect(result.snapshot.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
+          "archive:outer",
+        ]);
+        // The outermost transaction still reconciles the native alarm once.
+        expect(result.counts).toEqual({
+          schemaChecks: 1,
+          reconciliations: 1,
+          setAlarm: 1,
+          deleteAlarm: 0,
+        });
+        const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
+        expect(deliveries(delivered)).toEqual(["archive:outer"]);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
 
     test(
       "preserves getAlarm observations and explicit native alarm write ordering in transactions",

@@ -16,9 +16,9 @@ export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
 export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
   Effect.gen(function* () {
     const transaction = (yield* ActiveStorageTransactions).get(storage);
-    if (transaction?.alarmTablesEnsured) return;
+    if (transaction?.alarms.tablesEnsured) return;
     yield* initializeAlarmTables(storage);
-    if (transaction !== undefined) transaction.alarmTablesEnsured = true;
+    if (transaction !== undefined) transaction.alarms.tablesEnsured = true;
   });
 
 const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
@@ -91,7 +91,7 @@ export const reconcileDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
   Effect.gen(function* () {
     const transaction = (yield* ActiveStorageTransactions).get(storage);
     if (transaction !== undefined) {
-      transaction.alarmDirty = true;
+      transaction.alarms.dirty = true;
     } else {
       yield* reconcileAlarm(storage);
     }
@@ -101,9 +101,9 @@ export const reconcileDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
 export const flushDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
   Effect.gen(function* () {
     const transaction = (yield* ActiveStorageTransactions).get(storage);
-    if (transaction?.alarmDirty && !transaction.rolledBack) {
+    if (transaction?.alarms.dirty && !transaction.rolledBack) {
       yield* reconcileAlarm(storage);
-      transaction.alarmDirty = false;
+      transaction.alarms.dirty = false;
     }
   });
 

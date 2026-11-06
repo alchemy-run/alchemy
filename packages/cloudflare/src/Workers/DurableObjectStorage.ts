@@ -58,7 +58,10 @@ const settledTransaction = (
       : Effect.promise(() => transaction.settled).pipe(Effect.andThen(settledTransaction(storage)));
   });
 
-/** @internal Joins an owned transaction, or starts a native transaction. */
+/**
+ * @internal Starts a native transaction. Inside another transaction, workerd
+ * runs it as a savepoint: its failure or rollback leaves the outer one intact.
+ */
 function withStorageTransaction<A, E, R>(
   storage: cf.DurableObjectStorage,
   effect: Effect.Effect<A, E, R>,
@@ -73,34 +76,9 @@ function withStorageTransaction<A, E, R>(
 ): Effect.Effect<A, E | DurableObjectStorageError, R> {
   return Effect.gen(function* () {
     const transactions = yield* ActiveStorageTransactions;
-    const existing = transactions.get(storage) ?? (yield* settledTransaction(storage));
-    const evaluate = (transaction: ActiveStorageTransaction) =>
-      Effect.suspend(() =>
-        typeof body === "function"
-          ? body(
-              makeDurableObjectTransaction(
-                transaction.transaction,
-                checkTransactionOwner(transaction).pipe(Effect.orDie),
-                checkTransactionOwner(transaction, true).pipe(
-                  Effect.andThen(() =>
-                    Effect.sync(() => {
-                      if (!transaction.rolledBack) {
-                        transaction.transaction.rollback();
-                        transaction.rolledBack = true;
-                      }
-                    }),
-                  ),
-                  Effect.orDie,
-                ),
-                flushDurableObjectAlarm(storage),
-              ),
-            )
-          : body,
-      );
-
-    if (existing !== undefined) {
-      yield* checkTransactionOwner(existing);
-      return yield* evaluate(existing);
+    const parent = transactions.get(storage) ?? (yield* settledTransaction(storage));
+    if (parent !== undefined) {
+      yield* checkTransactionOwner(parent);
     }
 
     const context = yield* Effect.context<R>();
@@ -114,15 +92,51 @@ function withStorageTransaction<A, E, R>(
         let failure: Exit.Failure<A, E> | undefined;
         let currentTransaction: ActiveStorageTransaction | undefined;
         const settlement = Promise.withResolvers<void>();
-        const release = () => {
+        const alarms = parent?.alarms ?? { tablesEnsured: false, dirty: false };
+        const tablesEnsured = alarms.tablesEnsured;
+        // A rolled-back savepoint undoes its scheduler writes, so the
+        // enclosing transaction re-checks the tables and the alarm.
+        const discardAlarms = () => {
+          if (parent !== undefined) {
+            alarms.tablesEnsured = tablesEnsured;
+            alarms.dirty = true;
+          }
+        };
+        const release = (committed: boolean) => {
           if (currentTransaction !== undefined) {
             currentTransaction.active = false;
             if (activeStorageTransactions.get(storage) === currentTransaction) {
-              activeStorageTransactions.delete(storage);
+              if (parent === undefined) activeStorageTransactions.delete(storage);
+              else activeStorageTransactions.set(storage, parent);
             }
           }
+          if (!committed) discardAlarms();
           settlement.resolve();
         };
+        const evaluate = (transaction: ActiveStorageTransaction) =>
+          Effect.suspend(() =>
+            typeof body === "function"
+              ? body(
+                  makeDurableObjectTransaction(
+                    transaction.transaction,
+                    checkTransactionOwner(transaction).pipe(Effect.orDie),
+                    checkTransactionOwner(transaction, true).pipe(
+                      Effect.andThen(() =>
+                        Effect.sync(() => {
+                          if (!transaction.rolledBack) {
+                            transaction.transaction.rollback();
+                            transaction.rolledBack = true;
+                            discardAlarms();
+                          }
+                        }),
+                      ),
+                      Effect.orDie,
+                    ),
+                    flushDurableObjectAlarm(storage),
+                  ),
+                )
+              : body,
+          );
 
         yield* Effect.addFinalizer(
           Effect.fn(function* () {
@@ -148,7 +162,7 @@ function withStorageTransaction<A, E, R>(
 
         return yield* Effect.callback<A, E | DurableObjectStorageError>((resume) => {
           const reject = (cause: unknown) => {
-            release();
+            release(false);
             resume(
               failure !== undefined && cause === failure
                 ? Effect.failCause(failure.cause)
@@ -172,11 +186,10 @@ function withStorageTransaction<A, E, R>(
               }
               const transaction: ActiveStorageTransaction = {
                 transaction: txn,
+                alarms,
                 owner: undefined,
                 active: true,
                 rolledBack: false,
-                alarmTablesEnsured: false,
-                alarmDirty: false,
                 settled: settlement.promise,
               };
               currentTransaction = transaction;
@@ -193,7 +206,11 @@ function withStorageTransaction<A, E, R>(
                     transaction.owner = fiber;
                     return evaluate(transaction).pipe(
                       Effect.scoped,
-                      Effect.tap(() => flushDurableObjectAlarm(storage)),
+                      // Nested transactions commit into the outermost one,
+                      // which reconciles the alarm once.
+                      Effect.tap(() =>
+                        parent === undefined ? flushDurableObjectAlarm(storage) : Effect.void,
+                      ),
                     );
                   }),
                   { scheduler },
@@ -210,7 +227,7 @@ function withStorageTransaction<A, E, R>(
               });
             });
             native.then((value) => {
-              release();
+              release(true);
               resume(Effect.succeed(value));
             }, reject);
           } catch (cause) {
@@ -221,6 +238,22 @@ function withStorageTransaction<A, E, R>(
     );
   });
 }
+
+/**
+ * @internal Runs scheduler bookkeeping inside the caller's transaction, so a
+ * job scheduled in a transaction commits or rolls back with it, or in a new
+ * transaction when the caller has none.
+ */
+export const inStorageTransaction = <A, E, R>(
+  storage: cf.DurableObjectStorage,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | DurableObjectStorageError, R> =>
+  Effect.withFiber((fiber) => {
+    const owned = fiber.getRef(ActiveStorageTransactions).get(storage);
+    return owned === undefined
+      ? withStorageTransaction(storage, effect)
+      : Effect.andThen(checkTransactionOwner(owned), effect);
+  });
 
 // ---------------------------------------------------------------------------
 // SqlStorage — Effect-native wrapper around cf.SqlStorage
@@ -432,8 +465,10 @@ export interface DurableObjectStorage {
    * On SQLite-backed storage, SQL, KV, and alarm writes to this storage commit
    * together. Typed failures, defects, and interruption roll back the transaction.
    * Interruption waits for the callback fiber and native rollback to finish.
-   * Nested calls on the same fiber join the active transaction; transaction
-   * handles cannot be used by another fiber or after the callback finishes.
+   * A call inside another transaction starts a nested one: if it fails or rolls
+   * back, only its own writes are undone, and the outer transaction continues.
+   * Transaction handles cannot be used by another fiber or after the callback
+   * finishes.
    */
   transaction<A, E = never, R = never>(
     effect: Effect.Effect<A, E, R>,
