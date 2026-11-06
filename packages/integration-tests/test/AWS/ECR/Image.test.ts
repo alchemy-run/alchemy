@@ -178,6 +178,35 @@ test.provider(
 );
 
 test.provider(
+  "cache: true exports a layer cache ECR accepts, outside the image hash",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const image = yield* stack.deploy(Image("CachedImage", { context: fixtureDir, cache: true }));
+
+      // Out-of-band: `:buildcache` holds a BuildKit cache stored as an image
+      // manifest (ECR rejects BuildKit's default cache index).
+      const cache = yield* ecr.describeImages({
+        repositoryName: image.repositoryName,
+        imageIds: [{ imageTag: "buildcache" }],
+      });
+      expect(cache.imageDetails?.[0]?.artifactMediaType).toBe(
+        "application/vnd.buildkit.cacheconfig.v0",
+      );
+      expect(cache.imageDetails?.[0]?.imageDigest).not.toBe(image.digest);
+
+      // The cache is not part of the content hash: dropping it plans no update.
+      const plan = yield* stack.plan(Image("CachedImage", { context: fixtureDir }));
+      expect(plan.resources.CachedImage?.action).toBe("noop");
+
+      yield* stack.destroy();
+      yield* assertRepositoryDeleted(image.repositoryName);
+    }),
+  { tags: ["provider:aws", "provider:aws:ecr", "live"], timeout: 120_000 },
+);
+
+test.provider(
   "build arguments, platform, and repository changes still update the image",
   (stack) =>
     Effect.gen(function* () {
