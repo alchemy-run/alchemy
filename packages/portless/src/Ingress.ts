@@ -1,5 +1,23 @@
-import type { IngressConfig } from "alchemy/Local/Ingress";
+import type { Input } from "alchemy/Input";
+import type * as Core from "alchemy/Local/Ingress";
 import type { Proxy, ProxyAttributes } from "./Proxy.ts";
+
+/**
+ * The `dev.ingress` value `Portless.Ingress(proxy)` returns: plain data naming
+ * the proxy to route through. `alchemy dev` hands it, its Outputs resolved, to
+ * the router in `@alchemy.run/portless/IngressLive`, which only the dev
+ * sidecar imports.
+ */
+export interface PortlessIngress extends Core.Ingress {
+  /** The proxy's domain, for example `myapp`. */
+  readonly domain: string;
+  /** `localhost`, or `local` for a LAN proxy. */
+  readonly tld: string;
+  /** The port the proxy serves HTTPS on. */
+  readonly port: number;
+  /** The proxy's state directory, which holds its routes file. */
+  readonly stateDirectory: string;
+}
 
 export interface IngressInput {
   /**
@@ -34,18 +52,38 @@ export interface IngressInput {
  * worker.url; // "https://dev-alice.builder.myapp.localhost"
  * ```
  *
+ * **Example:** A route named apart from the logical id
+ * ```typescript
+ * const site = yield* Cloudflare.Worker("Website", {
+ *   main: "./src/site.ts",
+ *   dev: { ingress: Portless.Ingress(proxy, { name: "Site" }) },
+ * });
+ * site.url; // "https://dev-alice.site.myapp.localhost"
+ * ```
+ *
  * @primitive
  */
-export const Ingress = (
-  proxy: Pick<Proxy | ProxyAttributes, "domain" | "tld" | "port" | "stateDirectory">,
+export function Ingress(
+  proxy: ProxySettings<ProxyAttributes>,
   input?: IngressInput,
-): IngressConfig<"portless"> => ({
-  type: "portless",
-  ...(input?.name === undefined ? {} : { name: input.name }),
-  options: {
+): PortlessIngress;
+export function Ingress(
+  proxy: ProxySettings<Proxy | ProxyAttributes>,
+  input?: IngressInput,
+): Input<PortlessIngress>;
+export function Ingress(
+  proxy: ProxySettings<Proxy | ProxyAttributes>,
+  input?: IngressInput,
+): Input<PortlessIngress> {
+  return {
+    module: "@alchemy.run/portless/IngressLive",
+    ...(input?.name === undefined ? {} : { name: input.name }),
     domain: proxy.domain,
     tld: proxy.tld,
     port: proxy.port,
     stateDirectory: proxy.stateDirectory,
-  },
-});
+  };
+}
+
+/** The proxy settings an ingress routes through: a `Portless.Proxy`, or its deployed attributes. */
+type ProxySettings<P> = Pick<P, "domain" | "tld" | "port" | "stateDirectory">;
