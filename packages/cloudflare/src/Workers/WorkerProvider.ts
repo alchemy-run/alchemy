@@ -6030,6 +6030,14 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
     if (namespace.script === scriptName && namespace.class && namespace.id)
       namespaces.set(namespace.class, namespace.id);
   const kept = DomainVersion.keptMovers({ movers, deployedClasses, namespaces, passes });
+  for (const className of kept) {
+    const namespace = namespaces.get(className);
+    const times =
+      namespace === undefined ? [] : DomainVersion.passesOf(className, namespace, passes);
+    yield* Effect.logInfo(
+      `Keeping the old Domain class ${className} while its objects move (namespace ${namespace ?? "not listed"}, passes at ${times.length === 0 ? "none" : times.join(", ")}).`,
+    );
+  }
   return leaveOut(
     new Set(allMovers.map((mover) => mover.className).filter((className) => !kept.has(className))),
   );

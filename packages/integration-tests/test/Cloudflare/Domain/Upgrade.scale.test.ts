@@ -106,14 +106,26 @@ test.provider(
       expect(yield* movedBy(scriptName)).toBeGreaterThanOrEqual(accounts.length);
       yield* everyAccountReads(url);
 
-      // Once the move has settled, the next upload deletes every old class.
+      // Once the move has settled, an upload deletes every old class. It reads each
+      // class's passes from Cloudflare's list of Workflow instances, which can lag
+      // behind the migration that recorded them: a class whose pass isn't listed yet
+      // is kept, and a later upload deletes it.
       yield* backdatePasses(scriptName, Object.keys(legacy));
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          return { worker: yield* ScaleV1Worker };
-        }),
-      );
-      expect(yield* doBindings(scriptName)).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      const remaining = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return { worker: yield* ScaleV1Worker };
+          }),
+        )
+        .pipe(
+          Effect.andThen(doBindings(scriptName)),
+          Effect.repeat({
+            schedule: Schedule.spaced("30 seconds"),
+            until: (bindings) => Object.keys(bindings).length === 1,
+            times: 4,
+          }),
+        );
+      expect(remaining).toEqual({ AlchemyDomain: "AlchemyDomain" });
       yield* everyAccountReads(url);
       // And it takes new writes.
       yield* call(url, "POST", `/3/savings/open/b-3/new`);
