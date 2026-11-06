@@ -1,8 +1,9 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, diffTags } from "alchemy/Tags";
+import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -169,6 +170,62 @@ export const HostedZoneProvider = () =>
         return (response.HostedZones ?? []).find((zone) => zone.Name === normalizeName(name));
       });
 
+      // Every zone in the account named exactly `name`. Zone names are NOT
+      // unique: one private zone per VPC with the same name is normal, and
+      // public zones can repeat too. Results are sorted by name, so stop at
+      // the first page that runs past it.
+      const listAllByName = Effect.fn(function* (name: string) {
+        const target = normalizeName(name);
+        const matches: route53.HostedZone[] = [];
+        let request: route53.ListHostedZonesByNameRequest = { DNSName: target, MaxItems: 100 };
+        while (true) {
+          const response = yield* route53.listHostedZonesByName(request);
+          const page = response.HostedZones ?? [];
+          matches.push(...page.filter((zone) => zone.Name === target));
+          if (!response.IsTruncated || page.some((zone) => zone.Name !== target)) {
+            return matches;
+          }
+          request = {
+            DNSName: response.NextDNSName,
+            HostedZoneId: response.NextHostedZoneId,
+            MaxItems: 100,
+          };
+        }
+      });
+
+      // Ids of the zones that could BE the zone these props describe: for a
+      // private zone, only zones associated with its VPC; otherwise only
+      // public zones. Used for adoption / state-loss recovery, where a
+      // name-only match would pick up another stack's zone.
+      const findCandidates = Effect.fn(function* (props: {
+        name: string;
+        privateZone?: boolean;
+        vpc?: { vpcId: string; vpcRegion: string };
+      }) {
+        const target = normalizeName(props.name);
+        if (props.privateZone && props.vpc) {
+          const ids: string[] = [];
+          let nextToken: string | undefined;
+          do {
+            const page = yield* route53.listHostedZonesByVPC({
+              VPCId: props.vpc.vpcId,
+              VPCRegion: props.vpc.vpcRegion as route53.VPCRegion,
+              NextToken: nextToken,
+            });
+            ids.push(
+              ...page.HostedZoneSummaries.filter((zone) => normalizeName(zone.Name) === target).map(
+                (zone) => normalizeId(zone.HostedZoneId),
+              ),
+            );
+            nextToken = page.NextToken;
+          } while (nextToken);
+          return ids;
+        }
+        return (yield* listAllByName(target))
+          .filter((zone) => zone.Config?.PrivateZone !== true)
+          .map((zone) => normalizeId(zone.Id));
+      });
+
       const observe = Effect.fn(function* (id: string) {
         return yield* route53
           .getHostedZone({ Id: normalizeId(id) })
@@ -303,28 +360,43 @@ export const HostedZoneProvider = () =>
             comment: detail.HostedZone.Config?.Comment,
           };
         }),
-        read: Effect.fn(function* ({ olds, output }) {
-          // Resolve the zone id: prefer the stored output, else look up by name
-          // (adoption / state-loss recovery). The persisted `name` may be
-          // `undefined` when a `creating` row was written before upstream
-          // Outputs resolved — report "not found" and let the engine
-          // re-drive the create.
-          const zoneId =
-            output?.id ??
-            (olds?.name !== undefined ? (yield* findByName(olds.name))?.Id : undefined);
-          if (zoneId === undefined) {
-            return undefined;
-          }
-          const detail = yield* observe(zoneId);
-          if (!detail) {
-            return undefined;
-          }
-          return {
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const toAttrs = (detail: route53.GetHostedZoneResponse) => ({
             id: normalizeId(detail.HostedZone.Id),
             name: detail.HostedZone.Name,
             nameServers: detail.DelegationSet?.NameServers ?? [],
             comment: detail.HostedZone.Config?.Comment,
-          };
+          });
+
+          // Refresh of a zone we already track.
+          if (output?.id) {
+            const detail = yield* observe(output.id);
+            return detail ? toAttrs(detail) : undefined;
+          }
+
+          // Adoption / state-loss recovery. The persisted `name` may be
+          // `undefined` when a `creating` row was written before upstream
+          // Outputs resolved — report "not found" and let the engine
+          // re-drive the create.
+          if (olds?.name === undefined) {
+            return undefined;
+          }
+          const candidates = yield* findCandidates(olds);
+          if (candidates.length === 0) {
+            return undefined;
+          }
+          // Prefer the zone carrying our ownership tags; otherwise report the
+          // match as Unowned so the engine gates the takeover behind --adopt.
+          // A plain return here would silently adopt — and retag — another
+          // stack's zone that merely shares the name.
+          for (const zoneId of candidates) {
+            if (yield* hasAlchemyTags(id, yield* observedTags(zoneId))) {
+              const detail = yield* observe(zoneId);
+              if (detail) return toAttrs(detail);
+            }
+          }
+          const detail = yield* observe(candidates[0]!);
+          return detail ? Unowned(toAttrs(detail)) : undefined;
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
           // Observe.
@@ -354,9 +426,14 @@ export const HostedZoneProvider = () =>
                   DelegationSet: response.DelegationSet,
                 })),
                 // Re-running with the same CallerReference races; re-observe.
+                // Match on that CallerReference, not just the name: another
+                // zone with the same name (another VPC's private zone, or a
+                // duplicate public zone) is not the one we created.
                 Effect.catchTag("HostedZoneAlreadyExists", () =>
                   Effect.gen(function* () {
-                    const existing = yield* findByName(news.name);
+                    const existing = (yield* listAllByName(news.name)).find(
+                      (zone) => zone.CallerReference === instanceId,
+                    );
                     if (!existing) {
                       return yield* Effect.die(
                         new Error("hosted zone not found after HostedZoneAlreadyExists"),

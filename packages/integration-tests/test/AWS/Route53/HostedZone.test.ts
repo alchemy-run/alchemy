@@ -2,8 +2,11 @@ import * as AWS from "@alchemy.run/aws";
 import { HostedZone } from "@alchemy.run/aws/Route53";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Vpc } from "@alchemy.run/aws/EC2";
 import * as route53 from "@distilled.cloud/aws/route-53";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -227,6 +230,127 @@ test.provider(
     }),
   { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );
+
+// Private zone names are not unique within an account: one zone per VPC with
+// the same name is the normal pattern (e.g. a per-region private endpoint
+// name). A stack that declares its own private zone must create it, not adopt
+// a same-named zone that serves another VPC.
+const sharedPrivateZoneName = "alchemy-hostedzone-private-shared.alchemy.";
+const VPC_REGION = "us-west-2";
+
+test.provider(
+  "private zone with a name already used by another VPC's zone is created, not adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { vpc, otherVpc } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return {
+            vpc: yield* Vpc("ZoneVpc", { cidrBlock: "10.81.0.0/16", enableDnsSupport: true, enableDnsHostnames: true }),
+            otherVpc: yield* Vpc("OtherZoneVpc", { cidrBlock: "10.82.0.0/16", enableDnsSupport: true, enableDnsHostnames: true }),
+          };
+        }),
+      );
+
+      // Another stack's zone: same name, other VPC, created out of band.
+      const foreign = yield* route53.createHostedZone({
+        Name: sharedPrivateZoneName,
+        CallerReference: `alchemy-test-foreign-${otherVpc.vpcId}`,
+        HostedZoneConfig: { PrivateZone: true },
+        VPC: { VPCId: otherVpc.vpcId, VPCRegion: VPC_REGION },
+      });
+      const foreignId = normalizeId(foreign.HostedZone.Id);
+      yield* Effect.addFinalizer(() =>
+        route53.deleteHostedZone({ Id: foreignId }).pipe(Effect.ignore),
+      );
+
+      const zone = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Vpc("OtherZoneVpc", { cidrBlock: "10.82.0.0/16", enableDnsSupport: true, enableDnsHostnames: true });
+          const ownVpc = yield* Vpc("ZoneVpc", { cidrBlock: "10.81.0.0/16", enableDnsSupport: true, enableDnsHostnames: true });
+          return yield* HostedZone("PrivateZone", {
+            name: sharedPrivateZoneName,
+            privateZone: true,
+            vpc: { vpcId: ownVpc.vpcId, vpcRegion: VPC_REGION },
+          });
+        }),
+      );
+
+      expect(normalizeId(zone.id)).not.toBe(foreignId);
+      const observed = yield* route53.getHostedZone({ Id: normalizeId(zone.id) });
+      expect(observed.VPCs?.map((v) => v.VPCId)).toEqual([vpc.vpcId]);
+
+      // The foreign zone was not retagged as ours.
+      const foreignTags = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: foreignId,
+      });
+      expect(
+        (foreignTags.ResourceTagSet.Tags ?? []).some((tag) => tag.Key?.startsWith("alchemy::")),
+      ).toBe(false);
+
+      yield* stack.destroy();
+      yield* assertZoneGone(zone.id);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 300_000 },
+);
+
+const unownedZoneName = "alchemy-hostedzone-unowned.alchemy.";
+
+test.provider(
+  "an untagged zone with the same name is not silently adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const existing = yield* route53.createHostedZone({
+        Name: unownedZoneName,
+        CallerReference: `alchemy-test-unowned-${Date.now().toString(36)}`,
+      });
+      const existingId = normalizeId(existing.HostedZone.Id);
+      yield* Effect.addFinalizer(() =>
+        route53.deleteHostedZone({ Id: existingId }).pipe(Effect.ignore),
+      );
+
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* HostedZone("UnownedZone", { name: unownedZoneName });
+          }),
+        )
+        .pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+        );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      // With adopt(true) the engine takes the existing zone over.
+      const adopted = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* HostedZone("UnownedZone", { name: unownedZoneName });
+          }),
+        )
+        .pipe(adopt(true));
+      expect(normalizeId(adopted.id)).toBe(existingId);
+
+      yield* stack.destroy();
+      yield* assertZoneGone(existingId);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
+);
+
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
+  cause.reasons
+    .map((reason) =>
+      Cause.isFailReason(reason)
+        ? reason.error
+        : Cause.isDieReason(reason)
+          ? reason.defect
+          : undefined,
+    )
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);
 
 test.provider(
   "idempotent delete tolerates an already-gone zone",
