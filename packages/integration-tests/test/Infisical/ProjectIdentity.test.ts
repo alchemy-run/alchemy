@@ -2,6 +2,7 @@ import * as Infisical from "@alchemy.run/infisical";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as infisical from "@distilled.cloud/infisical";
+import { isActionState, State } from "alchemy/State/State";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
@@ -23,17 +24,15 @@ const oidcDefaults = {
     { ipAddress: "0.0.0.0", type: "ipv4", prefix: 0 },
     { ipAddress: "::", type: "ipv6", prefix: 0 },
   ],
-  templateId: null,
 };
 
-// Use an existing test project's UUID; authentication comes from the selected
-// Infisical profile or the environment supported by Infisical.providers().
+// Runs against an existing project, given by its UUID.
 describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJECT)(
   "ProjectIdentity",
-  { tags: ["live", "provider:infisical", "provider:infisical:projectidentity"] },
+  { tags: ["provider:infisical", "provider:infisical:projectidentity", "live"] },
   () => {
     test.provider(
-      "converges permanent roles and OIDC, repairs drift, and recovers deletion",
+      "converges roles and OIDC, repairs drift, recovers, and deletes",
       (stack) =>
         Effect.gen(function* () {
           const project = yield* Config.String("INFISICAL_TEST_PROJECT");
@@ -102,10 +101,18 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
           expect(recovered.id).not.toBe(reset.id);
           yield* verify(recovered, ["viewer"], oidcDefaults);
 
+          // A create whose attributes never reached state: deploy finds the
+          // identity by its instance suffix and keeps it.
+          yield* forgetAttributes(stack);
+          const found = yield* stack.deploy(program(["viewer"]));
+          expect(found.id).toBe(recovered.id);
+
+          // The same lost create, then destroy: the identity is deleted.
+          yield* forgetAttributes(stack);
           yield* stack.destroy();
           expect(yield* exists(project, recovered.id)).toBe(false);
-        }).pipe(infisical.Retry.none),
-      { timeout: 120_000, retry: 0 },
+        }),
+      { timeout: 120_000 },
     );
   },
 );
@@ -145,3 +152,23 @@ const exists = (project: string, id: string) =>
     Effect.as(true),
     Effect.catchTag("NotFound", () => Effect.succeed(false)),
   );
+
+/**
+ * Reproduce a create whose response or state write was lost: the identity
+ * exists in Infisical, but its row is still `creating`, with no attributes.
+ */
+const forgetAttributes = (stack: Test.ScratchStack) =>
+  Effect.gen(function* () {
+    const state = yield* yield* State;
+    const address = { stack: stack.name, stage: stack.stage, fqn: "Identity" };
+    const stored = yield* state.get(address);
+    if (
+      !stored ||
+      isActionState(stored) ||
+      (stored.status !== "created" && stored.status !== "updated")
+    ) {
+      return yield* Effect.die(new Error("Expected a deployed Identity row"));
+    }
+    const { attr: _, ...rest } = stored;
+    yield* state.set({ ...address, value: { ...rest, status: "creating" } });
+  }).pipe(Effect.provide(stack.state));
