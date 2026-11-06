@@ -2,6 +2,7 @@ import {
   inlineSqlParams,
   MigrationError,
   migrationError,
+  probeExecutor,
   runMigrations,
   type MigrationDialect,
   type NormalizedMigrationsInput,
@@ -16,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { toRows } from "../RDSData/Marshall.ts";
 import { withMigrationConnection, type MigrationConnectionTarget } from "./MigrationConnection.ts";
 import type { MigrationRunnerRequest, MigrationRunnerResponse } from "./MigrationRunnerHandler.ts";
 
@@ -47,8 +49,9 @@ interface MigrationTarget {
   host: string | undefined;
   port: number | undefined;
   database: string | undefined;
-  /** The cluster ARN when the Data API is enabled on the instance's cluster. */
-  dataApiArn: string | undefined;
+  clusterArn: string | undefined;
+  /** What the instance's cluster reports; `undefined` when it reports nothing. */
+  dataApiEnabled: boolean | undefined;
   managedSecretArn: string | undefined;
 }
 
@@ -76,7 +79,8 @@ const describeTarget = Effect.fn(function* (instance: rds.DBInstance) {
       host: cluster.Endpoint,
       port: cluster.Port,
       database: cluster.DatabaseName,
-      dataApiArn: cluster.HttpEndpointEnabled ? cluster.DBClusterArn : undefined,
+      clusterArn: cluster.DBClusterArn,
+      dataApiEnabled: cluster.HttpEndpointEnabled,
       managedSecretArn: cluster.MasterUserSecret?.SecretArn,
     } satisfies MigrationTarget;
   }
@@ -90,7 +94,8 @@ const describeTarget = Effect.fn(function* (instance: rds.DBInstance) {
     host: instance.Endpoint?.Address,
     port: instance.Endpoint?.Port,
     database: instance.DBName,
-    dataApiArn: undefined,
+    clusterArn: undefined,
+    dataApiEnabled: undefined,
     managedSecretArn: instance.MasterUserSecret?.SecretArn,
   } satisfies MigrationTarget;
 });
@@ -132,23 +137,11 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
         secretArn,
         database,
         sql: inlineSqlParams(sql, params ?? [], dialect),
-        formatRecordsAs: "JSON",
+        includeResultMetadata: true,
       }).pipe(
         Effect.retry(resumeRetry),
         Effect.mapError(migrationError("Data API query")),
-        Effect.flatMap((result) =>
-          Effect.try({
-            try: () =>
-              (result.formattedRecords ? JSON.parse(result.formattedRecords) : []) as Array<
-                Record<string, unknown>
-              >,
-            catch: (cause) =>
-              new MigrationError({
-                message: `Data API returned malformed records: ${String(cause)}`,
-                cause,
-              }),
-          }),
-        ),
+        Effect.map(toRows),
       ),
     batch: (statements) =>
       Effect.gen(function* () {
@@ -275,10 +268,12 @@ export const runDBInstanceMigrations = Effect.fn(function* (options: {
 }) {
   const identifier = options.instance.DBInstanceIdentifier ?? "unknown";
   const target = yield* describeTarget(options.instance);
-  const transport = options.transport ?? (target.dataApiArn ? "data-api" : "direct");
+  const transport = options.transport ?? (target.dataApiEnabled ? "data-api" : "direct");
 
   if (transport === "data-api") {
-    const resourceArn = target.dataApiArn;
+    // Refuse only a cluster that reports the Data API off. One that reports
+    // nothing (Floci) gets the call, and the Data API answers for itself.
+    const resourceArn = target.dataApiEnabled === false ? undefined : target.clusterArn;
     if (!resourceArn) {
       return yield* new MigrationError({
         message: options.instance.DBClusterIdentifier
@@ -301,7 +296,7 @@ export const runDBInstanceMigrations = Effect.fn(function* (options: {
           resourceArn,
           secretArn,
           database: target.database,
-        }).pipe(Effect.flatMap(apply)),
+        }).pipe(Effect.flatMap(probeExecutor), Effect.flatMap(apply)),
     });
   }
 

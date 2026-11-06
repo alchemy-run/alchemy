@@ -8,6 +8,7 @@ import { DBCluster, DBInstance, MigrationRunner, type DBInstanceProps } from "@a
 import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
+import { toRows } from "@alchemy.run/aws/RDSData/Marshall";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
@@ -2628,7 +2629,7 @@ for (const { lane, engine, cidrBlock } of [
           path.join(migrationsDir, "0001_users.sql"),
           "CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT NOT NULL);",
         );
-        const deployDb = stack.deploy(
+        const program = (backupRetentionPeriod: Duration.Input | undefined) =>
           Effect.gen(function* () {
             const net = yield* Network("MigrationsNet", { cidrBlock });
             const securityGroup = yield* SecurityGroup("MigrationsDbSecurityGroup", {
@@ -2646,6 +2647,7 @@ for (const { lane, engine, cidrBlock } of [
               storageEncrypted: true,
               kmsKeyId: key.keyArn,
               migrations: Output.asOutput(migrationsDir),
+              backupRetentionPeriod,
             });
             return {
               keyArn: key.keyArn,
@@ -2653,8 +2655,8 @@ for (const { lane, engine, cidrBlock } of [
               secretArn: db.secret.secretArn,
               writer: db.writer,
             };
-          }),
-        );
+          });
+        const deployDb = stack.deploy(program(undefined));
 
         yield* stack.destroy();
 
@@ -2677,7 +2679,10 @@ for (const { lane, engine, cidrBlock } of [
         const cluster = (yield* rds.describeDBClusters({
           DBClusterIdentifier: created.clusterArn,
         })).DBClusters?.[0];
-        expect(cluster?.KmsKeyId).toEqual(created.keyArn);
+        // Floci does not report `KmsKeyId` on a described cluster.
+        if (process.env.ALCHEMY_TEST_DEV !== "1") {
+          expect(cluster?.KmsKeyId).toEqual(created.keyArn);
+        }
 
         // Out-of-band: the bookkeeping rows via the Data API.
         const applied = yield* rdsdata.executeStatement({
@@ -2685,12 +2690,22 @@ for (const { lane, engine, cidrBlock } of [
           secretArn: created.secretArn,
           database: "app",
           sql: "SELECT name FROM __alchemy_migrations ORDER BY id;",
-          formatRecordsAs: "JSON",
+          includeResultMetadata: true,
         });
-        expect(JSON.parse(applied.formattedRecords ?? "[]")).toEqual([
-          { name: "0001_users.sql" },
-          { name: "0002_posts.sql" },
-        ]);
+        expect(toRows(applied)).toEqual([{ name: "0001_users.sql" }, { name: "0002_posts.sql" }]);
+
+        // Nothing pending and nothing changed: a redeploy has no work to do.
+        const unchanged = (yield* stack.plan(program(undefined))).resources;
+        expect(unchanged["MigrationsDb/Cluster"]).toMatchObject({ action: "noop" });
+        expect(unchanged["MigrationsDb/Writer"]).toMatchObject({ action: "noop" });
+
+        // A cluster update sends `EnableHttpEndpoint` again, because Floci
+        // never reports the field it would otherwise be compared against.
+        yield* stack.deploy(program("2 days"));
+        const modified = (yield* rds.describeDBClusters({
+          DBClusterIdentifier: created.clusterArn,
+        })).DBClusters?.[0];
+        expect(modified?.BackupRetentionPeriod).toEqual(2);
 
         yield* stack.destroy();
       }),
