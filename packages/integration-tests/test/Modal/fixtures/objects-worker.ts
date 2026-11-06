@@ -18,7 +18,10 @@ export default class ObjectsWorker extends Cloudflare.Worker<ObjectsWorker>()(
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const key = new URL(request.url, "http://host").searchParams.get("key") ?? "k";
+        const key = new URL(request.url, "http://host").searchParams.get("key");
+        // Only the test's own requests create objects: a request without a
+        // key (a probe of the fresh URL) would leave a retained dict behind.
+        if (key === null) return HttpServerResponse.empty({ status: 404 });
         const volume = yield* volumes.getOrCreate(`objects-${key}`);
         const dict = yield* dicts.getOrCreate(`objects-${key}`);
         return yield* HttpServerResponse.json({
