@@ -81,9 +81,7 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
           template: {
             containers: [
               {
-                image: hub.registryUri.pipe(
-                  Output.map((registry) => `${registry}/${nodes.image}`),
-                ),
+                image: hub.registryUri.pipe(Output.map((registry) => `${registry}/${nodes.image}`)),
                 env: servicesEnvironment(nodes).pipe(
                   Output.map((env) =>
                     Object.entries(env).map(([name, value]) => ({ name, value })),
