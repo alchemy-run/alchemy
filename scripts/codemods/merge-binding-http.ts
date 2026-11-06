@@ -169,7 +169,7 @@ for (const dir of services) {
       .filter(
         (p) =>
           fs.existsSync(p) &&
-          !/Http\.ts$/.test(p) &&
+          !p.endsWith("Http.ts") &&
           /Binding\.Service</.test(fs.readFileSync(p, "utf8")),
       );
     const contractPath = fs.existsSync(sameName)
