@@ -11,14 +11,19 @@ export class LinkedContainer extends Cloudflare.Container<
 
 /**
  * A generated-Dockerfile container whose bundle bytes change with `marker`,
- * so each entrypoint publishes a new image over the same base layers.
+ * so each entrypoint publishes a new image over the same base layers, with
+ * a registry layer cache.
  */
 export const linkedContainer = (main: string, marker: string) =>
   LinkedContainer.make(
     {
       main,
       image: "oven/bun:latest",
-      build: { input: { transform: { define: { BUNDLE_MARKER: JSON.stringify(marker) } } } },
+      build: {
+        input: { transform: { define: { BUNDLE_MARKER: JSON.stringify(marker) } } },
+        // A fresh builder imports the base layers' cache instead of pulling them.
+        cache: true,
+      },
     },
     Effect.sync(() => {
       // Only the bundle defines the marker; deploy-time runs see the argument.
