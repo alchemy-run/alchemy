@@ -1037,6 +1037,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -2974,7 +3007,9 @@ export const ServiceProvider = () =>
           output?.repositoryName ??
           (yield* createPhysicalName({
             id: `${id}-repo`,
-            maxLength: 256,
+            // ECS caps an image reference at 255 characters: the registry host,
+            // this name and a 64-character tag must all fit.
+            maxLength: 128,
             lowercase: true,
           }));
         const logGroupName =

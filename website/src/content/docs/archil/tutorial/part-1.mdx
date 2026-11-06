@@ -1,0 +1,94 @@
+---
+title: "Part 1: Your First Stack"
+description: Install Alchemy, create a Stack with an Archil disk, and deploy it.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/archil@latest effect @effect/platform-node`;
+
+Install Alchemy, declare an Archil disk, and deploy it.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) or Node.js 24.11.1+
+- An Archil API key in an Alchemy profile ([Setup](/archil/setup))
+
+## Create a project
+
+<PackageManagers init dir="my-app" />
+
+## Install dependencies
+
+<PackageManagers add={pkgs} />
+
+## Create the Stack
+
+Every Alchemy program starts with a `Stack`:
+
+```typescript
+// alchemy.run.ts
+import * as Archil from "@alchemy.run/archil";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Archil.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {}),
+);
+```
+
+`Archil.providers()` reads your key from your Alchemy profile.
+`Alchemy.localState()` keeps deploy state in `.alchemy/` next to your
+code; [Part 5](/archil/tutorial/part-5) moves it somewhere CI can read.
+
+## Declare a disk
+
+Declare resources in their own module so programs can import them:
+
+```typescript
+// src/Storage.ts
+import * as Archil from "@alchemy.run/archil";
+
+export const Files = Archil.Disk("Files", {});
+```
+
+Alchemy names the disk from the stack, stage and logical id.
+
+## Add it to the Stack
+
+Yield the disk and return its id:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Archil from "@alchemy.run/archil";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import { Files } from "./src/Storage.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Archil.providers(), state: Alchemy.localState() },
+-  Effect.gen(function* () {}),
++  Effect.gen(function* () {
++    const files = yield* Files;
++    return { diskId: files.diskId };
++  }),
+);
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+The output prints `diskId`, a `dsk-…` id. The disk shows up under
+**Disks** in the [Archil console](https://console.archil.com).
+
+## Recap
+
+You have a Stack with one Archil disk. In
+[Part 2](/archil/tutorial/part-2) you'll run a program that reads and
+writes files on it.

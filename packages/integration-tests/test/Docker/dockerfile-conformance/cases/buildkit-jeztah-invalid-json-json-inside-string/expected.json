@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "scratch",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "CMD",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "'[\"echo\", \"Well, JSON in a string is JSON too?\"]'"
+          }
+        }
+      ]
+    }
+  ]
+}

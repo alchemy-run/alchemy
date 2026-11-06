@@ -75,6 +75,21 @@ Each binding adds its statement to the **task role**, the role the container run
 
 The image comes from one of three places: `image`, an image from any registry, copied into your account; `context`, your own Dockerfile, built with your local Docker; or `main`, your Effect program, bundled into a base image, `oven/bun:1` unless you set `image`. Images are built for the architecture the task runs on. Set `runtimePlatform: { cpuArchitecture: "ARM64" }` to run on Graviton, which costs less per vCPU.
 
+## Cache build layers
+
+Builds from `context` or `main` reuse the local BuildKit cache of the machine they run on. A fresh CI runner has none and rebuilds every step. Keep the layers in the task's ECR repository with `build.cache`:
+
+```typescript title="alchemy.run.ts"
+const api = yield* AWS.ECS.Service("Api", {
+  cluster,
+  context: "./api",
+  port: 8080,
+  build: { cache: true },
+});
+```
+
+Builds then import and export every stage's layers at the repository's `:buildcache` tag. The cache is off by default and never changes the image, so turning it on doesn't start a deployment. Other backends take BuildKit's cache backends, as in [Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+
 ## Run a job to completion
 
 A Task on its own runs until its process exits. Give it a `run` Effect instead of `fetch`:
