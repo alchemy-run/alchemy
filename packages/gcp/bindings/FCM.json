@@ -2,14 +2,6 @@
   "discovery": "fcm-v1",
   "module": "fcm_v1",
   "resources": {},
-  "permissions": {
-    "fcm.projects.registrations.topicSubscriptions.list": "cloudmessaging.topicSubscriptions.list",
-    "fcm.projects.registrations.topicSubscriptions.create": "cloudmessaging.topicSubscriptions.create",
-    "fcm.projects.registrations.topicSubscriptions.delete": "cloudmessaging.topicSubscriptions.delete",
-    "fcm.projects.registrations.topicSubscriptions.get": "cloudmessaging.topicSubscriptions.get",
-    "fcm.projects.registrations.topicSubscriptions.patch": "cloudmessaging.topicSubscriptions.update",
-    "fcm.projects.messages.send": "cloudmessaging.messages.create"
-  },
   "probes": {
     "resources": {},
     "enable": ["fcm.googleapis.com"]

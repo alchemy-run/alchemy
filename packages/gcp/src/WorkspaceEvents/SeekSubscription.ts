@@ -24,7 +24,7 @@ export type SeekSubscriptionShape = () => Effect.Effect<
  * Seeks an existing subscription to a point in time or to a given snapshot, whichever is provided in the request.
  *
  * A call on the stack's project, so it takes no resource.
- * Provide {@link SeekSubscriptionHttp}. The host gets `roles/pubsub.editor` on the project.
+ * Provide {@link SeekSubscriptionHttp}. The host gets `roles/pubsub.subscriber` on the project.
  *
  * ### Usage
  * **Example:** Call `subscriptions.seek`
@@ -61,7 +61,7 @@ export const SeekSubscriptionHttp = Layer.effect(
         operation: pubsub.seekProjectsSubscriptions,
         param: "subscription",
         children: [["subscriptions", "subscription"]],
-        role: "roles/pubsub.editor",
+        role: "roles/pubsub.subscriber",
       },
     ],
   }),

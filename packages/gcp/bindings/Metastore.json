@@ -12,11 +12,6 @@
       "pattern": "projects/*/locations/*/services/*/backups/*"
     }
   },
-  "permissions": {
-    "metastore.projects.locations.services.alterLocation": "metastore.services.mutateMetadata",
-    "metastore.projects.locations.services.moveTableToDatabase": "metastore.services.mutateMetadata",
-    "metastore.projects.locations.services.alterTableProperties": "metastore.services.mutateMetadata"
-  },
   "probes": {
     "resources": {
       "Service": "ProbeService",

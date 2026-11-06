@@ -2,9 +2,6 @@
   "discovery": "trafficdirector-v3",
   "module": "trafficdirector_v3",
   "resources": {},
-  "permissions": {
-    "trafficdirector.discovery.client_status": "trafficdirector.networks.getConfigs"
-  },
   "probes": {
     "resources": {},
     "enable": ["trafficdirector.googleapis.com"]

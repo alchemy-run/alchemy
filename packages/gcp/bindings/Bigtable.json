@@ -40,12 +40,6 @@
       "lifecycleOnly": true
     }
   },
-  "permissions": {
-    "bigtableadmin.projects.instances.tables.restore": "bigtable.backups.restore",
-    "bigtableadmin.projects.instances.tables.modifyColumnFamilies": "bigtable.tables.update",
-    "bigtableadmin.projects.instances.tables.dropRowRange": "bigtable.tables.mutateRows",
-    "bigtableadmin.projects.instances.clusters.backups.copy": "bigtable.backups.create"
-  },
   "skip": {
     "bigtableadmin.projects.instances.partialUpdateInstance": "updates the instance, which its provider owns",
     "bigtableadmin.projects.instances.clusters.partialUpdateCluster": "updates the cluster, which its provider owns",

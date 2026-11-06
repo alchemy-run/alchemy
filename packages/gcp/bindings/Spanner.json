@@ -23,19 +23,6 @@
       "lifecycleOnly": true
     }
   },
-  "permissions": {
-    "spanner.projects.instances.databases.sessions.read": "spanner.databases.read",
-    "spanner.projects.instances.databases.sessions.commit": "spanner.databases.write",
-    "spanner.projects.instances.databases.sessions.executeBatchDml": "spanner.databases.write",
-    "spanner.projects.instances.databases.sessions.beginTransaction": "spanner.databases.beginOrRollbackReadWriteTransaction",
-    "spanner.projects.instances.databases.sessions.rollback": "spanner.databases.beginOrRollbackReadWriteTransaction",
-    "spanner.projects.instances.databases.sessions.partitionQuery": "spanner.databases.partitionQuery",
-    "spanner.projects.instances.databases.sessions.partitionRead": "spanner.databases.partitionRead",
-    "spanner.projects.instances.databases.sessions.batchCreate": "spanner.sessions.create",
-    "spanner.projects.instances.databases.restore": "spanner.backups.restoreDatabase",
-    "spanner.projects.instances.move": "spanner.instances.update",
-    "spanner.projects.instances.databases.changequorum": "spanner.databases.changequorum"
-  },
   "names": {
     "BatchSessionCreate": "BatchCreateSessions",
     "BeginSessionTransaction": "BeginTransaction",

@@ -66,7 +66,7 @@ export const SendMessageHttp = Layer.effect(
 | --- | --- | --- | --- |
 | Operation source | discovery doc methods | Smithy operations in distilled's AWS models | Smithy operations in distilled's Cloudflare models |
 | Target resource | the method's `name` pattern matched against `resources.*.pattern` | the request member carrying the resource's identity (`QueueUrl`, `TableName`, `Bucket`) mapped to the resource attribute that fills it (`queue.queueUrl`) | path parameters (`account_id`, `zone_id`, `bucket_name`) mapped to resource attributes |
-| Permission | `<service>.<collection>.<verb>`, overrides in `permissions` | IAM action `<prefix>:<Operation>` (prefix from the sigv4 signing name, as `scripts/generate-iam-actions.ts` derives it), on the resource ARN attribute | the API token permission group for the operation |
+| Permission | the distilled operation's `iam` (`patches/<module>/iam.json`), proposed from `<service>.<collection>.<verb>` for new methods | IAM action `<prefix>:<Operation>` (prefix from the sigv4 signing name, as `scripts/generate-iam-actions.ts` derives it), on the resource ARN attribute | the API token permission group for the operation |
 | Grant | smallest role from `roles.json` on the resource's IAM policy | a policy statement on the bound resource's ARN | a scoped `AccountApiToken` (the existing `*Http.ts` scaffolding) |
 | Existing bindings | all generated | ~3,000 hand-written `*Http.ts`, already one `make…HttpBinding` call each | hand-written; native Worker bindings (`*Binding`) stay hand-written |
 | Classifier to start from | built in | `scripts/audit-service.ts` | none yet |

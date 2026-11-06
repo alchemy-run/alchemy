@@ -22,9 +22,5 @@
       "LongrunningrecognizeSpeech": "{ body: { config: { languageCode: \"en-US\" }, audio: { uri: \"gs://alchemy-missing-bucket/missing.flac\" } } }"
     }
   },
-  "defaultPermission": "serviceusage.services.use",
-  "roles": {
-    "speech.speech.longrunningrecognize": "roles/speech.client",
-    "speech.speech.recognize": "roles/speech.client"
-  }
+  "defaultPermission": "serviceusage.services.use"
 }

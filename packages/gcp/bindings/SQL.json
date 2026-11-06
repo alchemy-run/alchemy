@@ -30,16 +30,6 @@
     }
   },
   "permissionService": "cloudsql",
-  "permissions": {
-    "sql.connect.get": "cloudsql.instances.connect",
-    "sql.connect.generateEphemeral": "cloudsql.instances.connect",
-    "sql.sslCerts.createEphemeral": "cloudsql.instances.connect",
-    "sql.Backups.GetBackup": "cloudsql.backupRuns.get",
-    "sql.Backups.ListBackups": "cloudsql.backupRuns.list",
-    "sql.Backups.CreateBackup": "cloudsql.backupRuns.create",
-    "sql.Backups.UpdateBackup": "cloudsql.backupRuns.update",
-    "sql.Backups.DeleteBackup": "cloudsql.backupRuns.delete"
-  },
   "skip": {
     "sql.tiers.list": "lists machine tiers: catalog data, no project resource",
     "sql.flags.list": "lists database flags: catalog data, no project resource",

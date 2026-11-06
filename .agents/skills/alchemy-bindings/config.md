@@ -64,17 +64,28 @@ Service-level keys that reshape the target:
 
 ## What it is granted
 
-The generator derives `<service>.<collection>.<verb>` and grants the
-smallest predefined role holding it, from `roles.json`.
+Not in the config. A bound method's grant is its distilled operation's
+`iam` (`op.iam`: the permission it checks and the predefined roles that
+grant it), recorded in `submodules/distilled/packages/gcp/patches/<module>/iam.json`.
+Correct a grant there, with a `description` saying why, and regenerate
+distilled. The config only says where the grant goes:
 
 | Key | |
 | --- | --- |
-| `permissions` | method id → the permission actually checked (`storage.objects.insert` → `storage.objects.create`) |
+| `projectGrant` | method → why the permission is only honoured on the project |
+| `grantOn` (above) | the permission is checked on another resource the bound one names |
+
+For a method distilled has no `iam` for yet, the generator proposes one
+(`--write-iam-patches` writes it into distilled's patches for review): the
+permission `<service>.<collection>.<verb>` and the smallest predefined role
+holding it, from `roles.json`. These keys steer only that proposal:
+
+| Key | |
+| --- | --- |
+| `permissionService` | the IAM prefix when it isn't the discovery name |
 | `permissionCollections` | collection → the collection permissions are named after (`regionDisks` → `disks`) |
 | `verbPermissions` | verb → the verb checked (`resize` → `update`) |
 | `defaultPermission` | when no permission resolves (billing-only APIs: `serviceusage.services.use`) |
-| `roles` | permission or method → role, when the smallest is a bad fit; a list grants the rest on the project |
-| `projectGrant` | method → why the permission is only honoured on the project |
 
 ## Whether, and as what, it is a binding
 

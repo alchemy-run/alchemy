@@ -6,9 +6,6 @@
       "pattern": "projects/*/locations/*/jobs/*"
     }
   },
-  "permissions": {
-    "cloudscheduler.projects.locations.jobs.resume": "cloudscheduler.jobs.enable"
-  },
   "probes": {
     "resources": {},
     "coveredBy": "Bindings.test.ts"

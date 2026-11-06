@@ -8,38 +8,6 @@
       "scopeByCondition": true
     }
   },
-  "permissions": {
-    "firestore.projects.databases.bulkDeleteDocuments": "datastore.databases.bulkDelete",
-    "firestore.projects.databases.importDocuments": "datastore.databases.import",
-    "firestore.projects.databases.exportDocuments": "datastore.databases.export",
-    "firestore.projects.databases.documents.commit": "datastore.entities.update",
-    "firestore.projects.databases.documents.batchWrite": "datastore.entities.update",
-    "firestore.projects.databases.documents.beginTransaction": "datastore.databases.get",
-    "firestore.projects.databases.documents.rollback": "datastore.databases.get",
-    "firestore.projects.databases.documents.batchGet": "datastore.entities.get",
-    "firestore.projects.databases.documents.executePipeline": "datastore.entities.list",
-    "firestore.projects.databases.documents.partitionQuery": "datastore.entities.list",
-    "firestore.projects.databases.documents.runAggregationQuery": "datastore.entities.list",
-    "firestore.projects.databases.documents.listCollectionIds": "datastore.entities.list",
-    "firestore.projects.databases.documents.listDocuments": "datastore.entities.list",
-    "firestore.projects.databases.collectionGroups.indexes.create": "datastore.indexes.create",
-    "firestore.projects.databases.collectionGroups.indexes.get": "datastore.indexes.get",
-    "firestore.projects.databases.collectionGroups.indexes.list": "datastore.indexes.list",
-    "firestore.projects.databases.collectionGroups.indexes.delete": "datastore.indexes.delete",
-    "firestore.projects.databases.collectionGroups.fields.get": "datastore.indexes.get",
-    "firestore.projects.databases.collectionGroups.fields.list": "datastore.indexes.list",
-    "firestore.projects.databases.collectionGroups.fields.patch": "datastore.indexes.update",
-    "firestore.projects.databases.userCreds.enable": "datastore.userCreds.update",
-    "firestore.projects.databases.userCreds.disable": "datastore.userCreds.update",
-    "firestore.projects.databases.userCreds.resetPassword": "datastore.userCreds.update"
-  },
-  "roles": {
-    "datastore.indexes.create": "roles/datastore.indexAdmin",
-    "datastore.indexes.get": "roles/datastore.indexAdmin",
-    "datastore.indexes.list": "roles/datastore.indexAdmin",
-    "datastore.indexes.delete": "roles/datastore.indexAdmin",
-    "datastore.indexes.update": "roles/datastore.indexAdmin"
-  },
   "names": {
     "BatchDocumentGet": "BatchGetDocuments",
     "BatchDocumentWrite": "BatchWriteDocuments",

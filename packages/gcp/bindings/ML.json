@@ -10,9 +10,6 @@
       "pattern": "projects/*/models/*/versions/*"
     }
   },
-  "permissions": {
-    "ml.projects.explain": "ml.models.predict"
-  },
   "probes": {
     "resources": {},
     "untestable": {

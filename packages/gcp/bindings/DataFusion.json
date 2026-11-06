@@ -6,9 +6,6 @@
       "pattern": "projects/*/locations/*/instances/*"
     }
   },
-  "permissions": {
-    "datafusion.projects.locations.versions.list": "datafusion.instances.list"
-  },
   "probes": {
     "resources": {
       "Instance": "ProbeInstance"

@@ -7,9 +7,6 @@
       "iamKind": "cloudfunctions.function"
     }
   },
-  "permissions": {
-    "cloudfunctions.projects.locations.runtimes.list": "cloudfunctions.functions.list"
-  },
   "probes": {
     "resources": {
       "Function": "TargetFunction"

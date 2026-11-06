@@ -2,11 +2,6 @@
   "discovery": "kmsinventory-v1",
   "module": "kmsinventory_v1",
   "resources": {},
-  "permissions": {
-    "kmsinventory.projects.cryptoKeys.list": "cloudkms.cryptoKeys.list",
-    "kmsinventory.projects.locations.keyRings.cryptoKeys.getProtectedResourcesSummary": "cloudkms.protectedResources.search",
-    "kmsinventory.projects.protectedResources.search": "cloudkms.protectedResources.search"
-  },
   "probes": {
     "resources": {},
     "enable": ["kmsinventory.googleapis.com"],

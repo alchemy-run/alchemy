@@ -9,10 +9,6 @@
       "pattern": "projects/*/locations/*/queuedResources/*"
     }
   },
-  "permissions": {
-    "tpu.projects.locations.queuedResources.list": "tpu.nodes.list",
-    "tpu.projects.locations.queuedResources.reset": "tpu.nodes.reset"
-  },
   "probes": {
     "resources": {
       "QueuedResource": "QueuedTrainer"

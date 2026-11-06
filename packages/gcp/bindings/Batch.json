@@ -6,9 +6,6 @@
       "pattern": "projects/*/locations/*/jobs/*"
     }
   },
-  "permissions": {
-    "batch.projects.locations.jobs.cancel": "batch.jobs.delete"
-  },
   "probes": {
     "resources": {
       "Job": "ProbeJob"

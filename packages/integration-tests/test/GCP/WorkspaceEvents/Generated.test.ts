@@ -122,6 +122,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "DeleteSchemaRevision (pubsub.projects.schemas.deleteRevision)",
+        () => probe("DeleteSchemaRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workspaceevents", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "DeleteSnapshot (pubsub.projects.snapshots.delete)",
         () => probe("DeleteSnapshot", false),
         {
@@ -312,14 +320,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:workspaceevents", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "pubsub.projects.schemas.deleteRevision: no predefined role grants its permission",
-        () => Effect.void,
       );
     });
   },

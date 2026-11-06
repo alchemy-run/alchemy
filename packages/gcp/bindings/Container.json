@@ -13,10 +13,6 @@
       "pattern": "projects/*/locations/*/clusters/*/nodePools/*"
     }
   },
-  "permissions": {
-    "container.projects.aggregated.usableSubnetworks.list": "container.clusters.list",
-    "container.projects.zones.getServerconfig": "container.clusters.list"
-  },
   "skip": {
     "container.projects.zones.getServerconfig": "the zonal v1 method; the location-scoped method reaches the same clusters",
     "container.projects.zones.operations.cancel": "the zonal v1 method; the location-scoped method reaches the same clusters",

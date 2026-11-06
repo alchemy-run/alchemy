@@ -2,10 +2,6 @@
   "discovery": "firebasestorage-v1beta",
   "module": "firebasestorage_v1beta",
   "resources": {},
-  "permissions": {
-    "firebasestorage.projects.getDefaultBucket": "firebasestorage.defaultBucket.get",
-    "firebasestorage.projects.deleteDefaultBucket": "firebasestorage.defaultBucket.delete"
-  },
   "probes": {
     "resources": {},
     "enable": ["firebasestorage.googleapis.com"]
