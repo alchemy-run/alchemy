@@ -1,8 +1,10 @@
 import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
-import { createInternalTags } from "alchemy/Tags";
+import { Stack } from "alchemy/Stack";
+import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 /**
  * Who created an object at run time: the stack, stage and binding host
@@ -88,11 +90,14 @@ export const RuntimeOwnerOf = Effect.fn(function* () {
   if (runtime === undefined) return Effect.succeed<RuntimeOwner | undefined>(undefined);
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;
-    if (host !== undefined) {
-      const tags = yield* createInternalTags(host.LogicalId);
-      yield* runtime.set(ENV.stack, Output.literal(tags["alchemy::stack"]));
-      yield* runtime.set(ENV.stage, Output.literal(tags["alchemy::stage"]));
-      yield* runtime.set(ENV.id, Output.literal(tags["alchemy::id"]));
+    // The deploying stack and stage, read without requiring them, so the
+    // binding's `make` needs nothing a script or an Action lacks.
+    const stack = Option.getOrUndefined(yield* Effect.serviceOption(Stack));
+    const stage = Option.getOrUndefined(yield* Effect.serviceOption(Stage));
+    if (host !== undefined && stack !== undefined && stage !== undefined) {
+      yield* runtime.set(ENV.stack, Output.literal(stack.name));
+      yield* runtime.set(ENV.stage, Output.literal(stage));
+      yield* runtime.set(ENV.id, Output.literal(host.LogicalId));
     }
   }
   return Effect.gen(function* () {
