@@ -31,3 +31,5 @@ export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
   },
 });
 export const Default = RivetKubernetes.DeploymentPool("Default").pipe(Layer.provide(Cluster));
+// Rivet Services: Durable Streams.
+export const Services = RivetKubernetes.ServicesPool("Services").pipe(Layer.provide(Cluster));
