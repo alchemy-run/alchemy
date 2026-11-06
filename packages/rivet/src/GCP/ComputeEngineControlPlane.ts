@@ -3,6 +3,7 @@ import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Run from "@alchemy.run/gcp/Run";
 import * as Storage from "@alchemy.run/gcp/Storage";
+import * as VpcAccess from "@alchemy.run/gcp/VpcAccess";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -78,6 +79,12 @@ export interface ComputeEngineControlPlaneProps {
    * @default "10.44.0.0/20"
    */
   cidrBlock?: string;
+  /**
+   * An unused `/28` in the network for the Serverless VPC Access connector
+   * the HTTPS proxy reaches the engines through.
+   * @default "10.44.16.0/28"
+   */
+  connectorCidrBlock?: string;
 }
 
 /** Boot one instance: mount its data disk, then run the engine on the host network. */
@@ -115,8 +122,8 @@ setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > 
  * every actor's data (reached as the instances' own service account), and a
  * Cloud Run service in front. Callers reach it over HTTPS at the service's
  * `run.app` address, so it needs no domain of your own; the service proxies
- * to the engines over Direct VPC egress, and the engines take no traffic
- * from outside their subnetwork. Instances find each other through the
+ * to the engines through a Serverless VPC Access connector, and the engines
+ * take no traffic from outside their network. Instances find each other through the
  * bucket and talk on a private port only they can reach. A namespace is
  * created for the stage.
  *
@@ -165,13 +172,14 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
         region,
         ipCidrRange: cidrBlock,
       });
-      // The API port is open only inside the subnetwork: to the proxy, which
-      // sends from it, and to nodes that run in it.
+      const connectorCidrBlock = props.connectorCidrBlock ?? "10.44.16.0/28";
+      // The API port is open only inside the network: to the proxy, which
+      // sends from its connector's range, and to nodes in the subnetwork.
       yield* Compute.Firewall(`${id}ApiFirewall`, {
         network: network.networkName,
         direction: "INGRESS",
         allowed: [{ protocol: "tcp", ports: [String(API_PORT)] }],
-        sourceRanges: [cidrBlock],
+        sourceRanges: [cidrBlock, connectorCidrBlock],
         targetTags: [tag],
       });
       // The peer port is plaintext and unauthenticated: only instances reach it.
@@ -231,7 +239,18 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
       }
 
       // HTTPS without a domain of your own: a Cloud Run service's address,
-      // running a proxy that reaches the engines over Direct VPC egress.
+      // running a proxy that reaches the engines through a Serverless VPC
+      // Access connector. (Direct VPC egress holds the subnetwork's
+      // addresses for 1-2 hours after the service is deleted, so the
+      // control plane couldn't be destroyed.)
+      const connector = yield* VpcAccess.Connector(`${id}Connector`, {
+        location: region,
+        network: network.networkName,
+        ipCidrRange: connectorCidrBlock,
+        machineType: "e2-micro",
+        minInstances: 2,
+        maxInstances: 3,
+      });
       const upstreams = Output.all(...hosts.map((host) => host.networkIP)).pipe(
         Output.map((addresses) => addresses.map((ip) => `${ip}:${API_PORT}`).join(" ")),
       );
@@ -244,12 +263,7 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
           // Nodes hold one connection each, as long as Cloud Run allows.
           timeout: "3600s",
           maxInstanceRequestConcurrency: 1000,
-          vpcAccess: {
-            networkInterfaces: [
-              { network: network.networkName, subnetwork: subnet.subnetworkName },
-            ],
-            egress: "PRIVATE_RANGES_ONLY",
-          },
+          vpcAccess: { connector: connector.name, egress: "PRIVATE_RANGES_ONLY" },
           containers: [
             {
               image: PROXY_IMAGE,
