@@ -493,14 +493,19 @@ test.provider(
       yield* call(url, "/Billing/open/a-2/ann", "POST");
       yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
 
-      // Once the move has settled, the next upload deletes the old classes.
+      // Once the move has settled, the next upload deletes the old classes. The saga's
+      // stays: the code from before versions addressed a run's objects by raw id, so
+      // the move can't learn their keys (see `moveListed`).
       yield* backdatePasses(scriptName, Object.keys(legacy));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedNextWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
+      expect(yield* doBindings(scriptName)).toEqual({
+        "Billing.Domain": "Billing.Domain",
+        "Billing.ApproveWorkflow.BeforeVersions": "ApproveWorkflow",
+      });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });

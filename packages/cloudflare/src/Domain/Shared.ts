@@ -52,6 +52,8 @@ const COPY_BUDGET_MS = 20_000;
 
 /** An old object that doesn't know the move: it still runs the code from before the deploy. */
 const STALE = /not found on Durable Object/;
+/** What an old object's storage answers once its data has moved (`DurableObjectMove`). */
+const MOVED = "data has moved to another object";
 /** How a forwarded call came back: answered, refused by a sealed object, or on older code. */
 type Forwarded = { readonly value: unknown } | { readonly sealed: true } | { readonly stale: true };
 /** What a sealed old object answers a forwarded call: the new object takes over and serves. */
@@ -778,7 +780,17 @@ const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
       return "skipped" as const;
     }
     const id = legacy.idFromString(item.id);
-    const name = yield* orDie<string | null>(makeRpcStub<Stub>(legacy.get(id)).domainName!());
+    const asked = yield* makeRpcStub<Stub>(legacy.get(id)).domainName!().pipe(
+      Effect.map((name) => ({ name: name as string | null })),
+      // Sealed by an earlier move: its data is in the new object already.
+      Effect.catchCause((cause) =>
+        Cause.pretty(cause).includes(MOVED)
+          ? Effect.succeed({ moved: true } as const)
+          : Effect.die(Cause.squash(cause)),
+      ),
+    );
+    if ("moved" in asked) return "moved" as const;
+    const name = asked.name;
     if (name === null) {
       yield* Effect.logWarning(`domain move skipped ${JSON.stringify(item)}: it knows no name`);
       return "skipped" as const;
