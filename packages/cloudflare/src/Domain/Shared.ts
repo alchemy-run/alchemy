@@ -715,9 +715,7 @@ const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
 
 /** Ask `route/key`'s object to move its data: `true` once it owns it. */
 const moveNamed = (resolver: Resolver, route: string, key: string, waitMillis: number) =>
-  orDie<boolean>(
-    makeRpcStub<Stub>(resolver.namespace.getByName(`${route}/${key}`)).domainMove!(waitMillis),
-  );
+  orDie<boolean>((resolver.namespace.getByName(`${route}/${key}`) as Stub).domainMove!(waitMillis));
 
 /** Consumer keys a source answers per call, from its history. */
 const CONSUMERS_PAGE = 500;
@@ -743,7 +741,7 @@ const moveEntry = (
     if (entry === undefined) return true;
     if (!(yield* moveNamed(resolver, entry.route, item.i, waitMillis))) return false;
     if (!entry.source) return true;
-    const source = makeRpcStub<Stub>(resolver.namespace.getByName(`${entry.route}/${item.i}`));
+    const source = resolver.namespace.getByName(`${entry.route}/${item.i}`) as Stub;
     let done = true;
     for (let after = 0; ;) {
       const page = yield* orDie<{
@@ -758,7 +756,8 @@ const moveEntry = (
         const routes = resolver.consumer(target);
         if (routes === undefined) continue;
         objects.add(`${routes.keys}/${key}`);
-        objects.add(`${routes.run}/${resolver.scanner(ref)}`);
+        // A scanner of this source in the consumer's run (policies have no run).
+        if (routes.run !== routes.keys) objects.add(`${routes.run}/${resolver.scanner(ref)}`);
         if (target.kind === "projection")
           for (const stream of resolver.streams(target.name)) objects.add(`${stream}/${key}`);
       }
@@ -770,7 +769,12 @@ const moveEntry = (
         },
         { concurrency: FanOut.RELAY_FANOUT },
       );
-      if (moved.some((owned) => !owned)) done = false;
+      if (moved.some((owned) => !owned)) {
+        done = false;
+        yield* Effect.logInfo(
+          `domain move: ${item.s}/${item.i} waits on ${[...objects].filter((_, i) => !moved[i]).join(", ")}`,
+        );
+      }
       if (page.next === null) break;
       after = page.next;
     }
@@ -798,7 +802,11 @@ const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
       );
     const resolver = classes.resolver;
     // Code that hasn't built the model can't find its objects: ask again later.
-    if (resolver === undefined) return Effect.succeed(false);
+    if (resolver === undefined)
+      return Effect.as(
+        Effect.logWarning(`domain move: ${classes.className} isn't built here yet; asked again`),
+        false,
+      );
     return "n" in item
       ? moveNamed(resolver, item.r, item.n, waitMillis)
       : moveEntry(resolver, item, waitMillis);
@@ -889,9 +897,10 @@ const migrationObject = (classes: Classes): ObjectImpl =>
               if (resolver === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
               const node = path.slice(`${target}${DIRECTORY}`.length);
               const page = yield* orDie<Backfill.Listing>(
-                makeRpcStub<Stub>(
-                  resolver.namespace.getByName(`${resolver.directory}/node:${node}`),
-                ).list!(node, after),
+                (resolver.namespace.getByName(`${resolver.directory}/node:${node}`) as Stub).list!(
+                  node,
+                  after,
+                ),
               );
               return {
                 entries: [

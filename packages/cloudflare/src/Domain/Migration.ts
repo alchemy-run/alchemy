@@ -363,10 +363,9 @@ export const migrateModel = Effect.fn(function* ({
       return yield* new MigrationStillRunning({
         message: `Moving Domain objects to ${news.domainClass} is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,
       });
-    yield* session.note(
-      `Moving Domain objects to ${news.domainClass}: ${where} (${Math.round(elapsed / 1000)}s) ...`,
-      { kind: "status" },
-    );
+    const line = `Moving Domain objects to ${news.domainClass}: ${where} (${Math.round(elapsed / 1000)}s) ...`;
+    yield* session.note(line, { kind: "status" });
+    yield* Effect.logInfo(line);
     yield* Effect.sleep(POLL);
   }
 
