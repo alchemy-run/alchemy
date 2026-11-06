@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/modal/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
@@ -110,6 +113,9 @@
     },
     {
       "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/modal/tsconfig.json"
     },
     {
       "path": "./packages/planetscale/tsconfig.json"
@@ -336,6 +342,12 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-modal-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/modal-functions/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"

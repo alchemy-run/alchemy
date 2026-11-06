@@ -11,6 +11,7 @@
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/github": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/pkg": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",

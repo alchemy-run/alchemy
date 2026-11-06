@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
+import * as Modal from "@alchemy.run/modal";
 import * as Neon from "@alchemy.run/neon";
 import * as Planetscale from "@alchemy.run/planetscale";
 import * as Prisma from "@alchemy.run/prisma";
@@ -28,6 +29,7 @@ export default Alchemy.Stack(
       Railway.providers(),
       Stripe.providers(),
       Turso.providers(),
+      Modal.providers(),
     ),
     state: Cloudflare.state(),
   },

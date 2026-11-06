@@ -1,0 +1,35 @@
+---
+title: "Part 4: Stages"
+description: Deploy separate dev, staging and prod copies, each in its own Modal environment.
+sidebar:
+  order: 4
+---
+
+## Deploy a second stage
+
+```sh
+alchemy deploy --stage staging
+```
+
+The `Agents` environment's name includes the stage, so `staging` gets its own environment, app, images and volumes. Your own stage is untouched.
+
+## Limit what a stage can spend
+
+```diff lang="typescript"
+// src/Sandbox.ts
+-export const Agents = Modal.Environment("Agents", {});
++export const Agents = Modal.Environment("Agents", {
++  maxConcurrentTasks: 20,
++  budget: 50,
++});
+```
+
+`budget` is a monthly limit in US dollars for the environment. Modal stops starting containers when it's reached.
+
+## Remove a stage
+
+```sh
+alchemy destroy --stage staging
+```
+
+Destroying the environment also removes the volumes your Worker created in it.

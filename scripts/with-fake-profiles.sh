@@ -37,6 +37,8 @@ export GH_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 export GITHUB_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 
 export HCLOUD_TOKEN=alchemy-fake-local-hetzner-token
+export MODAL_TOKEN_ID=ak-alchemy-fake-local
+export MODAL_TOKEN_SECRET=as-alchemy-fake-local
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 

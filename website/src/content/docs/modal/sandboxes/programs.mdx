@@ -1,0 +1,73 @@
+---
+title: Programs
+description: Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
+---
+
+A `Modal.Sandbox` is a program Alchemy bundles into an image. Every sandbox you start from it runs the program.
+
+## Write the program
+
+```typescript
+// src/Agent.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Coder } from "./Coder.ts";
+
+export default class Agent extends Modal.Sandbox<Agent>()(
+  "Agent",
+  { main: import.meta.url, app: Coder },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ready")),
+    };
+  }),
+) {}
+```
+
+Run `alchemy deploy`. Modal builds the image; you don't need Docker.
+
+## Start one and call it
+
+```typescript
+const agents = yield* Modal.CreateSandbox(Agent);
+const agent = yield* agents.create({ timeout: "10 minutes" });
+const response = yield* agent.fetch(HttpClientRequest.get("/"));
+```
+
+Provide `Modal.CreateSandboxHttp`. `fetch` goes through the sandbox's tunnel to the program's port.
+
+## Use bindings in the program
+
+```typescript
+const models = yield* Modal.ReadVolume(Models);
+```
+
+The program's env, including the token its bindings need, is stored in a Modal Secret attached to every sandbox. It never goes into the image.
+
+## A plain program
+
+```typescript
+// src/Agent.ts
+import * as Modal from "@alchemy.run/modal";
+import { Coder } from "./Coder.ts";
+
+export const Agent = Modal.Sandbox("Agent", {
+  main: "./src/agent-server.ts",
+  app: Coder,
+  env: { GREETING: "hello" },
+});
+export type AgentEnv = Modal.InferEnv<typeof Agent>;
+```
+
+```typescript
+// src/agent-server.ts
+import { createServer } from "node:http";
+import type { AgentEnv } from "./Agent.ts";
+
+const env = process.env as unknown as AgentEnv;
+
+createServer((_request, response) => response.end(env.GREETING)).listen(Number(process.env.PORT));
+```
+
+It runs on Bun. Listen on `PORT` (8080 unless you set `port`).

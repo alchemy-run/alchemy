@@ -20,6 +20,7 @@ const bareImports = (result: Bundle.BundleOutput) =>
 const BOOTSTRAPS = [
   ["@alchemy.run/fly", "@alchemy.run/fly/Bootstrap"],
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
+  ["@alchemy.run/modal", "@alchemy.run/modal/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],
   ["@alchemy.run/railway", "@alchemy.run/railway/Bootstrap"],
 ] as const;
