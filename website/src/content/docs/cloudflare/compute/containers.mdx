@@ -251,8 +251,8 @@ redeploy it.
 
 ## Cached builds by default
 
-Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds use
-registry caching without extra configuration:
+Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds reuse
+published images without extra configuration:
 
 ```typescript
 export class Web extends Cloudflare.Container<Web>()("Web", {
@@ -295,23 +295,15 @@ the configured account ID. With the default registry host, a build uses:
 
 ```text
 Published build: registry.cloudflare.com/<account-id>/web:<build-hash>
-Build cache:     registry.cloudflare.com/<account-id>/web:buildcache
 Deployed image:  registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
 ```
 
 The build hash identifies the inputs; the manifest digest identifies the
 published artifact. Stages using the same repository and matching build
 inputs reuse the published image without invoking Docker. Changed inputs
-produce a new hash tag in that repository and can reuse its shared inline
-build-layer cache. Each stage still has its own Container application,
-runtime settings, and running instances; only images and build layers are shared.
-
-All builds targeting a repository import reusable layers from its
-`:buildcache` tag, even when their complete input hashes differ. That tag
-points to the latest exported inline cache, not an aggregate of every image
-ever published to the repository. A finished-image cache hit leaves the
-layer-cache tag unchanged. The Container deploys the immutable digest, not
-the mutable `buildcache` tag.
+produce a new hash tag in that repository. Each stage still has its own
+Container application, runtime settings, and running instances; only images
+are shared.
 
 For an Effect-native Container, put `publish` in the props passed to
 `.make()`, alongside `main`. Omitting `publish` keeps the default cached,
@@ -321,6 +313,49 @@ For a pre-built external `image`, `publish.repository` chooses where it is
 re-published, but does not enable finished-image cache reuse. Images already
 in the target registry keep their existing repository instead of being
 copied into the requested one.
+
+## Cache build layers
+
+A changed build reuses the layers in the local BuildKit cache of the machine
+it runs on. A builder that has never built the image, such as a fresh CI
+runner, has no layers and reruns every step. Keep the layers in the registry
+with `build.cache`:
+
+```typescript
+export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+  context: `${import.meta.dirname}/context`,
+  build: { cache: true },
+}) {}
+```
+
+Builds then import and export a cache at the repository's `:buildcache` tag.
+It holds every stage's layers, so a change late in a multi-stage Dockerfile
+doesn't rerun an expensive step in an earlier stage. Exporting a cache needs
+a builder that supports it: the `docker` driver with the containerd image
+store, or a `docker-container` builder (what `docker/setup-buildx-action`
+creates in CI).
+
+For another [cache backend](https://docs.docker.com/build/cache/backends/),
+pass BuildKit's own `--cache-from` / `--cache-to` values as `from` and `to`:
+
+```typescript
+export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+  context: `${import.meta.dirname}/context`,
+  build: {
+    cache: {
+      from: ["type=gha,scope=agent"],
+      to: ["type=gha,scope=agent,mode=max"],
+    },
+  },
+}) {}
+```
+
+Credentials for `gha` and `s3` come from the environment, as BuildKit
+documents; the values reach `docker`'s arguments, so never put secrets in
+them. The cache isn't part of the image's content hash, so changing it never
+rebuilds an image. Every resource that builds an image takes the same
+`cache`: `Docker.Image`, `AWS.ECS`, `GCP.Run` and `Kubernetes` workloads under
+`build`, `AWS.ECR.Image` and Lambda container images next to `buildArgs`.
 
 ## Configure the container with `env`
 

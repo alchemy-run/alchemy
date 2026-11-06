@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 6,
+      "image": "image",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 7,
+          "flags": []
+        },
+        {
+          "tag": "ENV",
+          "line": 8,
+          "flags": [],
+          "vars": [
+            [
+              "GOPATH",
+              "go"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
