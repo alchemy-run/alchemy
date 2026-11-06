@@ -1,0 +1,221 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 18,
+      "image": "ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 19,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 22,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends install -yq \tapt-utils \taufs-tools \tautomake \tbtrfs-tools \tbuild-essential \tcurl \tdpkg-sig \tgit \tiptables \tlibapparmor-dev \tlibcap-dev \tmercurial \tpandoc \tparallel \treprepro \truby1.9.1 \truby1.9.1-dev \ts3cmd=1.1.0* \t--no-install-recommends"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 44,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "git clone --no-checkout https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2 \u0026\u0026 cd /usr/local/lvm2 \u0026\u0026 git checkout -q v2_02_103"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 49,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /usr/local/lvm2 \u0026\u0026 ./configure --enable-static_link \u0026\u0026 make device-mapper \u0026\u0026 make install_device-mapper"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 53,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "curl -sSL https://golang.org/dl/go1.3.src.tar.gz | tar -v -C /usr/local -xz"
+          }
+        },
+        {
+          "tag": "ENV",
+          "line": 54,
+          "flags": [],
+          "vars": [
+            [
+              "PATH",
+              "/usr/local/go/bin:$PATH"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 55,
+          "flags": [],
+          "vars": [
+            [
+              "GOPATH",
+              "/go:/go/src/github.com/docker/docker/vendor"
+            ]
+          ]
+        },
+        {
+          "tag": "RUN",
+          "line": 56,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /usr/local/go/src \u0026\u0026 ./make.bash --no-clean 2\u003e\u00261"
+          }
+        },
+        {
+          "tag": "ENV",
+          "line": 59,
+          "flags": [],
+          "vars": [
+            [
+              "DOCKER_CROSSPLATFORMS",
+              "linux/386 linux/arm \tdarwin/amd64 darwin/386 \tfreebsd/amd64 freebsd/386 freebsd/arm"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 64,
+          "flags": [],
+          "vars": [
+            [
+              "GOARM",
+              "5"
+            ]
+          ]
+        },
+        {
+          "tag": "RUN",
+          "line": 65,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /usr/local/go/src \u0026\u0026 bash -xc 'for platform in $DOCKER_CROSSPLATFORMS; do GOOS=${platform%/*} GOARCH=${platform##*/} ./make.bash --no-clean 2\u003e\u00261; done'"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 68,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "go get golang.org/x/tools/cmd/cover"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 71,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "gem install --no-rdoc --no-ri fpm --version 1.0.2"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 74,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "git clone -b buildroot-2014.02 https://github.com/jpetazzo/docker-busybox.git /docker-busybox"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 77,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "/bin/echo -e '[default]\\naccess_key=$AWS_ACCESS_KEY\\nsecret_key=$AWS_SECRET_KEY' \u003e /.s3cfg"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 80,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "git config --global user.email 'docker-dummy@example.com'"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 83,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "groupadd -r docker"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 84,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "useradd --create-home --gid docker unprivilegeduser"
+          }
+        },
+        {
+          "tag": "VOLUME",
+          "line": 86,
+          "flags": []
+        },
+        {
+          "tag": "WORKDIR",
+          "line": 87,
+          "flags": [],
+          "value": "/go/src/github.com/docker/docker"
+        },
+        {
+          "tag": "ENV",
+          "line": 88,
+          "flags": [],
+          "vars": [
+            [
+              "DOCKER_BUILDTAGS",
+              "apparmor selinux"
+            ]
+          ]
+        },
+        {
+          "tag": "ENTRYPOINT",
+          "line": 91,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "hack/dind"
+            ]
+          }
+        },
+        {
+          "tag": "COPY",
+          "line": 94,
+          "flags": [],
+          "sources": [
+            "."
+          ],
+          "destination": "/go/src/github.com/docker/docker"
+        }
+      ]
+    }
+  ]
+}

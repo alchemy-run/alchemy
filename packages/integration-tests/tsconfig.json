@@ -8,7 +8,8 @@
     "test/Cloudflare/Workers/fixtures/prisma-orm/generated/contract.json",
     "test/Prisma/ORM/fixtures/client/generated/contract.json",
     "test/Prisma/ORM/fixtures/psl/generated/contract.json",
-    "test/Prisma/ORM/fixtures/variants/generated/contract.json"
+    "test/Prisma/ORM/fixtures/variants/generated/contract.json",
+    "test/Docker/dockerfile-conformance/cases.json"
   ],
   "exclude": [
     // Prisma migration packages are self-emitting Node scripts whose

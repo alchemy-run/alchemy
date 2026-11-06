@@ -1,0 +1,83 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 apt-get install wget -y"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "wget http://s3.amazonaws.com/influxdb/influxdb_latest_amd64.deb"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 5,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "dpkg -i influxdb_latest_amd64.deb"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 6,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "rm -r /opt/influxdb/shared"
+          }
+        },
+        {
+          "tag": "VOLUME",
+          "line": 8,
+          "flags": []
+        },
+        {
+          "tag": "CMD",
+          "line": 10,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "/usr/bin/influxdb --pidfile /var/run/influxdb.pid -config /opt/influxdb/shared/config.toml"
+          }
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 12,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 13,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 14,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 15,
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

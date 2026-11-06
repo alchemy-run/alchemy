@@ -101,7 +101,7 @@ layer(BunServices.layer)("DockerfileParser", (test) => {
         });
         expect(copyScript).toMatchObject({
           _tag: "COPY",
-          sources: ["<<-SCRIPT"],
+          sources: ["<<-'SCRIPT'"],
           destination: "/run.sh",
           flags: [{ name: "chmod", value: "755" }],
           heredocs: [
@@ -151,11 +151,11 @@ layer(BunServices.layer)("DockerfileParser", (test) => {
         const unknown = yield* Effect.flip(DockerfileParser.parse("FROM alpine\nFETCH x\n"));
         expect(unknown).toMatchObject({ _tag: "DockerfileSyntaxError", line: 2 });
         const early = yield* Effect.flip(DockerfileParser.parse("RUN echo\nFROM alpine\n"));
-        expect(early).toMatchObject({ line: 1, message: "RUN before the first FROM" });
+        expect(early).toMatchObject({ line: 1, message: "no build stage in current context" });
         const heredoc = yield* Effect.flip(
           DockerfileParser.parse("FROM alpine\nRUN <<EOF\necho\n"),
         );
-        expect(heredoc).toMatchObject({ line: 2, message: "unterminated heredoc <<EOF" });
+        expect(heredoc).toMatchObject({ line: 2, message: "unterminated heredoc" });
       }),
     { tags },
   );
