@@ -202,128 +202,106 @@ provider registered via `dual`.
 A local resource that listens on a port advertises `http://localhost:<port>`.
 A user who routes dev traffic through a router (a local HTTPS proxy, a
 tunnel) wants the resource's `url` to be the router's address instead. The
-resource takes an `ingress` in its `dev` props, and its local provider asks
-the router's **ingress adapter** to route a name to the listener.
+resource takes an `ingress` in its `dev` props:
 
-The prop is an `IngressConfig`, which is plain data (`{ type, options }`).
-It crosses the sidecar's RPC boundary and persists in state, and a function
-in it would arrive as `null`. `Output` values in `options` are resolved
-before `reconcile` sees them.
+```typescript
+dev?: { ingress?: Ingress.Ingress };
+```
 
-### Derive the target
+An `Ingress` is plain data: the `module` that routes it, an optional route
+`name`, and any settings the router reads. It crosses the sidecar's RPC
+boundary and persists in state, and none of the router is bundled into the
+resource.
+
+```typescript
+dev: { ingress: { module: "@alchemy.run/portless/IngressLive", name: "api" } }
+```
+
+### Attach the listener
 
 ```typescript
 import * as Ingress from "alchemy/Local/Ingress";
 
-const target = Ingress.createTarget({ stack, id, fqn, type: Web.Type, config: news.dev.ingress });
-```
-
-The target names the resource to the adapter: stack, stage, fqn, logical id
-and resource type. `stack` is the `Stack` service the provider read when its
-layer was built, and `id` and `fqn` come from the context `start` receives.
-`label` is what the route is called: the `name` on the user's `IngressConfig`,
-else the logical id. Two resources in one stack and stage need distinct
-names, so a resource that builds another one inside itself (a site composite
-builds its server as `"Build"`) sets `name` for the user, to its own id, when
-the user gave an `ingress` and no `name`.
-
-### Route the listener
-
-```typescript
-start: Effect.fn(function* ({ news }) {
+start: Effect.fn(function* ({ id, fqn, news }) {
   const listener = yield* startServer(news);
-  const url = news.dev?.ingress
-    ? yield* Ingress.route(news.dev.ingress, target, listener)
+  const ingress = news.dev?.ingress;
+  const url = ingress
+    ? yield* Ingress.attach(ingress, { stack: stack.name, stage: stack.stage, fqn, id, type }, listener)
     : listener.href;
   return { url, localUrl: listener.href };
 }),
 ```
 
-`route` returns the origin and keeps the route until the ambient `Scope`
-closes, which for `start` is the instance scope. Keep the raw listener in an
+`attach` imports `ingress.module` inside the sidecar, builds its
+default-export Layer once per process, and asks the router to route the
+target to the listener. The route lasts until the ambient `Scope` closes,
+which for `start` is the instance scope. Keep the raw listener in an
 attribute (`localUrl`) for everything that dials the resource from inside
 the dev session, such as service bindings and emulated routers.
 
-There is no call for the origin without a listener, because a router that
-names a route when it makes it (a quick tunnel) has no name to give before
-then. Code that needs a router's name earlier uses that router's own
-function.
-
-`route` fails with `IngressAdapterNotFound` when no installed package
-contributes the adapter, and with `IngressError` when the adapter can't make
-the route. Let either fail `start`, so the resource never advertises an
-address nothing routes.
+`attach` fails with `IngressError` when the module can't be loaded or the
+router can't make the route. Let it fail `start`, so the resource never
+advertises an address nothing routes.
 
 :::note[Typed errors across the sidecar]
 A failure inside the sidecar reaches the engine as a defect that keeps its
-message, not its class. Put what the user needs in the message, as the two
-ingress errors do.
+message, not its class. Put what the user needs in the message, as
+`IngressError` does.
 :::
 
-### Write an adapter
+### Write a router
 
-A router's package contributes its adapter under a `type` in its
-[contributions](/infrastructure-as-code/contributions):
-
-```diff lang="typescript"
- export default Contributions.make({
-   name: "acme-router",
-+  ingress: {
-+    "acme-router": Contributions.lazy(
-+      () => import("./Ingress.ts"),
-+      (module) => module.factory,
-+    ),
-+  },
- });
-```
+A router is a module whose default export is a Layer providing
+`Ingress.Router`. Its Layer is built with the services the sidecar gives
+every local provider: `FileSystem`, `Path`, `ChildProcessSpawner` and
+`HttpClient`.
 
 ```typescript
-// src/Ingress.ts
-import type { IngressFactory } from "alchemy/Local/Ingress";
+// src/IngressLive.ts
+import * as Ingress from "alchemy/Local/Ingress";
 
-export const factory: IngressFactory = {
-  make: (options) =>
-    Effect.succeed({
-      attach: (target, listener) =>
+export default Layer.effect(
+  Ingress.Router,
+  Effect.gen(function* () {
+    const table = yield* openRouteTable;
+    return {
+      attach: (ingress, target, listener) =>
         Effect.acquireRelease(
-          addRoute(hostFor(options, target), listener),
-          () => removeRoute(hostFor(options, target)),
+          table.add(hostFor(ingress, target), listener),
+          () => table.remove(hostFor(ingress, target)),
         ),
-    }),
-};
+    };
+  }),
+);
 ```
 
-The package also exports the constructor users call to get the
-`IngressConfig` for `dev.ingress`. A user who needs two routes with the same
-logical id, or a name other than the id, sets `name` on the result:
+The package also exports the constructor users call to get the `Ingress`
+for `dev.ingress`, carrying the settings its router reads:
 
 ```typescript
-export const Ingress = (
-  options: { domain?: string } = {},
-): IngressConfig<"acme-router"> => ({ type: "acme-router", options });
-
-// dev: { ingress: { ...Ingress(), name: "api" } }
+export const Ingress = (options: { domain: string; name?: string }) => ({
+  module: "@alchemy.run/acme-router/IngressLive",
+  name: options.name,
+  domain: options.domain,
+});
 ```
 
-`attach` keeps its route in the `Scope` and returns the origin it answers at.
-It follows three rules:
+`attach` returns the origin it answers at and follows three rules:
 
 - Attaching the same `fqn` and listener again changes nothing.
 - Attaching an `fqn` to a new listener replaces its route.
 - Closing the `Scope` removes the route that call added, unless a later
   attach for the same `fqn` took it over.
 
-Key anything the adapter keeps by `fqn`, and make the hostname from the
-target's stage and label. The stage is the CLI's name for it (`dev_alice`),
-which isn't a valid host label, so the adapter slugifies it. The factory's
-`make` runs on every call, so keep it cheap and keep shared state outside
-the adapter value.
+Key anything the router keeps by `fqn`, and name the route from
+`ingress.name`, else `target.id`. The stage is the CLI's name for it
+(`dev_alice`), which isn't a valid host label, so slugify it in hostnames.
 
-A test registers an adapter without a package by providing
-`Ingress.Adapters`, which is checked before contributed adapters:
+A test points `module` at a router of its own, such as the loopback
+forwarder in `@alchemy.run/test`:
 
 ```typescript
-Layer.succeed(Ingress.Adapters, { "acme-router": factory });
+dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } }
 ```
 
 ## Testing

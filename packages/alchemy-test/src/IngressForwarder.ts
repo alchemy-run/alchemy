@@ -1,48 +1,30 @@
 /**
  * A dev ingress router for tests.
  *
- * `makeForwarder` is an `alchemy/Local/Ingress` adapter that really routes: one
- * HTTP server on a free loopback port that forwards each request to the
- * listener attached for its `Host`. Tests of the ingress contract and of every
- * resource that takes `dev.ingress` share it, so a routed URL is exercised
- * end to end without installing a router.
+ * The default export is an `alchemy/Local/Ingress` {@link Router} Layer that
+ * really routes: one HTTP server on a free loopback port that forwards each
+ * request to the listener attached for its `Host`. Point a resource's
+ * `dev.ingress` at this module and its routed URL is exercised end to end,
+ * inside the dev sidecar or in-process, without installing a router.
  *
  * ```ts
- * const forwarder = yield* makeForwarder;
- * const worker = yield* stack.deploy(program).pipe(Effect.provide(forwarder.adapters));
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main,
+ *   dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } },
+ * });
  * const answer = yield* getRouted(worker.url); // worker.url is on the forwarder
  * ```
  *
- * A test that runs under the real `alchemy dev` sidecar can't hand the sidecar
- * a service. There the package contributes {@link sharedFactory} under the
- * same {@link FORWARDER_TYPE} (see `IngressContributions.ts`), so
- * `forwarderConfig()` resolves inside the sidecar the way an installed
- * router's adapter does, and the test reaches the routed origin with
- * {@link getRouted}.
+ * Origins are `http://<stage>.<name>.<stack>.localhost:<port>`, with `name`
+ * from the `Ingress` (default: the resource's logical id). Reach one with
+ * {@link getRouted}, which dials loopback with the origin's `Host`, so no
+ * test depends on resolving `*.localhost`.
  */
 import * as NodeHttp from "node:http";
 import type { AddressInfo } from "node:net";
-import {
-  Adapters,
-  IngressError,
-  type IngressAdapter,
-  type IngressConfig,
-  type IngressFactory,
-  type IngressOptions,
-  type IngressTarget,
-} from "alchemy/Local/Ingress";
+import { IngressError, Router } from "alchemy/Local/Ingress";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
-
-/** The `IngressConfig.type` the forwarder's factory is registered under. */
-export const FORWARDER_TYPE = "forwarder";
-
-/** The `dev.ingress` value that selects a forwarder, with optional adapter options. */
-export const forwarderConfig = (options?: IngressOptions): IngressConfig => ({
-  type: FORWARDER_TYPE,
-  options,
-});
 
 /** Lowercase, host-safe label: `dev_alice` becomes `dev-alice`. */
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -54,146 +36,85 @@ interface Route {
   readonly owner: symbol;
 }
 
-export interface Forwarder {
-  /** Register under `IngressConfig.type` `"forwarder"` (see {@link FORWARDER_TYPE}). */
-  readonly factory: IngressFactory;
-  /**
-   * `factory` as `Ingress.Adapters`: provide it around the code under test so
-   * the resolution finds the forwarder before any contributed adapter.
-   */
-  readonly adapters: Layer.Layer<Adapters>;
-  /** The forwarder's own port: every origin it names answers here. */
-  readonly port: number;
-  /** The live routes, by fqn. */
-  readonly routes: () => ReadonlyMap<string, { readonly host: string; readonly listener: string }>;
-  /** The options each `make` call received. */
-  readonly made: () => ReadonlyArray<IngressOptions | undefined>;
-}
-
 /**
- * A router for tests. Origins are
- * `http://<stage>.<label>.<domain>.localhost:<port>`, with `domain` from the
- * adapter's options (default: the stack name). It refuses non-`http:`
- * listeners with an `IngressError`.
- *
- * Reach an origin it named with {@link getRouted}, which dials the loopback
- * address with the origin's `Host`, so no test depends on resolving
- * `*.localhost`.
+ * A forwarder as a {@link Router} Layer. Each build starts its own server,
+ * which stops when the Layer's scope closes. A fixture module default-exports
+ * one to count or wrap builds; this module's default export is one.
  */
-export const makeForwarder = Effect.gen(function* () {
-  const routes = new Map<string, Route>();
-  const made: Array<IngressOptions | undefined> = [];
+export const make = (): Layer.Layer<Router> =>
+  Layer.effect(
+    Router,
+    Effect.gen(function* () {
+      const routes = new Map<string, Route>();
 
-  const server = NodeHttp.createServer((request, response) => {
-    const host = (request.headers.host ?? "").replace(/:\d+$/, "");
-    const route = [...routes.values()].find((candidate) => candidate.host === host);
-    if (route === undefined) {
-      response.writeHead(502, { "content-type": "text/plain" }).end(`no route for ${host}`);
-      return;
-    }
-    const upstream = NodeHttp.request(
-      {
-        hostname: route.listener.hostname.replace(/^\[|\]$/g, ""),
-        port: route.listener.port,
-        method: request.method,
-        path: request.url,
-        headers: request.headers,
-      },
-      (answer) => {
-        response.writeHead(answer.statusCode ?? 502, answer.headers);
-        answer.pipe(response);
-      },
-    );
-    upstream.on("error", (error) => {
-      response.writeHead(502, { "content-type": "text/plain" }).end(String(error));
-    });
-    request.pipe(upstream);
-  });
+      const server = NodeHttp.createServer((request, response) => {
+        const host = (request.headers.host ?? "").replace(/:\d+$/, "");
+        const route = [...routes.values()].find((candidate) => candidate.host === host);
+        if (route === undefined) {
+          response.writeHead(502, { "content-type": "text/plain" }).end(`no route for ${host}`);
+          return;
+        }
+        const upstream = NodeHttp.request(
+          {
+            hostname: route.listener.hostname.replace(/^\[|\]$/g, ""),
+            port: route.listener.port,
+            method: request.method,
+            path: request.url,
+            headers: request.headers,
+          },
+          (answer) => {
+            response.writeHead(answer.statusCode ?? 502, answer.headers);
+            answer.pipe(response);
+          },
+        );
+        upstream.on("error", (error) => {
+          response.writeHead(502, { "content-type": "text/plain" }).end(String(error));
+        });
+        request.pipe(upstream);
+      });
 
-  yield* Effect.acquireRelease(
-    Effect.callback<void>((resume) => {
-      server.listen(0, "127.0.0.1", () => resume(Effect.void));
+      yield* Effect.acquireRelease(
+        Effect.callback<void>((resume) => {
+          server.listen(0, "127.0.0.1", () => resume(Effect.void));
+        }),
+        () =>
+          Effect.callback<void>((resume) => {
+            server.close(() => resume(Effect.void));
+            server.closeAllConnections();
+          }),
+      );
+      // Never what keeps a process alive: a router built for the dev sidecar
+      // lives until the process exits.
+      server.unref();
+      const { port } = server.address() as AddressInfo;
+
+      return {
+        attach: (ingress, target, listener) => {
+          if (listener.protocol !== "http:") {
+            return Effect.fail(
+              new IngressError({
+                message: `The forwarder only routes http listeners, not ${listener.protocol}`,
+              }),
+            );
+          }
+          const host = `${slug(target.stage)}.${slug(ingress.name ?? target.id)}.${slug(target.stack)}.localhost`;
+          return Effect.acquireRelease(
+            Effect.sync(() => {
+              const owner = Symbol(target.fqn);
+              routes.set(target.fqn, { host, listener, owner });
+              return owner;
+            }),
+            (owner) =>
+              Effect.sync(() => {
+                if (routes.get(target.fqn)?.owner === owner) routes.delete(target.fqn);
+              }),
+          ).pipe(Effect.as(`http://${host}:${port}`));
+        },
+      };
     }),
-    () =>
-      Effect.callback<void>((resume) => {
-        server.close(() => resume(Effect.void));
-        server.closeAllConnections();
-      }),
   );
-  // Never what keeps a process alive: a shared forwarder has no owner to close it.
-  server.unref();
-  const { port } = server.address() as AddressInfo;
 
-  const hostOf = (domain: string, target: IngressTarget) =>
-    `${slug(target.stage)}.${slug(target.label)}.${slug(domain)}.localhost`;
-
-  const factory: IngressFactory = {
-    make: (options) =>
-      Effect.sync((): IngressAdapter => {
-        made.push(options);
-        const domain = typeof options?.domain === "string" ? options.domain : undefined;
-        const origin = (target: IngressTarget) =>
-          `http://${hostOf(domain ?? target.stack, target)}:${port}`;
-        return {
-          attach: (target, listener) =>
-            listener.protocol !== "http:"
-              ? Effect.fail(
-                  new IngressError({
-                    type: FORWARDER_TYPE,
-                    message: `The forwarder only routes http listeners, not ${listener.protocol}`,
-                  }),
-                )
-              : Effect.acquireRelease(
-                  Effect.sync(() => {
-                    const owner = Symbol(target.fqn);
-                    routes.set(target.fqn, {
-                      host: hostOf(domain ?? target.stack, target),
-                      listener,
-                      owner,
-                    });
-                    return { owner, origin: origin(target) };
-                  }),
-                  ({ owner }) =>
-                    Effect.sync(() => {
-                      if (routes.get(target.fqn)?.owner === owner) routes.delete(target.fqn);
-                    }),
-                ).pipe(Effect.map(({ origin }) => origin)),
-        };
-      }),
-  };
-
-  return {
-    factory,
-    adapters: Layer.succeed(Adapters, { [FORWARDER_TYPE]: factory }),
-    port,
-    routes: () =>
-      new Map(
-        [...routes].map(([fqn, route]) => [
-          fqn,
-          { host: route.host, listener: route.listener.href },
-        ]),
-      ),
-    made: () => made,
-  } satisfies Forwarder;
-});
-
-let shared: Promise<Forwarder> | undefined;
-
-/**
- * The forwarder's factory for a process that can't be handed one: the first
- * adapter it builds starts a forwarder that lives until the process exits, and
- * every later one shares it, so routes added by one call are served by the
- * port an earlier call returned.
- */
-export const sharedFactory: IngressFactory = {
-  make: (options) =>
-    Effect.promise(
-      () =>
-        (shared ??= Effect.runPromise(
-          Effect.flatMap(Scope.make(), (scope) => Scope.provide(makeForwarder, scope)),
-        )),
-    ).pipe(Effect.flatMap((forwarder) => forwarder.factory.make(options))),
-};
+export default make();
 
 /** What a client sees from {@link getRouted}. */
 export interface Answer {

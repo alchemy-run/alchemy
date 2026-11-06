@@ -1,10 +1,5 @@
 import { assert, describe, expect, it } from "@alchemy.run/test";
-import {
-  FORWARDER_TYPE,
-  getRouted,
-  makeForwarder,
-  makeListener,
-} from "@alchemy.run/test/IngressForwarder";
+import { getRouted, makeListener } from "@alchemy.run/test/IngressForwarder";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -12,201 +7,110 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Ingress from "@/Local/Ingress.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { builds } from "./fixtures/ingress-forwarder.ts";
 
-const config: Ingress.IngressConfig = { type: FORWARDER_TYPE };
+/** The fixture module, by the URL `attach` imports it from. */
+const forwarder: Ingress.Ingress = {
+  module: new URL("./fixtures/ingress-forwarder.ts", import.meta.url).href,
+};
 
-const target: Ingress.IngressTarget = {
+const target: Ingress.Target = {
   stack: "myapp",
   stage: "dev_alice",
   fqn: "Backend/Api",
   id: "Api",
-  label: "api",
   type: "Cloudflare.Worker",
 };
 
-/** A forwarder registered as `Ingress.Adapters`, under the services adapters run under. */
-const withForwarder = <A, E>(
-  use: (
-    forwarder: Effect.Success<typeof makeForwarder>,
-  ) => Effect.Effect<A, E, Scope.Scope | Ingress.IngressServices>,
-) =>
-  Effect.gen(function* () {
-    const forwarder = yield* makeForwarder;
-    return yield* use(forwarder).pipe(Effect.provide(forwarder.adapters));
-  }).pipe(Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)), Effect.scoped);
+/** The services the dev sidecar provides a router's Layer. */
+const services = Layer.merge(PlatformServices, FetchHttpClient.layer);
 
-describe("Ingress", { tags: ["unit", "local"] }, () => {
-  it.live("route forwards the origin to the listener", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const listener = yield* makeListener("api");
-        const origin = yield* Ingress.route(config, target, listener);
-        expect(origin).toBe(`http://dev-alice.api.myapp.localhost:${forwarder.port}`);
-        const answer = yield* getRouted(origin, "/hello");
-        expect(answer.status).toBe(200);
-        // The listener sees the routed host, as a browser's request would carry it.
-        expect(answer.body).toBe(`api /hello ${new URL(origin).host}`);
-      }),
-    ),
+describe("Ingress.attach", { tags: ["unit", "local"] }, () => {
+  it.live("routes the origin to the listener", () =>
+    Effect.gen(function* () {
+      const listener = yield* makeListener("api");
+      const origin = yield* Ingress.attach(forwarder, target, listener);
+      expect(origin).toMatch(/^http:\/\/dev-alice\.api\.myapp\.localhost:\d+$/);
+      const answer = yield* getRouted(origin, "/hello");
+      expect(answer.status).toBe(200);
+      // The listener sees the routed host, as a browser's request would carry it.
+      expect(answer.body).toBe(`api /hello ${new URL(origin).host}`);
+    }).pipe(Effect.provide(services), Effect.scoped),
+  );
+
+  it.live("names the route after the ingress's name", () =>
+    Effect.gen(function* () {
+      const listener = yield* makeListener("web");
+      const origin = yield* Ingress.attach({ ...forwarder, name: "Shop" }, target, listener);
+      expect(origin).toMatch(/^http:\/\/dev-alice\.shop\.myapp\.localhost:\d+$/);
+      expect((yield* getRouted(origin)).body).toMatch(/^web /);
+    }).pipe(Effect.provide(services), Effect.scoped),
   );
 
   it.live("closing the scope removes the route", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const listener = yield* makeListener("api");
-        const scope = yield* Scope.make();
-        const origin = yield* Ingress.route(config, target, listener).pipe(Scope.provide(scope));
-        expect(forwarder.routes().get(target.fqn)?.listener).toBe(listener.href);
-        expect((yield* getRouted(origin)).status).toBe(200);
+    Effect.gen(function* () {
+      const listener = yield* makeListener("api");
+      const scope = yield* Scope.make();
+      const origin = yield* Ingress.attach(forwarder, { ...target, fqn: "Closed" }, listener).pipe(
+        Scope.provide(scope),
+      );
+      expect((yield* getRouted(origin)).status).toBe(200);
 
-        yield* Scope.close(scope, Exit.void);
-        expect(forwarder.routes().size).toBe(0);
-        expect((yield* getRouted(origin)).status).toBe(502);
-      }),
-    ),
+      yield* Scope.close(scope, Exit.void);
+      expect((yield* getRouted(origin)).status).toBe(502);
+    }).pipe(Effect.provide(services), Effect.scoped),
   );
 
-  it.live("attaching the same fqn and listener again is idempotent", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const listener = yield* makeListener("api");
-        const first = yield* Scope.make();
-        const second = yield* Scope.make();
-        const one = yield* Ingress.route(config, target, listener).pipe(Scope.provide(first));
-        const two = yield* Ingress.route(config, target, listener).pipe(Scope.provide(second));
-        expect(two).toBe(one);
-        expect(forwarder.routes().size).toBe(1);
-
-        // The later attach owns the route: the earlier scope leaves it alone.
-        yield* Scope.close(first, Exit.void);
-        expect((yield* getRouted(one)).status).toBe(200);
-        yield* Scope.close(second, Exit.void);
-        expect(forwarder.routes().size).toBe(0);
-      }),
-    ),
+  it.live("builds each module's Layer once per process", () =>
+    Effect.gen(function* () {
+      const listener = yield* makeListener("api");
+      const [one, two] = yield* Effect.all(
+        [
+          Ingress.attach(forwarder, { ...target, fqn: "One", id: "One" }, listener),
+          Ingress.attach(forwarder, { ...target, fqn: "Two", id: "Two" }, listener),
+        ],
+        { concurrency: "unbounded" },
+      );
+      // Both routes are on the one forwarder the module built.
+      expect(new URL(one).port).toBe(new URL(two).port);
+      expect(builds.count).toBe(1);
+    }).pipe(Effect.provide(services), Effect.scoped),
   );
 
-  it.live("a new listener replaces the route and the old scope leaves it", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const before = yield* makeListener("before");
-        const after = yield* makeListener("after");
-        const first = yield* Scope.make();
-        const second = yield* Scope.make();
-        const origin = yield* Ingress.route(config, target, before).pipe(Scope.provide(first));
-        expect((yield* getRouted(origin)).body).toMatch(/^before /);
-
-        yield* Ingress.route(config, target, after).pipe(Scope.provide(second));
-        expect((yield* getRouted(origin)).body).toMatch(/^after /);
-
-        yield* Scope.close(first, Exit.void);
-        expect((yield* getRouted(origin)).body).toMatch(/^after /);
-        yield* Scope.close(second, Exit.void);
-        expect(forwarder.routes().size).toBe(0);
-      }),
-    ),
-  );
-
-  it.live("routes for different fqns are independent", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const other: Ingress.IngressTarget = { ...target, fqn: "Web", id: "Web", label: "web" };
-        const api = yield* makeListener("api");
-        const web = yield* makeListener("web");
-        const apiScope = yield* Scope.make();
-        const apiOrigin = yield* Ingress.route(config, target, api).pipe(Scope.provide(apiScope));
-        const webOrigin = yield* Ingress.route(config, other, web);
-        expect(apiOrigin).not.toBe(webOrigin);
-        expect((yield* getRouted(apiOrigin)).body).toMatch(/^api /);
-        expect((yield* getRouted(webOrigin)).body).toMatch(/^web /);
-
-        yield* Scope.close(apiScope, Exit.void);
-        expect(forwarder.routes().has(other.fqn)).toBe(true);
-        expect((yield* getRouted(webOrigin)).status).toBe(200);
-      }),
-    ),
-  );
-
-  it.live("a route the adapter refuses fails and leaves nothing routed", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          Ingress.route(config, target, new URL("https://localhost:1337")),
-        );
-        assert(error._tag === "IngressError");
-        expect(error.message).toContain("only routes http listeners");
-        expect(forwarder.routes().size).toBe(0);
-      }),
-    ),
-  );
-
-  it.live("options reach the adapter", () =>
-    withForwarder((forwarder) =>
-      Effect.gen(function* () {
-        const listener = yield* makeListener("api");
-        const origin = yield* Ingress.route(
-          { type: FORWARDER_TYPE, options: { domain: "Shop" } },
-          target,
-          listener,
-        );
-        expect(origin).toBe(`http://dev-alice.api.shop.localhost:${forwarder.port}`);
-        expect(forwarder.made()).toEqual([{ domain: "Shop" }]);
-      }),
-    ),
-  );
-
-  it.live("an unknown type fails naming the type and the package to install", () =>
+  it.live("a route the router refuses fails with IngressError", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
-        Ingress.route({ type: "nope" }, target, new URL("http://localhost:1")),
+        Ingress.attach(forwarder, target, new URL("https://localhost:1337")),
       );
-      assert(error._tag === "IngressAdapterNotFound");
-      expect(error.type).toBe("nope");
-      expect(error.message).toContain('"nope"');
-      expect(error.message).toContain("@alchemy.run/nope");
-      expect(error.message).toContain("No installed package contributes an ingress adapter");
-    }).pipe(Effect.provide(Layer.merge(PlatformServices, FetchHttpClient.layer)), Effect.scoped),
+      assert(error._tag === "IngressError");
+      expect(error.message).toContain("only routes http listeners");
+    }).pipe(Effect.provide(services), Effect.scoped),
   );
 
-  it.live("a type that is only an Object.prototype name is unknown", () =>
-    withForwarder(() =>
-      Effect.gen(function* () {
-        const error = yield* Effect.flip(
-          Ingress.route({ type: "toString" }, target, new URL("http://localhost:1")),
-        );
-        assert(error._tag === "IngressAdapterNotFound");
-        expect(error.type).toBe("toString");
-      }),
-    ),
+  it.live("a module that can't be imported fails with IngressError", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        Ingress.attach(
+          { module: "@alchemy.run/no-such-router" },
+          target,
+          new URL("http://localhost:1"),
+        ),
+      );
+      assert(error._tag === "IngressError");
+      expect(error.message).toBe(
+        "Ingress module @alchemy.run/no-such-router could not be imported",
+      );
+    }).pipe(Effect.provide(services), Effect.scoped),
   );
-});
 
-describe("Ingress.createTarget", { tags: ["unit", "local"] }, () => {
-  const resource = {
-    stack: { name: "myapp", stage: "dev_alice" },
-    id: "Build",
-    fqn: "Web/Build",
-    type: "Website.Server",
-    config: { type: "forwarder" },
-  };
-
-  it("derives the target from the provider's identity", () => {
-    expect(Ingress.createTarget(resource)).toEqual({
-      stack: "myapp",
-      stage: "dev_alice",
-      fqn: "Web/Build",
-      id: "Build",
-      label: "Build",
-      type: "Website.Server",
-    });
-  });
-
-  it("the route is called the config's name when it has one", () => {
-    const derived = Ingress.createTarget({
-      ...resource,
-      config: { type: "forwarder", name: "Web" },
-    });
-    expect(derived.label).toBe("Web");
-    expect(derived.id).toBe("Build");
-  });
+  it.live("a module without a default-export Layer fails with IngressError", () =>
+    Effect.gen(function* () {
+      const module = new URL("./fixtures/ingress-no-default.ts", import.meta.url).href;
+      const error = yield* Effect.flip(
+        Ingress.attach({ module }, target, new URL("http://localhost:1")),
+      );
+      assert(error._tag === "IngressError");
+      expect(error.message).toBe(`Ingress module ${module} has no default-export Layer`);
+    }).pipe(Effect.provide(services), Effect.scoped),
+  );
 });
