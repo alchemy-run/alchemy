@@ -69,12 +69,10 @@ docker swarm init
 
 ## Use Rivet Cloud
 
-To let Rivet run the control plane, create a namespace in the [Rivet dashboard](https://dashboard.rivet.dev) and set what it shows before you deploy:
+To let Rivet run the control plane, create a cluster in the [Rivet dashboard](https://dashboard.rivet.dev) and sign in to it:
 
-```sh title=".env"
-RIVET_ENDPOINT=https://my-cluster-api.onrivet.dev
-RIVET_NAMESPACE=my-namespace
-RIVET_TOKEN=...
+```sh
+alchemy profile edit --add RivetCloud
 ```
 
 See [Rivet Cloud](/rivet/rivet-cloud).

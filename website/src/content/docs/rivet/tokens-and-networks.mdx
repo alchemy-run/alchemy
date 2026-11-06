@@ -65,12 +65,13 @@ A [Rivet Services](/rivet/durable-streams) node also serves Durable Streams on a
 
 A deploy needs the credentials of the cloud the control plane runs on, read the way that provider reads them in CI: `AWS_*` for AWS, `HCLOUD_TOKEN` for Hetzner, and so on. A control plane you run creates its own admin token, so it needs nothing from Rivet.
 
-A Rivet Cloud control plane needs its address, namespace and token. `RivetCloud.ControlPlane()` reads them from the environment:
+A Rivet Cloud control plane needs a cluster token from the Rivet dashboard and the cluster's name. `RivetCloud.ControlPlane` reads them from the environment:
 
 ```sh
-RIVET_ENDPOINT=https://my-cluster-api.onrivet.dev
-RIVET_NAMESPACE=my-namespace
-RIVET_TOKEN=...
+RIVET_CLOUD_TOKEN=...
+RIVET_CLOUD_CLUSTER=my-cluster
 ```
+
+See [Sign in from CI](/rivet/rivet-cloud#sign-in-from-ci).
 
 See [CI](/environments/ci) and [Secrets](/rivet/secrets).
