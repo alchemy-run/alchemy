@@ -15,6 +15,7 @@ import {
   PostgresDefaultRoleProvider,
 } from "./Postgres/PostgresDefaultRole.ts";
 import { PostgresRole, PostgresRoleProvider } from "./Postgres/PostgresRole.ts";
+import { ServiceToken, ServiceTokenProvider } from "./ServiceToken.ts";
 
 /**
  * Service tag bundling all PlanetScale providers + auth + credentials. Use
@@ -45,6 +46,7 @@ export const providers = () =>
       MySQLPassword,
       PostgresRole,
       PostgresDefaultRole,
+      ServiceToken,
     ]),
   ).pipe(
     Layer.provide(
@@ -56,6 +58,7 @@ export const providers = () =>
         MySQLPasswordProvider(),
         PostgresRoleProvider(),
         PostgresDefaultRoleProvider(),
+        ServiceTokenProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
