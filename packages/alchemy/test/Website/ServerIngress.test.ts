@@ -57,8 +57,6 @@ const getRaw = (url: string) =>
     Effect.orDie,
   );
 
-// The forwarder is one Router per sidecar process, keyed by fqn, so each case
-// declares its own ids.
 describe("Website.Server dev.ingress", { tags: ["unit", "local"] }, () => {
   test.provider(
     "a site composite's route is called the site's id, and localUrl is the framework's listener",
