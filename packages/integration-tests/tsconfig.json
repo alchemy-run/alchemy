@@ -98,6 +98,7 @@
     { "path": "../acme/tsconfig.json" },
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
+    { "path": "../rivet/tsconfig.json" },
     { "path": "../turso/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },

@@ -713,6 +713,39 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 - [Tokens](https://alchemy.run/turso/tokens) — Create tokens for apps that run outside your Stack.
 - [Team & organization](https://alchemy.run/turso/organization) — Invite teammates and change your Turso organization's settings.
 
+## Rivet
+
+Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
+
+- [Rivet](https://alchemy.run/rivet) — Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
+- [What is Rivet?](https://alchemy.run/rivet/what-is-rivet) — The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
+- [Setup](https://alchemy.run/rivet/setup) — Install the Rivet provider, the provider for the cloud you run it on, and get Docker ready to run Rivet on your machine.
+- [Control planes and namespaces](https://alchemy.run/rivet/namespaces) — What holds a Rivet app — a control plane you run or Rivet Cloud, divided into namespaces — how Alchemy gives each stage its own namespace, and when to give an environment a control plane of its own.
+- [Tokens and networks](https://alchemy.run/rivet/tokens-and-networks) — Who can reach a Rivet control plane and with what — the admin token and everything that holds it, the HTTPS address each control plane gets without a domain, nodes that only connect out, and the credentials a deploy needs in CI.
+- [Secrets](https://alchemy.run/rivet/secrets) — Give a Rivet Durable Object an API key or a password with Config, hand a control plane its object storage keys, and choose where each stage's values come from.
+- [Part 1: Your First Durable Object](https://alchemy.run/rivet/tutorial/part-1) — Run a Rivet control plane and pool on Docker, and deploy a chat room that counts its visitors.
+- [Part 2: Messages in SQL](https://alchemy.run/rivet/tutorial/part-2) — Give each room a SQL table of messages, and post and read them over HTTP.
+- [Part 3: Clear Idle Rooms](https://alchemy.run/rivet/tutorial/part-3) — Use a Durable Object alarm to clear a room's messages an hour after the last one.
+- [Part 4: Run It on Hetzner](https://alchemy.run/rivet/tutorial/part-4) — Move the chat rooms from Docker to Hetzner Cloud by swapping the control plane, the pool and the API's host.
+- [Three ways to build Actors](https://alchemy.run/rivet/actors) — Build Rivet Actors as Alchemy Durable Objects, with RivetKit, or with RivetKit's Effect SDK — what each one is for, and how all three deploy to the same control planes and pools.
+- [Durable Object](https://alchemy.run/rivet/durable-objects) — What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
+- [Storage](https://alchemy.run/rivet/storage) — What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
+- [Concurrency](https://alchemy.run/rivet/concurrency) — How a Rivet Durable Object runs calls in parallel, how a transaction keeps a read and a write together, and how Workers.InputGate gives code written for Cloudflare the same rule it has there.
+- [Calling a Durable Object](https://alchemy.run/rivet/calling) — How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
+- [RivetKit Actors](https://alchemy.run/rivet/rivetkit) — Deploy Actors written with RivetKit, unchanged, to a Rivet control plane and pool on any cloud.
+- [RivetKit Effect Actors](https://alchemy.run/rivet/rivetkit-effect) — Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
+- [Durable Streams](https://alchemy.run/rivet/durable-streams) — Append-only logs with a replayable history, one per key, served by Rivet Services — declare one with its message Schema, append, read from an offset, follow it live, and choose its wire format as a Layer.
+- [Control Plane](https://alchemy.run/rivet/control-planes) — What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
+- [Pool](https://alchemy.run/rivet/pools) — How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
+- [Docker](https://alchemy.run/rivet/docker) — Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
+- [AWS](https://alchemy.run/rivet/aws) — Run a Rivet control plane on EC2 or ECS, and pools of nodes on Fargate or EC2.
+- [GCP](https://alchemy.run/rivet/gcp) — Run a Rivet control plane on Compute Engine, and pools of nodes on Cloud Run or Compute Engine.
+- [Kubernetes](https://alchemy.run/rivet/kubernetes) — Run a Rivet control plane and pools of nodes on any Kubernetes cluster — EKS, GKE, kind or your own.
+- [Fly](https://alchemy.run/rivet/fly) — Run a Rivet control plane on Fly Machines and pools of nodes on a Fly Service.
+- [Hetzner](https://alchemy.run/rivet/hetzner) — Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
+- [Railway](https://alchemy.run/rivet/railway) — Run pools of Rivet nodes on Railway, on a control plane on another cloud.
+- [Rivet Cloud](https://alchemy.run/rivet/rivet-cloud) — Use Rivet Cloud as the control plane, sign in to it from the alchemy CLI or CI, and run your nodes on Rivet Cloud or on any cloud.
+
 ## Better Auth
 
 Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.
@@ -930,7 +963,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [View](https://alchemy.run/domain/view) — How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
 - [Projection](https://alchemy.run/domain/projection) — How a projection consumes events into a store you own, in order per key, batched and replayable, and why it never sends commands.
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
-- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized per request and per row, paged by cursor, and consistent with the caller's own writes.
+- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized by its handler, paged by cursor, and consistent with the caller's own writes.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
@@ -953,10 +986,10 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
-- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
 
 ## API reference
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~213 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~220 KB) — only fetch it when you need to locate a specific resource's reference page.

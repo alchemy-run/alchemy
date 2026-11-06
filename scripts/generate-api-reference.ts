@@ -137,6 +137,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/docker/src",
   },
   { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
+  {
+    srcRoot: "packages/rivet/src",
+    providerPrefix: "Rivet",
+    sourceDisplayPrefix: "packages/rivet/src",
+  },
 ];
 
 interface FileEntry {

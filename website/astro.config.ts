@@ -49,6 +49,7 @@ function providersSidebarEntry() {
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
+      { label: "Rivet", link: "/rivet" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -1930,6 +1931,63 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
+          label: "Rivet",
+          items: [
+            { label: "Overview", link: "/rivet" },
+            { label: "What is Rivet?", link: "/rivet/what-is-rivet" },
+            { label: "Setup", link: "/rivet/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "rivet/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Control planes and namespaces", link: "/rivet/namespaces" },
+                { label: "Tokens and networks", link: "/rivet/tokens-and-networks" },
+                { label: "Secrets", link: "/rivet/secrets" },
+              ],
+            },
+            {
+              label: "Building Actors",
+              items: [
+                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Durable Objects", link: "/rivet/durable-objects" },
+                { label: "Storage", link: "/rivet/storage" },
+                { label: "Concurrency", link: "/rivet/concurrency" },
+                { label: "Calling a Durable Object", link: "/rivet/calling" },
+                { label: "RivetKit Actors", link: "/rivet/rivetkit" },
+                { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+              ],
+            },
+            {
+              label: "Rivet Services",
+              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+            },
+            {
+              label: "Running Rivet",
+              items: [
+                { label: "Control Plane", link: "/rivet/control-planes" },
+                { label: "Pool", link: "/rivet/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/rivet/docker" },
+                { label: "AWS", link: "/rivet/aws" },
+                { label: "GCP", link: "/rivet/gcp" },
+                { label: "Kubernetes", link: "/rivet/kubernetes" },
+                { label: "Fly", link: "/rivet/fly" },
+                { label: "Hetzner", link: "/rivet/hetzner" },
+                { label: "Railway", link: "/rivet/railway" },
+                { label: "Rivet Cloud", link: "/rivet/rivet-cloud" },
+              ],
+            },
+            providerApiReferenceEntry("Rivet"),
           ],
         },
         {

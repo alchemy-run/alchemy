@@ -26,6 +26,7 @@ import { RuntimeContext } from "../RuntimeContext.ts";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
+import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { withEventContext } from "./WorkerBridge.ts";
 
@@ -151,26 +152,36 @@ export const makeDurableObjectInstance = ({
 }: DurableObjectInstanceOptions): DurableObjectInstance => {
   const instance: Promise<BuiltDurableObject> = (gate ?? ((run) => run()))(() =>
     build(waitUntil).then(({ context, runtimeContext: runtime, export: exported, telemetry }) => {
-      const { constructor, services } = exported;
+      const { constructor } = exported;
+      // A class given the `InputGate` Layer gets a gate per instance.
+      const services = runtime?.inputGate
+        ? Context.add(exported.services, InstanceInputGate, Effect.runSync(makeInputGate))
+        : exported.services;
       const instanceRuntimeContext = runtimeContext ? runtimeContext(runtime, context) : runtime;
       const doContext = Layer.succeedContext(engineServices).pipe(
         Layer.provideMerge(Layer.succeedContext(services)),
         Layer.provideMerge(Layer.succeedContext(context)),
       );
-      return constructor.pipe(
-        Effect.provide(doContext),
-        Effect.flatMap((inner) =>
-          Effect.suspend(() => {
-            const seal = initialize?.();
-            const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
-              Layer.provideMerge(doContext),
-            );
-            return inner.pipe(
-              Effect.provide(instanceContext),
-              Effect.ensuring(Effect.sync(() => seal?.())),
-            );
-          }),
+      // Construction runs through the gate as a call of its own, so fibers it
+      // forks (a background loop) belong to that call and their storage is
+      // gated like any call's.
+      return gateCall(
+        constructor.pipe(
+          Effect.flatMap((inner) =>
+            Effect.suspend(() => {
+              const seal = initialize?.();
+              const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
+                Layer.provideMerge(doContext),
+              );
+              return inner.pipe(
+                Effect.provide(instanceContext),
+                Effect.ensuring(Effect.sync(() => seal?.())),
+              );
+            }),
+          ),
         ),
+      ).pipe(
+        Effect.provide(doContext),
         Effect.map((built): BuiltDurableObject => ({
           instance: built as DurableObjectInstanceShape,
           services: Context.add(services, RuntimeContext, instanceRuntimeContext),
@@ -194,7 +205,9 @@ export const makeDurableObjectInstance = ({
 
     const { instance: shape, services, context, runtime, telemetry } = await instance;
 
-    return Effect.andThen(event.holdExporters, fn(shape))
+    // A class given the `InputGate` Layer has a gate; the call runs
+    // through it so storage can't interleave between calls.
+    return Effect.andThen(event.holdExporters, gateCall(Effect.suspend(() => fn(shape))))
       .pipe(
         Effect.provide(
           Layer.mergeAll(

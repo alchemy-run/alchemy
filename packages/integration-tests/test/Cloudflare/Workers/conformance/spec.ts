@@ -63,7 +63,13 @@ const get = (url: string) =>
     Effect.mapError((cause) => notReady(url, String(cause))),
     Effect.flatMap((response) =>
       response.status >= 500
-        ? Effect.fail(notReady(url, `upstream ${response.status}`))
+        ? // Keep the start of the body: it names the failure on the far side.
+          response.text.pipe(
+            Effect.orElseSucceed(() => ""),
+            Effect.flatMap((body) =>
+              Effect.fail(notReady(url, `upstream ${response.status}: ${body.slice(0, 500)}`)),
+            ),
+          )
         : Effect.succeed(response),
     ),
     Effect.retry({
