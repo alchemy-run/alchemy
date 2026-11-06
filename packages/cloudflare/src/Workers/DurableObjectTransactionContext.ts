@@ -9,6 +9,8 @@ export interface ActiveStorageTransaction {
   rolledBack: boolean;
   alarmTablesEnsured: boolean;
   alarmDirty: boolean;
+  /** Resolves once the native transaction commits or rolls back. */
+  readonly settled: Promise<void>;
 }
 
 export const ActiveStorageTransactions = Context.Reference<
