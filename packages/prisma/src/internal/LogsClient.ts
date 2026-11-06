@@ -1,6 +1,5 @@
 import type { ConfigError } from "@distilled.cloud/core/errors";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { PrismaApiError } from "../Client.ts";
 import type {
   BuildLogsQuery,
@@ -8,6 +7,7 @@ import type {
   DeploymentLogsQuery,
   DeploymentLogsRequest,
 } from "../Types.ts";
+import { authorizationHeader } from "./Authorization.ts";
 import { Credentials } from "./Credentials.ts";
 
 /**
@@ -131,9 +131,7 @@ export const getDeploymentLogsRequest = (
     );
     return {
       url,
-      headers: {
-        Authorization: Redacted.make(`Bearer ${Redacted.value(apiToken)}`),
-      },
+      headers: authorizationHeader(apiToken),
     };
   });
 
@@ -148,7 +146,7 @@ export const getBuildLogsRequest = (
     return {
       url,
       headers: {
-        Authorization: Redacted.make(`Bearer ${Redacted.value(apiToken)}`),
+        ...authorizationHeader(apiToken),
         Accept: "application/x-ndjson",
       },
     };

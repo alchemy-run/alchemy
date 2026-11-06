@@ -24,7 +24,9 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
       expect(request.url).toBe(
         "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=100&cursor=byte-42&from_start=true",
       );
-      expect(Redacted.value(request.headers.Authorization)).toBe("Bearer test-token");
+      expect(request.headers.Authorization && Redacted.value(request.headers.Authorization)).toBe(
+        "Bearer test-token",
+      );
     }).pipe(provideEnv),
   );
 
@@ -34,7 +36,9 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
       expect(request.url).toBe(
         "https://api.prisma.test/v1/builds/build-1/logs?follow=true&cursor=cursor-1",
       );
-      expect(Redacted.value(request.headers.Authorization)).toBe("Bearer test-token");
+      expect(request.headers.Authorization && Redacted.value(request.headers.Authorization)).toBe(
+        "Bearer test-token",
+      );
       expect(request.headers.Accept).toBe("application/x-ndjson");
     }).pipe(provideEnv),
   );

@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { authorizationHeader } from "./internal/Authorization.ts";
 import { type ObservedConnection, secretValue } from "./internal/Observed.ts";
 import { PrismaEnvironment } from "./PrismaEnvironment.ts";
 import type {
@@ -592,8 +593,10 @@ function makePrismaClient(): Effect.Effect<
             : method === "PATCH"
               ? HttpClientRequest.patch(url)
               : HttpClientRequest.delete(url);
-      const request = init.pipe(
-        HttpClientRequest.bearerToken(Redacted.value(env.serviceToken)),
+      const authenticated = env.serviceToken
+        ? init.pipe(HttpClientRequest.bearerToken(Redacted.value(env.serviceToken)))
+        : init;
+      const request = authenticated.pipe(
         HttpClientRequest.setHeaders({
           Accept: "application/json",
           "User-Agent": "alchemy-prisma/1.0",
@@ -1055,9 +1058,7 @@ function makePrismaClient(): Effect.Effect<
         buildWebSocketUrl(`/v1/deployments/${pathSegment(id)}/logs`, logsQuery(query)).pipe(
           Effect.map((url): DeploymentLogsRequest => ({
             url,
-            headers: {
-              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
-            },
+            headers: authorizationHeader(env.serviceToken),
           })),
         ),
       getBuildLogsRequest: (buildId, query) =>
@@ -1065,7 +1066,7 @@ function makePrismaClient(): Effect.Effect<
           Effect.map((url): BuildLogsRequest => ({
             url,
             headers: {
-              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
+              ...authorizationHeader(env.serviceToken),
               Accept: "application/x-ndjson",
             },
           })),
