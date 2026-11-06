@@ -15,6 +15,12 @@ import { icons as brands } from "@iconify-json/simple-icons";
  * mark and move the call site back to `b()`.
  */
 const custom: Record<string, string> = {
+  // Official mark: the header logo on https://archil.com (the same framed
+  // "A" as https://archil.com/icon.svg, without the favicon's dark tile),
+  // used verbatim. Its 64×64 viewBox is scaled uniformly into the 24×24 box;
+  // it already draws in currentColor.
+  archil:
+    '<g transform="scale(0.375)"><rect x="1.82" y="1.82" width="60.36" height="60.36" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" transform="translate(-115.998 -166.784)" d="M172.376 222.438L169.116 222.447V207.734C169.116 206.191 167.865 204.939 166.321 204.938H156.427C155.042 204.939 153.762 205.677 153.067 206.876L144.003 222.525L123.625 222.59L150.84 175.562L172.376 175.41V222.438ZM168.961 184.194C168.961 182.71 167.017 182.155 166.233 183.415L156.512 199.038C155.836 200.124 156.617 201.53 157.896 201.53H166.088C167.675 201.53 168.961 200.244 168.961 198.657V184.194Z"/></g>',
   // Official mark: https://axiom.co/axiom-brand-assets.zip
   // Preserve its 800×690 proportions, centered in our 24×24 icon box.
   axiom:
@@ -68,6 +74,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Archil: c("archil"),
   Prisma: c("prisma"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
   PrismaColor: c("prismaColor"),
@@ -108,6 +115,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Frontend: l("layout-template"),
   APIs: l("braces"),
   Data: l("database"),
+  Storage: l("hard-drive"),
   Databases: l("database"),
   Access: l("key-round"),
   Messaging: l("send"),
@@ -158,6 +166,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   GitHub: b("github"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Archil: c("archil"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),
