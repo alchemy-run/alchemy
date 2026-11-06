@@ -106,12 +106,21 @@ export const sweepRuntimeObjects = Effect.fn(function* (
 ) {
   const env = Effect.succeed(environment);
   const stamp = Effect.succeed<string | undefined>(prefix);
-  const sweep = <E>(client: {
+  // An environment deleted meanwhile (the stack deletes its own) has nothing
+  // left to sweep.
+  const gone = (error: { readonly _tag: string }) => error._tag === "EnvironmentNotFound";
+  const sweep = <E extends { readonly _tag: string }>(client: {
     readonly list: () => Effect.Effect<ReadonlyArray<string>, E>;
     readonly delete: (name: string) => Effect.Effect<void, E>;
   }) =>
-    Effect.flatMap(client.list(), (names) =>
-      Effect.forEach(names, (name) => client.delete(name), { concurrency: 4, discard: true }),
+    Effect.flatMap(
+      client.list().pipe(Effect.catchIf(gone, () => Effect.succeed<ReadonlyArray<string>>([]))),
+      (names) =>
+        Effect.forEach(
+          names,
+          (name) => client.delete(name).pipe(Effect.catchIf(gone, () => Effect.void)),
+          { concurrency: 4, discard: true },
+        ),
     );
   switch (kind) {
     case "volume":

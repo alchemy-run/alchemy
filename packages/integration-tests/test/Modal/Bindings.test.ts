@@ -36,8 +36,10 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+// The fixture deploys a Lambda, a Worker and Modal runtimes; next to the rest
+// of the Modal suite that takes longer than the default hook timeout.
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 300_000 });
 
 /**
  * The hosts each case runs on. A Worker reaches Modal's control plane over a
