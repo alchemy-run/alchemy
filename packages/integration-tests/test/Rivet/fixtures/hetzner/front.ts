@@ -1,8 +1,10 @@
-/** The HTTP front of the Hetzner conformance suite: a Hetzner Service calling the counter. */
+/** The HTTP front of the Hetzner conformance suite: a Hetzner Service calling the counter and a stream. */
 import * as Hetzner from "@alchemy.run/hetzner";
+import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
 import * as Effect from "effect/Effect";
-import { conformanceFetch } from "../../../Cloudflare/Workers/conformance/routes.ts";
-import { Counter } from "../counter-declaration.ts";
+import * as Layer from "effect/Layer";
+import { durableStreamFront } from "../durable-stream-front.ts";
+import { Services } from "./cluster.ts";
 
 export const FrontServer = Hetzner.Server("RivetHetznerFrontServer", {
   serverType: "cx23",
@@ -13,8 +15,5 @@ export const FrontServer = Hetzner.Server("RivetHetznerFrontServer", {
 export default class Front extends Hetzner.Service<Front>()(
   "RivetHetznerFront",
   { server: FrontServer, main: import.meta.url },
-  Effect.gen(function* () {
-    const counters = yield* Counter;
-    return { fetch: conformanceFetch(counters) };
-  }),
+  durableStreamFront.pipe(Effect.provide(Layer.mergeAll(Services, StreamFormat.Json))),
 ) {}

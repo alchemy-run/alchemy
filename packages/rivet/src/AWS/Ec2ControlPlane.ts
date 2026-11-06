@@ -14,7 +14,9 @@ export { DEFAULT_ENGINE_IMAGE, type ControlPlaneProps } from "./internal/Control
  * A Rivet control plane on EC2, as a `Rivet.Cluster` Layer: instances
  * across Availability Zones, each running the engine container from its
  * user data with a data disk of its own, an S3 bucket for the durable copy
- * of every actor's data, and an Application Load Balancer in front.
+ * of every actor's data, and an internal Application Load Balancer in front.
+ * Callers reach it over HTTPS at a CloudFront address, through a VPC origin,
+ * so it needs no domain of your own; nodes in its VPC skip CloudFront.
  * Instances find each other through the bucket and talk on a private port
  * only they can reach. A namespace is created for the stage.
  *

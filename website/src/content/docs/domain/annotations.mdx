@@ -26,7 +26,7 @@ Every building block takes annotations the same way: events, commands, rejection
 
 ## Where descriptions show
 
-The surfaces built from an [Api](/domain/api) show the descriptions of what it serves. For a command, the description replaces the sentence the surface would otherwise generate. For a view, a stream or an aggregate, it follows the sentence that says what the call does.
+The surfaces built from an [Api](/domain/api) show the descriptions of what it serves. For a command, the description replaces the sentence the surface would otherwise generate. For a query, a view or a stream, it follows the sentence that says what the call does.
 
 ```typescript title="src/AgentTools.ts"
 import * as DomainAi from "@alchemy.run/domain/Ai";
@@ -63,20 +63,6 @@ export class NotOwner extends Domain.Rejection("NotOwner", {}, {
 ```
 
 An event's annotations are its Schema's annotations too.
-
-## Record span attributes beside them
-
-An event's and a rejection's annotations also hold the span `attributes` they record, the one key that changes what the model does at runtime. See [Observability](/domain/observability).
-
-```typescript title="src/WithdrawMoney.command.ts"
-export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  amount: Schema.Int,
-  balanceAfter: Schema.Int,
-}, {
-  description: "Money left an account. Amounts are in cents.",
-  attributes: (e) => ({ "account.amount": e.amount }),
-}) {}
-```
 
 ## Add keys of your own
 
@@ -119,4 +105,4 @@ const glossary = Bank.commands.map(
 );
 ```
 
-The surfaces read only `description`. Every other key is yours to use.
+The surfaces read only `description`, and [`toHttpApi`](/domain/http-api#paths-and-methods) reads `httpApiCacheControl` for the `cache-control` of a query's or a read's answers. Every other key is yours to use.

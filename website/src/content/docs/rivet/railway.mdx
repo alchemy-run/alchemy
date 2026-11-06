@@ -30,6 +30,14 @@ export const Default = RivetRailway.ServicePool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a Railway service with no public domain:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetRailway.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
 ## Call it from a Railway Service
 
 ```typescript title="src/api.ts"
@@ -48,4 +56,4 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [ServicePool](/providers/rivet/railway#servicepool).
+Every option, with its default, is in the reference: [ServicePool](/providers/rivet/railway#servicepool) and [ServicesPool](/providers/rivet/railway#servicespool).

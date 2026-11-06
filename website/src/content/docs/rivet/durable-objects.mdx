@@ -5,8 +5,6 @@ description: What a Rivet Durable Object is — a class with one instance per na
 
 A Durable Object is a way to build a stateful service out of many small, named pieces. Instead of one server that holds every chat room in memory, or a database every request goes through, each room is its own small program with its own data. You call a room by its name, and Rivet makes sure there's exactly one of it.
 
-This chapter starts with what that means: a class and its instances, one instance per name, and state that lives with the instance. Then it builds the `Room` from the [tutorial](/rivet/tutorial/part-1) piece by piece: the two phases its code runs in, the methods callers use, and the two handlers Rivet calls itself. It ends with how to keep a class's code out of the programs that call it.
-
 ## A class and its instances
 
 A Durable Object starts as a class. `Room` says what a room can do, like let someone join:
@@ -24,11 +22,13 @@ export default class Room extends Rivet.DurableObject<Room>()(
       const state = yield* Rivet.DurableObjectState;
       return {
         join: () =>
-          Effect.gen(function* () {
-            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-            yield* state.storage.put("visitors", visitors);
-            return visitors;
-          }),
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
       };
     });
   }).pipe(Effect.provide(Default)),
@@ -110,18 +110,20 @@ Every function the inner Effect returns, apart from `fetch` and `alarm`, is a me
 ```typescript title="src/room.ts"
 return {
   join: () =>
-    Effect.gen(function* () {
-      const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-      yield* state.storage.put("visitors", visitors);
-      return visitors;
-    }),
+    state.storage.transaction(
+      Effect.gen(function* () {
+        const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+        yield* state.storage.put("visitors", visitors);
+        return visitors;
+      }),
+    ),
   post: (author: string, text: string) => insertMessage(author, text),
 };
 ```
 
 A method takes arguments and returns an Effect. Arguments and results travel between machines as JSON, so they're strings, numbers, booleans, arrays and plain objects. A method can also return a `Stream`, or fail with a tagged error the caller catches by name. See [Calling a Durable Object](/rivet/calling).
 
-Methods share the room's state, and a room can run more than one call at once. Storage stays consistent anyway: a call's reads and writes, with nothing else to wait on between them, never interleave with another call's. See [Storage](/rivet/storage#change-state-safely-while-calls-overlap).
+Methods share the room's state, and a room runs its calls in parallel, so their reads and writes can interleave. A method that reads a value and writes it back runs as a transaction. See [Concurrency](/rivet/concurrency).
 
 ## Handle HTTP with fetch
 
@@ -175,11 +177,13 @@ export const RoomLive = Room.make(
       const state = yield* Rivet.DurableObjectState;
       return {
         join: () =>
-          Effect.gen(function* () {
-            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-            yield* state.storage.put("visitors", visitors);
-            return visitors;
-          }),
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
       };
     });
   }).pipe(Effect.provide(Default)),

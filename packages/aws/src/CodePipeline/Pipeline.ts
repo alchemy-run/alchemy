@@ -132,8 +132,18 @@ export interface Pipeline extends Resource<
     pipelineVersion: number;
   },
   never,
-  Providers
+  Providers,
+  PipelineLookup
 > {}
+
+/**
+ * Props for {@link Pipeline.lookup}: find a pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipelineLookup {
+  /** The pipeline name of the existing pipeline. */
+  pipelineName: string;
+}
 
 /**
  * An AWS CodePipeline continuous-delivery pipeline: an ordered set of
@@ -178,6 +188,16 @@ export interface Pipeline extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing pipeline
+ * `Pipeline.lookup` references a pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `pipelineName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipeline
+ * ```typescript
+ * const existing = AWS.CodePipeline.Pipeline.lookup({ pipelineName: "my-pipeline" });
  * ```
  *
  * @resource
@@ -304,6 +324,17 @@ export const PipelineProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ pipelineName: name }) {
+          const found = yield* getPipeline(name);
+          if (found?.metadata?.pipelineArn === undefined) return undefined;
+          const attrs = {
+            pipelineName: found.pipeline?.name ?? name,
+            pipelineArn: found.metadata.pipelineArn,
+            pipelineVersion: found.pipeline?.version ?? 1,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

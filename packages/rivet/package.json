@@ -165,5 +165,10 @@
     "@alchemy.run/kubernetes": {
       "optional": true
     }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/rivet/Contributions"
+    ]
   }
 }

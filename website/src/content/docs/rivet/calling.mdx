@@ -3,23 +3,24 @@ title: Calling a Durable Object
 description: How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Sequence from "../../../components/diagrams/Sequence.astro";
 
 A caller reaches a room by naming it. It doesn't need to know where the room runs, or whether it's running at all: it sends the call to the control plane, and the control plane finds the room or starts it.
 
-This chapter follows a call from the Api in the [tutorial](/rivet/tutorial/part-1) to a room: getting the class, naming an instance, and calling its methods. Then it covers what a method can send back besides a value, forwarding an HTTP request, and calling one Durable Object from another.
-
-<DAG
-  nodes={[
-    { id: "api", label: "Api", type: "Worker or Lambda", layer: 0 },
-    { id: "cp", label: "Control plane", tone: "accent", layer: 1 },
-    { id: "lobby", label: "lobby", type: "Room", layer: 2 },
+<Sequence
+  actors={[
+    { id: "api", label: "Api", type: "Worker or Lambda" },
+    { id: "gateway", label: "Gateway", type: "control plane" },
+    { id: "lobby", label: "lobby", type: "Room, on a node" },
   ]}
-  edges={[
-    { from: "api", to: "cp", label: "lobby.join()" },
-    { from: "cp", to: "lobby" },
+  steps={[
+    { from: "api", to: "gateway", label: "join() on lobby, with the token" },
+    { note: "lobby is asleep", over: "gateway" },
+    { from: "gateway", to: "lobby", label: "start on a free node" },
+    { from: "gateway", to: "lobby", label: "join()" },
+    { from: "lobby", to: "api", label: "4", dashed: true },
   ]}
-  caption="Calls travel over HTTP to the control plane, so the caller never needs a route to the pool's nodes."
+  caption="The caller names the room and the gateway does the rest: it starts the room if it's asleep, then passes the call on. The caller never needs a route to the nodes."
 />
 
 ## Get the class

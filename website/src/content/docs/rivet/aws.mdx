@@ -18,7 +18,7 @@ Install `@alchemy.run/aws` and finish [AWS setup](/aws/setup).
 
 ## The control plane
 
-You get three engines across availability zones in a VPC of their own. Each has an EBS disk, and they share an S3 bucket. An Application Load Balancer is the endpoint.
+You get three engines across availability zones in a VPC of their own. Each has an EBS disk, and they share an S3 bucket. An internal Application Load Balancer spreads calls across them, and CloudFront serves it over HTTPS at a `cloudfront.net` address, through a VPC origin, so the engines have no public address and you need no domain.
 
 ```typescript title="src/cluster.ts"
 export const Cluster = RivetAWS.Ec2ControlPlane("Rivet", {
@@ -63,6 +63,16 @@ export const Default = RivetAWS.Ec2Pool("Default", { instanceType: "t3.small" })
 
 Nodes run in the control plane's VPC. With a control plane outside AWS, the pool creates a VPC of its own.
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on Fargate, in the control plane's VPC:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetAWS.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Its image is copied into ECR when you deploy.
+
 ## Call it from a Lambda
 
 ```typescript title="src/api.ts"
@@ -81,4 +91,4 @@ export default class Api extends Lambda.Function<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Ec2ControlPlane](/providers/rivet/aws#ec2controlplane), [EcsControlPlane](/providers/rivet/aws#ecscontrolplane), [EcsPool](/providers/rivet/aws#ecspool) and [Ec2Pool](/providers/rivet/aws#ec2pool).
+Every option, with its default, is in the reference: [Ec2ControlPlane](/providers/rivet/aws#ec2controlplane), [EcsControlPlane](/providers/rivet/aws#ecscontrolplane), [EcsPool](/providers/rivet/aws#ecspool), [Ec2Pool](/providers/rivet/aws#ec2pool) and [ServicesPool](/providers/rivet/aws#servicespool).

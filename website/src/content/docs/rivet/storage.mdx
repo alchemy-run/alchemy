@@ -5,9 +5,7 @@ description: What each Rivet Durable Object instance keeps — key-value entries
 
 Every room keeps its own data. Nothing else can read it, and it outlives the room going to sleep, the node it ran on, and every deploy.
 
-This chapter covers the three ways a room uses its storage: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. It ends with what happens when two calls reach a room at once.
-
-All three come from the room's state:
+A room keeps three kinds of data: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. All three come from the room's state:
 
 ```typescript title="src/room.ts"
 const state = yield* Rivet.DurableObjectState;
@@ -124,33 +122,11 @@ If `alarm` fails, Rivet runs it again: up to six more times, two seconds after t
 
 ## Change state safely while calls overlap
 
-A room runs more than one call at once: while one call waits on something, another can start. Storage is the exception. Once a call starts using storage, no other call touches it until the first one waits on something else, so a read followed by a write stays together:
-
-```typescript title="src/room.ts"
-const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-yield* state.storage.put("visitors", visitors);
-```
-
-Fifty joins at once count fifty visitors. That's the same rule Cloudflare's Durable Objects follow, so code written for one runs correctly on the other.
-
-The protection ends when the call waits on anything that isn't storage, like another Durable Object or an HTTP request. Read again after the wait rather than reusing a value from before it.
-
-The `alarm` handler, work handed to `waitUntil`, and fibers the room forks when it starts follow the same rule. A fiber the room forks counts as part of the room's start, so a loop that reads and writes in the background keeps its read and its write together, just like a call:
-
-```typescript title="src/room.ts"
-yield* Effect.forkDetach(
-  Effect.gen(function* () {
-    const ticks = ((yield* state.storage.get<number>("ticks")) ?? 0) + 1;
-    yield* state.storage.put("ticks", ticks);
-  }).pipe(Effect.repeat(Schedule.spaced("1 minute"))),
-);
-```
-
-A call never pauses to let others in during plain code, so keep heavy computation off the room. A long loop with no waits holds everything else back until it finishes.
+A room runs calls in parallel, so two calls' reads and writes can interleave. A read followed by a write that depends on it belongs in a transaction. See [Concurrency](/rivet/concurrency).
 
 ## Group changes in a transaction
 
-When a change has to wait in the middle, or must undo itself on failure, run it as a transaction. Admitting someone from the waiting list moves them in one go:
+When a change reads before it writes, has to wait in the middle, or must undo itself on failure, run it as a transaction. Admitting someone from the waiting list moves them in one go:
 
 ```typescript title="src/room.ts"
 yield* state.storage.transaction(
@@ -177,6 +153,6 @@ yield* state.storage.transaction(
 );
 ```
 
-A call back into this room from inside a transaction can't use storage until the transaction finishes, and the transaction is waiting on it. Rivet spots that, even through other Durable Objects, and fails the call back with HTTP 508 instead of letting both wait. The transaction sees the failure and rolls back. The same goes for a room that calls itself while it starts.
+A call back into this room from inside a transaction can't use storage until the transaction finishes, and the transaction is waiting on it. Rivet spots that, even through other Durable Objects, and fails the call back with HTTP 508 instead of letting both wait. See [Concurrency](/rivet/concurrency#calls-that-would-wait-on-themselves).
 
-Next, [Calling a Durable Object](/rivet/calling): how callers reach a room.
+Next, [Concurrency](/rivet/concurrency): what happens when calls reach a room at once.

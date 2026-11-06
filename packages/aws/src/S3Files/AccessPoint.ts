@@ -113,8 +113,18 @@ export interface AccessPoint extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AccessPointLookup
 > {}
+
+/**
+ * Props for {@link AccessPoint.lookup}: find an access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AccessPointLookup {
+  /** The id of the existing access point. */
+  accessPointId: string;
+}
 
 /**
  * An Amazon S3 File System Access Point — application-specific access to a
@@ -141,6 +151,16 @@ export interface AccessPoint extends Resource<
  *     creationPermissions: { ownerUid: 1000, ownerGid: 1000, permissions: "0755" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing access point
+ * `AccessPoint.lookup` references an access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accessPointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing access point
+ * ```typescript
+ * const app = AWS.S3Files.AccessPoint.lookup({ accessPointId });
  * ```
  *
  * @resource
@@ -245,6 +265,10 @@ export const AccessPointProvider = () =>
             }
             return out;
           }),
+        lookup: Effect.fn(function* ({ accessPointId }) {
+          const found = yield* observe(accessPointId);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.accessPointId !== undefined

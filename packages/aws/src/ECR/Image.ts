@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ImageUnexpectedResponse extends Data.TaggedError("ImageUnexpectedResponse")<{
@@ -153,8 +154,20 @@ export interface Image extends Resource<
     ownsRepository: boolean;
   },
   never,
-  Providers
+  Providers,
+  ImageLookup
 > {}
+
+/**
+ * Props for {@link Image.lookup}: find an image this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImageLookup {
+  /** The repository holding the image. */
+  repositoryName: string;
+  /** The image's tag. */
+  imageTag: string;
+}
 
 /**
  * A Docker image built from a local context and pushed to a private Amazon
@@ -232,6 +245,17 @@ export interface Image extends Resource<
  *   main: import.meta.url,
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references an image Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName` and `imageTag`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run an image pinned by digest
+ * ```typescript
+ * const web = AWS.ECR.Image.lookup({ repositoryName: "web", imageTag: "stable" });
+ * const pinned = Output.interpolate`${web.repositoryUri}@${web.digest}`;
  * ```
  *
  * @resource
@@ -317,6 +341,20 @@ export const ImageProvider = () =>
       });
 
       return {
+        lookup: Effect.fn(function* ({ repositoryName, imageTag }) {
+          const detail = yield* describeImage(repositoryName, imageTag);
+          if (!detail?.imageDigest || !detail.registryId) return undefined;
+          const { region } = yield* AWSEnvironment.current;
+          const repositoryUri = `${detail.registryId}.dkr.ecr.${region}.amazonaws.com/${repositoryName}`;
+          return {
+            imageUri: `${repositoryUri}:${imageTag}`,
+            digest: detail.imageDigest,
+            repositoryUri,
+            repositoryName,
+            imageTag,
+            ownsRepository: false,
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           // The content hash cannot be recovered without running a build, so
           // a lost-state read has nothing to look up.

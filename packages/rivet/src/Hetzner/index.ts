@@ -4,3 +4,4 @@
  */
 export * from "./ServerControlPlane.ts";
 export * from "./ServerPool.ts";
+export * from "./ServicesPool.ts";

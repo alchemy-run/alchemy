@@ -6,6 +6,7 @@
  *
  * @internal
  */
+import * as CloudFront from "@alchemy.run/aws/CloudFront";
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import * as IAM from "@alchemy.run/aws/IAM";
@@ -158,9 +159,10 @@ export const makeControlPlane = <Req>(
       const image = props.image ?? DEFAULT_ENGINE_IMAGE;
 
       const token = yield* adminToken(id);
+      const cidrBlock = props.cidrBlock ?? "10.42.0.0/16";
       // The load balancer needs subnets in two zones, even for one instance.
       const network = yield* EC2.Network(`${id}Network`, {
-        cidrBlock: props.cidrBlock ?? "10.42.0.0/16",
+        cidrBlock,
         availabilityZones: Math.min(Math.max(instances, 2), 3),
         gatewayEndpoints: ["s3"],
       });
@@ -193,10 +195,21 @@ export const makeControlPlane = <Req>(
         roleName: role.roleName,
       });
 
+      // The load balancer is internal: CloudFront reaches it through a VPC
+      // origin, and nodes in the VPC reach it directly.
       const loadBalancerGroup = yield* EC2.SecurityGroup(`${id}LoadBalancerGroup`, {
         vpcId: network.vpcId,
         description: "Rivet control plane load balancer",
-        ingress: [{ ipProtocol: "tcp", fromPort: 80, toPort: 80, cidrIpv4: "0.0.0.0/0" }],
+        ingress: [
+          { ipProtocol: "tcp", fromPort: 80, toPort: 80, cidrIpv4: cidrBlock },
+          // A VPC origin forwards with CloudFront's origin-facing addresses.
+          {
+            ipProtocol: "tcp",
+            fromPort: 80,
+            toPort: 80,
+            prefixListId: EC2.managedPrefixListId("com.amazonaws.global.cloudfront.origin-facing"),
+          },
+        ],
         egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
       });
       const engineGroup = yield* EC2.SecurityGroup(`${id}EngineGroup`, {
@@ -237,7 +250,7 @@ export const makeControlPlane = <Req>(
       });
       const loadBalancer = yield* ELBv2.LoadBalancer(`${id}LoadBalancer`, {
         type: "application",
-        scheme: "internet-facing",
+        scheme: "internal",
         subnets: network.publicSubnetIds,
         securityGroups: [loadBalancerGroup.groupId],
         // Nodes hold one long-lived connection each.
@@ -318,7 +331,64 @@ export const makeControlPlane = <Req>(
         }
       }
 
-      const endpoint = Output.interpolate`http://${loadBalancer.dnsName}`;
+      // HTTPS without a domain of your own: CloudFront's address, in front of
+      // the internal load balancer through a VPC origin. Nothing is cached:
+      // the cache policy only exists to forward `Authorization`, which an
+      // origin request policy can't, and it never outlives a response that
+      // doesn't ask to be cached.
+      const origin = yield* CloudFront.VpcOrigin(`${id}Origin`, {
+        arn: loadBalancer.loadBalancerArn,
+        httpPort: 80,
+        originProtocolPolicy: "http-only",
+      });
+      const cachePolicy = yield* CloudFront.CachePolicy(`${id}CachePolicy`, {
+        comment: "Rivet control plane: forward credentials, cache nothing",
+        minTTL: 0,
+        defaultTTL: 0,
+        maxTTL: "1 second",
+        parametersInCacheKeyAndForwardedToOrigin: {
+          EnableAcceptEncodingGzip: false,
+          HeadersConfig: {
+            HeaderBehavior: "whitelist",
+            Headers: { Quantity: 2, Items: ["Authorization", "x-rivet-token"] },
+          },
+          CookiesConfig: { CookieBehavior: "none" },
+          QueryStringsConfig: { QueryStringBehavior: "all" },
+        },
+      });
+      const distribution = yield* CloudFront.Distribution(`${id}Distribution`, {
+        comment: "Rivet control plane",
+        // CloudFront keeps an error response for 10 seconds by default,
+        // whatever the cache policy says: a read right after a write would
+        // see the 404 from before it.
+        customErrorResponses: [400, 403, 404, 405, 414, 416, 500, 501, 502, 503, 504].map(
+          (code) => ({ ErrorCode: code, ErrorCachingMinTTL: 0 }),
+        ),
+        origins: [
+          {
+            id: "engines",
+            domainName: loadBalancer.dnsName,
+            vpcOriginConfig: {
+              vpcOriginId: origin.vpcOriginId,
+              // The longest CloudFront allows without a quota increase: a
+              // call that answers later than this fails with 504.
+              originReadTimeout: "60 seconds",
+              originKeepaliveTimeout: "60 seconds",
+            },
+          },
+        ],
+        defaultCacheBehavior: {
+          targetOriginId: "engines",
+          viewerProtocolPolicy: "https-only",
+          allowedMethods: ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
+          cachedMethods: ["GET", "HEAD"],
+          compress: false,
+          cachePolicyId: cachePolicy.cachePolicyId,
+          originRequestPolicyId: CloudFront.MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+        },
+      });
+      ready.push(distribution.distributionId);
+      const endpoint = Output.interpolate`https://${distribution.domainName}`;
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Created through the API the instances serve, once they all run.
         endpoint: Output.all(endpoint, Output.all(...ready)).pipe(Output.map(([url]) => url)),
@@ -326,6 +396,8 @@ export const makeControlPlane = <Req>(
       });
       return {
         endpoint,
+        // Nodes in the VPC skip CloudFront.
+        nodeEndpoint: Output.interpolate`http://${loadBalancer.dnsName}`,
         network: {
           kind: "aws",
           vpcId: network.vpcId,

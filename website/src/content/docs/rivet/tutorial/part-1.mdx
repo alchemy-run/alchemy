@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 Build chat rooms in four parts, starting with a room that counts its visitors. Each room is a Durable Object: later parts give it messages and an alarm, then move it to Hetzner. This part runs on your machine: no cloud account needed yet.
 
 If Rivet is new to you, read [What is Rivet?](/rivet/what-is-rivet) first. The finished code is in [`examples/rivet-rooms`](https://github.com/alchemy-run/alchemy/tree/main/examples/rivet-rooms).
@@ -166,9 +168,7 @@ The Stack only names the Api. The room comes with it, because the Api calls it, 
 
 ## Deploy
 
-```diff lang="sh"
-+pnpm alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The first deploy builds the node image and takes about a minute.
 

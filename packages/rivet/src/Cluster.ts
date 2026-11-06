@@ -49,8 +49,9 @@ export interface ClusterShape {
    */
   readonly endpoint: Input<string>;
   /**
-   * The URL runtimes connect to — nodes and `Rivet.Client` callers — when it
-   * differs from {@link endpoint}: a private address inside {@link network}.
+   * The URL nodes inside {@link network} connect to, when it differs from
+   * {@link endpoint}: a private address only that network reaches. Nodes
+   * anywhere else use {@link endpoint}.
    */
   readonly nodeEndpoint?: Input<string> | undefined;
   /**
@@ -64,6 +65,11 @@ export interface ClusterShape {
   readonly token: Input<Redacted.Redacted<string>>;
   /** The namespace this app's pools and actors live in. */
   readonly namespace: Input<string>;
+  /**
+   * The Rivet Cloud cluster this control plane is, when Rivet Cloud runs it.
+   * `RivetCloud.Pool` runs nodes only on one.
+   */
+  readonly rivetCloudCluster?: Input<string> | undefined;
 }
 
 /**

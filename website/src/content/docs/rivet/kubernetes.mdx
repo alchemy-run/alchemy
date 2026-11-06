@@ -62,4 +62,12 @@ export const Default = RivetKubernetes.DeploymentPool("Default", { replicas: 3 }
 
 The pool runs on the control plane's cluster unless you pass `cluster`.
 
-Every option, with its default, is in the reference: [StatefulSetControlPlane](/providers/rivet/kubernetes#statefulsetcontrolplane) and [DeploymentPool](/providers/rivet/kubernetes#deploymentpool).
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a Deployment on the control plane's cluster:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetKubernetes.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Every option, with its default, is in the reference: [StatefulSetControlPlane](/providers/rivet/kubernetes#statefulsetcontrolplane), [DeploymentPool](/providers/rivet/kubernetes#deploymentpool) and [ServicesPool](/providers/rivet/kubernetes#servicespool).

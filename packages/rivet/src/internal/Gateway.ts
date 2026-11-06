@@ -20,13 +20,18 @@ export interface GatewayTarget {
   readonly key: string;
 }
 
+/** The header the gateway reads the caller's token from, as RivetKit's client sends it. */
+export const TOKEN_HEADER = "x-rivet-token";
+
 /** RivetKit's canonical key encoding (one part). */
 const encodeKey = (key: string) =>
   key === "" ? "\\0" : key.replace(/\\/g, "\\\\").replace(/,/g, "\\,");
 
 /**
  * The gateway URL for a request to `/path?query` on an actor addressed by
- * name and key, created in its pool on first use.
+ * name and key, created in its pool on first use. The token travels in the
+ * {@link TOKEN_HEADER} header, never the URL, so it stays out of proxy and
+ * load balancer logs.
  */
 export const gatewayUrl = (target: GatewayTarget, path: string, search: string): string => {
   const params = new URLSearchParams({
@@ -35,7 +40,6 @@ export const gatewayUrl = (target: GatewayTarget, path: string, search: string):
     "rvt-runner": target.pool,
     "rvt-key": encodeKey(target.key),
     "rvt-crash-policy": "sleep",
-    "rvt-token": target.token,
   });
   const base = target.endpoint.replace(/\/+$/, "");
   const query = search === "" ? `?${params}` : `${search}&${params}`;
@@ -51,11 +55,34 @@ export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
       request.method === "GET" || request.method === "HEAD"
         ? undefined
         : await request.arrayBuffer();
+    const headers = new Headers(request.headers);
+    headers.set(TOKEN_HEADER, target.token);
     return fetch(gatewayUrl(target, url.pathname, url.search), {
       method: request.method,
-      headers: request.headers,
+      headers,
       body: body === undefined || body.byteLength === 0 ? undefined : body,
       signal: request.signal,
     });
   },
 });
+
+/**
+ * Send one request to the gateway over the runtime's own `fetch`, with the
+ * caller's token in {@link TOKEN_HEADER}.
+ */
+export const gatewaySend = (
+  url: string,
+  token: string,
+  init: {
+    readonly method: string;
+    readonly headers?: Record<string, string> | undefined;
+    readonly body?: Uint8Array | undefined;
+    readonly signal: AbortSignal;
+  },
+) =>
+  fetch(url, {
+    method: init.method,
+    headers: { ...init.headers, [TOKEN_HEADER]: token },
+    body: init.body as BodyInit | undefined,
+    signal: init.signal,
+  });

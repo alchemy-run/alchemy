@@ -18,7 +18,7 @@ Install `@alchemy.run/gcp` and finish [GCP setup](/gcp/setup).
 
 ## The control plane
 
-You get three instances across zones. Each has a persistent disk, they share a Cloud Storage bucket, and a network load balancer is the endpoint.
+You get three instances across zones. Each has a persistent disk, and they share a Cloud Storage bucket. A Cloud Run service serves them over HTTPS at a `run.app` address, reaching them through a Serverless VPC Access connector, so the instances take no traffic from outside their network and you need no domain.
 
 ```typescript title="src/cluster.ts"
 export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet", {
@@ -53,6 +53,16 @@ export const Default = RivetGCP.ComputeEnginePool("Default", {
 
 Each deploy updates running nodes in place.
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on a Cloud Run worker pool:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetGCP.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Cloud Run pulls its image from Docker Hub through an Artifact Registry remote repository, which the pool creates.
+
 ## Call it from Cloud Run
 
 ```typescript title="src/api.ts"
@@ -71,4 +81,4 @@ export default class Api extends GCP.Run.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [ComputeEngineControlPlane](/providers/rivet/gcp#computeenginecontrolplane), [CloudRunPool](/providers/rivet/gcp#cloudrunpool) and [ComputeEnginePool](/providers/rivet/gcp#computeenginepool).
+Every option, with its default, is in the reference: [ComputeEngineControlPlane](/providers/rivet/gcp#computeenginecontrolplane), [CloudRunPool](/providers/rivet/gcp#cloudrunpool), [ComputeEnginePool](/providers/rivet/gcp#computeenginepool) and [ServicesPool](/providers/rivet/gcp#servicespool).

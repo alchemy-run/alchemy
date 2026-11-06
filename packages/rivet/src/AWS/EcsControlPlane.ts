@@ -33,8 +33,10 @@ const INSTANCE_ATTRIBUTE = "rivet.instance";
  * Rivet's own AWS guide: EC2 instances across Availability Zones register
  * with an ECS cluster, each with a data disk of its own, and each runs one
  * engine as an ECS service pinned to it with host networking. An S3 bucket
- * holds the durable copy of every actor's data and an Application Load
- * Balancer sits in front. A namespace is created for the stage.
+ * holds the durable copy of every actor's data and an internal Application
+ * Load Balancer sits in front. Callers reach it over HTTPS at a CloudFront
+ * address, through a VPC origin, so it needs no domain of your own; nodes in
+ * its VPC skip CloudFront. A namespace is created for the stage.
  *
  * Each data disk is its own EBS volume, so it outlives the instance it is
  * attached to. A new engine image rolls out as an ECS deployment onto the

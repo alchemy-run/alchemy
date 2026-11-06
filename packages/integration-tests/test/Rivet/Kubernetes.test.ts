@@ -5,7 +5,9 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { FRONT_NODE_PORT, FRONT_PORT, Kind } from "./fixtures/kubernetes/cluster.ts";
 import { CounterLive } from "./fixtures/kubernetes/counter-live.ts";
@@ -62,5 +64,22 @@ describe.skipIf(!!process.env.FAST)(
     afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 600_000 });
 
     conformanceTests(test, { baseUrl: () => baseUrl, kind: "local" });
+    test(
+      "Durable Streams: the front appends to and reads a stream on its cloud's Services pool",
+      Effect.gen(function* () {
+        const client = yield* HttpClient.HttpClient;
+        const read = (yield* Effect.suspend(() =>
+          client.get(`${baseUrl}/durable-stream/${crypto.randomUUID()}`),
+        ).pipe(
+          Effect.flatMap((res) => res.json),
+          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
+        )) as { messages: unknown[] };
+        expect(read.messages).toEqual([
+          { user: "a", text: "one" },
+          { user: "b", text: "two" },
+        ]);
+      }),
+      { timeout: 180_000 },
+    );
   },
 );

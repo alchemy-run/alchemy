@@ -58,6 +58,12 @@ export interface ServerControlPlaneProps {
    */
   objectStorage?: ObjectStorage;
   /**
+   * Server type of the edge, the Server running Caddy that serves the
+   * engines over HTTPS.
+   * @default "cx23"
+   */
+  edgeServerType?: string;
+  /**
    * IPv4 range of the engines' private Network.
    * @default "10.45.0.0/16"
    */
@@ -107,15 +113,49 @@ ${options.environment.map(([name, value]) => `  -e ${name}=${shellQuote(value)} 
   ${shellQuote(options.image)}
 `;
 
+/** Caddy, the proxy that serves the engines over HTTPS. */
+const EDGE_IMAGE = "caddy:2";
+
+/**
+ * Boot the edge: name it after its own public address under `sslip.io`,
+ * which resolves any `a-b-c-d.sslip.io` to `a.b.c.d`, and run Caddy, which
+ * gets a certificate for that name and proxies to the Load Balancer's
+ * private address.
+ */
+const edgeUserData = (options: { readonly upstream: string }) => `#!/bin/bash
+set -euo pipefail
+PUBLIC_IP="$(curl -sf http://169.254.169.254/hetzner/v1/metadata/public-ipv4)"
+mkdir -p /etc/caddy
+cat > /etc/caddy/Caddyfile <<CADDY
+$(echo "$PUBLIC_IP" | tr . -).sslip.io {
+\treverse_proxy ${options.upstream} {
+\t\tflush_interval -1
+\t}
+}
+CADDY
+until docker info >/dev/null 2>&1; do sleep 2; done
+docker rm -f rivet-edge >/dev/null 2>&1 || true
+docker run -d --name rivet-edge --restart always --network host \\
+  -v /etc/caddy:/etc/caddy -v rivet-edge-data:/data \\
+  ${EDGE_IMAGE}
+`;
+
+/** The edge's HTTPS address: its public IPv4 under `sslip.io`. */
+const edgeEndpoint = (ipv4: string | undefined) =>
+  `https://${(ipv4 ?? "").replaceAll(".", "-")}.sslip.io`;
+
 /** A storage value as a string for the engine's environment. */
 const plain = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
 
 /**
  * A Rivet control plane on Hetzner Cloud, as a `Rivet.Cluster` Layer:
  * Servers running the engine container, each with a Volume of its own, on a
- * private Network they talk to each other over, behind a Load Balancer whose
- * public address is the endpoint. A firewall drops every other inbound
- * connection to the Servers. A namespace is created for the stage.
+ * private Network they talk to each other over, behind a private Load
+ * Balancer. An edge Server runs Caddy in front of it and serves the engines
+ * over HTTPS at its own address under `sslip.io`
+ * (`https://203-0-113-7.sslip.io`), with a certificate from Let's Encrypt,
+ * so it needs no domain of your own. A firewall drops every other inbound
+ * connection to the engines. A namespace is created for the stage.
  *
  * One engine keeps actor data on its Volume. Several share it through
  * `objectStorage` — Hetzner Object Storage, or any S3-compatible bucket.
@@ -203,6 +243,8 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
         servers.push(
           yield* Hetzner.Server(`${id}Engine${i}`, {
             serverType: props.serverType ?? "cx23",
+            // IPv4 only: a primary IP each counts against the project's limit.
+            enableIpv6: false,
             image: DOCKER_IMAGE,
             location,
             networks: [network],
@@ -215,10 +257,13 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
         );
       }
 
+      // Private only: it spreads calls across the engines, and the edge is
+      // the one public way in.
       const balancer = yield* Hetzner.LoadBalancer(`${id}Api`, {
         loadBalancerType: "lb11",
         location,
         networks: [network],
+        publicInterface: false,
         services: [
           {
             protocol: "tcp",
@@ -241,7 +286,28 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
         })),
       });
 
-      const endpoint = Output.interpolate`http://${balancer.ipv4}:${API_PORT}`;
+      // HTTPS without a domain of your own: a small Server running Caddy in
+      // front of the Load Balancer, on its own address under `sslip.io`.
+      const edgeFirewall = yield* Hetzner.Firewall(`${id}EdgeFirewall`, {
+        rules: [
+          { direction: "in", protocol: "tcp", port: "80", sourceIps: ["0.0.0.0/0", "::/0"] },
+          { direction: "in", protocol: "tcp", port: "443", sourceIps: ["0.0.0.0/0", "::/0"] },
+        ],
+      });
+      const edge = yield* Hetzner.Server(`${id}Edge`, {
+        serverType: props.edgeServerType ?? "cx23",
+        enableIpv6: false,
+        image: DOCKER_IMAGE,
+        location,
+        networks: [network],
+        firewalls: [edgeFirewall],
+        userData: balancer.privateNetworks.pipe(
+          Output.map((networks) =>
+            edgeUserData({ upstream: `${networks[0]?.ip ?? ""}:${API_PORT}` }),
+          ),
+        ) as unknown as string,
+      });
+      const endpoint = edge.ipv4.pipe(Output.map(edgeEndpoint));
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Created through the API the engines serve, once they all run.
         endpoint: Output.all(endpoint, Output.all(...servers.map((server) => server.id))).pipe(

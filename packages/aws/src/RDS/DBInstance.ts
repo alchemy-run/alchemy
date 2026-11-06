@@ -573,8 +573,18 @@ export interface DBInstance extends Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBInstanceLookup
 > {}
+
+/**
+ * Props for {@link DBInstance.lookup}: find a DB instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBInstanceLookup {
+  /** The db instance identifier of the existing DB instance. */
+  dbInstanceIdentifier: string;
+}
 
 /**
  * An RDS database instance — either a standalone (non-Aurora) database or a
@@ -978,6 +988,17 @@ export interface DBInstance extends Resource<
  *   enablePerformanceInsights: true,
  *   enableCloudwatchLogsExports: ["postgresql", "upgrade"],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB instance
+ * `DBInstance.lookup` references a DB instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB instance
+ * ```typescript
+ * const existing = AWS.RDS.DBInstance.lookup({ dbInstanceIdentifier: "my-db-instance" });
+ * const endpoint = existing.endpoint;
  * ```
  *
  * @resource
@@ -1992,6 +2013,19 @@ export const DBInstanceProvider = () =>
           if (yield* diffMigrations({ news, output })) {
             return { action: "update" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbInstanceIdentifier }) {
+          const instance = yield* readInstance(dbInstanceIdentifier);
+          if (!instance?.DBInstanceArn) return undefined;
+          return toAttrs({
+            instance,
+            tags: toTagRecord(instance.TagList),
+            skipFinalSnapshot: undefined,
+            finalDBSnapshotIdentifier: undefined,
+            masterUserPasswordFingerprint: undefined,
+            masterUserSecretResourcePolicy: yield* readObservedSecretPolicy(instance),
+            migrations: undefined,
+          });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

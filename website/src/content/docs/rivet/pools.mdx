@@ -3,11 +3,9 @@ title: Pool
 description: How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A pool is a group of machines, called nodes, that run your Durable Objects. Each class runs on one pool. When a room wakes, the control plane starts it on one of its pool's nodes.
-
-This chapter shows how to declare a pool and put a class on it, then when to share one pool between classes, when to split them, and how to scale one. It ends with running a pool on a different cloud from its control plane.
 
 ## Declare it
 
@@ -39,19 +37,16 @@ Each deploy builds one program for the pool, holding every class it runs, and ro
 
 Classes with similar needs share a pool and its machines. The rooms and the greeter run on the same nodes:
 
-<DAG
+<Tree
   nodes={[
-    { id: "room", label: "Room", type: "Durable Object", layer: 0 },
-    { id: "greeter", label: "Greeter", type: "Durable Object", layer: 0 },
-    { id: "pool", label: "Default", type: "pool", tone: "accent", layer: 1 },
-    { id: "cp", label: "Rivet", type: "control plane", layer: 2 },
+    { id: "pool", label: "Default", type: "pool: Room, Greeter" },
+    { id: "n1", label: "node 1", parent: "pool", dashed: true },
+    { id: "n2", label: "node 2", parent: "pool", dashed: true },
+    { id: "lobby", label: "lobby", type: "Room", parent: "n1" },
+    { id: "sam", label: "sam", type: "Greeter", parent: "n1" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "n2" },
   ]}
-  edges={[
-    { from: "room", to: "pool" },
-    { from: "greeter", to: "pool" },
-    { from: "pool", to: "cp" },
-  ]}
-  caption="Two classes, one pool, one control plane."
+  caption="Every node in a pool runs every class on it. The control plane starts each instance on one of them, so a node holds instances of both classes."
 />
 
 One pool is the right start. Fewer pools means fewer machines idling.
