@@ -65,3 +65,24 @@ export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
     });
   },
 });
+
+/**
+ * Send one request to the gateway over the runtime's own `fetch`, with the
+ * caller's token in {@link TOKEN_HEADER}.
+ */
+export const gatewaySend = (
+  url: string,
+  token: string,
+  init: {
+    readonly method: string;
+    readonly headers?: Record<string, string> | undefined;
+    readonly body?: Uint8Array | undefined;
+    readonly signal: AbortSignal;
+  },
+) =>
+  fetch(url, {
+    method: init.method,
+    headers: { ...init.headers, [TOKEN_HEADER]: token },
+    body: init.body as BodyInit | undefined,
+    signal: init.signal,
+  });

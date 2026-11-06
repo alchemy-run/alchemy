@@ -1,6 +1,7 @@
 import * as Compute from "@alchemy.run/gcp/Compute";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
+import * as Run from "@alchemy.run/gcp/Run";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -21,6 +22,29 @@ const MOUNT_PATH = "/mnt/disks/rivet";
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
 const PEER_PORT = 6421;
+
+/** The proxy in front of the engines: Caddy, spreading calls across them. */
+const PROXY_IMAGE = "docker.io/library/caddy:2";
+
+/**
+ * The proxy's Caddyfile. Cloud Run terminates TLS and sets `PORT`; Caddy
+ * spreads calls across the engines that pass their health check, and
+ * streams responses without buffering.
+ */
+const PROXY_CADDYFILE = `{
+\tadmin off
+\tauto_https off
+}
+:{$PORT} {
+\treverse_proxy {$UPSTREAMS} {
+\t\tlb_policy round_robin
+\t\tlb_try_duration 10s
+\t\thealth_uri /health
+\t\thealth_interval 10s
+\t\tflush_interval -1
+\t}
+}
+`;
 
 export interface ComputeEngineControlPlaneProps {
   /**
@@ -89,9 +113,12 @@ setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > 
  * instances across zones, each running the engine container with a
  * persistent disk of its own, a Cloud Storage bucket for the durable copy of
  * every actor's data (reached as the instances' own service account), and a
- * regional network load balancer on a static address. Instances find each
- * other through the bucket and talk on a private port only they can reach.
- * A namespace is created for the stage.
+ * Cloud Run service in front. Callers reach it over HTTPS at the service's
+ * `run.app` address, so it needs no domain of your own; the service proxies
+ * to the engines over Direct VPC egress, and the engines take no traffic
+ * from outside their subnetwork. Instances find each other through the
+ * bucket and talk on a private port only they can reach. A namespace is
+ * created for the stage.
  *
  * Each data disk is its own resource, so it outlives the instance it is
  * attached to: a replaced instance mounts the same disk again.
@@ -132,18 +159,19 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
 
       const token = yield* adminToken(id);
       const network = yield* Compute.Network(`${id}Network`, { autoCreateSubnetworks: false });
+      const cidrBlock = props.cidrBlock ?? "10.44.0.0/20";
       const subnet = yield* Compute.Subnetwork(`${id}Subnet`, {
         network: network.networkName,
         region,
-        ipCidrRange: props.cidrBlock ?? "10.44.0.0/20",
+        ipCidrRange: cidrBlock,
       });
-      // A passthrough load balancer keeps the client's address: the API
-      // port is open to nodes and callers anywhere.
+      // The API port is open only inside the subnetwork: to the proxy, which
+      // sends from it, and to nodes that run in it.
       yield* Compute.Firewall(`${id}ApiFirewall`, {
         network: network.networkName,
         direction: "INGRESS",
         allowed: [{ protocol: "tcp", ports: [String(API_PORT)] }],
-        sourceRanges: ["0.0.0.0/0"],
+        sourceRanges: [cidrBlock],
         targetTags: [tag],
       });
       // The peer port is plaintext and unauthenticated: only instances reach it.
@@ -202,29 +230,49 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
         );
       }
 
-      const health = yield* Compute.HttpHealthCheck(`${id}Health`, {
-        port: API_PORT,
-        requestPath: "/health",
-      });
-      const pool = yield* Compute.TargetPool(`${id}Engines`, {
-        region,
-        healthChecks: [health.selfLink as Output.Output<string>],
-        instances: hosts.map((host) => host.selfLink as Output.Output<string>),
-      });
-      const address = yield* Compute.Address(`${id}Address`, { region });
-      const rule = yield* Compute.ForwardingRule(`${id}Api`, {
-        region,
-        ipAddress: address.address as Output.Output<string>,
-        ipProtocol: "TCP",
-        portRange: String(API_PORT),
-        target: pool.selfLink as Output.Output<string>,
-        loadBalancingScheme: "EXTERNAL",
+      // HTTPS without a domain of your own: a Cloud Run service's address,
+      // running a proxy that reaches the engines over Direct VPC egress.
+      const upstreams = Output.all(...hosts.map((host) => host.networkIP)).pipe(
+        Output.map((addresses) => addresses.map((ip) => `${ip}:${API_PORT}`).join(" ")),
+      );
+      const proxy = yield* Run.Service(`${id}Proxy`, {
+        location: region,
+        ingress: "INGRESS_TRAFFIC_ALL",
+        // The engines check every call's token themselves.
+        invokerIamDisabled: true,
+        template: {
+          // Nodes hold one connection each, as long as Cloud Run allows.
+          timeout: "3600s",
+          maxInstanceRequestConcurrency: 1000,
+          vpcAccess: {
+            networkInterfaces: [
+              { network: network.networkName, subnetwork: subnet.subnetworkName },
+            ],
+            egress: "PRIVATE_RANGES_ONLY",
+          },
+          containers: [
+            {
+              image: PROXY_IMAGE,
+              command: ["sh", "-c"],
+              args: [
+                'printf "%s" "$CADDYFILE" > /tmp/Caddyfile && exec caddy run --adapter caddyfile --config /tmp/Caddyfile',
+              ],
+              env: [
+                { name: "CADDYFILE", value: PROXY_CADDYFILE },
+                { name: "UPSTREAMS", value: upstreams },
+              ],
+              ports: [{ containerPort: 8080 }],
+            },
+          ],
+        },
       });
 
-      const endpoint = Output.interpolate`http://${address.address}:${API_PORT}`;
+      const endpoint = proxy.uri.pipe(
+        Output.map((uri) => (uri ?? "").replace(/\/+$/, "")),
+      ) as Output.Output<string>;
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Created through the API the instances serve, once they all run.
-        endpoint: Output.all(endpoint, rule.selfLink, grant.role).pipe(Output.map(([url]) => url)),
+        endpoint: Output.all(endpoint, grant.role).pipe(Output.map(([url]) => url)),
         token: token.text,
       });
       return {

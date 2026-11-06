@@ -49,8 +49,9 @@ export interface ClusterShape {
    */
   readonly endpoint: Input<string>;
   /**
-   * The URL runtimes connect to — nodes and `Rivet.Client` callers — when it
-   * differs from {@link endpoint}: a private address inside {@link network}.
+   * The URL nodes inside {@link network} connect to, when it differs from
+   * {@link endpoint}: a private address only that network reaches. Nodes
+   * anywhere else use {@link endpoint}.
    */
   readonly nodeEndpoint?: Input<string> | undefined;
   /**

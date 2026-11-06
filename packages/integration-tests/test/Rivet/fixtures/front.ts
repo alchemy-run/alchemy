@@ -4,16 +4,22 @@
  */
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
+import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
-import { Cluster, FRONT_PORT } from "./cluster.ts";
+import { BinaryLog, ChatLog } from "./chat-log.ts";
+import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
 import GatedTally from "./gated-tally.ts";
 import Greeter from "./greeter.ts";
 import { Reentrant } from "./reentrant-declaration.ts";
+import Room from "./room.ts";
 import Tally from "./tally.ts";
 
 export default class Front extends Docker.Service<Front>()(
@@ -35,7 +41,94 @@ export default class Front extends Docker.Service<Front>()(
     const parallelTallies = yield* Tally;
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
+    const rooms = yield* Room;
+    const chat = yield* ChatLog;
+    const binary = yield* BinaryLog;
     const conformance = conformanceFetch(counters);
+    // Durable Streams: `/durable-stream/<key>/<case>`. Each returns what it saw,
+    // with failures as their tags.
+    const streamCase = Effect.fn(function* (name: string, which: string | undefined) {
+      const say = (user: string, text: string) => ({ user, text });
+      if (which === "roundtrip") {
+        yield* chat.append(name, say("a", "one"));
+        yield* chat.appendAll(name, [say("b", "two"), say("a", "three")]);
+        const first = yield* chat.read(name);
+        yield* chat.append(name, say("b", "four"));
+        const second = yield* chat.read(name, { from: first.next });
+        return yield* HttpServerResponse.json({ first, second });
+      }
+      if (which === "tail") {
+        yield* chat.appendAll(name, [say("a", "1"), say("a", "2")]);
+        const live = yield* chat
+          .tail(name)
+          .pipe(Stream.take(4), Stream.runCollect, Effect.forkChild);
+        yield* Effect.sleep("1 second");
+        yield* chat.appendAll(name, [say("a", "3"), say("a", "4")]);
+        const messages = yield* Fiber.join(live).pipe(Effect.timeout("30 seconds"));
+        return yield* HttpServerResponse.json({ messages });
+      }
+      if (which === "closed") {
+        yield* chat.append(name, say("a", "last"));
+        yield* chat.close(name);
+        const after = yield* chat.append(name, say("a", "late")).pipe(
+          Effect.as("appended"),
+          Effect.catchTag("Rivet.DurableStreamConflict", (e) => Effect.succeed(e._tag)),
+        );
+        const read = yield* chat.read(name);
+        const tailed = yield* chat.tail(name).pipe(Stream.runCollect, Effect.timeout("30 seconds"));
+        return yield* HttpServerResponse.json({ after, read, tailed });
+      }
+      if (which === "binary") {
+        yield* binary.appendAll(name, [say("a", "één"), say("b", "two")]);
+        const read = yield* binary.read(name);
+        yield* binary.append(name, say("a", "three"));
+        const live = yield* binary
+          .tail(name)
+          .pipe(Stream.take(3), Stream.runCollect, Effect.timeout("30 seconds"));
+        return yield* HttpServerResponse.json({ read, live });
+      }
+      if (which === "producer") {
+        const producer = { id: "writer", epoch: 1, seq: 0 };
+        yield* chat.append(name, say("a", "once"), { producer });
+        yield* chat.append(name, say("a", "once"), { producer });
+        const stale = yield* chat
+          .append(name, say("a", "stale"), { producer: { ...producer, epoch: 0, seq: 1 } })
+          .pipe(
+            Effect.as("appended"),
+            Effect.catchTags({
+              "Rivet.DurableStreamStaleProducer": (e) => Effect.succeed(e._tag),
+              "Rivet.DurableStreamRequestError": (e) => Effect.succeed(`${e._tag} ${e.status}`),
+            }),
+          );
+        return yield* HttpServerResponse.json({ read: yield* chat.read(name), stale });
+      }
+      if (which === "missing") {
+        const read = yield* chat.read(name).pipe(
+          Effect.as("found"),
+          Effect.catchTag("Rivet.DurableStreamNotFound", (e) => Effect.succeed(e._tag)),
+        );
+        yield* chat.delete(name);
+        return yield* HttpServerResponse.json({ read });
+      }
+      if (which === "deleted") {
+        yield* chat.append(name, say("a", "gone"));
+        yield* chat.delete(name);
+        const read = yield* chat.read(name).pipe(
+          Effect.as("found"),
+          Effect.catchTag("Rivet.DurableStreamNotFound", (e) => Effect.succeed(e._tag)),
+        );
+        return yield* HttpServerResponse.json({ read });
+      }
+      if (which === "room") {
+        const room = rooms.getByName(name);
+        yield* room.say(name, "a", "from a room");
+        yield* room.say(name, "b", "and again");
+        return yield* HttpServerResponse.json(yield* chat.read(name));
+      }
+
+      return HttpServerResponse.text("unknown case", { status: 404 });
+    });
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -43,6 +136,12 @@ export default class Front extends Docker.Service<Front>()(
         const [group, name] = url.pathname.split("/").filter((segment) => segment.length > 0);
         // `?gated=1` sends a tally route to the class given `Workers.InputGate`.
         const tallies = url.searchParams.get("gated") === "1" ? gatedTallies : parallelTallies;
+        if (group === "durable-stream" && name !== undefined) {
+          return yield* streamCase(
+            name,
+            url.pathname.split("/").filter((segment) => segment.length > 0)[2],
+          ).pipe(Effect.orDie);
+        }
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);
           return yield* HttpServerResponse.json({ greeting });
@@ -224,5 +323,5 @@ export default class Front extends Docker.Service<Front>()(
         return yield* conformance;
       }),
     };
-  }),
+  }).pipe(Effect.provide(Layer.mergeAll(Services, StreamFormat.Json))),
 ) {}

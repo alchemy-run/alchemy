@@ -306,5 +306,98 @@ describe.skipIf(!!process.env.FAST)(
       }),
       { timeout: 120_000 },
     );
+
+    describe("Durable Streams", { tags: ["provider:rivet:durable-stream"] }, () => {
+      // GET a stream case on a fresh stream; a retried attempt starts over.
+      const stream = <T>(which: string) =>
+        Effect.gen(function* () {
+          const client = yield* HttpClient.HttpClient;
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/durable-stream/${crypto.randomUUID()}/${which}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      const m = (user: string, text: string) => ({ user, text });
+      type Read = { messages: unknown[]; next: string; upToDate: boolean; closed: boolean };
+
+      test(
+        "appends create the stream, and a read from its next offset returns only what came after",
+        Effect.gen(function* () {
+          const { first, second } = yield* stream<{ first: Read; second: Read }>("roundtrip");
+          expect(first.messages).toEqual([m("a", "one"), m("b", "two"), m("a", "three")]);
+          expect(first.upToDate).toBe(true);
+          expect(first.closed).toBe(false);
+          expect(second.messages).toEqual([m("b", "four")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a tail replays history, then follows new appends live",
+        Effect.gen(function* () {
+          const { messages } = yield* stream<{ messages: unknown[] }>("tail");
+          expect(messages).toEqual([m("a", "1"), m("a", "2"), m("a", "3"), m("a", "4")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a closed stream refuses appends, and its tail ends",
+        Effect.gen(function* () {
+          const { after, read, tailed } = yield* stream<{
+            after: string;
+            read: Read;
+            tailed: unknown[];
+          }>("closed");
+          expect(after).toBe("Rivet.DurableStreamConflict");
+          expect(read.closed).toBe(true);
+          expect(read.messages).toEqual([m("a", "last")]);
+          expect(tailed).toEqual([m("a", "last")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a stream with its own format writes and reads SchemaBinary on a byte stream",
+        Effect.gen(function* () {
+          const { read, live } = yield* stream<{ read: Read; live: unknown[] }>("binary");
+          expect(read.messages).toEqual([m("a", "één"), m("b", "two")]);
+          expect(live).toEqual([m("a", "één"), m("b", "two"), m("a", "three")]);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "an idempotent writer's repeated append is written once, and an older epoch is refused",
+        Effect.gen(function* () {
+          const { read, stale } = yield* stream<{ read: Read; stale: string }>("producer");
+          expect(read.messages).toEqual([m("a", "once")]);
+          expect(stale).toBe("Rivet.DurableStreamStaleProducer");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a stream nobody appended to is not found, and a deleted one is gone",
+        Effect.gen(function* () {
+          const missing = yield* stream<{ read: string }>("missing");
+          expect(missing.read).toBe("Rivet.DurableStreamNotFound");
+          const deleted = yield* stream<{ read: string }>("deleted");
+          expect(deleted.read).toBe("Rivet.DurableStreamNotFound");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a Durable Object appends to a stream that another runtime reads",
+        Effect.gen(function* () {
+          const read = yield* stream<Read>("room");
+          expect(read.messages).toEqual([m("a", "from a room"), m("b", "and again")]);
+        }),
+        { timeout: 120_000 },
+      );
+    });
   },
 );

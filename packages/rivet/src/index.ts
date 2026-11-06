@@ -4,6 +4,7 @@
  */
 export * from "./Cluster.ts";
 export * from "./DurableObject.ts";
+export * from "./DurableStream.ts";
 export { DurableObjectState, SqlRowCountMismatch } from "./DurableObjectState.ts";
 export type {
   DurableObjectStateShape,
@@ -14,3 +15,4 @@ export type {
 export * from "./Namespace.ts";
 export * from "./Pool.ts";
 export * from "./Providers.ts";
+export * from "./Services.ts";

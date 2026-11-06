@@ -165,7 +165,10 @@ export const makePoolLayer = <Network, Req>(options: {
       // pool resource — whose bindings carry every class's env, which can
       // name other classes' pools.
       const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
-      const endpoint = cluster.nodeEndpoint ?? cluster.endpoint;
+      // A private address only works for nodes inside the control plane's
+      // network: nodes anywhere else connect to its public endpoint.
+      const endpoint =
+        network === cluster.network ? (cluster.nodeEndpoint ?? cluster.endpoint) : cluster.endpoint;
       const caller = {
         pool: name,
         endpoint: cluster.clientEndpoint ?? cluster.endpoint,

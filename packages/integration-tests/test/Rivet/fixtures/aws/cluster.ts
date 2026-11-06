@@ -7,3 +7,5 @@ export const Cluster = RivetAWS.Ec2ControlPlane("Rivet");
 export const Default = RivetAWS.EcsPool("Default", { architecture: "ARM64" }).pipe(
   Layer.provide(Cluster),
 );
+// Rivet Services on Fargate in the same VPC: Durable Streams.
+export const Services = RivetAWS.ServicesPool("Services").pipe(Layer.provide(Cluster));
