@@ -98,11 +98,11 @@ export type ServerDevProps =
        */
       strictPort?: boolean;
       /**
-       * Route this site's dev URL through an ingress adapter, for example
-       * `Portless.Ingress()`, so `url` is a stable HTTPS name instead of
+       * Route this site's dev URL through an ingress router, for example
+       * `Portless.Ingress(proxy)`, so `url` is a stable HTTPS name instead of
        * `http://localhost:<port>`.
        *
-       * Under `alchemy dev`, `url` becomes the adapter's origin and
+       * Under `alchemy dev`, `url` becomes the router's origin and
        * {@link Server.localUrl} keeps the framework server's own address, which
        * everything inside the dev session (a Router's dev origin, for one)
        * dials. The route is called the config's `name`, else this server's id;
@@ -110,11 +110,11 @@ export type ServerDevProps =
        * site's id when you give an `ingress` without one. Changing `ingress`
        * restarts the dev server.
        *
-       * `alchemy dev` fails to start the server when the adapter can't be
-       * resolved or can't route, instead of advertising a URL that isn't
+       * `alchemy dev` fails to start the server when the router's module can't
+       * be loaded or can't route, instead of advertising a URL that isn't
        * routed. Inert on deploy.
        */
-      ingress?: Ingress.IngressConfig;
+      ingress?: Ingress.Ingress;
     }
   | {
       /**
@@ -600,20 +600,14 @@ export const ServerProviderLocal = () =>
           );
           const localUrl = normalizeAdvertisedUrl(url);
           // The route lives in the instance scope, so a restart or delete
-          // removes it. Fails when the adapter can't route: never advertise an
+          // removes it. Fails when the router can't route: never advertise an
           // origin nothing answers on.
           const origin =
             dev?.ingress === undefined
               ? localUrl
-              : yield* Ingress.route(
+              : yield* Ingress.attach(
                   dev.ingress,
-                  Ingress.createTarget({
-                    stack,
-                    id,
-                    fqn,
-                    type: Server.Type,
-                    config: dev.ingress,
-                  }),
+                  { stack: stack.name, stage: stack.stage, fqn, id, type: Server.Type },
                   new URL(localUrl),
                 );
           return {

@@ -197,8 +197,8 @@ export const viteFrameworkOptions = (
  *
  * **Example:** Routed Dev URL
  * ```typescript
- * // `dev.ingress` takes an ingress adapter's config, such as the one
- * // @alchemy.run/portless exports. site.url is the adapter's origin; the
+ * // `dev.ingress` takes an ingress router, such as the one
+ * // @alchemy.run/portless exports. site.url is the router's origin; the
  * // dev server keeps its own address in site.build.localUrl.
  * const site = yield* AWS.Website.Vite("Web", { dev: { ingress } });
  * ```
