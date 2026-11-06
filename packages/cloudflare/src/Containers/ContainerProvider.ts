@@ -6,7 +6,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
@@ -621,7 +621,37 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* docker.image.pull(build.image, platform, undefined, session);
+          // Pull every time so a mutable tag publishes the newest image. An
+          // image built on this machine or `docker load`ed has no registry
+          // to pull from, so when the pull fails and the image is present
+          // locally, publish the local copy.
+          const usedLocalImage = yield* docker.image
+            .pull(build.image, platform, undefined, session)
+            .pipe(
+              Effect.as(false),
+              Effect.catch((pullError) =>
+                docker.image.inspect(build.image).pipe(
+                  Effect.flatMap((local) =>
+                    local
+                      ? Effect.logInfo(
+                          `Cloudflare Container image: ${build.image} could not be pulled, publishing the local image`,
+                        ).pipe(Effect.as(true))
+                      : Effect.fail(pullError),
+                  ),
+                  Effect.mapError(
+                    () =>
+                      new ContainerProviderOperationFailed({
+                        message:
+                          `Container image "${build.image}" could not be pulled and is not in the local Docker. ` +
+                          `If it is in a registry, check the name and tag, and run \`docker login\` for a private registry. ` +
+                          `If it is built on this machine, build or load it before deploying: ` +
+                          `\`docker build --platform ${platform} -t ${build.image} .\` or \`docker load\`.`,
+                        cause: pullError,
+                      }),
+                  ),
+                ),
+              ),
+            );
           yield* docker.image.tag(build.image, imageRef);
           yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
@@ -629,9 +659,19 @@ export const LiveContainerProvider = () =>
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image
-            .push(imageRef, credentials, platform, undefined, session)
-            .pipe(retryContainerPublication);
+          yield* docker.image.push(imageRef, credentials, platform, undefined, session).pipe(
+            retryContainerPublication,
+            Effect.mapError((pushError) =>
+              usedLocalImage
+                ? new ContainerProviderOperationFailed({
+                    message:
+                      `Could not publish the local image "${build.image}" as ${platform}, the platform Cloudflare runs. ` +
+                      `Rebuild it for that platform: \`docker build --platform ${platform} -t ${build.image} .\`.`,
+                    cause: pushError,
+                  })
+                : pushError,
+            ),
+          );
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -1266,7 +1306,18 @@ export const LiveContainerProvider = () =>
 
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
+        diff: Effect.fn(function* ({
+          id,
+          olds = {},
+          news: desired = {},
+          output,
+          newBindings,
+          oldBindings,
+        }) {
+          // An Effect-native (`main`) Container carries its program as an
+          // Effect in `exports`, which `isResolved` never accepts. Strip it so
+          // a guest-code change still reaches the image hash comparison.
+          const news = stripEffects(desired);
           if (!isResolved(news)) return;
           yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           if (!isResolved(newBindings)) return;

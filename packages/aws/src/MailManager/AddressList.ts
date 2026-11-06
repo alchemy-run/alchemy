@@ -49,8 +49,18 @@ export interface AddressList extends Resource<
     addressListName: string;
   },
   never,
-  Providers
+  Providers,
+  AddressListLookup
 > {}
+
+/**
+ * Props for {@link AddressList.lookup}: find an address list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AddressListLookup {
+  /** The name of the existing address list. */
+  addressListName: string;
+}
 
 /**
  * An SES Mail Manager address list — a named set of email addresses that
@@ -81,6 +91,16 @@ export interface AddressList extends Resource<
  * // runtime
  * yield* registerMember({ Address: "spammer@example.com" });
  * const { Addresses } = yield* listMembers({});
+ * ```
+ *
+ * ### Looking up an existing address list
+ * `AddressList.lookup` references an address list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `addressListName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing address list
+ * ```typescript
+ * const existing = AWS.MailManager.AddressList.lookup({ addressListName: "blocked" });
  * ```
  *
  * @resource
@@ -149,6 +169,10 @@ export const AddressListProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ addressListName }) {
+          const found = yield* observe(undefined, addressListName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.addressListName ?? (yield* createName(id, olds ?? {}));
           const list = yield* observe(output, name);

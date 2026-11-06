@@ -8,6 +8,11 @@ import * as Schedule from "effect/Schedule";
 import { materializeIsolatedProject, removeIsolatedProject } from "../../IsolatedProject.ts";
 import IsolatedProjectService, { project } from "./fixtures/isolated-project-service.ts";
 
+// App Runner closed to new customers on 2026-04-30; accounts that weren't
+// already customers get "Account <id> can't create new App Runner services".
+// Set AWS_TEST_APPRUNNER_SERVICES=1 on an account that can still create them.
+const appRunnerServices = !!process.env.AWS_TEST_APPRUNNER_SERVICES;
+
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Live proof that the App Runner bun bootstrap boots when the service's
@@ -20,7 +25,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 //
 // Heavy (Docker build + ECR push + 3-5 min App Runner provisioning, bills
 // while running), so it is skipped under `--fast` like the platform e2e.
-test.provider.skipIf(!!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST || !appRunnerServices)(
   "service bundled from an isolated project boots and serves HTTP",
   (stack) =>
     Effect.gen(function* () {

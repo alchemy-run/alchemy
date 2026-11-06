@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -50,7 +51,7 @@ describe.sequential(
           const { rule } = yield* stack.deploy(
             Effect.gen(function* () {
               const config = yield* Cloudflare.MagicNetworkMonitoring.Config("Config", {
-                name: "alchemy-mnm-list-test",
+                name: testName("alchemy-mnm-list-test"),
                 defaultSampling: 1,
               });
               // Rules cannot exist without the account config — sequence the

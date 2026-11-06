@@ -5,7 +5,7 @@ description: How a stream keeps a keyed, append-only log that a projection write
 
 import DAG from "../../../components/DAG.astro";
 
-A stream is a keyed, append-only log: one ordered list of entries per key, kept for good and readable from any point. A [projection](/domain/projection) writes it; clients read it through an [Api](/domain/api), with the same middleware and `validate` as a view.
+A stream is a keyed, append-only log: one ordered list of entries per key, kept for good and readable from any point. A [projection](/domain/projection) writes it; clients read it through an [Api](/domain/api), guarded like a view.
 
 Its latest entry is its current value. So one stream answers both "what is it now?" and "tell me every change", which is what a client syncing state needs: the current value first, then everything after it.
 
@@ -56,6 +56,18 @@ export class AccountCard extends Domain.Stream("AccountCard", {
 Add it to the model's `streams`.
 
 A stream can also be keyed by a string Schema, like an org id, with one log per value. Its writer is then keyed by the same Schema, and reads take the value: `bank.OrgFeed.peek(orgId)`. See [Key a view by a value](/domain/view#key-a-view-by-a-value).
+
+## Describe it
+
+A stream's last argument is its [annotations](/domain/annotations). The read tools, CLI subcommand and OpenAPI operations an [Api](/domain/api) builds for the stream show its `description` after the sentence that says what the call does.
+
+```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
+export class AccountCard extends Domain.Stream(
+  "AccountCard",
+  { key: Account, entries: [CardChanged] },
+  { description: "An account's card, with an entry each time it changes." },
+) {}
+```
 
 ## Write it from a projection
 
@@ -139,13 +151,19 @@ Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the Dura
 
 ## Decide who may read it
 
-`validate` judges every read against the key's latest entry, and runs again on each new entry while a client watches.
+The declaration lists the `middleware` and `rejects` of its reads. Its Layer's `validate` judges every read against the key's latest entry, and runs again on each new entry while a client watches.
 
 ```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
-validate: Effect.fn(function* (_request, latest) {
-  yield* mustOwn(latest?.event.customerId ?? null);
-}),
+export const AccountCardLive = AccountCard.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
+      yield* mustOwn(latest?.event.customerId ?? null);
+    }),
+  ),
+);
 ```
+
+A stream that declares either needs its Layer, provided with the model's handlers.
 
 ## Use it as a value
 
@@ -169,4 +187,4 @@ streamed(
 ),
 ```
 
-Next, [Policy](/domain/policy): the consumer that acts on the world rather than recording it.
+Next, [Query](/domain/query) serves a store a projection writes, across keys.

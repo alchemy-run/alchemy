@@ -259,7 +259,10 @@ export const MilestoneProvider = () =>
         const dueOn =
           requestedDueOn === undefined
             ? null
-            : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
+            : yield* Effect.try(() =>
+                // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(requestedDueOn).toISOString().replace(".000Z", "Z"),
+              );
 
         // Observe — probe for an existing milestone by title. GitHub's list
         // endpoint supports filtering by state, but we need to check both open

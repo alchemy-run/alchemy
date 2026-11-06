@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/test",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Minimal Effect-native, vitest-compatible test harness and single-process runner for Bun.",
   "keywords": [
     "alchemy",

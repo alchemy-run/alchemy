@@ -1,5 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
-import { expect } from "@alchemy.run/test";
+import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as addons from "@distilled.cloud/fly-io/addons";
 import * as machines from "@distilled.cloud/fly-io/machines";
@@ -9,8 +9,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import BucketApi, { BucketIp, BucketSite, Data, OBJECT_BODY } from "./fixtures/bucket-api.ts";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -74,181 +75,185 @@ const listedSecrets = (appName: string) =>
       Effect.catchTag("NotFound", () => Effect.succeed(new Set<string>())),
     );
 
-test.provider(
-  "create, update, and destroy a tigris bucket",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+// Every case deploys its own stack, so they run concurrently; the flyApi limit
+// caps the load on Fly.
+describe.concurrent("Bucket", () => {
+  test.provider(
+    "create, update, and destroy a tigris bucket",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.Bucket("Data");
-        }),
-      );
-
-      expect(created.addOnId).toEqual(expect.any(String));
-      expect(created.addOnId.length).toBeGreaterThan(0);
-      expect(created.name).toEqual(expect.any(String));
-      expect(created.name.length).toBeGreaterThan(0);
-      expect(created.public).toEqual(false);
-
-      const fetched = yield* findAddOn(created.addOnId, created.name);
-      expect(fetched).toBeDefined();
-      expect(fetched?.id).toEqual(created.addOnId);
-      expect(fetched?.name).toEqual(created.name);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.Bucket("Data", {
-            public: true,
-          });
-        }),
-      );
-
-      expect(updated.addOnId).toEqual(created.addOnId);
-      expect(updated.name).toEqual(created.name);
-
-      const refetched = yield* findAddOn(updated.addOnId, updated.name);
-      expect(refetched).toBeDefined();
-      expect(refetched?.id).toEqual(created.addOnId);
-
-      const provider = yield* Provider.findProvider(Fly.Bucket);
-      const all = yield* provider.list();
-      const listed = all.find((row) => row.addOnId === created.addOnId);
-      expect(listed).toBeDefined();
-      expect(listed?.name).toEqual(created.name);
-
-      yield* stack.destroy();
-
-      const gone = yield* waitUntilBucketGone(created.addOnId, created.name);
-      expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
-);
-
-test.provider(
-  "replace when the name changes",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.Bucket("Data");
-        }),
-      );
-
-      const nextName = sanitizeReplaceName(created.name);
-      const replaced = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Fly.Bucket("Data", {
-            name: nextName,
-          });
-        }),
-      );
-
-      expect(replaced.name).toEqual(nextName);
-      expect(replaced.addOnId).not.toEqual(created.addOnId);
-
-      const oldGone = yield* findAddOn(created.addOnId, created.name);
-      expect(oldGone).toBeUndefined();
-      const next = yield* findAddOn(replaced.addOnId, replaced.name);
-      expect(next).toBeDefined();
-      expect(next?.name).toEqual(nextName);
-
-      yield* stack.destroy();
-
-      const gone = yield* waitUntilBucketGone(replaced.addOnId, replaced.name);
-      expect(gone).toEqual("gone");
-    }).pipe(logLevel),
-  { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
-);
-
-test.provider(
-  "a Service puts and gets an object on Tigris",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const out = yield* stack.deploy(
-        Effect.gen(function* () {
-          const app = yield* BucketSite;
-          const bucket = yield* Data;
-          const ip = yield* BucketIp;
-          const api = yield* BucketApi;
-          return { app, bucket, ip, api };
-        }),
-      );
-
-      expect(out.api.url).toEqual(`https://${out.app.appName}.fly.dev`);
-
-      const names = yield* listedSecrets(out.app.appName).pipe(
-        Effect.flatMap((set) =>
-          set.has("BUCKET_NAME") && set.has("AWS_ACCESS_KEY_ID")
-            ? Effect.succeed(set)
-            : Effect.fail(new Error(`missing Tigris secrets: ${[...set].join(",") || "(none)"}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("2 seconds"),
-          times: 8,
-        }),
-      );
-      expect(names.has("BUCKET_NAME")).toEqual(true);
-      expect(names.has("AWS_ACCESS_KEY_ID")).toEqual(true);
-
-      const untilOk = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        effect.pipe(
-          Effect.retry({
-            schedule: Schedule.spaced("4 seconds"),
-            times: 10,
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Fly.Bucket("Data");
           }),
         );
 
-      const put = yield* untilOk(
-        HttpClient.get(`${out.api.url}/put`).pipe(
-          Effect.flatMap((res) =>
-            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
+        expect(created.addOnId).toEqual(expect.any(String));
+        expect(created.addOnId.length).toBeGreaterThan(0);
+        expect(created.name).toEqual(expect.any(String));
+        expect(created.name.length).toBeGreaterThan(0);
+        expect(created.public).toEqual(false);
+
+        const fetched = yield* findAddOn(created.addOnId, created.name);
+        expect(fetched).toBeDefined();
+        expect(fetched?.id).toEqual(created.addOnId);
+        expect(fetched?.name).toEqual(created.name);
+
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Fly.Bucket("Data", {
+              public: true,
+            });
+          }),
+        );
+
+        expect(updated.addOnId).toEqual(created.addOnId);
+        expect(updated.name).toEqual(created.name);
+
+        const refetched = yield* findAddOn(updated.addOnId, updated.name);
+        expect(refetched).toBeDefined();
+        expect(refetched?.id).toEqual(created.addOnId);
+
+        const provider = yield* Provider.findProvider(Fly.Bucket);
+        const all = yield* provider.list();
+        const listed = all.find((row) => row.addOnId === created.addOnId);
+        expect(listed).toBeDefined();
+        expect(listed?.name).toEqual(created.name);
+
+        yield* stack.destroy();
+
+        const gone = yield* waitUntilBucketGone(created.addOnId, created.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
+  );
+
+  test.provider(
+    "replace when the name changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const created = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Fly.Bucket("Data");
+          }),
+        );
+
+        const nextName = sanitizeReplaceName(created.name);
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Fly.Bucket("Data", {
+              name: nextName,
+            });
+          }),
+        );
+
+        expect(replaced.name).toEqual(nextName);
+        expect(replaced.addOnId).not.toEqual(created.addOnId);
+
+        const oldGone = yield* findAddOn(created.addOnId, created.name);
+        expect(oldGone).toBeUndefined();
+        const next = yield* findAddOn(replaced.addOnId, replaced.name);
+        expect(next).toBeDefined();
+        expect(next?.name).toEqual(nextName);
+
+        yield* stack.destroy();
+
+        const gone = yield* waitUntilBucketGone(replaced.addOnId, replaced.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    { tags: ["provider:fly", "provider:fly:bucket", "live"], timeout: 120_000 },
+  );
+
+  test.provider(
+    "a Service puts and gets an object on Tigris",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const out = yield* stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* BucketSite;
+            const bucket = yield* Data;
+            const ip = yield* BucketIp;
+            const api = yield* BucketApi;
+            return { app, bucket, ip, api };
+          }),
+        );
+
+        expect(out.api.url).toEqual(`https://${out.app.appName}.fly.dev`);
+
+        const names = yield* listedSecrets(out.app.appName).pipe(
+          Effect.flatMap((set) =>
+            set.has("BUCKET_NAME") && set.has("AWS_ACCESS_KEY_ID")
+              ? Effect.succeed(set)
+              : Effect.fail(new Error(`missing Tigris secrets: ${[...set].join(",") || "(none)"}`)),
           ),
-          Effect.map((value) => value as { ok: boolean }),
-        ),
-      );
-      expect(put.ok).toEqual(true);
+          Effect.retry({
+            schedule: Schedule.spaced("2 seconds"),
+            times: 8,
+          }),
+        );
+        expect(names.has("BUCKET_NAME")).toEqual(true);
+        expect(names.has("AWS_ACCESS_KEY_ID")).toEqual(true);
 
-      const got = yield* untilOk(
-        HttpClient.get(`${out.api.url}/get`).pipe(
-          Effect.flatMap((res) =>
-            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
+        const untilOk = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+          effect.pipe(
+            Effect.retry({
+              schedule: Schedule.spaced("4 seconds"),
+              times: 10,
+            }),
+          );
+
+        const put = yield* untilOk(
+          HttpClient.get(`${out.api.url}/put`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
+            ),
+            Effect.map((value) => value as { ok: boolean }),
           ),
-          Effect.map((value) => value as { ok: boolean; text: string }),
-        ),
-      );
-      expect(got.ok).toEqual(true);
-      expect(got.text).toEqual(OBJECT_BODY);
+        );
+        expect(put.ok).toEqual(true);
 
-      yield* stack.destroy();
+        const got = yield* untilOk(
+          HttpClient.get(`${out.api.url}/get`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
+            ),
+            Effect.map((value) => value as { ok: boolean; text: string }),
+          ),
+        );
+        expect(got.ok).toEqual(true);
+        expect(got.text).toEqual(OBJECT_BODY);
 
-      const bucketGone = yield* waitUntilBucketGone(out.bucket.addOnId, out.bucket.name);
-      expect(bucketGone).toEqual("gone");
-      const appGone = yield* waitUntilAppGone(out.app.appName);
-      expect(appGone).toEqual("gone");
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:bucket",
-      "provider:fly:ipassignment",
-      "provider:fly:machine",
-      "provider:fly:service",
-      "live",
-    ],
-    // Deploys a Fly Service (image build + push + machine health checks)
-    // and a Tigris bucket, then destroys both: measured 336–380s.
-    timeout: 600_000,
-  },
-);
+        yield* stack.destroy();
 
-const sanitizeReplaceName = (name: string): string => {
-  const clipped = name.length >= 30 ? name.slice(0, 29) : name;
-  return `${clipped}x`.replace(/[^a-z0-9-]/g, "-").slice(0, 63);
-};
+        const bucketGone = yield* waitUntilBucketGone(out.bucket.addOnId, out.bucket.name);
+        expect(bucketGone).toEqual("gone");
+        const appGone = yield* waitUntilAppGone(out.app.appName);
+        expect(appGone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:bucket",
+        "provider:fly:ipassignment",
+        "provider:fly:machine",
+        "provider:fly:service",
+        "live",
+      ],
+      // Deploys a Fly Service (image build + push + machine health checks)
+      // and a Tigris bucket, then destroys both: measured 336–380s.
+      timeout: 600_000,
+    },
+  );
+
+  const sanitizeReplaceName = (name: string): string => {
+    const clipped = name.length >= 30 ? name.slice(0, 29) : name;
+    return `${clipped}x`.replace(/[^a-z0-9-]/g, "-").slice(0, 63);
+  };
+});

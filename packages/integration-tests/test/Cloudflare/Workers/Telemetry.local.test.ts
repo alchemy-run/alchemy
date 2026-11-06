@@ -162,6 +162,204 @@ test.provider(
   },
 );
 
+test.provider(
+  "flushes a streamed body's spans after the body settles without delaying its end",
+  (stack) =>
+    Effect.gen(function* () {
+      // Hold the export that carries the body's span: the body must still end.
+      const collector = yield* startOtlpCollector({
+        holdResponse: (body) => body.includes('"name":"otel-event-flush.stream-tail"'),
+      });
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const client = yield* HttpClient.HttpClient;
+      const response = yield* client
+        .get(`${deployment.url}/stream`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(response.status).toBe(200);
+      expect(yield* response.text).toBe("head\ntail\n");
+
+      // One flush, after the body settled: the tail span ends after the
+      // handler returned, yet it ships in the same batch as the request's
+      // root span and the handler's span. The stream runs outside the
+      // request's span, so the tail span carries its own trace.
+      const batches = yield* own.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (batches) => batches.length > 0,
+          times: 50,
+        }),
+      );
+      expect(batches).toHaveLength(1);
+      const [{ batch, spans }] = batches;
+      // The handler's finalizer ran on the event scope, after the body ended.
+      expect([...spans].sort()).toEqual([
+        "GET",
+        "otel-event-flush.finalizer-after-body",
+        "otel-event-flush.worker",
+      ]);
+      expect(batch.body).toContain('"name":"otel-event-flush.stream-tail"');
+      // The body ended while its export was still held.
+      expect(batch.completed).toBe(false);
+      yield* Effect.sync(collector.releaseResponses);
+      yield* Effect.sync(() => batch.completed).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          until: (completed) => completed,
+          times: 30,
+        }),
+      );
+      expect(yield* own).toHaveLength(1);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "exports spans recorded in waitUntil work",
+  (stack) =>
+    Effect.gen(function* () {
+      const collector = yield* startOtlpCollector();
+      const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
+      const deployment = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const worker = yield* OtelEventFlushWorker;
+            return { url: worker.url };
+          }),
+        )
+        .pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.orElse(
+              ConfigProvider.fromUnknown({
+                OTLP_EVENT_FLUSH_URL: `${collector.url}/v1/traces`,
+              }),
+              currentConfig,
+            ),
+          ),
+        );
+      if (deployment.url === undefined) {
+        return yield* Effect.die("OTLP event flush test Worker URL unavailable");
+      }
+      const trace = yield* Effect.makeSpanScoped("telemetry-local.client", { root: true });
+      const own = Effect.suspend(() => ownBatches(collector.requests, trace.traceId));
+      const exported = (name: string) =>
+        own.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (batches) => batches.some(({ spans }) => spans.includes(name)),
+            times: 10,
+          }),
+        );
+      const client = yield* HttpClient.HttpClient;
+
+      // Worker: `Cloudflare.waitUntil`, and background work that starts more.
+      const response = yield* client
+        .get(`${deployment.url}/wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(response.status).toBe(202);
+      const workerBatches = yield* exported("otel-event-flush.background.nested");
+      const workerSpans = workerBatches.flatMap(({ records }) => records);
+      const parentOf = (name: string) => {
+        const span = workerSpans.find((record) => record.name === name);
+        return workerSpans.find((record) => record.spanId === span?.parentSpanId)?.name;
+      };
+      expect(parentOf("otel-event-flush.background")).toBe("otel-event-flush.worker");
+      expect(parentOf("otel-event-flush.background.nested")).toBe("otel-event-flush.background");
+
+      // A streamed body, which closes the request scope itself, and work that
+      // fails.
+      for (const [route, name] of [
+        ["/wait-until-stream", "otel-event-flush.background.stream"],
+        ["/wait-until-failing", "otel-event-flush.background.failing"],
+      ] as const) {
+        const routed = yield* client
+          .get(`${deployment.url}${route}`)
+          .pipe(Effect.withParentSpan(trace));
+        expect(routed.status).toBeLessThan(300);
+        yield* routed.text;
+        const spans = (yield* exported(name)).flatMap(({ records }) => records);
+        const span = spans.find((record) => record.name === name);
+        expect(spans.find((record) => record.spanId === span?.parentSpanId)?.name).toBe(
+          "otel-event-flush.worker",
+        );
+      }
+
+      // Work a finalizer hands off while the event's scope closes.
+      const finalized = yield* client
+        .get(`${deployment.url}/finalizer-wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(finalized.status).toBe(202);
+      const finalizerSpans = (yield* exported("otel-event-flush.finalizer.background")).flatMap(
+        ({ records }) => records,
+      );
+      expect(finalizerSpans.map((span) => span.name)).toContain(
+        "otel-event-flush.finalizer.background",
+      );
+
+      // Durable Object: a span recorded by a Stream result as it is read.
+      const streamed = yield* client
+        .get(`${deployment.url}/rpc-stream-span`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(streamed.status).toBe(200);
+      expect(yield* streamed.text).toBe("item");
+      const streamSpans = (yield* exported("otel-event-flush.rpc.stream-item")).flatMap(
+        ({ records }) => records,
+      );
+      const item = streamSpans.find((span) => span.name === "otel-event-flush.rpc.stream-item");
+      expect(item).toBeDefined();
+
+      // Durable Object: `DurableObjectState.waitUntil` in an RPC call.
+      const rpcResponse = yield* client
+        .get(`${deployment.url}/rpc-wait-until`)
+        .pipe(Effect.withParentSpan(trace));
+      expect(rpcResponse.status).toBe(200);
+      expect(yield* rpcResponse.text).toBe("worker-saw:durable-object-rpc-ok");
+      const rpcBatches = yield* exported("otel-event-flush.rpc.background");
+      const rpcSpans = rpcBatches.flatMap(({ records }) => records);
+      const background = rpcSpans.find((span) => span.name === "otel-event-flush.rpc.background");
+      expect(rpcSpans.find((span) => span.spanId === background?.parentSpanId)?.name).toBe(
+        "otel-event-flush.rpc.later",
+      );
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
 for (const scenario of [
   { name: "bound default", shutdownTimeout: 0, delivered: true },
   { name: "custom 3 seconds", shutdownTimeout: 3_000, delivered: false },

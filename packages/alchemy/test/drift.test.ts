@@ -25,6 +25,9 @@ import {
   failOn,
   failOnMultiple,
   inDev,
+  lookupCalls,
+  LookupTarget,
+  lookupTargets,
   ModalResource,
   modalCalls,
   type TestCloudService,
@@ -270,6 +273,41 @@ describe("drift detection and repair", { tags: ["unit", "local"] }, () => {
       expect(result.resources.A?.action).toEqual("unchanged");
     }),
   );
+});
+
+// Drift works from persisted rows, so a consumer of a lookup is repaired
+// from the value the lookup resolved to at deploy time; the lookup itself
+// has no row, is never observed, and is not re-run.
+describe("lookups", { tags: ["unit", "local"] }, () => {
+  test.provider("a consumer of a lookup is repaired from its persisted props", (stack) => {
+    const cloud = makeTestCloud();
+    return Effect.gen(function* () {
+      const name = "drift-found";
+      lookupTargets.set(name, { name, value: "external" });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name });
+          yield* DriftResource("A", { value: "a", ref: found.value });
+        }),
+      );
+      const lookupsAfterDeploy = lookupCalls.filter((c) => c.name === name).length;
+
+      // The looked-up resource goes away and the consumer is deleted out of band.
+      lookupTargets.delete(name);
+      cloud.resources.delete("A");
+
+      cloud.calls.length = 0;
+      const result = yield* runDrift();
+
+      expect(Object.keys(result.resources)).toEqual(["A"]);
+      expect(result.resources.A).toMatchObject({
+        action: "recreated",
+        attr: { value: "a", ref: "external" },
+      });
+      expect(readCalls(cloud)).toEqual(["A"]);
+      expect(lookupCalls.filter((c) => c.name === name)).toHaveLength(lookupsAfterDeploy);
+    }).pipe(withCloud(cloud));
+  });
 });
 
 describe("dry run", { tags: ["unit", "local"] }, () => {

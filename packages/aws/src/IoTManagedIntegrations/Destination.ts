@@ -68,8 +68,18 @@ export interface Destination extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DestinationLookup
 > {}
+
+/**
+ * Props for {@link Destination.lookup}: find a destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DestinationLookup {
+  /** The destination name of the existing destination. */
+  destinationName: string;
+}
 
 /**
  * An AWS IoT Managed Integrations notification destination. Managed
@@ -100,6 +110,16 @@ export interface Destination extends Resource<
  *   roleArn: role.roleArn,
  *   description: "Managed integrations device events",
  * });
+ * ```
+ *
+ * ### Looking up an existing destination
+ * `Destination.lookup` references a destination Alchemy doesn't manage (created in the
+ * console or by another stack), found by `destinationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing destination
+ * ```typescript
+ * const existing = AWS.IoTManagedIntegrations.Destination.lookup({ destinationName: "my-destination" });
  * ```
  *
  * @resource
@@ -153,6 +173,12 @@ export const DestinationProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ destinationName: name }) {
+          const destination = yield* observe(name);
+          if (destination === undefined) return undefined;
+          const attrs = yield* toAttributes(destination);
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.destinationName ?? (yield* toName(id, olds ?? {}));

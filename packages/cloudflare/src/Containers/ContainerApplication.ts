@@ -395,6 +395,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
    *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
+   *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
    * `registry.cloudflare.com` by default) — e.g. a digest reference pushed
@@ -453,6 +459,12 @@ export interface DurableObjectContainerProps
    * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
    * Omit every image source to contribute no image: `start()` then uses the
    * managed `cloudflare/debian-trixie` image unless given another.
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    */
   image?: string;
   /**
