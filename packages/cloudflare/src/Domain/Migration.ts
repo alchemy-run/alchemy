@@ -5,6 +5,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
+import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -32,6 +33,11 @@ export interface MigrationProps {
   namespaces: Record<string, string>;
   /** The Worker's code and settings, so every upload moves what the last one couldn't. */
   deployment: unknown;
+  /**
+   * Walk the model's directory too: every object it lists, and the consumer
+   * objects their histories reached, including those Cloudflare doesn't list yet.
+   */
+  walk?: boolean;
   /**
    * How long a deploy waits for the move, in seconds.
    * @default 1800
@@ -119,245 +125,263 @@ const MigrationLive = () =>
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ id, news, session }) {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const workflowName = news.workflowName;
-      const started = yield* Clock.currentTimeMillis;
-      // Every object listed from here on is moved by this pass.
-      const listedAt = Math.floor(started / 1000);
-      // Each model's migration runs its own pass: a Worker's models migrate at once,
-      // in the same second, and must not share a run.
-      const target = `move-${fnv(id)}-${listedAt}`;
-      const timeout = (news.timeoutSeconds ?? 1800) * 1000;
-      const attrs = { accountId, workflowName };
-
-      // The old classes the upload kept, and their objects that may hold data. Models
-      // that shared a class from before versions each bind it, and the upload keeps
-      // only the binding of the model that keeps its data: the others move nothing.
-      const settings = yield* workers.getScriptScriptAndVersionSetting({
-        accountId,
-        scriptName: news.scriptName,
-      });
-      const bound = new Set(
-        (settings.bindings ?? []).flatMap((binding) =>
-          binding.type === "durable_object_namespace" ? [binding.name] : [],
-        ),
-      );
-      const live = news.classes.filter(
-        ({ className, binding }) => news.namespaces[className] !== undefined && bound.has(binding),
-      );
-      const pages: Array<{ n: number; className: string; route: string; ids: string[] }> = [];
-      for (const { className, route } of live) {
-        const objects = yield* durableObjects.listNamespaceObjects
-          .items({ accountId, id: news.namespaces[className]! })
-          .pipe(
-            Stream.filter((object) => object.hasStoredData === true),
-            Stream.runCollect,
-            // The upload deleted the class: nothing of it is left to move.
-            Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
-          );
-        const ids = Array.from(objects, (object) => object.id).filter(
-          (id): id is string => typeof id === "string",
-        );
-        for (let i = 0; i < ids.length; i += PAGE)
-          pages.push({ n: pages.length, className, route, ids: ids.slice(i, i + PAGE) });
-      }
-      const total = pages.reduce((sum, page) => sum + page.ids.length, 0);
-
-      /** Start instances, a hundred per call; one started before is found started. */
-      const create = (instances: ReadonlyArray<{ readonly id: string; readonly params: object }>) =>
-        Effect.forEach(
-          Array.from({ length: Math.ceil(instances.length / BULK) }, (_, i) =>
-            instances.slice(i * BULK, (i + 1) * BULK),
-          ),
-          (group) =>
-            workflows
-              .bulkInstance({
-                accountId,
-                workflowName,
-                body: group.map(({ id, params }) => ({ instanceId: id, params })),
-              })
-              .pipe(
-                Effect.asVoid,
-                // A deploy started again: one by one, skipping those that exist.
-                Effect.catchTag("InstanceAlreadyExists", () =>
-                  Effect.forEach(
-                    group,
-                    ({ id, params }) =>
-                      workflows
-                        .createInstance({ accountId, workflowName, instanceId: id, params })
-                        .pipe(
-                          Effect.asVoid,
-                          Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
-                        ),
-                    { discard: true },
-                  ),
-                ),
-                // The Workflow is uploaded with the Worker: it can take a moment to appear.
-                Effect.retry({
-                  while: (error) =>
-                    error._tag === "WorkflowNotFound" ||
-                    error._tag === "WorkflowInternalError" ||
-                    error._tag === "CloudflareRateLimited",
-                  schedule: Schedule.spaced("2 seconds"),
-                  times: 30,
-                }),
-              ),
-          { discard: true },
-        );
-      const instance = (instanceId: string) =>
-        workflows
-          .getInstance({ accountId, workflowName, instanceId })
-          .pipe(Effect.retry(retryInternal));
-      const ended = (instanceId: string, status: string, error: string | undefined) =>
-        new MigrationFailed({
-          message: `Moving Domain objects to ${news.domainClass} ended ${status}: ${error ?? "no error reported"}. Deploy again to move the rest; nothing that moved is lost.`,
-          instanceId,
-        });
-      /**
-       * Record each class's complete pass as an instance of the Workflow that
-       * does nothing: the Worker's next upload reads them, and deletes a class
-       * once two passes far enough apart have seen every object written
-       * before the move. A class with objects that couldn't move gets none.
-       *
-       * Each marker must complete to count. One started on an edge that
-       * doesn't have the uploaded Worker yet fails: it is started again, a
-       * second earlier each time, which claims no more than this pass saw.
-       */
-      const markOne = (className: string) =>
-        Effect.gen(function* () {
-          for (let attempt = 0; ; attempt++) {
-            const id = passMarker(className, news.namespaces[className]!, listedAt - attempt);
-            yield* create([{ id, params: { op: "mark" } }]);
-            const done = yield* instance(id).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("1 second"),
-                until: (status) => status.status !== "queued" && status.status !== "running",
-                times: 60,
-              }),
-            );
-            if (done.status === "complete") return;
-            const elapsed = (yield* Clock.currentTimeMillis) - started;
-            if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
-              yield* Effect.sleep(RESTART_DELAY);
-              continue;
-            }
-            return yield* ended(id, done.status, done.error?.message ?? undefined);
-          }
-        });
-      const mark = (skipped: Readonly<Record<string, number>>) =>
-        Effect.forEach(
-          live.filter(({ className }) => (skipped[className] ?? 0) === 0),
-          ({ className }) => markOne(className),
-          { concurrency: 10, discard: true },
-        );
-
-      if (total === 0) {
-        yield* mark({});
-        return { ...attrs, instances: 0, moved: 0 };
-      }
-      yield* session.note(
-        `Moving ${total} Domain objects of ${live.length} classes to ${news.domainClass} ...`,
-        { kind: "status" },
-      );
-
-      // Hand the run its pages, a few per instance (an instance's params are limited).
-      const adds = Array.from({ length: Math.ceil(pages.length / PAGES_PER_ADD) }, (_, i) => ({
-        id: `mg-add-${target}-${i}`,
-        params: {
-          op: "add",
-          cls: news.domainClass,
-          target,
-          pages: pages.slice(i * PAGES_PER_ADD, (i + 1) * PAGES_PER_ADD),
-        },
-      }));
-      yield* create(adds);
-      for (const add of adds) {
-        for (let attempt = 0, id = add.id; ; attempt++) {
-          const done = yield* instance(id).pipe(
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              until: (status) => status.status !== "queued" && status.status !== "running",
-              times: 120,
-            }),
-          );
-          if (done.status === "complete") break;
-          // Started on an edge that doesn't have the uploaded Worker yet, or reached an
-          // object still on the code before it: start it again.
-          const elapsed = (yield* Clock.currentTimeMillis) - started;
-          if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
-            yield* Effect.sleep(RESTART_DELAY);
-            id = `${add.id}-${attempt + 1}`;
-            yield* create([{ id, params: add.params }]);
-            continue;
-          }
-          return yield* ended(id, done.status, done.error?.message ?? undefined);
-        }
-      }
-
-      // Start the run and wait for it: each check step's output is its progress.
-      const runParams = {
-        op: "run",
-        cls: news.domainClass,
-        target,
-        plan: {
-          pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
-        },
-      };
-      let runId = `mg-run-${target}`;
-      let restarts = 0;
-      yield* create([{ id: runId, params: runParams }]);
-      let progress: (Progress & { readonly skipped?: Record<string, number> }) | undefined;
-      while (true) {
-        const status = yield* instance(runId);
-        const latest = progressOf(status.steps ?? [])?.[0];
-        if (latest !== undefined) progress = latest as typeof progress;
-        if (status.status === "complete") break;
-        if (status.status === "errored" || status.status === "terminated") {
-          // Started on an edge that doesn't have the uploaded Worker yet, or reached an
-          // object still on the code before it: start it again. The run itself is in
-          // Durable Objects: a new instance waits on the same run.
-          const elapsed = (yield* Clock.currentTimeMillis) - started;
-          if (worthRestarting(status.error?.message ?? "", elapsed) && restarts < MAX_RESTARTS) {
-            restarts += 1;
-            yield* Effect.sleep(RESTART_DELAY);
-            runId = `mg-run-${target}-${restarts}`;
-            yield* create([{ id: runId, params: runParams }]);
-            continue;
-          }
-          return yield* ended(runId, status.status, status.error?.message ?? undefined);
-        }
-        const elapsed = (yield* Clock.currentTimeMillis) - started;
-        const where =
-          progress === undefined
-            ? "starting"
-            : `${progress.instances}/${total} moved (${progress.done}/${progress.subtrees} pages${progress.refused > 0 ? `, ${progress.refused} calls refused` : ""})`;
-        if (elapsed > timeout)
-          return yield* new MigrationStillRunning({
-            message: `Moving Domain objects to ${news.domainClass} is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,
-          });
-        yield* session.note(
-          `Moving Domain objects to ${news.domainClass}: ${where} (${Math.round(elapsed / 1000)}s) ...`,
-          { kind: "status" },
-        );
-        yield* Effect.sleep(POLL);
-      }
-
-      const skipped = progress?.skipped ?? {};
-      for (const [className, count] of Object.entries(skipped))
-        yield* session.note(
-          `${count} objects of ${className} know neither their name nor their key, so they can't move to ${news.domainClass}: the class is kept.`,
-          { kind: "status" },
-        );
-      yield* mark(skipped);
-      yield* session.note(`Moved ${total} Domain objects to ${news.domainClass}`, {
-        kind: "status",
-      });
-      return { ...attrs, instances: adds.length + 1, moved: total };
-    }),
-    // The instances end by themselves; the old classes go with the Worker's next upload.
+    reconcile: ({ id, news, session }) => migrateModel({ id, news, session }),
     delete: Effect.fn(function* () {}),
   });
+
+/**
+ * Move one model's objects from its old classes to its class: list what
+ * Cloudflare lists, walk the model's directory, and wait for the run on the
+ * Worker. The Worker's deploy runs it between its two uploads: the second
+ * deletes each old class the run moved every object of (see `WorkerProvider`).
+ */
+export const migrateModel = Effect.fn(function* ({
+  id,
+  news,
+  session,
+}: {
+  /** Names the run, so each model's runs apart. */
+  readonly id: string;
+  readonly news: MigrationProps;
+  readonly session: ScopedPlanStatusSession;
+}) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const workflowName = news.workflowName;
+  const started = yield* Clock.currentTimeMillis;
+  // Every object listed from here on is moved by this pass.
+  const listedAt = Math.floor(started / 1000);
+  // Each model's migration runs its own pass: a Worker's models migrate at once,
+  // in the same second, and must not share a run.
+  const target = `move-${fnv(id)}-${listedAt}`;
+  const timeout = (news.timeoutSeconds ?? 1800) * 1000;
+  const attrs = { accountId, workflowName };
+
+  // The old classes the upload kept, and their objects that may hold data. Models
+  // that shared a class from before versions each bind it, and the upload keeps
+  // only the binding of the model that keeps its data: the others move nothing.
+  const settings = yield* workers.getScriptScriptAndVersionSetting({
+    accountId,
+    scriptName: news.scriptName,
+  });
+  const bound = new Set(
+    (settings.bindings ?? []).flatMap((binding) =>
+      binding.type === "durable_object_namespace" ? [binding.name] : [],
+    ),
+  );
+  const live = news.classes.filter(
+    ({ className, binding }) => news.namespaces[className] !== undefined && bound.has(binding),
+  );
+  const pages: Array<{ n: number; className: string; route: string; ids: string[] }> = [];
+  for (const { className, route } of live) {
+    const objects = yield* durableObjects.listNamespaceObjects
+      .items({ accountId, id: news.namespaces[className]! })
+      .pipe(
+        Stream.filter((object) => object.hasStoredData === true),
+        Stream.runCollect,
+        // The upload deleted the class: nothing of it is left to move.
+        Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
+      );
+    const ids = Array.from(objects, (object) => object.id).filter(
+      (id): id is string => typeof id === "string",
+    );
+    for (let i = 0; i < ids.length; i += PAGE)
+      pages.push({ n: pages.length, className, route, ids: ids.slice(i, i + PAGE) });
+  }
+  const total = pages.reduce((sum, page) => sum + page.ids.length, 0);
+
+  /** Start instances, a hundred per call; one started before is found started. */
+  const create = (instances: ReadonlyArray<{ readonly id: string; readonly params: object }>) =>
+    Effect.forEach(
+      Array.from({ length: Math.ceil(instances.length / BULK) }, (_, i) =>
+        instances.slice(i * BULK, (i + 1) * BULK),
+      ),
+      (group) =>
+        workflows
+          .bulkInstance({
+            accountId,
+            workflowName,
+            body: group.map(({ id, params }) => ({ instanceId: id, params })),
+          })
+          .pipe(
+            Effect.asVoid,
+            // A deploy started again: one by one, skipping those that exist.
+            Effect.catchTag("InstanceAlreadyExists", () =>
+              Effect.forEach(
+                group,
+                ({ id, params }) =>
+                  workflows
+                    .createInstance({ accountId, workflowName, instanceId: id, params })
+                    .pipe(
+                      Effect.asVoid,
+                      Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
+                    ),
+                { discard: true },
+              ),
+            ),
+            // The Workflow is uploaded with the Worker: it can take a moment to appear.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "WorkflowNotFound" ||
+                error._tag === "WorkflowInternalError" ||
+                error._tag === "CloudflareRateLimited",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 30,
+            }),
+          ),
+      { discard: true },
+    );
+  const instance = (instanceId: string) =>
+    workflows
+      .getInstance({ accountId, workflowName, instanceId })
+      .pipe(Effect.retry(retryInternal));
+  const ended = (instanceId: string, status: string, error: string | undefined) =>
+    new MigrationFailed({
+      message: `Moving Domain objects to ${news.domainClass} ended ${status}: ${error ?? "no error reported"}. Deploy again to move the rest; nothing that moved is lost.`,
+      instanceId,
+    });
+  /**
+   * Record each class's complete pass as an instance of the Workflow that
+   * does nothing: the Worker's next upload reads them, and deletes a class
+   * once two passes far enough apart have seen every object written
+   * before the move. A class with objects that couldn't move gets none.
+   *
+   * Each marker must complete to count. One started on an edge that
+   * doesn't have the uploaded Worker yet fails: it is started again, a
+   * second earlier each time, which claims no more than this pass saw.
+   */
+  const markOne = (className: string) =>
+    Effect.gen(function* () {
+      for (let attempt = 0; ; attempt++) {
+        const id = passMarker(className, news.namespaces[className]!, listedAt - attempt);
+        yield* create([{ id, params: { op: "mark" } }]);
+        const done = yield* instance(id).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (status) => status.status !== "queued" && status.status !== "running",
+            times: 60,
+          }),
+        );
+        if (done.status === "complete") return;
+        const elapsed = (yield* Clock.currentTimeMillis) - started;
+        if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
+          yield* Effect.sleep(RESTART_DELAY);
+          continue;
+        }
+        return yield* ended(id, done.status, done.error?.message ?? undefined);
+      }
+    });
+  const mark = (skipped: Readonly<Record<string, number>>) =>
+    Effect.forEach(
+      live.filter(({ className }) => (skipped[className] ?? 0) === 0),
+      ({ className }) => markOne(className),
+      { concurrency: 10, discard: true },
+    );
+
+  // Nothing listed and no directory to walk: nothing to move.
+  if (total === 0 && !news.walk) {
+    yield* mark({});
+    return { ...attrs, instances: 0, moved: 0, skipped: {} as Record<string, number> };
+  }
+  yield* session.note(
+    `Moving ${total} Domain objects of ${live.length} classes to ${news.domainClass} ...`,
+    { kind: "status" },
+  );
+
+  // Hand the run its pages, a few per instance (an instance's params are limited).
+  const adds = Array.from({ length: Math.ceil(pages.length / PAGES_PER_ADD) }, (_, i) => ({
+    id: `mg-add-${target}-${i}`,
+    params: {
+      op: "add",
+      cls: news.domainClass,
+      target,
+      pages: pages.slice(i * PAGES_PER_ADD, (i + 1) * PAGES_PER_ADD),
+    },
+  }));
+  yield* create(adds);
+  for (const add of adds) {
+    for (let attempt = 0, id = add.id; ; attempt++) {
+      const done = yield* instance(id).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (status) => status.status !== "queued" && status.status !== "running",
+          times: 120,
+        }),
+      );
+      if (done.status === "complete") break;
+      // Started on an edge that doesn't have the uploaded Worker yet, or reached an
+      // object still on the code before it: start it again.
+      const elapsed = (yield* Clock.currentTimeMillis) - started;
+      if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
+        yield* Effect.sleep(RESTART_DELAY);
+        id = `${add.id}-${attempt + 1}`;
+        yield* create([{ id, params: add.params }]);
+        continue;
+      }
+      return yield* ended(id, done.status, done.error?.message ?? undefined);
+    }
+  }
+
+  // Start the run and wait for it: each check step's output is its progress.
+  const runParams = {
+    op: "run",
+    cls: news.domainClass,
+    target,
+    plan: {
+      pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
+      ...(news.walk ? { walk: true } : {}),
+    },
+  };
+  let runId = `mg-run-${target}`;
+  let restarts = 0;
+  yield* create([{ id: runId, params: runParams }]);
+  let progress: (Progress & { readonly skipped?: Record<string, number> }) | undefined;
+  while (true) {
+    const status = yield* instance(runId);
+    const latest = progressOf(status.steps ?? [])?.[0];
+    if (latest !== undefined) progress = latest as typeof progress;
+    if (status.status === "complete") break;
+    if (status.status === "errored" || status.status === "terminated") {
+      // Started on an edge that doesn't have the uploaded Worker yet, or reached an
+      // object still on the code before it: start it again. The run itself is in
+      // Durable Objects: a new instance waits on the same run.
+      const elapsed = (yield* Clock.currentTimeMillis) - started;
+      if (worthRestarting(status.error?.message ?? "", elapsed) && restarts < MAX_RESTARTS) {
+        restarts += 1;
+        yield* Effect.sleep(RESTART_DELAY);
+        runId = `mg-run-${target}-${restarts}`;
+        yield* create([{ id: runId, params: runParams }]);
+        continue;
+      }
+      return yield* ended(runId, status.status, status.error?.message ?? undefined);
+    }
+    const elapsed = (yield* Clock.currentTimeMillis) - started;
+    const where =
+      progress === undefined
+        ? "starting"
+        : `${progress.instances}/${total} moved (${progress.done}/${progress.subtrees} pages${progress.refused > 0 ? `, ${progress.refused} calls refused` : ""})`;
+    if (elapsed > timeout)
+      return yield* new MigrationStillRunning({
+        message: `Moving Domain objects to ${news.domainClass} is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,
+      });
+    yield* session.note(
+      `Moving Domain objects to ${news.domainClass}: ${where} (${Math.round(elapsed / 1000)}s) ...`,
+      { kind: "status" },
+    );
+    yield* Effect.sleep(POLL);
+  }
+
+  const skipped = progress?.skipped ?? {};
+  for (const [className, count] of Object.entries(skipped))
+    yield* session.note(
+      `${count} objects of ${className} know neither their name nor their key, so they can't move to ${news.domainClass}: the class is kept.`,
+      { kind: "status" },
+    );
+  yield* mark(skipped);
+  yield* session.note(`Moved ${total} Domain objects to ${news.domainClass}`, {
+    kind: "status",
+  });
+  return { ...attrs, instances: adds.length + 1, moved: total, skipped };
+});
 
 /** In `alchemy dev` nothing was deployed before: nothing to move. */
 const MigrationLocal = () =>

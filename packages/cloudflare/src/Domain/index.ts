@@ -62,9 +62,8 @@ import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { layerDurableObjectEngine, makeEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
-import { Migration } from "./Migration.ts";
 import { backfillRuntime, exclusively, type Random } from "./Runtime.ts";
-import { ID_KEY, type LegacyClass, sharedClasses } from "./Shared.ts";
+import { ID_KEY, type LegacyClass, RUN_ROOT, sharedClasses } from "./Shared.ts";
 import { beforeVersionsBinding, DeployVersion } from "./Version.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -475,7 +474,6 @@ const reachable = <A>(effect: Effect.Effect<A>) =>
 const REACH_RETRIES = { limit: 3, delay: "1 second", backoff: "constant" } as const;
 
 /** The object of a consumer's class at the root of its run: it drives the run's passes. */
-const RUN_ROOT = "~run";
 
 /** The object of a consumer's class for one relay of its run. */
 const relayName = (target: string, name: string) => `~relay/${target}/${name}`;
@@ -516,6 +514,30 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
   });
 
 /**
+ * A page of the consumer objects a source's stored rows reached, once each, and
+ * where the next page starts (`null` after the last). Rows are numbered without
+ * gaps, so a full page ends at `after + count`.
+ */
+const consumersPage = (
+  deliveries: Effect.Effect<ReadonlyArray<Delivery>>,
+  after: number,
+  count: number,
+  limit: number,
+) =>
+  Effect.map(deliveries, (all) => {
+    const seen = new Map<string, { readonly target: Delivery["target"]; readonly key: string }>();
+    for (const { target, key } of all)
+      seen.set(
+        `${target.kind}:${target.name}#${target.generation ?? 0}${target.inPlace ? "@" : ""}/${key}`,
+        {
+          target,
+          key,
+        },
+      );
+    return { consumers: [...seen.values()], next: count < limit ? null : after + count };
+  });
+
+/**
  * The directory subtree an object that isn't a source lists itself under:
  * policies, streams, projections and saga runs. Named like their classes
  * (`NotifyPolicy`), so they never share a subtree with the sources a backfill
@@ -523,7 +545,7 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
  * one exactly, with no wait on Cloudflare's listing.
  */
 export const registryName = (kind: "Policy" | "Stream" | "Projection" | "Workflow", name: string) =>
-  `${name.replace(/[^A-Za-z0-9_]/g, "_")}${kind}`;
+  `${name}${kind}`;
 
 const aggregateObject = (
   kit: AggregateKit,
@@ -734,6 +756,18 @@ const aggregateObject = (
         // Any code answers these: a run reads its log, and routes it with its own code.
         bfLog: (id: string, after: number, limit: number) =>
           reportDefects(sourceFor(id).log(after, limit)),
+        // A layout change: every consumer object this instance's history reached.
+        mgConsumers: (id: string, after: number, limit: number) =>
+          reportDefects(
+            Effect.flatMap(sourceFor(id).log(after, limit), (rows) =>
+              consumersPage(
+                kit.consumersOf(id, rows as ReadonlyArray<StoredEvent>),
+                after,
+                rows.length,
+                limit,
+              ),
+            ),
+          ),
         bfCursor: (id: string, target: string) => reportDefects(sourceFor(id).cursor(target)),
         bfRead: (id: string, target: string, key: string, after: number, limit: number) =>
           reportDefects(sourceFor(id).read(target, key, after, limit)),
@@ -950,6 +984,18 @@ const viewObject = (
         // first: a view or projection catching up never sees it still filling.
         bfLog: (key: string, after: number, limit: number) =>
           reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+        // A layout change: every consumer object this key's entries reached.
+        mgConsumers: (key: string, after: number, limit: number) =>
+          reportDefects(
+            Effect.flatMap(sourceFor(key).log(after, limit), (rows) =>
+              consumersPage(
+                kit.consumersOf(key, rows as ReadonlyArray<ViewEntry>),
+                after,
+                rows.length,
+                limit,
+              ),
+            ),
+          ),
         bfCursor: (key: string, target: string) =>
           reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
         bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
@@ -1728,6 +1774,49 @@ const durableObjectPlatform = (
           };
           // Saga runs list themselves in this directory too (see `listedRuns`).
           directories.set(modelName, net);
+          /** The stream routes each projection writes, as the model hosts them. */
+          const projectionStreams = new Map<string, Array<string>>();
+          /** Each projection's keys' route, in the generation this code runs. */
+          const projectionRoutes = new Map<string, string>();
+          const hosted = (route: string) => shared?.bound(route) !== undefined;
+          // How a migration run finds every object of this model (see `Shared.Resolver`).
+          if (shared !== undefined)
+            yield* shared.resolve({
+              namespace: inJurisdiction(shared.namespace),
+              directory: named("DomainDirectory"),
+              entry: (ref) => {
+                const aggregate = named(`${ref.source}Aggregate`);
+                if (hosted(aggregate)) return { route: aggregate, source: true };
+                const view = named(
+                  consumerClass(
+                    "view",
+                    ref.source,
+                    ref.generation ?? viewGenerations.get(ref.source) ?? 0,
+                  ),
+                );
+                if (hosted(view)) return { route: view, source: true };
+                // Listed objects that aren't sources: policies, streams, projections, saga runs.
+                const projection = /^(.*)Projection$/.exec(ref.source);
+                const other = projection ? projectionRoutes.get(projection[1]!) : named(ref.source);
+                return other !== undefined && hosted(other)
+                  ? { route: other, source: false }
+                  : undefined;
+              },
+              consumer: (target) => {
+                if (target.kind === "policy") {
+                  const route = named(`${target.name}Policy`);
+                  return { keys: route, run: route };
+                }
+                const keys = named(
+                  consumerClass(target.kind, target.name, generationOfTarget(targetId(target))),
+                );
+                return { keys, run: runClass(keys) };
+              },
+              streams: (projection) => projectionStreams.get(projection) ?? [],
+              runs: () =>
+                shared.routes().filter((route) => /(View|Projection)(V\d+)?Run$/.test(route)),
+              scanner: scannerName,
+            });
           directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
           // A deploy's backfill: start each new consumer's run, then wait until every one is
@@ -2027,11 +2116,22 @@ const durableObjectPlatform = (
             projection: (projection, kit) =>
               inInit(
                 Effect.gen(function* () {
+                  projectionStreams.set(
+                    projection.projectionName,
+                    (
+                      (
+                        projection.definition as {
+                          readonly writes?: ReadonlyArray<{ readonly streamName: string }>;
+                        }
+                      ).writes ?? []
+                    ).map((stream) => named(`${stream.streamName}Stream`)),
+                  );
                   const cls = consumerClass(
                     "projection",
                     projection.projectionName,
                     kit.generation,
                   );
+                  projectionRoutes.set(projection.projectionName, named(cls));
                   const namespace = yield* object(
                     cls,
                     projectionObject(kit, net, consumerPlans, random),
@@ -2106,21 +2206,20 @@ const durableObjectPlatform = (
                 ) {
                   yield* inInit(
                     Effect.gen(function* () {
+                      // The Worker's deploy moves them, between its two uploads.
                       const worker = yield* CloudflareWorker;
-                      yield* Migration(named("DomainMigration"), {
-                        scriptName: worker.workerName as unknown as string,
-                        workflowName: shared.workflowName as string,
-                        domainClass: shared.className,
-                        classes: movers,
-                        namespaces: worker.durableObjectNamespaces as unknown as Record<
-                          string,
-                          string
-                        >,
-                        deployment: worker.hash,
-                        ...(backfillTimeoutSeconds === undefined
-                          ? {}
-                          : { timeoutSeconds: backfillTimeoutSeconds }),
-                      }) as unknown as Effect.Effect<unknown>;
+                      yield* worker.bind`${named("DomainMigration")}`({
+                        domainMigrations: [
+                          {
+                            model: modelName,
+                            domainClass: shared.className,
+                            classes: movers,
+                            ...(backfillTimeoutSeconds === undefined
+                              ? {}
+                              : { timeoutSeconds: backfillTimeoutSeconds }),
+                          },
+                        ],
+                      });
                     }),
                   );
                 }

@@ -49,6 +49,24 @@ export interface DomainClass {
   readonly binding?: string;
 }
 
+/**
+ * A model whose old classes the Worker's deploy moves into its class, between
+ * its two uploads (see `WorkerProvider`).
+ */
+export interface DomainMigration {
+  readonly model: string;
+  /** The model's class, `Billing.Domain`. */
+  readonly domainClass: string;
+  /** Each old class the code can move, the binding it reaches it by, and the route its objects move to. */
+  readonly classes: ReadonlyArray<{
+    readonly className: string;
+    readonly binding: string;
+    readonly route: string;
+  }>;
+  /** How long the deploy waits for the move, in seconds. */
+  readonly timeoutSeconds?: number;
+}
+
 /** The binding through which a model reaches its class from before Domain version 0. */
 export const beforeVersionsBinding = (className: string) => `${className}.BeforeVersions`;
 

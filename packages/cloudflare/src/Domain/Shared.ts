@@ -1,4 +1,6 @@
+import type * as Backfill from "@alchemy.run/domain/Backfill";
 import * as FanOut from "@alchemy.run/domain/FanOut";
+import type { Delivery } from "@alchemy.run/domain/Platform";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -137,6 +139,39 @@ interface Classes {
   readonly env: Record<string, any> | undefined;
   /** Where the migration run's job tokens come from. */
   readonly random: Random;
+  /** How a migration run finds every object of the model: set once the model is built. */
+  resolver?: Resolver;
+}
+
+/**
+ * How a migration run finds every object of a model without Cloudflare's
+ * object listing, which lags behind recent writes: the model's directory lists
+ * every aggregate and view (and, from this release on, every other object),
+ * and each one's history names the consumer objects it reached.
+ */
+export interface Resolver {
+  /** The model's class, in the model's jurisdiction. */
+  readonly namespace: Namespace;
+  /** The route of the model's directory nodes, `Billing.DomainDirectory`. */
+  readonly directory: string;
+  /**
+   * The route of a directory entry's objects, and whether it is a source (an
+   * aggregate or view, whose history names consumers); `undefined` for one
+   * this code doesn't host.
+   */
+  readonly entry: (
+    ref: Backfill.SourceRef,
+  ) => { readonly route: string; readonly source: boolean } | undefined;
+  /** A consumer's routes: its keys', and its run's (root, relays and scanners). */
+  readonly consumer: (
+    target: Delivery["target"],
+  ) => { readonly keys: string; readonly run: string } | undefined;
+  /** The routes of the streams a projection writes, keyed like the projection. */
+  readonly streams: (projection: string) => ReadonlyArray<string>;
+  /** The routes of every consumer's run, whose root records its history. */
+  readonly runs: () => ReadonlyArray<string>;
+  /** The name of a source instance's scanner in a consumer's run (see `Domain/index.ts`). */
+  readonly scanner: (ref: Backfill.SourceRef) => string;
 }
 
 /** What makes job tokens: the platform's secure random source. */
@@ -189,6 +224,11 @@ export const sharedClasses = Effect.fn(function* (random: Random, modelName: str
   return {
     /** The model's class, `Billing.Domain`. */
     className: shared.className,
+    /** How a migration run finds the model's objects. */
+    resolve: (resolver: Resolver) =>
+      Effect.sync(() => {
+        shared.resolver = resolver;
+      }),
     /** The migration Workflow's name, as deployed: for the deploy's migration run. */
     workflowName: shared.workflowName,
     /** Each hosted route's version 0 class. */
@@ -213,6 +253,10 @@ export const sharedClasses = Effect.fn(function* (random: Random, modelName: str
         }
         return routeView(shared.namespace, route);
       }),
+    /** The model's class, unscoped: see `Resolver.namespace`. */
+    namespace: shared.namespace,
+    /** Every route this code hosts in the model's class. */
+    routes: (): ReadonlyArray<string> => [...shared.routes.keys()],
     /** A route's objects, if this code hosts it. */
     bound: (route: string): Namespace | undefined =>
       shared.routes.has(route) ? routeView(shared.namespace, route) : undefined,
@@ -581,26 +625,45 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
  */
 const MIGRATION_ROUTE = "~migration";
 
-/** One object to move: its old class, its route in the shared class, and its hex id. */
-interface MoveItem {
-  readonly c: string;
-  readonly r: string;
-  readonly id: string;
-}
+/**
+ * One thing a migration run moves:
+ *
+ * - a listed object: its old class, its route in the model's class, and its hex id;
+ * - an object by name: its route and its key (a directory node, a run's root);
+ * - a directory entry: its source name, id and generation. A source's history
+ *   names its consumer objects, which move with it.
+ */
+type MoveItem =
+  | { readonly c: string; readonly r: string; readonly id: string }
+  | { readonly r: string; readonly n: string }
+  | { readonly s: string; readonly i: string; readonly g?: number };
 
 /** A pass of a migration run. */
 interface MovePass extends FanOut.Pass {
   readonly target: string;
 }
 
-/** What a migration run moves: the pages of ids the deploy listed. */
+/** What a migration run moves: the pages of ids the deploy listed, and the model's directory. */
 export interface MovePlan {
   readonly pages: ReadonlyArray<{
     readonly n: number;
     readonly className: string;
     readonly size: number;
   }>;
+  /**
+   * Walk the model's directory too: every object it lists, the consumer
+   * objects their histories reached, and every run's root. Set when the
+   * deployed code lists its objects, so nothing it wrote is missed.
+   */
+  readonly walk?: boolean;
 }
+
+/** The object of a consumer's run class that records its history: see `Domain/index.ts`. */
+export const RUN_ROOT = "~run";
+
+/** The paths a run lists beyond its pages: the directory's nodes, and the runs' roots. */
+const DIRECTORY = "#dir:";
+const RUNS = "#runs";
 
 /** A page of ids the deploy listed, as the root keeps it. */
 interface StoredPage {
@@ -627,12 +690,15 @@ const migrationStub = (classes: Classes, key: string) =>
 const orDie = <A>(effect: Effect.Effect<unknown, unknown>) =>
   effect.pipe(Effect.orDie) as Effect.Effect<A>;
 
+/** A listed object: its old class, route and hex id. */
+type ListedItem = Extract<MoveItem, { readonly id: string }>;
+
 /**
- * Move one object: find its key (its name), and ask its new object to move
- * its data, waiting up to `waitMillis` for the flip. `skipped` for an object
- * that knows neither its name nor its key.
+ * Move one listed object: find its key (its name), and ask its new object to
+ * move its data, waiting up to `waitMillis` for the flip. `skipped` for an
+ * object that knows neither its name nor its key.
  */
-const moveOne = (classes: Classes, item: MoveItem, waitMillis: number) =>
+const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
   Effect.gen(function* () {
     const legacy = classes.env?.[item.c];
     const shared = classes.env?.[classes.className];
@@ -647,25 +713,102 @@ const moveOne = (classes: Classes, item: MoveItem, waitMillis: number) =>
       : ("pending" as const);
   });
 
+/** Ask `route/key`'s object to move its data: `true` once it owns it. */
+const moveNamed = (resolver: Resolver, route: string, key: string, waitMillis: number) =>
+  orDie<boolean>(
+    makeRpcStub<Stub>(resolver.namespace.getByName(`${route}/${key}`)).domainMove!(waitMillis),
+  );
+
+/** Consumer keys a source answers per call, from its history. */
+const CONSUMERS_PAGE = 500;
+
+/**
+ * Move a directory entry's object, then, for a source, every consumer object
+ * its history reached: each consumer key, its scanner in the consumer's run,
+ * and the stream keys a projection writes. `true` once all of them own their
+ * data; an object that has moved answers at once, so asking again is cheap.
+ */
+const moveEntry = (
+  resolver: Resolver,
+  item: Extract<MoveItem, { readonly s: string }>,
+  waitMillis: number,
+) =>
+  Effect.gen(function* () {
+    const ref: Backfill.SourceRef = {
+      source: item.s,
+      id: item.i,
+      ...(item.g === undefined ? {} : { generation: item.g }),
+    };
+    const entry = resolver.entry(ref);
+    if (entry === undefined) return true;
+    if (!(yield* moveNamed(resolver, entry.route, item.i, waitMillis))) return false;
+    if (!entry.source) return true;
+    const source = makeRpcStub<Stub>(resolver.namespace.getByName(`${entry.route}/${item.i}`));
+    let done = true;
+    for (let after = 0; ;) {
+      const page = yield* orDie<{
+        readonly consumers: ReadonlyArray<{
+          readonly target: Delivery["target"];
+          readonly key: string;
+        }>;
+        readonly next: number | null;
+      }>(source.mgConsumers!(item.i, after, CONSUMERS_PAGE));
+      const objects = new Set<string>();
+      for (const { target, key } of page.consumers) {
+        const routes = resolver.consumer(target);
+        if (routes === undefined) continue;
+        objects.add(`${routes.keys}/${key}`);
+        objects.add(`${routes.run}/${resolver.scanner(ref)}`);
+        if (target.kind === "projection")
+          for (const stream of resolver.streams(target.name)) objects.add(`${stream}/${key}`);
+      }
+      const moved = yield* Effect.forEach(
+        [...objects],
+        (object) => {
+          const slash = object.indexOf("/");
+          return moveNamed(resolver, object.slice(0, slash), object.slice(slash + 1), waitMillis);
+        },
+        { concurrency: FanOut.RELAY_FANOUT },
+      );
+      if (moved.some((owned) => !owned)) done = false;
+      if (page.next === null) break;
+      after = page.next;
+    }
+    return done;
+  });
+
 /** How a migration run's relays list a page and move an object: see `FanOut`. */
 const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
   label: "move",
-  list: (pass, path) =>
+  list: (pass, path, after) =>
     orDie<FanOut.Listed<MoveItem>>(
-      migrationStub(classes, `run:${pass.target}`).mgList!(pass.target, path),
+      migrationStub(classes, `run:${pass.target}`).mgList!(pass.target, path, after),
     ),
-  handle: (pass, item, waitMillis) =>
-    Effect.flatMap(moveOne(classes, item, waitMillis), (outcome) =>
-      outcome === "skipped"
-        ? Effect.as(
-            orDie(
-              migrationStub(classes, `run:${pass.target}`).mgSkip!(pass.target, item.c, item.id),
-            ),
-            true,
-          )
-        : Effect.succeed(outcome === "moved"),
-    ),
-  describe: (item) => `${item.c}/${item.id}`,
+  handle: (pass, item, waitMillis) => {
+    if ("id" in item)
+      return Effect.flatMap(moveListed(classes, item, waitMillis), (outcome) =>
+        outcome === "skipped"
+          ? Effect.as(
+              orDie(
+                migrationStub(classes, `run:${pass.target}`).mgSkip!(pass.target, item.c, item.id),
+              ),
+              true,
+            )
+          : Effect.succeed(outcome === "moved"),
+      );
+    const resolver = classes.resolver;
+    // Code that hasn't built the model can't find its objects: ask again later.
+    if (resolver === undefined) return Effect.succeed(false);
+    return "n" in item
+      ? moveNamed(resolver, item.r, item.n, waitMillis)
+      : moveEntry(resolver, item, waitMillis);
+  },
+  describe: (item) =>
+    "id" in item
+      ? `${item.c}/${item.id}`
+      : "n" in item
+        ? `${item.r}/${item.n}`
+        : `${item.s}/${item.i}`,
   relay: (name, pass, entries) =>
     orDie<FanOut.Result>(
       migrationStub(classes, `relay:${pass.target}:${name}`).mgRelay!(name, pass, entries),
@@ -674,7 +817,13 @@ const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
 
 /** A frontier entry's name in the root's marks of what is done. */
 const entryKey = (entry: FanOut.Entry<MoveItem>) =>
-  "path" in entry ? `p:${entry.path}` : `i:${entry.ref.c}/${entry.ref.id}`;
+  "path" in entry
+    ? `p:${entry.path}`
+    : "id" in entry.ref
+      ? `i:${entry.ref.c}/${entry.ref.id}`
+      : "n" in entry.ref
+        ? `n:${entry.ref.r}/${entry.ref.n}`
+        : `s:${entry.ref.s}/${entry.ref.i}${entry.ref.g === undefined ? "" : `#${entry.ref.g}`}`;
 
 interface MigrationRun {
   readonly begin: (target: string, plan: MovePlan) => Effect.Effect<FanOut.Begin<MovePlan>>;
@@ -704,12 +853,17 @@ const migrationObject = (classes: Classes): ObjectImpl =>
             nextPhase: () => "complete",
             pass: (target, _, deadline) => ({ target, deadline }),
             // Each page is one entry: the root paces pages, and the relays spread a page's objects.
-            roots: (pass, state) =>
-              state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
+            roots: (pass, state) => [
+              ...state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
+              ...(state.plan.walk
+                ? [{ path: `${pass.target}${DIRECTORY}` }, { path: `${pass.target}${RUNS}` }]
+                : []),
+            ],
             frontierSize: 0,
             samePlan: (a, b) =>
+              a.walk === b.walk &&
               a.pages.map((page) => `${page.className}#${page.n}`).join(",") ===
-              b.pages.map((page) => `${page.className}#${page.n}`).join(","),
+                b.pages.map((page) => `${page.className}#${page.n}`).join(","),
           },
           { waitMillis: MIGRATION_PASS_MS, againMillis: 1_000 },
         );
@@ -727,8 +881,42 @@ const migrationObject = (classes: Classes): ObjectImpl =>
             return { ...progress, skipped };
           }),
         /** What a path lists: the run's pages (its root), or a page's objects. */
-        mgList: (target: string, path: string) =>
+        mgList: (target: string, path: string, after?: string) =>
           Effect.gen(function* () {
+            // The model's directory: a node's own object, its child nodes and its entries.
+            if (path.startsWith(`${target}${DIRECTORY}`)) {
+              const resolver = classes.resolver;
+              if (resolver === undefined) return { entries: [] } satisfies FanOut.Listed<MoveItem>;
+              const node = path.slice(`${target}${DIRECTORY}`.length);
+              const page = yield* orDie<Backfill.Listing>(
+                makeRpcStub<Stub>(
+                  resolver.namespace.getByName(`${resolver.directory}/node:${node}`),
+                ).list!(node, after),
+              );
+              return {
+                entries: [
+                  ...(after === undefined
+                    ? [{ ref: { r: resolver.directory, n: `node:${node}` } }]
+                    : []),
+                  ...page.children.map((child) => ({ path: `${target}${DIRECTORY}${child}` })),
+                  ...page.rows.map((ref) => ({
+                    ref: {
+                      s: ref.source,
+                      i: ref.id,
+                      ...(ref.generation === undefined ? {} : { g: ref.generation }),
+                    },
+                  })),
+                ],
+                ...(page.next === undefined ? {} : { next: page.next }),
+              } satisfies FanOut.Listed<MoveItem>;
+            }
+            // Every consumer's run: its root records how far its history got.
+            if (path === `${target}${RUNS}`) {
+              const runs = classes.resolver?.runs() ?? [];
+              return {
+                entries: runs.map((run) => ({ ref: { r: run, n: RUN_ROOT } })),
+              } satisfies FanOut.Listed<MoveItem>;
+            }
             if (path === target) {
               const state = yield* storage.get<{ plan: MovePlan }>(
                 `run:${encodeURIComponent(target)}`,

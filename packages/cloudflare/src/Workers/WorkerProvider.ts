@@ -32,6 +32,7 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
+import { migrateModel } from "../Domain/Migration.ts";
 import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -5508,29 +5509,125 @@ export const LiveWorkerProvider = () =>
             bindings,
             existingSettings,
           });
-          // The build planned with every class: build again without the dropped ones.
-          if (settled.dropped.size > 0) {
-            const artifacts = yield* Effect.serviceOption(Artifacts);
-            if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
-          }
-          return yield* putWorker(
-            id,
-            fqn,
-            settled.dropped.size === 0 || news.exports === undefined
-              ? news
-              : {
-                  ...news,
-                  exports: Object.fromEntries(
-                    Object.entries(news.exports).filter(
-                      ([className]) => !settled.dropped.has(className),
-                    ),
-                  ),
-                },
-            settled.bindings,
-            olds,
-            output,
-            session,
-            existingSettings,
+          /** Upload the Worker without the `dropped` classes. */
+          const upload = (
+            dropped: ReadonlySet<string>,
+            uploaded: ResourceBinding<Worker["Binding"]>[],
+            settings: typeof existingSettings,
+          ) =>
+            Effect.gen(function* () {
+              // The build planned with every class: build again without the dropped ones.
+              if (dropped.size > 0) {
+                const artifacts = yield* Effect.serviceOption(Artifacts);
+                if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
+              }
+              return yield* putWorker(
+                id,
+                fqn,
+                dropped.size === 0 || news.exports === undefined
+                  ? news
+                  : {
+                      ...news,
+                      exports: Object.fromEntries(
+                        Object.entries(news.exports).filter(
+                          ([className]) => !dropped.has(className),
+                        ),
+                      ),
+                    },
+                uploaded,
+                olds,
+                output,
+                session,
+                settings,
+              );
+            });
+          const uploaded = yield* upload(settled.dropped, settled.bindings, existingSettings);
+
+          // Domain models whose old classes this upload kept: move their objects now, then
+          // upload again without each old class the move accounted for, so this one deploy
+          // leaves only the models' classes.
+          const migrations = bindings.flatMap((b) => b.data.domainMigrations ?? []);
+          const keptClasses = new Set(
+            settled.bindings.flatMap((b) =>
+              (b.data.bindings ?? []).flatMap((item: WorkerBinding) =>
+                item.type === "durable_object_namespace" && "className" in item && item.className
+                  ? [item.className]
+                  : [],
+              ),
+            ),
+          );
+          const moving = migrations
+            .map((migration) => ({
+              ...migration,
+              classes: migration.classes.filter(
+                ({ className }) =>
+                  keptClasses.has(className) &&
+                  uploaded.durableObjectNamespaces[className] !== undefined,
+              ),
+            }))
+            .filter((migration) => migration.classes.length > 0);
+          if (moving.length === 0) return uploaded;
+          const workflowName = settled.bindings
+            .flatMap((b) => b.data.bindings ?? [])
+            .find(
+              (item: WorkerBinding) =>
+                item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
+            ) as { readonly workflowName?: unknown } | undefined;
+          if (typeof workflowName?.workflowName !== "string") return uploaded;
+          // Code from before Domain versions listed none of its objects: what it wrote in its
+          // last minutes is in neither the directory nor Cloudflare's listing yet. Its old
+          // classes stay for a later upload, which deletes them once the move has settled.
+          const listedEverything =
+            DomainVersion.deployedVersion(existingSettings?.tags ?? []) !== undefined;
+          const moved = yield* Effect.forEach(
+            moving,
+            (migration) =>
+              Effect.map(
+                migrateModel({
+                  id: `${migration.model}.DomainMigration`,
+                  news: {
+                    scriptName: name,
+                    workflowName: workflowName.workflowName as string,
+                    domainClass: migration.domainClass,
+                    classes: [...migration.classes],
+                    namespaces: uploaded.durableObjectNamespaces,
+                    deployment: undefined,
+                    walk: true,
+                    ...(migration.timeoutSeconds === undefined
+                      ? {}
+                      : { timeoutSeconds: migration.timeoutSeconds }),
+                  },
+                  session,
+                }),
+                (result) => ({ migration, skipped: result.skipped }),
+              ),
+            { concurrency: "unbounded" },
+          );
+          if (!listedEverything) return uploaded;
+          // Every old class the move accounted for: each object it had is in the model's
+          // directory or Cloudflare's listing, or a source's history named it. Saga runs are
+          // listed nowhere until they start on this code, so their classes wait for the passes.
+          const accounted = new Set(
+            moved.flatMap(({ migration, skipped }) =>
+              migration.classes
+                .filter(
+                  ({ className }) =>
+                    !className.endsWith("Workflow") && (skipped[className] ?? 0) === 0,
+                )
+                .map(({ className }) => className),
+            ),
+          );
+          if (accounted.size === 0) return uploaded;
+          yield* session.note(
+            `Deleting ${accounted.size} old Domain classes: every object of theirs has moved.`,
+            { kind: "status" },
+          );
+          const dropped = new Set([...settled.dropped, ...accounted]);
+          const settings = yield* getScriptSettings(accountId, name, dispatchNamespace);
+          return yield* upload(
+            dropped,
+            withoutClasses(settled.bindings, name, accounted),
+            settings as typeof existingSettings,
           );
         }),
         delete: Effect.fn(function* ({ output }) {
