@@ -34,6 +34,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
+import * as Random from "effect/Random";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
@@ -126,7 +127,8 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
     if (!pem.includes("BEGIN CERTIFICATE")) return;
     // Replaced whole: other processes (workerd's config builds, bundles for
     // Node children) read this file while every health check rewrites it.
-    const temporary = `${FLOCI_CA_PATH}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+    const random = yield* Random.next;
+    const temporary = `${FLOCI_CA_PATH}.${process.pid}.${random.toString(36).slice(2)}.tmp`;
     yield* Effect.tryPromise({
       try: async () => {
         await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
