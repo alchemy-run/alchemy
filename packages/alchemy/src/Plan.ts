@@ -2082,11 +2082,32 @@ const makePlan = <A>(
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
 
-    // SCC membership of the combined upstream graph. Apply uses it to
-    // decide whether an update node must publish its prior attr early to
-    // break a cycle, or can simply wait for upstreams like a DAG node
-    // (the common case). Computed once, above, for the downstream graph.
-    const cycleMembers = combinedCycleMembers;
+    // SCC membership of the graph Apply schedules. Apply uses it to decide
+    // whether an update node must publish its prior attr early to break a
+    // cycle, or can simply wait for upstreams like a DAG node (the common
+    // case). The edges are the ones each node still carries — exactly what
+    // Apply's `waitForDeps` waits on. A declared reference to an upstream's
+    // stable attribute resolves to its value during planning and orders
+    // nothing, so it cannot close a cycle: two updating Workers that bind
+    // each other only by `workerName` are not a cycle, and a node that
+    // still references a peer's changing attribute waits for it (#3103).
+    const cycleMembers = findCycleMembers(
+      Object.fromEntries([
+        ...Object.entries(resourceGraph).map(([fqn, node]): [string, string[]] => [
+          fqn,
+          [
+            ...new Set([
+              ...Object.keys(Output.resolveUpstream("props" in node ? node.props : undefined)),
+              ...Object.keys(Output.resolveUpstream(node.bindings)),
+            ]),
+          ].filter((dep) => newNodeFqns.has(dep)),
+        ]),
+        ...actions.map((action): [string, string[]] => [
+          action.FQN,
+          allUpstreamDependencies[action.FQN] ?? [],
+        ]),
+      ]),
+    );
 
     // Detect unsatisfiable dependency cycles among create/replace nodes.
     // Update/noop nodes signal their Deferred before waitForDeps when in a

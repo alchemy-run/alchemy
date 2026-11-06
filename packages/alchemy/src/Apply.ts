@@ -3,7 +3,6 @@ import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -525,31 +524,6 @@ const executePlan = Effect.fn(function* (
       { concurrency: "unbounded" },
     );
 
-  // `parked` fires when a cycle member's first-pass update failed and it is
-  // waiting to retry (see `settlePeers`).
-  const parked = Object.fromEntries(
-    yield* Effect.forEach(Object.keys(plan.resources), (fqn) =>
-      Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
-    ),
-  ) as Record<string, Deferred.Deferred<void>>;
-
-  // Park `fqn`, then wait until each upstream cycle peer has finished its
-  // own pass: reconciled, failed, or parked to retry too. Parked peers end
-  // the wait so two members that fail on each other cannot deadlock.
-  const settlePeers = (fqn: string, peers: string[]) =>
-    Effect.gen(function* () {
-      yield* Deferred.succeed(parked[fqn]!, void 0);
-      yield* Effect.forEach(
-        peers.filter((peer) => peer !== fqn && peer in parked),
-        (peer) =>
-          Effect.race(
-            Effect.exit(Deferred.await(readyStable[peer]!)),
-            Deferred.await(parked[peer]!),
-          ),
-        { concurrency: "unbounded", discard: true },
-      );
-    });
-
   const failures: LifecycleFailure[] = [];
 
   yield* Effect.forEach(
@@ -586,7 +560,6 @@ const executePlan = Effect.fn(function* (
             (fqns) => waitForDeps(fqn, fqns),
             failures,
             plan.cycleMembers,
-            (peers) => settlePeers(fqn, peers),
           ),
     { concurrency: "unbounded" },
   );
@@ -669,7 +642,6 @@ const executeNode = (
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
   cycleMembers: ReadonlySet<string>,
-  settlePeers: (peers: string[]) => Effect.Effect<void>,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     const inCycle = cycleMembers.has(fqn);
@@ -1119,7 +1091,7 @@ const executeNode = (
       yield* report("pending");
       yield* waitForDeps(allUpstreamFqns());
 
-      let news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
+      const news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
       const adopting =
         node.adopting === true ||
         (node.state.status === "updating" && node.state.adopting === true);
@@ -1165,46 +1137,20 @@ const executeNode = (
 
       // Providers receive the resolved binding payload for this exact pass, while
       // `previousProps` tells them what state the live resource is being updated from.
-      let bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
+      const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      const reconcile = () =>
-        node.provider
-          .reconcile({
-            id: logicalId,
-            fqn,
-            news,
-            instanceId,
-            bindings: bindingOutputs,
-            session: scopedSession,
-            olds: previousProps,
-            output: node.state.attr,
-          })
-          .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
-
-      const firstPass = yield* Effect.exit(reconcile());
-      let attr: any;
-      if (Exit.isSuccess(firstPass)) {
-        attr = firstPass.value;
-      } else if (
-        inCycle &&
-        Cause.hasFails(firstPass.cause) &&
-        !Cause.hasDies(firstPass.cause) &&
-        !Cause.hasInterrupts(firstPass.cause)
-      ) {
-        // This pass ran against cycle peers' *previous* outputs, published
-        // before they reconciled, so the failure may only mean a peer hasn't
-        // applied yet what this update needs — e.g. a Worker binding a
-        // Durable Object class its peer adds in this same deploy (#3103).
-        // Wait for those peers to finish, then retry once against their
-        // fresh outputs; a second failure is the real one.
-        yield* scopedSession.note("waiting for cycle peers before retrying", { kind: "status" });
-        yield* settlePeers(allUpstreamFqns().filter((upstream) => cycleMembers.has(upstream)));
-        news = (yield* Output.evaluate(node.props, outputs)) as Record<string, any>;
-        bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
-        attr = yield* reconcile();
-      } else {
-        return yield* Effect.failCause(firstPass.cause);
-      }
+      const attr = yield* node.provider
+        .reconcile({
+          id: logicalId,
+          fqn,
+          news,
+          instanceId,
+          bindings: bindingOutputs,
+          session: scopedSession,
+          olds: previousProps,
+          output: node.state.attr,
+        })
+        .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
       if (node.state.status === "replaced") {
         yield* commit<ReplacedResourceState>({

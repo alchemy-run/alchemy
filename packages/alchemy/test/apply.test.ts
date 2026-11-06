@@ -1749,64 +1749,48 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
       }),
     );
 
-    // #3103: a cycle member's first pass runs against its peer's previous
-    // output, so it can fail on something the peer applies in this same
-    // deploy (a Worker binding a Durable Object class its peer adds). It
-    // must retry once the peer has updated instead of failing the deploy.
-    test.provider("update retries a cycle member after its peer finishes updating", (stack) =>
+    // #3103: A binds B only by B's `name`, which the update keeps, so
+    // planning resolves that reference to its value and it orders nothing.
+    // B still references A's changing `string`. That is not a cycle: B must
+    // wait for A's update instead of starting against A's previous output.
+    test.provider("an update orders peers linked back only by a stable attribute", (stack) =>
       Effect.gen(function* () {
-        yield* mutualBindingStack({ aString: "a-value" }).pipe(stack.deploy);
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* BindingTarget("A", { name: "a", string: `a-${version}` });
+            const B = yield* BindingTarget("B", { name: "b", string: `b-${version}` });
+            yield* A.bind("FromB", { env: { PEER: B.name } });
+            yield* B.bind("FromA", { env: { PEER: A.string } });
+            return { A, B };
+          });
 
-        const aTried = yield* Deferred.make<void>();
-        const bUpdated = yield* Deferred.make<void>();
-        const aAttempts: boolean[] = [];
+        yield* stack.deploy(program("v1"));
 
-        const output = yield* mutualBindingStack({ aString: "a-next", bString: "b-next" }).pipe(
+        const plan = yield* stack.plan(program("v2"));
+        expect([...plan.cycleMembers]).toEqual([]);
+
+        let aUpdated = false;
+        const bSawAUpdated: boolean[] = [];
+        const output = yield* program("v2").pipe(
           stack.deploy,
           hook({
             update: (id) =>
               id === "A"
-                ? Effect.gen(function* () {
-                    const ready = yield* Deferred.isDone(bUpdated);
-                    aAttempts.push(ready);
-                    yield* Deferred.succeed(aTried, void 0);
-                    if (!ready) return yield* new ResourceFailure();
-                  })
-                : // B updates only after A's first attempt, so A goes first.
-                  Deferred.await(aTried).pipe(Effect.andThen(Deferred.succeed(bUpdated, void 0))),
+                ? // Give B every chance to run first if nothing orders it.
+                  Effect.sleep("50 millis").pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        aUpdated = true;
+                      }),
+                    ),
+                  )
+                : Effect.sync(() => void bSawAUpdated.push(aUpdated)),
           }),
         );
 
-        expect(aAttempts).toEqual([false, true]);
-        expect(output.A.env).toEqual({ PEER: "b-next" });
-        expect(output.B.env).toEqual({ PEER: "a-next" });
-        expect((yield* getState("A"))?.status).toEqual("updated");
-        expect((yield* getState("B"))?.status).toEqual("updated");
-      }),
-    );
-
-    test.provider("update still fails a cycle member that fails after its peer updates", (stack) =>
-      Effect.gen(function* () {
-        yield* mutualBindingStack({ aString: "a-value" }).pipe(stack.deploy);
-
-        let aAttempts = 0;
-        // `hook` turns the deploy's ResourceFailure into `true`.
-        const failed = yield* mutualBindingStack({ aString: "a-next", bString: "b-next" }).pipe(
-          stack.deploy,
-          hook({
-            update: (id) =>
-              id === "A"
-                ? Effect.suspend(() => {
-                    aAttempts++;
-                    return Effect.fail(new ResourceFailure());
-                  })
-                : Effect.void,
-          }),
-        );
-
-        expect(failed).toBe(true);
-        expect(aAttempts).toEqual(2);
-        expect((yield* getState("A"))?.status).toEqual("updating");
+        expect(bSawAUpdated).toEqual([true]);
+        expect(output.A.env).toEqual({ PEER: "b" });
+        expect(output.B.env).toEqual({ PEER: "a-v2" });
       }),
     );
 

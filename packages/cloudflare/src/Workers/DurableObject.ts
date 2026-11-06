@@ -208,6 +208,35 @@ export const normalizeTransferredFrom = (
       ).map((source) => resolveTransferSourceRef(source));
 
 /**
+ * For a cross-script binding whose `scriptName` is another Worker's
+ * `workerName`, a reference to the namespace that Worker hosts for
+ * `className`.
+ *
+ * Cloudflare rejects a binding to a class the target script does not host
+ * yet, so the binding Worker must deploy after its host whenever the host
+ * adds the class. `workerName` alone can't say so: it is stable across
+ * updates, so planning resolves it to its value and nothing orders the two
+ * Workers. The host's `durableObjectNamespaces` is stable only while its
+ * set of classes is unchanged, so referencing it orders the deploys exactly
+ * when the host adds or removes a class (#3103). Alchemy-only: stripped
+ * before the script upload.
+ *
+ * @internal
+ */
+export const hostNamespaceOf = (
+  scriptName: Input<string> | undefined,
+  className: string,
+): Output.Output<string | undefined> | undefined =>
+  Output.isPropExpr(scriptName) &&
+  scriptName.identifier === "workerName" &&
+  Output.isResourceExpr(scriptName.expr) &&
+  isWorker(scriptName.expr.src)
+    ? (scriptName.expr as unknown as Worker).durableObjectNamespaces.pipe(
+        Output.map((namespaces) => namespaces?.[className]),
+      )
+    : undefined;
+
+/**
  * `ns` restricted to `jurisdiction`. Local workerd (`alchemy dev`) does not
  * implement jurisdictions and throws on `jurisdiction()`, so there the
  * unrestricted namespace is used, the same way a D1 database, R2 bucket or
@@ -1429,6 +1458,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
               name: namespace,
               className,
               scriptName,
+              hostNamespace: hostNamespaceOf(scriptName, className),
               transferredFrom: normalizeTransferredFrom(transferredFrom),
             },
           ],
