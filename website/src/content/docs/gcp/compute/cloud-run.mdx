@@ -203,6 +203,25 @@ Set CPU, memory, timeout, and concurrency on the revision template:
 
 Every template change rolls out a new revision.
 
+## Cache build layers
+
+Image builds reuse the local BuildKit cache of the machine they run on.
+A fresh CI runner has none and rebuilds every step. Keep the layers in
+Artifact Registry with `build.cache`:
+
+```typescript
+{
+  main: import.meta.url,
+  build: { cache: true },
+}
+```
+
+Builds then import and export every stage's layers at the repository's
+`:buildcache` tag. The cache is off by default and never changes the
+image, so turning it on doesn't roll out a revision. Other backends
+take BuildKit's cache backends, as in
+[Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+
 ## Check health
 
 Cloud Run's default startup probe passes as soon as the port accepts a
