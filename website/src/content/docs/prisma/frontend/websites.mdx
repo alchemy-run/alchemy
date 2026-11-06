@@ -200,9 +200,9 @@ const site = yield* Prisma.Website.Astro("Web", {
 `AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See
 [DNS Adapters](/infrastructure-as-code/dns-adapters).
 
-With `dns`, the site also publishes the `TXT` record that proves your
-workspace owns the hostname. With a plain hostname, publish it yourself;
-see [Compute custom domains](/prisma/compute/apps#custom-domains).
+With `dns`, the site also publishes the `TXT` record that proves your workspace owns the hostname. With a plain hostname, publish it yourself; see [Compute custom domains](/prisma/compute/apps#custom-domains).
+
+If your workspace already proved the hostname by hand, its verified domain ownership is not owned by your stack, and the first deploy fails with `OwnedBySomeoneElse`. Run that deploy once with `--adopt` to take it over.
 
 Changing an existing domain's hostname or app is rejected; add a second
 domain, verify DNS and TLS, cut traffic over, then remove the old one. See

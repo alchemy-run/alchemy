@@ -11,8 +11,8 @@ export type ExpectedRecord =
  * races a just-published record caches NXDOMAIN for the zone's SOA minimum
  * (30 minutes on Cloudflare), failing every retry. Wait (bounded) until
  * every authoritative nameserver answers the record, plus a margin for
- * anycast edges we cannot see. Proceeds regardless, so a missing record
- * still surfaces Prisma's own error.
+ * anycast edges we cannot see. Succeeds with whether every authoritative
+ * nameserver answered it; `false` also when none could be found.
  *
  * `margin: "if-unseen"` skips the margin when the first check already sees
  * the record, i.e. it was published before this deploy reached it.
@@ -25,7 +25,7 @@ export const waitForAuthoritativeRecord = (
     const dns = yield* Effect.tryPromise(() => import("node:dns/promises")).pipe(
       Effect.orElseSucceed(() => undefined),
     );
-    if (dns === undefined || typeof dns.Resolver !== "function") return;
+    if (dns === undefined || typeof dns.Resolver !== "function") return false;
     const labels = record.name.split(".");
     let servers: string[] = [];
     for (let i = 1; i < labels.length - 1 && servers.length === 0; i++) {
@@ -42,7 +42,7 @@ export const waitForAuthoritativeRecord = (
       );
       servers = addresses.flat();
     }
-    if (servers.length === 0) return;
+    if (servers.length === 0) return false;
     const answeredBy = (server: string) =>
       Effect.gen(function* () {
         const resolver = yield* Effect.sync(() => {
@@ -70,7 +70,7 @@ export const waitForAuthoritativeRecord = (
       Effect.map((seen) => seen.every(Boolean)),
     );
     const seenAtOnce = yield* check;
-    if (seenAtOnce && options.margin === "if-unseen") return;
+    if (seenAtOnce && options.margin === "if-unseen") return true;
     const visible =
       seenAtOnce ||
       (yield* check.pipe(
@@ -81,4 +81,5 @@ export const waitForAuthoritativeRecord = (
         }),
       ));
     if (visible) yield* Effect.sleep("10 seconds");
+    return visible;
   });

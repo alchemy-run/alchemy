@@ -338,7 +338,6 @@ const ProviderLive = () =>
               ? (yield* createDomainRetry({ domainId: domain.id })).data
               : domain
             : yield* createServiceDomain({ serviceId: appId, hostname }).pipe(
-                Effect.map((response) => response.data),
                 // A CNAME or ownership TXT published moments earlier, e.g. in
                 // the same deploy, may not be visible to Prisma's resolver yet.
                 Effect.retry({
@@ -356,6 +355,17 @@ const ProviderLive = () =>
                       adoptionRequiredError(hostname, appId, "appeared after the adoption check"),
                     ),
                 }),
+                Effect.flatMap((response) =>
+                  response.httpStatus === 201
+                    ? Effect.succeed(response.data)
+                    : Effect.fail(
+                        adoptionRequiredError(
+                          hostname,
+                          appId,
+                          "was returned as already registered by the create request",
+                        ),
+                      ),
+                ),
               );
           if (!identityMatches(reconciled)) {
             return yield* new CustomDomainUnexpectedResponse({

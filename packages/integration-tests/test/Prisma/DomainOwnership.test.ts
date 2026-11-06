@@ -1,39 +1,45 @@
-import { describe, expect, it } from "@alchemy.run/test";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Provider from "alchemy/Provider";
-import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import { TestClock } from "effect/testing";
-import { PrismaDomainOwnershipRequired } from "../../../prisma/src/internal/DomainOwnership.ts";
+import * as Result from "effect/Result";
+import type { ProjectReference } from "../../../prisma/src/internal/DomainOwnership.ts";
 import {
   DomainOwnershipProof,
   DomainOwnershipProofProvider,
 } from "../../../prisma/src/internal/DomainOwnershipProof.ts";
 import {
   data,
+  type FakeManagementApi,
   makeFakeManagementApi,
   noContent,
+  notFound,
   page,
   routesOf,
   unhandled,
   WIRE_CREATED_AT,
 } from "./fixtures/FakeManagementApi.ts";
 
+// `.test` has no nameservers, so the authoritative lookup finds none and the
+// verification record never counts as visible.
 const HOSTNAME = "app.custom.test";
-const RECORD_NAME = `_prisma-verification.${HOSTNAME}`;
-const RECORD_VALUE = `prisma-verification=${"a".repeat(64)}`;
+const RECORD = {
+  type: "TXT",
+  name: `_prisma-verification.${HOSTNAME}`,
+  value: `prisma-verification=${"a".repeat(64)}`,
+  ttl: 300,
+};
 
 type Status = "unverified" | "verified" | "expiring";
 
-const ownership = (status: Status, id = "do-1") => ({
+const ownership = (id: string, status: Status) => ({
   id,
   type: "domainOwnership",
   workspaceId: "ws-1",
   domain: HOSTNAME,
-  verification: { type: "TXT", name: RECORD_NAME, value: RECORD_VALUE, ttl: 300 },
+  verification: RECORD,
   status,
   expiresAt: status === "expiring" ? "2026-12-01T00:00:00.000Z" : null,
   verificationRecordLastSeenAt: status === "unverified" ? null : "2026-11-06T00:00:00.000Z",
@@ -42,212 +48,200 @@ const ownership = (status: Status, id = "do-1") => ({
   createdAt: WIRE_CREATED_AT,
 });
 
-interface Platform {
-  /** Rows the list route returns. */
-  listed: ReturnType<typeof ownership>[];
-  /** Status the create route returns. */
-  created: Status;
-  /** Statuses the verify route returns, one per call; the last repeats. */
-  verified: Status[];
-}
+type WireOwnership = ReturnType<typeof ownership>;
 
-const fakePlatform = (platform: Platform) =>
-  makeFakeManagementApi((request) => {
+/** One workspace's domain ownerships, served over the Management API routes. */
+const makeOwnershipCloud = () => {
+  const rows = new Map<string, WireOwnership>();
+  const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
+    if (path === "/v1/workspaces/ws-1/domain-ownerships/verification") {
+      return data(RECORD);
+    }
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {
-      if (request.method === "GET") return page(platform.listed);
+      if (request.method === "GET") return page(Array.from(rows.values()));
       if (request.method === "POST") {
-        return data(ownership(platform.created), { status: 201 });
+        const existing = Array.from(rows.values())[0];
+        if (existing) return data(existing);
+        const created = ownership("do-created", "unverified");
+        rows.set(created.id, created);
+        return data(created, { status: 201 });
       }
     }
-    if (path === "/v1/domain-ownerships/do-1/verify" && request.method === "POST") {
-      const status =
-        platform.verified.length > 1 ? platform.verified.shift()! : platform.verified[0]!;
-      return data(ownership(status));
-    }
-    if (path === "/v1/domain-ownerships/do-1" && request.method === "DELETE") {
-      return noContent();
+    const [, , , id, action] = path.split("/");
+    if (path.startsWith("/v1/domain-ownerships/") && id !== undefined) {
+      const row = rows.get(id);
+      if (row === undefined) return notFound("Domain ownership not found.");
+      if (action === "verify" && request.method === "POST") return data(row);
+      if (action === undefined && request.method === "GET") return data(row);
+      if (action === undefined && request.method === "DELETE") {
+        rows.delete(id);
+        return noContent();
+      }
     }
     return unhandled(request);
   });
+  const reset = (...initial: WireOwnership[]) => {
+    rows.clear();
+    for (const row of initial) rows.set(row.id, row);
+    fake.captured.length = 0;
+  };
+  return { fake, rows, reset, routes: () => routesOf(fake.captured) };
+};
 
-const provider = DomainOwnershipProofProvider().pipe(
-  Layer.provide(
-    Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
-  ),
+class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
+
+const providers = (fake: FakeManagementApi) =>
+  Layer.effect(TestPrismaProviders, Provider.collection([DomainOwnershipProof])).pipe(
+    Layer.provideMerge(DomainOwnershipProofProvider()),
+    Layer.provide(
+      Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
+    ),
+    Layer.provideMerge(fake.layer),
+  );
+
+const project = (projectId: string): ProjectReference =>
+  ({ projectId, workspaceId: "ws-1" }) as ProjectReference;
+
+const ownershipStack = (projectId = "proj-1") =>
+  DomainOwnershipProof("Ownership", { project: project(projectId), domain: HOSTNAME });
+
+const tags = ["local", "provider:prisma", "provider:prisma:domainownership"];
+
+const created = makeOwnershipCloud();
+const createdTest = Test.make({ providers: providers(created.fake) });
+
+createdTest.test.provider(
+  "fails with the record to publish and creates nothing when the record is not visible",
+  (stack) =>
+    Effect.gen(function* () {
+      created.reset();
+      yield* stack.destroy();
+
+      const result = yield* stack.deploy(ownershipStack()).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        const message = String(result.failure);
+        expect(message).toContain("PrismaDomainOwnershipRequired");
+        expect(message).toContain(RECORD.name);
+        expect(message).toContain(RECORD.value);
+      }
+      expect(created.routes()).not.toContain("POST /v1/workspaces/ws-1/domain-ownerships");
+      expect(created.routes().some((route) => route.startsWith("DELETE"))).toBe(false);
+      expect(created.rows.size).toBe(0);
+
+      yield* stack.destroy();
+    }),
+  { tags },
 );
 
-const project = { projectId: "proj-1", workspaceId: "ws-1" } as never;
+const unverified = makeOwnershipCloud();
+const unverifiedTest = Test.make({ providers: providers(unverified.fake) });
 
-const reconcileInput = (output?: unknown) =>
-  ({
-    id: "Ownership",
-    fqn: "Ownership",
-    instanceId: "00000000000000000000000000000000",
-    news: { project, domain: HOSTNAME },
-    olds: undefined,
-    output,
-    session: undefined as never,
-    bindings: [],
-  }) as never;
+unverifiedTest.test.provider(
+  "takes over an unverified domain ownership without --adopt and deletes nothing on failure",
+  (stack) =>
+    Effect.gen(function* () {
+      unverified.reset(ownership("do-1", "unverified"));
+      yield* stack.destroy();
 
-const reconcile = (output?: unknown) =>
-  Effect.gen(function* () {
-    const live = yield* Provider.findProvider(DomainOwnershipProof);
-    return yield* live.reconcile(reconcileInput(output));
-  });
+      const result = yield* stack.deploy(ownershipStack()).pipe(Effect.result);
 
-describe(
-  "Prisma.DomainOwnership",
-  { tags: ["unit", "provider:prisma", "provider:prisma:domain-ownership", "local"] },
-  () => {
-    it.effect("creates the domain ownership and verifies it until Prisma reports verified", () => {
-      const api = fakePlatform({ listed: [], created: "unverified", verified: ["verified"] });
-      return Effect.gen(function* () {
-        const attrs = yield* reconcile();
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("PrismaDomainOwnershipRequired");
+        expect(String(result.failure)).not.toContain("Cannot adopt resource");
+      }
+      expect(unverified.routes()).not.toContain("POST /v1/workspaces/ws-1/domain-ownerships");
+      expect(unverified.routes().some((route) => route.startsWith("DELETE"))).toBe(false);
+      expect(unverified.rows.has("do-1")).toBe(true);
 
-        expect(attrs.status).toBe("verified");
-        expect(attrs.expiresAt).toBeNull();
-        expect(attrs.verifiedAt).toBe("2026-11-06T00:00:00.000Z");
-        expect(attrs.recordName).toBe(RECORD_NAME);
-        expect(routesOf(api.captured)).toEqual([
-          "GET /v1/workspaces/ws-1/domain-ownerships",
-          "POST /v1/workspaces/ws-1/domain-ownerships",
-          "POST /v1/domain-ownerships/do-1/verify",
-        ]);
-      }).pipe(
-        Effect.provide(provider),
-        Effect.provide(api.layer),
-        Effect.provide(PlatformServices),
-      );
-    });
+      unverified.reset();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
 
-    it.effect("returns a domain ownership Prisma already reports verified without a call", () => {
-      const api = fakePlatform({
-        listed: [ownership("verified")],
-        created: "verified",
-        verified: [],
-      });
-      return Effect.gen(function* () {
-        const attrs = yield* reconcile();
+const foreign = makeOwnershipCloud();
+const foreignTest = Test.make({ providers: providers(foreign.fake) });
 
-        expect(attrs.domainOwnershipId).toBe("do-1");
-        expect(attrs.status).toBe("verified");
-        expect(routesOf(api.captured)).toEqual(["GET /v1/workspaces/ws-1/domain-ownerships"]);
-      }).pipe(
-        Effect.provide(provider),
-        Effect.provide(api.layer),
-        Effect.provide(PlatformServices),
-      );
-    });
+foreignTest.test.provider(
+  "refuses a verified domain ownership it did not record without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      foreign.reset(ownership("do-1", "verified"));
+      yield* stack.destroy();
 
-    it.effect("does not count an expiring domain ownership as proved", () => {
-      const api = fakePlatform({
-        listed: [ownership("expiring")],
-        created: "verified",
-        verified: ["verified"],
-      });
-      return Effect.gen(function* () {
-        const attrs = yield* reconcile();
+      const result = yield* stack.deploy(ownershipStack()).pipe(Effect.result);
 
-        expect(attrs.status).toBe("verified");
-        expect(routesOf(api.captured)).toEqual([
-          "GET /v1/workspaces/ws-1/domain-ownerships",
-          "POST /v1/domain-ownerships/do-1/verify",
-        ]);
-      }).pipe(
-        Effect.provide(provider),
-        Effect.provide(api.layer),
-        Effect.provide(PlatformServices),
-      );
-    });
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("Cannot adopt resource");
+      }
+      expect(foreign.routes().some((route) => route.startsWith("POST"))).toBe(false);
+      expect(foreign.routes().some((route) => route.startsWith("DELETE"))).toBe(false);
 
-    it.effect(
-      "fails with the record to publish, and removes the domain ownership it created",
-      () => {
-        const api = fakePlatform({ listed: [], created: "unverified", verified: ["unverified"] });
-        return Effect.gen(function* () {
-          const fiber = yield* reconcile().pipe(
-            Effect.flip,
-            Effect.forkChild({ startImmediately: true }),
-          );
-          for (let i = 0; i < 100 && fiber.pollUnsafe() === undefined; i++) {
-            yield* TestClock.adjust("5 seconds");
-            yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
-          }
-          const error = yield* Fiber.join(fiber);
+      foreign.reset();
+      yield* stack.destroy();
+    }),
+  { tags },
+);
 
-          expect(error).toBeInstanceOf(PrismaDomainOwnershipRequired);
-          if (error instanceof PrismaDomainOwnershipRequired) {
-            expect(error.hostname).toBe(HOSTNAME);
-            expect(error.recordName).toBe(RECORD_NAME);
-            expect(error.recordValue).toBe(RECORD_VALUE);
-          }
-          const routes = routesOf(api.captured);
-          expect(routes.filter((route) => route.endsWith("/verify"))).toHaveLength(7);
-          expect(routes.at(-1)).toBe("DELETE /v1/domain-ownerships/do-1");
-        }).pipe(
-          Effect.provide(provider),
-          Effect.provide(api.layer),
-          Effect.provide(PlatformServices),
-          Effect.provide(TestClock.layer()),
-        );
-      },
-    );
+const adopted = makeOwnershipCloud();
+const adoptedTest = Test.make({ providers: providers(adopted.fake), adopt: true });
 
-    it.effect("keeps an existing unverified domain ownership it could not prove", () => {
-      const api = fakePlatform({
-        listed: [ownership("unverified")],
-        created: "unverified",
-        verified: ["unverified"],
-      });
-      return Effect.gen(function* () {
-        const fiber = yield* reconcile().pipe(
-          Effect.flip,
-          Effect.forkChild({ startImmediately: true }),
-        );
-        for (let i = 0; i < 100 && fiber.pollUnsafe() === undefined; i++) {
-          yield* TestClock.adjust("5 seconds");
-          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
-        }
-        const error = yield* Fiber.join(fiber);
+adoptedTest.test.provider(
+  "adopts a verified domain ownership, finds it by domain when the stored id is gone, and deletes it on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      adopted.reset(ownership("do-1", "verified"));
+      yield* stack.destroy();
 
-        expect(error).toBeInstanceOf(PrismaDomainOwnershipRequired);
-        expect(routesOf(api.captured)).not.toContain("DELETE /v1/domain-ownerships/do-1");
-        expect(routesOf(api.captured)).not.toContain("POST /v1/workspaces/ws-1/domain-ownerships");
-      }).pipe(
-        Effect.provide(provider),
-        Effect.provide(api.layer),
-        Effect.provide(PlatformServices),
-        Effect.provide(TestClock.layer()),
-      );
-    });
+      const first = yield* stack.deploy(ownershipStack());
+      expect(first.domainOwnershipId).toBe("do-1");
+      expect(first.status).toBe("verified");
+      expect(adopted.routes().some((route) => route.startsWith("POST"))).toBe(false);
 
-    it.effect("reads a domain ownership it did not record as Unowned, with its status", () => {
-      const api = fakePlatform({
-        listed: [ownership("expiring")],
-        created: "verified",
-        verified: [],
-      });
-      return Effect.gen(function* () {
-        const live = yield* Provider.findProvider(DomainOwnershipProof);
-        const attrs = yield* live.read!({
-          id: "Ownership",
-          fqn: "Ownership",
-          instanceId: "00000000000000000000000000000000",
-          olds: { project, domain: HOSTNAME },
-          output: undefined,
-        } as never);
+      // The row is replaced out of band; a changed project makes the deploy
+      // reconcile from the stored id.
+      adopted.reset(ownership("do-2", "verified"));
+      const second = yield* stack.deploy(ownershipStack("proj-2"));
 
-        expect(attrs && Unowned.is(attrs)).toBe(true);
-        expect(attrs?.status).toBe("expiring");
-        expect(attrs?.expiresAt).toBe("2026-12-01T00:00:00.000Z");
-        expect(attrs?.verifiedAt).toBeNull();
-      }).pipe(
-        Effect.provide(provider),
-        Effect.provide(api.layer),
-        Effect.provide(PlatformServices),
-      );
-    });
-  },
+      expect(second.domainOwnershipId).toBe("do-2");
+      expect(adopted.routes()).toContain("GET /v1/domain-ownerships/do-1");
+      expect(adopted.routes()).toContain("GET /v1/workspaces/ws-1/domain-ownerships");
+      expect(adopted.routes().some((route) => route.startsWith("POST"))).toBe(false);
+      expect(adopted.routes().some((route) => route.startsWith("DELETE"))).toBe(false);
+
+      yield* stack.destroy();
+      expect(adopted.routes()).toContain("DELETE /v1/domain-ownerships/do-2");
+      expect(adopted.rows.size).toBe(0);
+    }),
+  { tags },
+);
+
+const expiring = makeOwnershipCloud();
+const expiringTest = Test.make({ providers: providers(expiring.fake), adopt: true });
+
+expiringTest.test.provider(
+  "does not count an expiring domain ownership as proved, and deletes nothing on failure",
+  (stack) =>
+    Effect.gen(function* () {
+      expiring.reset(ownership("do-1", "expiring"));
+      yield* stack.destroy();
+
+      const result = yield* stack.deploy(ownershipStack()).pipe(Effect.result);
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("PrismaDomainOwnershipRequired");
+      }
+      expect(expiring.routes().some((route) => route.startsWith("DELETE"))).toBe(false);
+      expect(expiring.rows.get("do-1")?.status).toBe("expiring");
+
+      expiring.reset();
+      yield* stack.destroy();
+    }),
+  { tags },
 );

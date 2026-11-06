@@ -161,7 +161,7 @@ A wildcard and its apex share one record name
 Without `dns`, publish the record yourself: the deploy fails with
 `PrismaDomainOwnershipRequired`, which names the record.
 
-A deploy succeeds only once Prisma reports the ownership `verified`. If the record later disappears, its `status` becomes `expiring`: hostnames already serving keep serving until `expiresAt`, and publishing the record again makes it `verified`.
+A deploy succeeds only once Prisma reports the ownership `verified`. The ownership's `status` and `expiresAt` are what Prisma reported when the deploy last proved the domain; an unchanged redeploy does not check again.
 
 Changing the hostname or app in place is intentionally rejected.
 Create a second domain, verify DNS and TLS, cut traffic over, and then

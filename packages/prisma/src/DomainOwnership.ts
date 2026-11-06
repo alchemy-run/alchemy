@@ -39,11 +39,12 @@ export interface DomainOwnershipProps {
  *
  * The proof is a `TXT` record named `_prisma-verification.{domain}` whose
  * value is the same for every domain in the workspace. With `dns`, the
- * record is published for you. The deploy succeeds once Prisma reports the
- * ownership `verified`; its `status` and `expiresAt` show whether it still
- * is. Destroying the
- * resource removes the ownership and the record; custom domains attached
- * under it stay attached.
+ * record is published for you. The deploy creates the ownership only once
+ * every authoritative nameserver returns the record, and succeeds once
+ * Prisma reports it `verified`. `status` and `expiresAt` are what Prisma
+ * reported when the deploy last proved the domain; an unchanged redeploy
+ * does not check again. Destroying the resource removes the ownership and
+ * the record; custom domains attached under it stay attached.
  *
  * `Prisma.Website` composites prove their own hostname when `domain` names a
  * DNS host (`domain: { name, dns }`), so declare this resource only to prove
