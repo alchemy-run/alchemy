@@ -217,15 +217,37 @@ const MigrationLive = () =>
        * does nothing: the Worker's next upload reads them, and deletes a class
        * once two passes far enough apart have seen every object written
        * before the move. A class with objects that couldn't move gets none.
+       *
+       * Each marker must complete to count. One started on an edge that
+       * doesn't have the uploaded Worker yet fails: it is started again, a
+       * second earlier each time, which claims no more than this pass saw.
        */
+      const markOne = (className: string) =>
+        Effect.gen(function* () {
+          for (let attempt = 0; ; attempt++) {
+            const id = passMarker(className, news.namespaces[className]!, listedAt - attempt);
+            yield* create([{ id, params: { op: "mark" } }]);
+            const done = yield* instance(id).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (status) => status.status !== "queued" && status.status !== "running",
+                times: 60,
+              }),
+            );
+            if (done.status === "complete") return;
+            const elapsed = (yield* Clock.currentTimeMillis) - started;
+            if (worthRestarting(done.error?.message ?? "", elapsed) && attempt < MAX_RESTARTS) {
+              yield* Effect.sleep(RESTART_DELAY);
+              continue;
+            }
+            return yield* ended(id, done.status, done.error?.message ?? undefined);
+          }
+        });
       const mark = (skipped: Readonly<Record<string, number>>) =>
-        create(
-          live
-            .filter(({ className }) => (skipped[className] ?? 0) === 0)
-            .map(({ className }) => ({
-              id: passMarker(className, news.namespaces[className]!, listedAt),
-              params: { op: "mark" },
-            })),
+        Effect.forEach(
+          live.filter(({ className }) => (skipped[className] ?? 0) === 0),
+          ({ className }) => markOne(className),
+          { concurrency: 10, discard: true },
         );
 
       if (total === 0) {
