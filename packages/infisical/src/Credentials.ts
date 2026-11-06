@@ -18,5 +18,7 @@ export const fromAuthProvider = () =>
     lazyCredentials<InfisicalResolvedCredentials, ConfigError>()(
       INFISICAL_AUTH_PROVIDER_NAME,
       ({ token, apiBaseUrl }) => ({ apiKey: token, apiBaseUrl }),
+      // Cache a minted access token only until it expires.
+      { expiresAt: ({ expires }) => expires },
     ),
   );
