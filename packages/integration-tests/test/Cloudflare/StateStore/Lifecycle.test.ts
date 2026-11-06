@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { readStoreCredentials } from "@alchemy.run/cloudflare/StateStore/CredentialsFile";
@@ -11,7 +12,7 @@ import {
   EncryptionKeySecretName,
   stateStoreSecretName,
 } from "@alchemy.run/cloudflare/StateStore/Token";
-import { expect } from "@alchemy.run/test";
+import { expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -336,5 +337,46 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
     timeout: 300_000,
+  },
+);
+
+it.live(
+  "a rejected Cloudflare credential fails as an authentication error",
+  () =>
+    Effect.gen(function* () {
+      const worker = "alchemy-state-store-rejected";
+      // Well-formed and never issued. A new one each run: Cloudflare rate
+      // limits a rejected token for minutes, and would answer the next run
+      // with that instead.
+      const token = yield* Effect.sync(() => randomBytes(30).toString("base64url"));
+      const exit = yield* inCI(
+        {
+          CLOUDFLARE_API_TOKEN: token,
+          CLOUDFLARE_ACCOUNT_ID: "0".repeat(32),
+          ALCHEMY_PROFILE: "rejected-credentials",
+        },
+        Effect.exit(
+          Alchemist.State.store({ type: "provider", backend: "cloudflare", name: worker }).pipe(
+            Effect.flatMap((store) => store.listStacks()),
+            Effect.provide(Alchemist.layer()),
+          ),
+        ),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.pretty(exit.cause);
+        expect(failure).toContain(
+          `Cloudflare authentication failed while looking up Cloudflare State Store '${worker}': ` +
+            `Authentication error.`,
+        );
+        expect(failure).not.toContain("alchemy state bootstrap");
+        expect(failure).not.toContain("Rate limited");
+      }
+    }),
+  // Exclusive: sets `CI` on the process.
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:statestore", "live"],
+    timeout: 90_000,
+    exclusive: true,
   },
 );
