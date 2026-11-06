@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/rivet/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/modal/tsconfig.json"
     },
     {
@@ -113,6 +116,12 @@
     },
     {
       "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./packages/effect-cluster/tsconfig.json"
     },
     {
       "path": "./packages/modal/tsconfig.json"
