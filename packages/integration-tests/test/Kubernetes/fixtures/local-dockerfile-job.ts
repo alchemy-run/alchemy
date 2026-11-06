@@ -7,7 +7,7 @@ export const BUILD_SECRET = "alchemy-build-secret-value";
 
 /**
  * A one-shot Job built from `buildsecrets/Dockerfile` with a build arg, a
- * BuildKit secret and a `mode=max` registry layer cache, pushed to the
+ * BuildKit secret and a registry layer cache, pushed to the
  * cluster's registry. It prints the file its build wrote.
  */
 export default Kubernetes.Job(
@@ -20,8 +20,8 @@ export default Kubernetes.Job(
       build: {
         args: { GREETING: "hello" },
         secrets: { token: Redacted.make(BUILD_SECRET) },
-        // No `ref`: the cache goes to the image repository's `:buildcache`.
-        cache: { to: [{ type: "registry", mode: "max" }] },
+        // Every stage's layers at the image repository's `:buildcache`.
+        cache: true,
       },
       name: "local-dockerfile-job",
       backoffLimit: 0,

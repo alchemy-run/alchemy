@@ -102,10 +102,7 @@ const image = yield* Docker.Image("app", {
   name: "my-app",
   build: {
     context: "./app",
-    cache: {
-      from: [{ type: "registry" }],
-      to: [{ type: "registry", mode: "max" }],
-    },
+    cache: true,
   },
   registry: {
     server: "ghcr.io",
@@ -115,16 +112,13 @@ const image = yield* Docker.Image("app", {
 });
 ```
 
-`build.cache` lists [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-to import (`from`) and export (`to`). A `registry` backend without a
-`ref` uses the image's own repository with a `:buildcache` tag, and the
-build authenticates with `registry`. `mode: "max"` keeps every stage's
-layers, so a change late in a multi-stage Dockerfile doesn't rerun the
-earlier stages on a fresh machine. Other backends (`gha`, `s3`, `local`)
-take their attributes the same way. Every resource that builds an image
-takes the same `cache` shape: Cloudflare Containers, ECS, Cloud Run and
-Kubernetes workloads under `build.cache`, `AWS.ECR.Image` and Lambda
-container images as `cache` next to `buildArgs`.
+`cache: true` keeps every stage's layers at the image's own repository
+with a `:buildcache` tag, and the build authenticates with `registry`. A
+fresh machine, such as a CI runner, then skips the unchanged steps instead
+of rerunning the whole Dockerfile. For another backend (`gha`, `s3`,
+`local`), pass [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+as `{ from, to }`. Every resource that builds an image takes the same
+`cache` option.
 
 ## Mirror and pin remote images
 

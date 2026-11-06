@@ -529,42 +529,38 @@ type ContainerShape<Shape> = {
  *
  * ```text
  * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
- * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
  * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
  * ```
  *
  * The build hash identifies the inputs; the manifest digest identifies the
  * published artifact. Applications and stages in the same account can use
- * `publish: { repository: "web" }` to reuse matching published builds. Changed
- * inputs produce another hash tag in the same repository. Builds targeting
- * that repository import reusable layers from its shared `:buildcache` tag,
- * including when full input hashes differ. This mutable tag points to the
- * latest exported cache, not a combined cache of every historical image.
- * Reusing a finished image does not move the layer-cache tag.
+ * `publish: { repository: "web" }` to reuse matching published builds without
+ * invoking Docker. Changed inputs produce another hash tag in the same
+ * repository.
  *
- * `build.cache` chooses where builds import and export layer caches, as
- * BuildKit cache backends (`inline`, `registry`, `local`, `gha`, `s3`, ...).
- * The default imports `:buildcache` and exports an inline cache, which only
- * keeps final-stage layers. When an expensive step in an earlier stage is
- * followed by a `COPY` of code that changes often, export a `mode: "max"`
- * registry cache so the earlier stage resumes from its last unchanged step.
- * A `registry` backend without `ref` uses the repository's `:buildcache`.
+ * ### Caching Build Layers
+ * A changed build reuses the layers in the local BuildKit cache of the
+ * machine it runs on. A builder that has never built the image, such as a
+ * fresh CI runner, reruns every step. Set `build.cache: true` to keep every
+ * stage's layers at the repository's `:buildcache` tag, so fresh builders
+ * resume from the last unchanged step, including steps in earlier stages of
+ * a multi-stage Dockerfile.
  *
- * **Example:** Keep every stage's layers in the build cache
+ * **Example:** Cache build layers in the registry
  * ```typescript
  * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
  *   context: `${import.meta.dirname}/context`,
- *   build: { cache: { to: [{ type: "registry", mode: "max" }] } },
+ *   build: { cache: true },
  * }) {}
  * ```
  *
- * **Example:** GitHub Actions cache, falling back to the registry cache
+ * **Example:** Cache build layers in GitHub Actions
  * ```typescript
  * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
  *   context: `${import.meta.dirname}/context`,
  *   build: {
  *     cache: {
- *       from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
+ *       from: [{ type: "gha", scope: "agent" }],
  *       to: [{ type: "gha", scope: "agent", mode: "max" }],
  *     },
  *   },

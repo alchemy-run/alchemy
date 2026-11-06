@@ -1,4 +1,4 @@
-import { type BuildCache, BuildCacheSchema } from "@alchemy.run/docker/BuildCache";
+import { type BuildCacheOptions, BuildCacheSchema } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -51,13 +51,14 @@ export interface FunctionDockerImageSource extends FunctionImageConfig {
    */
   buildArgs?: Record<string, string>;
   /**
-   * BuildKit layer caches to import and export, as
-   * [cache backends](https://docs.docker.com/build/cache/backends/). A
-   * `registry` backend without `ref` uses the function's ECR repository's
-   * `:buildcache` tag. The cache is not part of the image hash.
-   * @default no cache
+   * Keep build layers in a remote cache so a fresh builder (a new CI runner)
+   * skips unchanged steps. `true` keeps every stage's layers at the function
+   * repository's `:buildcache` tag; pass `{ from, to }` with
+   * [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+   * for another backend. The cache is not part of the image hash.
+   * @default false
    */
-  cache?: BuildCache;
+  cache?: BuildCacheOptions["cache"];
 }
 
 /** An existing private ECR image, addressed by tag or immutable digest. */

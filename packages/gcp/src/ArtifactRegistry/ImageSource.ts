@@ -690,9 +690,7 @@ export const makeImageSource = Effect.gen(function* () {
           ...imageBuildCacheOptions(
             source.build,
             imageUri,
-            source.build?.cache === undefined
-              ? undefined
-              : yield* getArtifactRegistryCredentials(location),
+            source.build?.cache ? yield* getArtifactRegistryCredentials(location) : undefined,
           ),
         });
       }

@@ -701,13 +701,12 @@ describe.concurrent(
     );
 
     registryCacheTest.provider(
-      "caches default publications and imports repository layers in a fresh builder",
+      "caches default publications without exporting a layer cache",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
           const fs = yield* FileSystem.FileSystem;
           const path = yield* Path.Path;
-          const docker = yield* Docker;
           const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-default-cache-" });
           yield* fs.writeFileString(
             path.join(context, "Dockerfile"),
@@ -729,8 +728,9 @@ describe.concurrent(
           const username = credentials.username ?? credentials.user;
           assert(username);
           const client = yield* HttpClient.HttpClient;
-          const cacheDigest = Effect.gen(function* () {
-            const response = yield* client.execute(
+          // A layer cache is opt-in (`build.cache`): nothing but the image is pushed.
+          const cacheStatus = client
+            .execute(
               HttpClientRequest.head(
                 `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/manifests/buildcache`,
               ).pipe(
@@ -740,11 +740,9 @@ describe.concurrent(
                   "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
                 ),
               ),
-            );
-            expect(response.status).toBe(200);
-            return response.headers["docker-content-digest"];
-          });
-          expect(yield* cacheDigest).toBe(first.app.hash?.digest);
+            )
+            .pipe(Effect.map((response) => response.status));
+          expect(yield* cacheStatus).toBe(404);
           const layersOf = Effect.fn(function* (digest: string) {
             const response = yield* client.execute(
               HttpClientRequest.get(
@@ -777,38 +775,16 @@ describe.concurrent(
             const changed = yield* stack.deploy(program);
             const completed = (yield* buildHistory).filter((build) => build.status === "Completed");
             expect(completed).toHaveLength(1);
-            const log = yield* docker.run([
-              "buildx",
-              "history",
-              "logs",
-              completed[0]!.ref.split("/").at(-1)!,
-              "--progress",
-              "plain",
-            ]);
-            const text = `${log.stdout}\n${log.stderr}`;
-            expect(text).toContain(
-              `importing cache manifest from registry.cloudflare.com/${first.app.accountId}/${first.app.applicationName}:buildcache`,
-            );
             const changedLayers = yield* layersOf(changed.app.hash!.digest!);
-            // Re-executing RUN would create a different UUID and therefore a different layer.
-            expect(changedLayers.slice(0, -1)).toEqual(firstLayers.slice(0, -1));
-            expect(changedLayers.at(-1)).not.toBe(firstLayers.at(-1));
+            // Without a layer cache the fresh builder reruns RUN: a new UUID layer.
+            expect(changedLayers[0]).toBe(firstLayers[0]);
+            expect(changedLayers.slice(1, -1)).not.toEqual(firstLayers.slice(1, -1));
             return changed;
           }).pipe(withBuilder("alchemy-default-cache-changed", { attestations: false }));
           expect(changed.app.applicationId).toBe(first.app.applicationId);
           expect(changed.app.applicationName).toBe(first.app.applicationName);
           expect(changed.app.configuration.image).not.toBe(first.app.configuration.image);
-          // The registry keeps serving an overwritten tag's previous target
-          // for a while (observed ~25s), so wait for the new one.
-          expect(
-            yield* cacheDigest.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("4 seconds"),
-                until: (digest) => digest === changed.app.hash?.digest,
-                times: 10,
-              }),
-            ),
-          ).toBe(changed.app.hash?.digest);
+          expect(yield* cacheStatus).toBe(404);
 
           yield* fs.writeFileString(path.join(context, "payload"), "first");
           const restored = yield* stack
@@ -817,8 +793,6 @@ describe.concurrent(
           expect(restored.app.applicationId).toBe(first.app.applicationId);
           expect(restored.app.configuration.image).toBe(first.app.configuration.image);
           expect(yield* buildHistory).toEqual(firstHistory);
-          // Reusing a finished image leaves the latest exported layer cache in place.
-          expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
           expect(
             (yield* waitForImage(
               restored.app.accountId,
@@ -1036,39 +1010,6 @@ describe.concurrent(
           const history = yield* buildHistory;
           expect(history.filter((build) => build.status === "Completed")).toHaveLength(1);
           expect(first.app.configuration.image).toContain(`/${repositoryName}@sha256:`);
-          const credentials = yield* Containers.createContainerRegistryCredentials({
-            accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
-            permissions: ["pull"],
-            expirationMinutes: 15,
-          });
-          const username = credentials.username ?? credentials.user;
-          assert(username);
-          const http = yield* HttpClient.HttpClient;
-          // The registry keeps serving an overwritten tag's previous target
-          // for a while (observed ~25s), so wait for the new one.
-          const cached = yield* http
-            .execute(
-              HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
-              ).pipe(
-                HttpClientRequest.basicAuth(username, credentials.password),
-                HttpClientRequest.setHeader(
-                  "Accept",
-                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-                ),
-              ),
-            )
-            .pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("4 seconds"),
-                until: (response) =>
-                  response.headers["docker-content-digest"] === first.app.hash?.digest,
-                times: 10,
-              }),
-            );
-          expect(cached.status).toBe(200);
-          expect(cached.headers["docker-content-digest"]).toBe(first.app.hash?.digest);
 
           yield* stack.destroy();
           yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-second");
@@ -1285,19 +1226,6 @@ describe.concurrent(
             );
             expect(manifest.status).toBe(200);
             expect(manifest.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
-            const cache = yield* client.execute(
-              HttpClientRequest.head(
-                `https://registry.cloudflare.com/v2/${repository}/manifests/buildcache`,
-              ).pipe(
-                HttpClientRequest.basicAuth(username, credentials.password),
-                HttpClientRequest.setHeader(
-                  "Accept",
-                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
-                ),
-              ),
-            );
-            expect(cache.status).toBe(200);
-            expect(cache.headers["docker-content-digest"]).toBe(deployed.app.hash!.digest);
             if (exported) {
               // BuildKit's registry exporter publishes an OCI index (with
               // attestations) carrying the requested platform.

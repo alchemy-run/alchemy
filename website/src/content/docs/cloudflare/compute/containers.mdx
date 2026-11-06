@@ -251,8 +251,8 @@ redeploy it.
 
 ## Cached builds by default
 
-Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds use
-registry caching without extra configuration:
+Dockerfile builds, inline Dockerfiles, and Effect-native `main` builds reuse
+published images without extra configuration:
 
 ```typescript
 export class Web extends Cloudflare.Container<Web>()("Web", {
@@ -295,23 +295,15 @@ the configured account ID. With the default registry host, a build uses:
 
 ```text
 Published build: registry.cloudflare.com/<account-id>/web:<build-hash>
-Build cache:     registry.cloudflare.com/<account-id>/web:buildcache
 Deployed image:  registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
 ```
 
 The build hash identifies the inputs; the manifest digest identifies the
 published artifact. Stages using the same repository and matching build
 inputs reuse the published image without invoking Docker. Changed inputs
-produce a new hash tag in that repository and can reuse its shared
-build-layer cache. Each stage still has its own Container application,
-runtime settings, and running instances; only images and build layers are shared.
-
-All builds targeting a repository import reusable layers from its
-`:buildcache` tag, even when their complete input hashes differ. That tag
-points to the latest exported cache, not an aggregate of every image
-ever published to the repository. A finished-image cache hit leaves the
-layer-cache tag unchanged. The Container deploys the immutable digest, not
-the mutable `buildcache` tag.
+produce a new hash tag in that repository. Each stage still has its own
+Container application, runtime settings, and running instances; only images
+are shared.
 
 For an Effect-native Container, put `publish` in the props passed to
 `.make()`, alongside `main`. Omitting `publish` keeps the default cached,
@@ -322,61 +314,49 @@ re-published, but does not enable finished-image cache reuse. Images already
 in the target registry keep their existing repository instead of being
 copied into the requested one.
 
-## Configure the build cache
+## Cache build layers
 
-`build.cache` lists where builds import layer caches from (`from`) and
-export them to (`to`), as [BuildKit cache backends](https://docs.docker.com/build/cache/backends/).
-Each entry is a `type` plus that backend's attributes, written as
-`--cache-from` / `--cache-to` `type=<type>,<attribute>=<value>,...`, so every
-backend and option BuildKit supports works: `inline`, `registry`, `local`,
-`gha`, `s3`, `azblob`, and attributes such as `mode`, `scope` or
-`compression`. A `registry` backend without a `ref` uses the repository's
-`:buildcache` tag and Alchemy's registry credentials.
-
-The default is `from: [{ type: "registry" }]` and `to: [{ type: "inline" }]`:
-the published image carries cache metadata for its own layers and is also
-tagged `:buildcache`. That covers the final stage only. In a multi-stage
-Dockerfile where an expensive step (a dependency or toolchain build) is
-followed by a `COPY` of code that changes often, every change reaches the
-final stage through `COPY --from` and reruns the whole earlier stage,
-expensive step included. Export a `mode: "max"` registry cache to keep every
-stage's layers instead:
+A changed build reuses the layers in the local BuildKit cache of the machine
+it runs on. A builder that has never built the image, such as a fresh CI
+runner, has no layers and reruns every step. Keep the layers in the registry
+with `build.cache`:
 
 ```typescript
 export class Agent extends Cloudflare.Container<Agent>()("Agent", {
   context: `${import.meta.dirname}/context`,
-  build: { cache: { to: [{ type: "registry", mode: "max" }] } },
+  build: { cache: true },
 }) {}
 ```
 
-Or keep the cache in GitHub Actions, falling back to the registry cache:
+Builds then import and export a cache at the repository's `:buildcache` tag.
+It holds every stage's layers, so a change late in a multi-stage Dockerfile
+doesn't rerun an expensive step in an earlier stage. Exporting a cache needs
+a builder that supports it: the `docker` driver with the containerd image
+store, or a `docker-container` builder (what `docker/setup-buildx-action`
+creates in CI).
+
+For another cache backend, list [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+to import (`from`) and export (`to`):
 
 ```typescript
 export class Agent extends Cloudflare.Container<Agent>()("Agent", {
   context: `${import.meta.dirname}/context`,
   build: {
     cache: {
-      from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
+      from: [{ type: "gha", scope: "agent" }],
       to: [{ type: "gha", scope: "agent", mode: "max" }],
     },
   },
 }) {}
 ```
 
-`from` and `to` default separately, and `[]` turns either off. The image
-takes the `:buildcache` tag only while `to` has an `inline` destination and
-no other destination writes to `:buildcache`. Backends other than `inline`
-need a builder that can export them: Buildx 0.26 or newer with a
-`docker-container` builder (what `docker/setup-buildx-action` creates in
-CI), or the `docker` driver with the containerd image store for `registry`.
-Credentials for `gha`, `s3` and `azblob` come from the environment, as
-BuildKit documents; attributes reach `docker`'s arguments, so never put
-secrets in them. The cache is not part of the image's content hash, so the
-first build after a change overwrites the cache in the new format.
-
-Every resource that builds an image takes the same `cache` shape:
-`Docker.Image`, `AWS.ECS`, `GCP.Run` and `Kubernetes` workloads under
-`build.cache`, `AWS.ECR.Image` and Lambda container images as `cache`.
+Each entry is BuildKit's `type=<type>,<attribute>=<value>` written as an
+object. Credentials for `gha` and `s3` come from the environment, as BuildKit
+documents; attributes reach `docker`'s arguments, so never put secrets in
+them. The cache isn't part of the image's content hash, so changing it never
+rebuilds an image. Every resource that builds an image takes the same
+`cache`: `Docker.Image`, `AWS.ECS`, `GCP.Run` and `Kubernetes` workloads under
+`build`, `AWS.ECR.Image` and Lambda container images next to `buildArgs`.
 
 ## Configure the container with `env`
 

@@ -33,7 +33,7 @@ export interface CacheBackend {
 /**
  * Where an image build imports layer caches from and exports them to.
  *
- * Exporting anything but `inline` needs a builder that supports it: a
+ * Exporting a cache needs a builder that supports it: a
  * `docker-container` Buildx builder (what `docker/setup-buildx-action`
  * creates in CI), or the `docker` driver with the containerd image store
  * for `registry`.
@@ -53,45 +53,58 @@ export const CacheBackendSchema = Schema.StructWithRest(Schema.Struct({ type: Sc
   ),
 ]);
 
-/** Decodes a {@link BuildCache}. */
-export const BuildCacheSchema = Schema.Struct({
-  from: CacheBackendSchema.pipe(Schema.Array, Schema.optionalKey),
-  to: CacheBackendSchema.pipe(Schema.Array, Schema.optionalKey),
-});
+/** Decodes a `cache` option: `true`/`false` or a {@link BuildCache}. */
+export const BuildCacheSchema = Schema.Union([
+  Schema.Boolean,
+  Schema.Struct({
+    from: CacheBackendSchema.pipe(Schema.Array, Schema.optionalKey),
+    to: CacheBackendSchema.pipe(Schema.Array, Schema.optionalKey),
+  }),
+]);
 
 /** The `cache` option of an image build. */
 export interface BuildCacheOptions {
   /**
-   * BuildKit layer caches to import and export, as
-   * [cache backends](https://docs.docker.com/build/cache/backends/). A
-   * `registry` backend without `ref` uses the `:buildcache` tag of the
-   * repository the image is published to. The cache never changes the image's
-   * content hash, so changing it takes effect on the next build.
+   * Keep the image's build layers in a remote cache, so a builder that has
+   * never built it (a fresh CI runner, another machine) skips unchanged
+   * steps. Without it, builds reuse only the local BuildKit cache of the
+   * machine they run on.
+   *
+   * `true` imports and exports a registry cache at the `:buildcache` tag of
+   * the repository the image is published to, keeping every stage's layers
+   * (`mode=max`), not only the final image's. For another backend, list
+   * [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+   * to import (`from`) and export (`to`). The cache is never part of the
+   * image's content hash, so changing it never rebuilds an image.
+   *
+   * @default false
    *
    * @example
    * ```typescript
-   * // Keep every stage's layers, not only the final stage's:
-   * build: { cache: { to: [{ type: "registry", mode: "max" }] } }
+   * // Registry cache next to the image:
+   * build: { cache: true }
    *
-   * // GitHub Actions cache, falling back to the registry cache:
+   * // GitHub Actions cache:
    * build: {
    *   cache: {
-   *     from: [{ type: "gha", scope: "app" }, { type: "registry" }],
+   *     from: [{ type: "gha", scope: "app" }],
    *     to: [{ type: "gha", scope: "app", mode: "max" }],
    *   },
    * }
    * ```
    */
-  cache?: BuildCache;
+  cache?: boolean | BuildCache;
 }
 
-/** {@link BuildCache} with defaults applied and `registry` refs filled in. */
-export interface ResolvedBuildCache {
-  readonly from: readonly CacheBackend[];
-  readonly to: readonly CacheBackend[];
-  /** The `docker.image.build` options: `--cache-from` / `--cache-to` values. */
-  readonly flags: { "cache-from": string[]; "cache-to": string[] };
-}
+/**
+ * The `cache: true` backends: every stage's layers at the repository's
+ * `:buildcache`, stored as an OCI image manifest, the format every registry
+ * accepts (ECR rejects BuildKit's default cache index).
+ */
+const registryCache: BuildCache = {
+  from: [{ type: "registry" }],
+  to: [{ type: "registry", mode: "max", "image-manifest": true, "oci-mediatypes": true }],
+};
 
 /**
  * Format one backend as a Buildx `--cache-from` / `--cache-to` value,
@@ -108,34 +121,21 @@ export const formatCacheBackend = ({ type, ...attributes }: CacheBackend): strin
     .join(",");
 
 /**
- * Apply defaults to a {@link BuildCache} and point every `registry` backend
- * without a `ref` at `ref` (the target repository's `:buildcache` tag).
- * `from` and `to` default independently.
+ * `--cache-from` / `--cache-to` values for a `cache` option. A `registry`
+ * backend without a `ref` uses `ref`, the target repository's `:buildcache`.
  */
 export const resolveBuildCache = (
-  cache: BuildCache | undefined,
-  options: {
-    /** The ref a `registry` backend without one uses. */
-    ref: string;
-    /** @default [] */
-    from?: ReadonlyArray<CacheBackend>;
-    /** @default [] */
-    to?: ReadonlyArray<CacheBackend>;
-  },
-): ResolvedBuildCache => {
-  const resolve = (backends: ReadonlyArray<CacheBackend>): CacheBackend[] =>
-    backends.map((backend) =>
-      backend.type === "registry" && backend.ref === undefined
-        ? { ...backend, ref: options.ref }
-        : backend,
+  cache: boolean | BuildCache | undefined,
+  ref: string,
+): { "cache-from": string[]; "cache-to": string[] } => {
+  const backends = cache === true ? registryCache : cache || {};
+  const format = (list: ReadonlyArray<CacheBackend> = []) =>
+    list.map((backend) =>
+      formatCacheBackend(
+        backend.type === "registry" && backend.ref === undefined ? { ...backend, ref } : backend,
+      ),
     );
-  const from = resolve(cache?.from ?? options.from ?? []);
-  const to = resolve(cache?.to ?? options.to ?? []);
-  return {
-    from,
-    to,
-    flags: { "cache-from": from.map(formatCacheBackend), "cache-to": to.map(formatCacheBackend) },
-  };
+  return { "cache-from": format(backends.from), "cache-to": format(backends.to) };
 };
 
 /** The `:buildcache` ref in the repository of an image ref (`repo:tag` or `repo@digest`). */
@@ -143,10 +143,9 @@ export const buildCacheRef = (imageRef: string): string =>
   `${repositoryFromImageRef(imageRef)}:buildcache`;
 
 /**
- * `docker.image.build` options for a `cache` option on an image published to
- * `imageUri`, with no cache by default. A `registry` backend without `ref`
- * uses the target repository's `:buildcache` tag, and the build
- * authenticates with the push `credentials` so it can import and export it.
+ * `docker.image.build` options for the `cache` option of an image published
+ * to `imageUri`. The build authenticates with the push `credentials`, so it
+ * can import and export a cache in the target registry.
  */
 export const imageBuildCacheOptions = (
   options: BuildCacheOptions | undefined,
@@ -157,9 +156,6 @@ export const imageBuildCacheOptions = (
   "cache-to"?: string[];
   credentials?: RegistryCredentials;
 } =>
-  options?.cache === undefined
-    ? {}
-    : {
-        ...resolveBuildCache(options.cache, { ref: buildCacheRef(imageUri) }).flags,
-        credentials,
-      };
+  options?.cache
+    ? { ...resolveBuildCache(options.cache, buildCacheRef(imageUri)), credentials }
+    : {};

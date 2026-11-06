@@ -609,20 +609,7 @@ export const LiveContainerProvider = () =>
             return { imageRef: published, digest };
           }
         }
-        const cacheRef = buildCacheRef(imageRef);
-        const cache = resolveBuildCache(props.build?.cache, {
-          ref: cacheRef,
-          from: [{ type: "registry" }],
-          to: [{ type: "inline" }],
-        });
-        const cacheOptions = cache.flags;
-        // An inline cache lives in the image itself, so the image takes the
-        // `:buildcache` tag, unless another destination writes that tag.
-        const tag: [string, ...string[]] =
-          cache.to.some((backend) => backend.type === "inline") &&
-          !cache.to.some((backend) => backend.ref === cacheRef)
-            ? [imageRef, cacheRef]
-            : [imageRef];
+        const cacheOptions = resolveBuildCache(props.build?.cache, buildCacheRef(imageRef));
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -693,7 +680,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag,
+                tag: imageRef,
                 context: build.context,
                 platform,
                 file: build.dockerfile,
@@ -735,7 +722,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag,
+                tag: imageRef,
                 context: contextDir,
                 platform,
               },

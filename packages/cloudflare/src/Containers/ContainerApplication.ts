@@ -243,13 +243,9 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      * instance; an explicit repository allows cross-stage reuse.
      *
      * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag and a layer-cache tag, then deploys an immutable manifest digest. The
-     * build hash and manifest digest are different identifiers. Builds
-     * targeting this repository import reusable layers from its shared
-     * `:buildcache` tag, even when their full input hashes differ. The tag
-     * points to the latest exported cache, not an aggregate of all historical
-     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
-     * `build.cache` chooses which caches are imported and exported.
+     * tag, then deploys an immutable manifest digest. The build hash and
+     * manifest digest are different identifiers. With `build.cache: true`,
+     * builds also keep their layers at this repository's `:buildcache` tag.
      *
      * Applications and stages in the same account can share `"web"`. Matching
      * build inputs reuse the published image; changed inputs produce another
@@ -271,8 +267,6 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      *
      * // Published build:
      * // registry.cloudflare.com/<account-id>/web:<build-hash>
-     * // Shared build-layer cache:
-     * // registry.cloudflare.com/<account-id>/web:buildcache
      * // Deployed image (app.configuration.image):
      * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
      * ```
@@ -359,9 +353,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * Bundler configuration for {@link main}. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
    * parts prune more aggressively. List extra packages with
-   * `pure.packages`, or disable with `pure: false`. `cache` configures the
-   * image build's BuildKit layer cache; it defaults to importing the
-   * repository's `:buildcache` tag and exporting an inline cache.
+   * `pure.packages`, or disable with `pure: false`. `cache: true` keeps the
+   * image build's layers in the repository's `:buildcache` tag.
    */
   build?: Bundle.BundleConfig & BuildCacheOptions;
 }
@@ -478,7 +471,7 @@ export interface DurableObjectContainerProps
   context?: string;
   /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
   dockerfile?: string | InlineDockerfile;
-  /** Image publication and build-cache configuration. */
+  /** Image publication configuration. */
   publish?: ContainerApplicationPropsBase["publish"];
   /**
    * Maximum wait for Cloudflare to prepare the published image, including API calls.

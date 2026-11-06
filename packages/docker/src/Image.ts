@@ -164,11 +164,8 @@ export interface Image extends Resource<
  *   name: "registry.example.com/app",
  *   build: {
  *     context: "./app",
- *     // `registry` without `ref` uses registry.example.com/app:buildcache.
- *     cache: {
- *       from: [{ type: "registry" }],
- *       to: [{ type: "registry", mode: "max" }],
- *     },
+ *     // Every stage's layers at registry.example.com/app:buildcache.
+ *     cache: true,
  *   },
  *   // Authenticates the base-image pull and cache import/export, then the push.
  *   registry: {
@@ -221,10 +218,11 @@ export const ImageProvider = () =>
           target: props.build.target,
           "build-arg": props.build.args,
           secrets: props.build.secrets,
-          ...resolveBuildCache(props.build.cache, {
-            // A `registry` backend without `ref` caches next to the image.
-            ref: buildCacheRef(props.registry ? withRegistryHost(ref, props.registry) : ref),
-          }).flags,
+          // The registry cache lives next to the image.
+          ...resolveBuildCache(
+            props.build.cache,
+            buildCacheRef(props.registry ? withRegistryHost(ref, props.registry) : ref),
+          ),
           args: props.build.options,
           engineContext,
           // Base images and registry caches may live in the same registry;

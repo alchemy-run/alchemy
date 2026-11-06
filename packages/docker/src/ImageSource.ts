@@ -215,7 +215,7 @@ export const validateDockerfileBuild = (
           source: source.main !== undefined ? "main" : "image",
         }),
       )
-    : source.main === undefined && source.image !== undefined && source.build?.cache !== undefined
+    : source.main === undefined && source.image !== undefined && source.build?.cache
       ? Effect.die(new DockerfileBuildConflict({ id, source: "image", option: "cache" }))
       : Effect.void;
 
@@ -678,7 +678,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
           ...imageBuildCacheOptions(
             source.build,
             imageUri,
-            source.build?.cache === undefined ? undefined : yield* target.credentials,
+            source.build?.cache ? yield* target.credentials : undefined,
           ),
         });
       }

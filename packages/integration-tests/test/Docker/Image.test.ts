@@ -319,8 +319,8 @@ describe(
             docker.image.remove(`${name}:v1`, true).pipe(Effect.ignore),
           );
           const root = yield* dockerfileContext("FROM busybox\nRUN echo cached > /layer\n");
-          // No `ref`: both backends use `<name>:buildcache`, which only the
-          // registry credentials can read and write.
+          // `<name>:buildcache`, which only the registry credentials can
+          // read and write.
           yield* stack.deploy(
             Docker.Image("cache-app", {
               name,
@@ -328,10 +328,7 @@ describe(
               registry: registry.credentials,
               build: {
                 context: root,
-                cache: {
-                  from: [{ type: "registry" }],
-                  to: [{ type: "registry", mode: "max" }],
-                },
+                cache: true,
               },
             }),
           );

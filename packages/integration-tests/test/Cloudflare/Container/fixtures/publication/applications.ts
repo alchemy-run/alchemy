@@ -43,7 +43,7 @@ export const maxRegistryCacheApplication = (context: string) =>
   Effect.gen(function* () {
     const app = yield* Cloudflare.Container("MaxRegistryCachePublication", {
       context,
-      build: { cache: { to: [{ type: "registry", mode: "max" }] } },
+      build: { cache: true },
       maxInstances: 2,
     }).Application;
     return { app };

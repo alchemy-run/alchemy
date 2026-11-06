@@ -1,4 +1,4 @@
-import { type BuildCache, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -76,8 +76,8 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform?: string;
     /** Docker build arguments. */
     buildArgs?: Record<string, string>;
-    /** BuildKit layer caches; a `registry` backend without `ref` uses `<repositoryUri>:buildcache`. */
-    cache?: BuildCache;
+    /** BuildKit layer cache; `true` keeps it at `<repositoryUri>:buildcache`. */
+    cache?: BuildCacheOptions["cache"];
     /** Additional arguments appended to `docker image build`. */
     args?: string[];
   },
@@ -139,14 +139,16 @@ export interface ImageProps {
    */
   buildArgs?: Record<string, string>;
   /**
-   * BuildKit layer caches to import and export, as
-   * [cache backends](https://docs.docker.com/build/cache/backends/). A
-   * `registry` backend without `ref` uses the repository's `:buildcache`
-   * tag. The cache is not part of the content hash, so changing it does not
-   * rebuild the image.
-   * @default no cache
+   * Keep build layers in a remote cache so a fresh builder (a new CI runner)
+   * skips unchanged steps. `true` keeps every stage's layers at the
+   * repository's `:buildcache` tag; pass `{ from, to }` with
+   * [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+   * for another backend; an explicit ECR registry backend needs
+   * `"image-manifest": true` and `"oci-mediatypes": true`, which `true`
+   * sets. The cache is not part of the content hash.
+   * @default false
    */
-  cache?: BuildCache;
+  cache?: BuildCacheOptions["cache"];
 }
 
 export interface Image extends Resource<
