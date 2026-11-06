@@ -57,6 +57,14 @@ describe("hostname grammar", () => {
   });
 });
 
+describe("names in LAN mode", () => {
+  it("end in .local", () => {
+    expect(Effect.runSync(hostnameOf(routedName("Api", "dev_alice", "myapp"), "local"))).toBe(
+      "dev-alice.api.myapp.local",
+    );
+  });
+});
+
 describe("Portless.Origin", () => {
   it("is the origin of the service a string domain names", () => {
     const origin = Portless.Origin("Web", { proxy: { domain: "myapp" } }).pipe(
@@ -74,6 +82,13 @@ describe("Portless.Origin", () => {
       Effect.runSync,
     );
     expect(origin).toBe("https://dev-alice.web.myapp.localhost:8443");
+  });
+
+  it("ends in .local for a proxy in LAN mode", () => {
+    const origin = Portless.Origin("Api", {
+      proxy: { domain: "myapp", port: 8443, tld: "local" },
+    }).pipe(withStage("dev_alice"), withEnv({}), Effect.runSync);
+    expect(origin).toBe("https://dev-alice.api.myapp.local:8443");
   });
 
   it("is an Output when the proxy's domain is one", () => {
