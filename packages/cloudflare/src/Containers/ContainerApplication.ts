@@ -84,6 +84,39 @@ export namespace ContainerApplication {
     kind?: "full_auto";
     stepPercentage?: number;
   }
+  /**
+   * One BuildKit cache backend, written as `--cache-from` / `--cache-to`
+   * `type=<type>,<attribute>=<value>,...`. Every attribute other than `type`
+   * is passed through unchanged, so any backend and option BuildKit supports
+   * works without changes here: `inline`, `registry`, `local`, `gha`, `s3`,
+   * `azblob`, and their `mode`, `scope`, `compression`, ... attributes.
+   * Attributes set to `undefined` are left out.
+   *
+   * A `registry` backend without a `ref` uses the repository's `:buildcache`
+   * tag, with the same credentials Alchemy publishes with. Other backends
+   * authenticate the way BuildKit documents for them (for `gha` and `s3`,
+   * environment variables); never put credentials in attributes, because
+   * they reach `docker`'s argv.
+   *
+   * @see https://docs.docker.com/build/cache/backends/
+   */
+  export interface CacheBackend {
+    type: "inline" | "registry" | "local" | "gha" | "s3" | "azblob" | (string & {});
+    [attribute: string]: string | number | boolean | undefined;
+  }
+  /** Where image builds import layer caches from and export them to. */
+  export interface BuildCache {
+    /**
+     * Cache sources, imported in order (`--cache-from`). `[]` imports none.
+     * @default [{ type: "registry" }] (the repository's `:buildcache` tag)
+     */
+    from?: CacheBackend[];
+    /**
+     * Cache destinations (`--cache-to`). `[]` exports none.
+     * @default [{ type: "inline" }]
+     */
+    to?: CacheBackend[];
+  }
 }
 
 /**
@@ -237,17 +270,18 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      * Alchemy lowercases the name and adds the registry host and account ID:
      * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
      * The container application's name is independent of this repository name.
-     * Omitting `publish` uses the application's physical name instead and still
-     * enables caching. Generated names are scoped to the stage and resource
-     * instance; an explicit repository allows cross-stage reuse.
+     * Omitting `repository` uses the application's physical name instead and
+     * still enables caching. Generated names are scoped to the stage and
+     * resource instance; an explicit repository allows cross-stage reuse.
      *
      * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag and an inline layer-cache tag, then deploys an immutable manifest
-     * digest. The build hash and manifest digest are different identifiers.
-     * Builds targeting this repository import reusable layers from its shared
-     * `:buildcache` tag, even when their full input hashes differ. The tag points
-     * to the latest exported inline cache, not an aggregate of all historical
-     * images. A finished-image cache hit leaves this layer-cache tag unchanged.
+     * tag and a layer-cache tag (see {@link cache}), then deploys an immutable
+     * manifest digest. The build hash and manifest digest are different
+     * identifiers. Builds targeting this repository import reusable layers from
+     * its shared `:buildcache` tag, even when their full input hashes differ.
+     * The tag points to the latest exported cache, not an aggregate of all
+     * historical images. A finished-image cache hit leaves this layer-cache tag
+     * unchanged.
      *
      * Applications and stages in the same account can share `"web"`. Matching
      * build inputs reuse the published image; changed inputs produce another
@@ -275,7 +309,47 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
      * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
      * ```
      */
-    repository: string;
+    repository?: string;
+    /**
+     * Layer-cache sources and destinations for Dockerfile and Effect-native
+     * builds, as BuildKit cache backends. Any backend works; `from` and `to`
+     * are independent, and each defaults separately.
+     *
+     * By default builds import `:buildcache` and export an inline cache: the
+     * published image carries cache metadata for its own layers and is also
+     * tagged `:buildcache`. An inline cache only covers the final stage. In a
+     * multi-stage Dockerfile, a change that reaches the final stage through
+     * `COPY --from` reruns every step of the earlier stage, including expensive
+     * steps the change did not touch.
+     *
+     * The image takes the `:buildcache` tag only while `to` has an `inline`
+     * destination and no other destination writes to `:buildcache`. Exporting
+     * anything but `inline` needs a builder that supports it: Buildx 0.26 or
+     * newer with a `docker-container` builder, or the `docker` driver with the
+     * containerd image store, for `registry`. Changing destinations takes effect
+     * on the next build, which overwrites the cache in the new format.
+     *
+     * @example
+     * ```typescript
+     * // Keep every stage's layers in the repository's `:buildcache` tag:
+     * const app = yield* Cloudflare.Container("Agent", {
+     *   context: ".",
+     *   publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+     * }).Application;
+     *
+     * // GitHub Actions cache, falling back to the registry cache:
+     * const ci = yield* Cloudflare.Container("Agent", {
+     *   context: ".",
+     *   publish: {
+     *     cache: {
+     *       from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
+     *       to: [{ type: "gha", scope: "agent", mode: "max" }],
+     *     },
+     *   },
+     * }).Application;
+     * ```
+     */
+    cache?: ContainerApplication.BuildCache;
   };
   /**
    * Environment variables passed to the container runtime.
