@@ -341,6 +341,10 @@ test.provider(
         legacy["Billing.OwnersView"]!,
       ];
       yield* untilListed(written, (count) => count > 0);
+      // An account and its view row written seconds before the upgrade: Cloudflare
+      // doesn't list them yet, the model's directory does.
+      yield* call(url, "/Billing/open/a-9/zoe", "POST");
+      yield* poll(url, "/Billing/owners/a-9", (body) => (body as any)?.owner === "zoe");
 
       // Read the account throughout the upgrade: Worker isolates still on the
       // old code reach the old class, which forwards to the shared one.
@@ -367,10 +371,12 @@ test.provider(
       expect(new Set(answers.map((answer) => answer.body))).toEqual(
         new Set([JSON.stringify({ owner: "sam" })]),
       );
-      const moving = yield* namespacesOf(scriptName);
-      // the old classes stay, next to the model's class
-      expect(Object.keys(moving).sort()).toEqual([...Object.keys(legacy), "Billing.Domain"].sort());
-      for (const [cls, id] of Object.entries(legacy)) expect(moving[cls]).toBe(id);
+      // One deploy: every old class is gone but the saga's. Its runs are listed
+      // nowhere before this code, so it waits for the passes over what Cloudflare lists.
+      expect(yield* doBindings(scriptName)).toEqual({
+        "Billing.Domain": "Billing.Domain",
+        "Billing.ApproveWorkflow": "Billing.ApproveWorkflow",
+      });
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
 
       // The deploy waited for the move: the account, the view row, the saga
@@ -379,37 +385,39 @@ test.provider(
 
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
+      // written just before the upgrade, and moved though its class is gone
+      expect(yield* call(url, "/Billing/state/a-9")).toEqual({ owner: "zoe" });
+      expect(yield* call(url, "/Billing/owners/a-9")).toEqual({ owner: "zoe" });
       expect((yield* call(url, "/saga/s-1")) as any).toMatchObject({ _tag: "Running" });
       // the run started before the upgrade finishes after it
       yield* call(url, "/approve/s-1/lee", "POST");
       yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Completed");
       expect(yield* call(url, "/Billing/state/s-1")).toEqual({ owner: "kim:lee" });
-      // new writes land in the shared class
+      // new writes land in the model's class
       yield* call(url, "/Billing/open/a-2/ann", "POST");
       yield* poll(url, "/Billing/owners/a-2", (body) => (body as any)?.owner === "ann");
 
-      // A redeploy right away keeps the old classes: Cloudflare may not list
-      // every old object yet.
+      // A redeploy right away keeps the saga's class: Cloudflare may not list
+      // every run yet.
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedNextWorker };
         }),
       );
-      expect(Object.keys(yield* namespacesOf(scriptName)).sort()).toEqual(
-        Object.keys(moving).sort(),
-      );
+      expect(Object.keys(yield* doBindings(scriptName)).sort()).toEqual([
+        "Billing.ApproveWorkflow",
+        "Billing.Domain",
+      ]);
 
       // Record a pass from long ago, as if the move started earlier: with the
-      // passes the deploys ran, the next upload deletes every old class.
-      yield* backdatePasses(scriptName, Object.keys(legacy));
+      // passes the deploys ran, the next upload deletes the saga's class too.
+      yield* backdatePasses(scriptName, ["Billing.ApproveWorkflow"]);
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedWorker };
         }),
       );
-      expect(yield* namespacesOf(scriptName)).toEqual({
-        "Billing.Domain": moving["Billing.Domain"],
-      });
+      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
       expect(
         (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
       ).toEqual(["alchemy:domain:v1"]);
