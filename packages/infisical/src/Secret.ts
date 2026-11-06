@@ -52,7 +52,9 @@ export type Secret = Resource<"Infisical.Secret", SecretProps, SecretAttributes,
 /**
  * Writes a shared secret at its exact key in an Infisical environment and
  * folder, so tools reading Infisical can consume values produced by a stack.
- * Personal overrides of the same key are never read, written, or deleted.
+ * Creating and updating the shared row never touches personal overrides.
+ * Deleting it also deletes every personal override of the same key in that
+ * folder and environment, as Infisical's shared-secret deletion does.
  * The deployment identity needs permission to read values and metadata and
  * to create, update, and delete shared secrets in the target folder.
  *
@@ -83,7 +85,7 @@ export type Secret = Resource<"Infisical.Secret", SecretProps, SecretAttributes,
  */
 export const Secret = Resource<Secret>("Infisical.Secret");
 
-/** The secret declaration is invalid or its shared row did not converge. */
+/** The secret declaration is invalid, requires approval, or cannot be reconciled. */
 export class SecretError extends Data.TaggedError("SecretError")<{
   readonly message: string;
 }> {}
@@ -133,6 +135,22 @@ export const SecretProvider = () =>
         new SecretError({ message: `Infisical secret ${name}: ${action}` });
       const operation = <A, E>(effect: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>) =>
         effect.pipe(InfisicalApi.Retry.none, api);
+      const applied =
+        (name: string, action: string) =>
+        (
+          response:
+            | InfisicalApi.CreateSecretV4Response
+            | InfisicalApi.UpdateSecretV4Response
+            | InfisicalApi.DeleteSecretV4Response,
+        ) =>
+          "approval" in response
+            ? Effect.fail(
+                error(
+                  name,
+                  `${action} requires approval ${response.approval.id}; approve it in Infisical and deploy again`,
+                ),
+              )
+            : Effect.void;
       const decode = (props: SecretProps) =>
         Schema.decodeEffect(SecretPropsSchema)(props).pipe(
           Effect.mapError(() => error(props.name, "invalid declaration")),
@@ -148,13 +166,29 @@ export const SecretProvider = () =>
           Effect.catchTag("NotFound", () => Effect.undefined),
           operation,
         );
+      const checkOwnership = Effect.fnUntraced(function* (
+        id: string,
+        live: InfisicalApi.GetSecretByNameV4ResponseSecret,
+        output: SecretAttributes | undefined,
+      ) {
+        const owned = yield* hasAlchemyTags(id, metadataRecord(live));
+        if (output && live.id !== output.id && !owned) {
+          return yield* error(
+            output.name,
+            `shared row ${live.id} is not owned by this stack; ` +
+              "delete it, or remove this resource with alchemy state rm " +
+              "and deploy with --adopt to adopt it",
+          );
+        }
+        return owned;
+      });
 
       return {
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, olds, output }) {
           const live = yield* get(output ?? (yield* decode(olds)));
           if (!live) return undefined;
-          const owned = yield* hasAlchemyTags(id, metadataRecord(live));
+          const owned = yield* checkOwnership(id, live, output);
           const attrs = attributes(live);
           return owned ? attrs : Unowned(attrs);
         }),
@@ -188,9 +222,10 @@ export const SecretProvider = () =>
             ? ({ action: "update" } as const)
             : undefined;
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
           const props = yield* decode(news);
           const live = yield* get(props);
+          const ownedByStack = live ? yield* checkOwnership(id, live, output) : false;
           const value = Redacted.value(props.value);
           const tags = {
             ...(yield* createInternalTags(id)),
@@ -203,13 +238,11 @@ export const SecretProvider = () =>
               secretValue: value,
               secretComment: props.comment,
               secretMetadata,
-            }).pipe(operation);
+            }).pipe(Effect.flatMap(applied(props.name, "create")), operation);
           } else {
             const valueChanged = live.secretValueHidden || live.secretValue !== value;
             const commentChanged = live.secretComment !== props.comment;
-            const owned =
-              (yield* hasAlchemyTags(id, metadataRecord(live))) &&
-              metadataRecord(live)[instanceTag] === instanceId;
+            const owned = ownedByStack && metadataRecord(live)[instanceTag] === instanceId;
             if (valueChanged || commentChanged || !owned) {
               yield* InfisicalApi.updateSecretV4({
                 ...identity(props),
@@ -223,7 +256,7 @@ export const SecretProvider = () =>
                       ],
                     }
                   : {}),
-              }).pipe(operation);
+              }).pipe(Effect.flatMap(applied(props.name, "update")), operation);
             }
           }
           const updated = yield* get(props);
@@ -246,8 +279,8 @@ export const SecretProvider = () =>
           const live = yield* get(output);
           if (!live || metadataRecord(live)[instanceTag] !== instanceId) return;
           yield* InfisicalApi.deleteSecretV4(identity(output)).pipe(
+            Effect.flatMap(applied(output.name, "delete")),
             Effect.catchTag("NotFound", () => Effect.void),
-            Effect.asVoid,
             operation,
           );
         }),
