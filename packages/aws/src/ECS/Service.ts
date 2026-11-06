@@ -2561,29 +2561,49 @@ const observeServiceConvergence = (input: {
       };
     }
 
-    const targetGroupArns = [
-      ...new Set(
-        (service.loadBalancers ?? []).flatMap((loadBalancer) =>
-          loadBalancer.targetGroupArn ? [loadBalancer.targetGroupArn] : [],
-        ),
-      ),
+    // A load balancer is one target "slot". With native blue/green, ECS
+    // alternates the tasks between the configured group and
+    // `advancedConfiguration.alternateTargetGroupArn` while DescribeServices
+    // keeps reporting the configured one, so a slot counts the targets of
+    // both groups — it converges wherever ECS put the tasks.
+    const targetGroupSlots = [
+      ...new Map(
+        (service.loadBalancers ?? []).flatMap((loadBalancer) => {
+          const arns = [
+            ...new Set(
+              [
+                loadBalancer.targetGroupArn,
+                loadBalancer.advancedConfiguration?.alternateTargetGroupArn,
+              ].filter((arn): arn is string => arn !== undefined && arn !== ""),
+            ),
+          ];
+          return arns.length > 0 ? [[arns.join("|"), arns] as const] : [];
+        }),
+      ).values(),
     ];
     const targetGroups = yield* Effect.forEach(
-      targetGroupArns,
-      (targetGroupArn) =>
-        elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
-          Effect.map((health) => ({
-            missing: false,
-            states: (health.TargetHealthDescriptions ?? []).map(
-              (target) => target.TargetHealth?.State,
+      targetGroupSlots,
+      (arns) =>
+        Effect.forEach(arns, (targetGroupArn) =>
+          elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
+            Effect.map((health) => ({
+              missing: false,
+              states: (health.TargetHealthDescriptions ?? []).map(
+                (target) => target.TargetHealth?.State,
+              ),
+            })),
+            Effect.catchTag("TargetGroupNotFoundException", () =>
+              Effect.succeed({
+                missing: true,
+                states: [] as (string | undefined)[],
+              }),
             ),
-          })),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed({
-              missing: true,
-              states: [] as (string | undefined)[],
-            }),
           ),
+        ).pipe(
+          Effect.map((groups) => ({
+            missing: groups.every((group) => group.missing),
+            states: groups.flatMap((group) => group.states),
+          })),
         ),
       { concurrency: 4 },
     );
@@ -3437,22 +3457,32 @@ export const ServiceProvider = () =>
           };
 
           if (!observed?.serviceArn) {
-            const created = yield* ecs.createService({
-              ...mutableInput(news, task, network, securityGroups),
-              // With autoscaling, `desiredCount` is only the initial size
-              // (defaulting to `scaling.min`) — the scalable target owns it
-              // from then on.
-              desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
-              serviceName,
-              cluster: clusterArn,
-              loadBalancers: loadBalancersOf(news, task),
-              serviceRegistries: news.serviceRegistries,
-              deploymentController: news.deploymentController,
-              schedulingStrategy: news.schedulingStrategy,
-              role: news.role,
-              tags: toEcsTags(desiredTags),
-              enableECSManagedTags: news.enableECSManagedTags ?? true,
-            });
+            const created = yield* ecs
+              .createService({
+                ...mutableInput(news, task, network, securityGroups),
+                // With autoscaling, `desiredCount` is only the initial size
+                // (defaulting to `scaling.min`) — the scalable target owns it
+                // from then on.
+                desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
+                serviceName,
+                cluster: clusterArn,
+                loadBalancers: loadBalancersOf(news, task),
+                serviceRegistries: news.serviceRegistries,
+                deploymentController: news.deploymentController,
+                schedulingStrategy: news.schedulingStrategy,
+                role: news.role,
+                tags: toEcsTags(desiredTags),
+                enableECSManagedTags: news.enableECSManagedTags ?? true,
+              })
+              .pipe(
+                Effect.retry({
+                  // ECS assumes `advancedConfiguration.roleArn` (blue/green) to
+                  // validate the target groups. A role created in the same apply
+                  // may not have propagated through IAM yet — retry bounded.
+                  while: (e) => e._tag === "ServiceRoleNotAssumable",
+                  schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
+                }),
+              );
             const service = created.service;
             if (!service?.serviceArn) {
               return yield* Effect.die(new Error("createService returned no service"));
@@ -3524,11 +3554,14 @@ export const ServiceProvider = () =>
             .pipe(
               // The service may still be transitioning (e.g. a prior
               // deployment settling). updateService rejects with
-              // ServiceNotActiveException until it returns to ACTIVE — retry
-              // bounded.
+              // ServiceNotActiveException until it returns to ACTIVE. ECS also
+              // assumes `advancedConfiguration.roleArn` (blue/green) to validate
+              // the target groups, and a role created in the same apply may not
+              // have propagated through IAM yet. Retry both, bounded.
               Effect.retry({
-                while: (e) => e._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
+                while: (e) =>
+                  e._tag === "ServiceNotActiveException" || e._tag === "ServiceRoleNotAssumable",
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
           yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);

@@ -42,6 +42,22 @@ const checkTransactionOwner = (transaction: ActiveStorageTransaction, allowRolle
         ),
   );
 
+/**
+ * The transaction a fiber outside it must respect. A transaction whose
+ * callback has finished stays registered until the native transaction
+ * commits or rolls back; a fiber that never joined it waits for that, as
+ * workerd's input gate makes events and timers wait.
+ */
+const settledTransaction = (
+  storage: cf.DurableObjectStorage,
+): Effect.Effect<ActiveStorageTransaction | undefined> =>
+  Effect.suspend(() => {
+    const transaction = activeStorageTransactions.get(storage);
+    return transaction === undefined || transaction.active
+      ? Effect.succeed(transaction)
+      : Effect.promise(() => transaction.settled).pipe(Effect.andThen(settledTransaction(storage)));
+  });
+
 /** @internal Joins an owned transaction, or starts a native transaction. */
 function withStorageTransaction<A, E, R>(
   storage: cf.DurableObjectStorage,
@@ -57,7 +73,7 @@ function withStorageTransaction<A, E, R>(
 ): Effect.Effect<A, E | DurableObjectStorageError, R> {
   return Effect.gen(function* () {
     const transactions = yield* ActiveStorageTransactions;
-    const existing = transactions.get(storage) ?? activeStorageTransactions.get(storage);
+    const existing = transactions.get(storage) ?? (yield* settledTransaction(storage));
     const evaluate = (transaction: ActiveStorageTransaction) =>
       Effect.suspend(() =>
         typeof body === "function"
@@ -97,6 +113,7 @@ function withStorageTransaction<A, E, R>(
         let native: Promise<A> | undefined;
         let failure: Exit.Failure<A, E> | undefined;
         let currentTransaction: ActiveStorageTransaction | undefined;
+        const settlement = Promise.withResolvers<void>();
         const release = () => {
           if (currentTransaction !== undefined) {
             currentTransaction.active = false;
@@ -104,6 +121,7 @@ function withStorageTransaction<A, E, R>(
               activeStorageTransactions.delete(storage);
             }
           }
+          settlement.resolve();
         };
 
         yield* Effect.addFinalizer(
@@ -159,6 +177,7 @@ function withStorageTransaction<A, E, R>(
                 rolledBack: false,
                 alarmTablesEnsured: false,
                 alarmDirty: false,
+                settled: settlement.promise,
               };
               currentTransaction = transaction;
               activeStorageTransactions.set(storage, transaction);
@@ -492,12 +511,14 @@ export const fromDurableObjectStorage = (
   storage: cf.DurableObjectStorage,
 ): DurableObjectStorage => {
   const checkOwner = Effect.withFiber((fiber) => {
-    const transaction =
-      fiber.getRef(ActiveStorageTransactions).get(storage) ??
-      activeStorageTransactions.get(storage);
-    return transaction === undefined
-      ? Effect.void
-      : checkTransactionOwner(transaction).pipe(Effect.orDie);
+    const owned = fiber.getRef(ActiveStorageTransactions).get(storage);
+    return (owned === undefined ? settledTransaction(storage) : Effect.succeed(owned)).pipe(
+      Effect.flatMap((transaction) =>
+        transaction === undefined
+          ? Effect.void
+          : checkTransactionOwner(transaction).pipe(Effect.orDie),
+      ),
+    );
   });
   const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
   const useAlarm = <A>(effect: Effect.Effect<A>) =>
