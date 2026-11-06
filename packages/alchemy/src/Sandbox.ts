@@ -1,8 +1,10 @@
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as HttpClientError from "effect/http/HttpClientError";
-import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { RuntimeContext } from "./RuntimeContext.ts";
@@ -131,14 +133,57 @@ export interface SandboxPty<E, Options = PtyOptions> {
   readonly pty: Pty<E, Options>;
 }
 
-/** Call a port inside the sandbox; the request's path and query are kept. */
-export interface SandboxFetch<E> {
+/**
+ * A port inside the sandbox. `fetch` keeps the request's method, path, query,
+ * headers and body, and sends it to the port. Give it a client request to
+ * call the port, or the server request a handler received to proxy it there
+ * (a Cloudflare Worker in front of a sandbox), and get the matching response
+ * back. Bodies stream both ways.
+ *
+ * Providers widen it with what their platform has for a port (a public
+ * `url`, a preview token, a TCP `connect`).
+ */
+export interface SandboxPort<E> {
   fetch(
-    port: number,
     request: HttpClientRequest.HttpClientRequest,
   ): Effect.Effect<
     HttpClientResponse.HttpClientResponse,
     E | HttpClientError.HttpClientError,
-    RuntimeContext | Scope.Scope
+    RuntimeContext
+  >;
+  fetch(
+    request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    E | HttpClientError.HttpClientError,
+    RuntimeContext
   >;
 }
+
+/** `getTcpPort` on a handle, named as on Cloudflare Containers. */
+export interface SandboxPorts<E, Port extends SandboxPort<E> = SandboxPort<E>> {
+  getTcpPort(port: number): Effect.Effect<Port, E, RuntimeContext>;
+}
+
+/**
+ * Builds a {@link SandboxPort}'s `fetch` from a provider's client call, so
+ * proxying a server request works the same on every platform: the server
+ * request becomes a client request with its body streamed, and the response
+ * streams back as a server response.
+ */
+export const portFetch = <E>(
+  send: (
+    request: HttpClientRequest.HttpClientRequest,
+  ) => Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    E | HttpClientError.HttpClientError,
+    RuntimeContext
+  >,
+): SandboxPort<E>["fetch"] =>
+  ((request: HttpClientRequest.HttpClientRequest | HttpServerRequest.HttpServerRequest) =>
+    HttpClientRequest.isHttpClientRequest(request)
+      ? send(request)
+      : Effect.map(
+          send(HttpServerRequest.toClientRequest(request)),
+          HttpServerResponse.fromClientResponse,
+        )) as SandboxPort<E>["fetch"];
