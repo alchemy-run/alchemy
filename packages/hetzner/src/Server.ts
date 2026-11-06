@@ -216,6 +216,8 @@ export type Server = Resource<
     volumeIds: number[];
     /** Attached private Network IDs. */
     networkIds: number[];
+    /** The Server's address on each attached private Network, in {@link networkIds} order. */
+    privateIps: string[];
     /** Firewall IDs applied to the public NIC. */
     firewallIds: number[];
     /** Placement Group ID, or `undefined` if unassigned. */
@@ -392,6 +394,10 @@ const toAttrs = (server: CloudServer): Server["Attributes"] => ({
   networkIds: server.private_net
     .map((item) => item.network)
     .filter((id): id is number => typeof id === "number"),
+  privateIps: server.private_net
+    .filter((item) => typeof item.network === "number")
+    .map((item) => item.ip)
+    .filter((ip): ip is string => typeof ip === "string"),
   firewallIds: (server.public_net.firewalls ?? [])
     .map((item) => item.id)
     .filter((id): id is number => typeof id === "number"),

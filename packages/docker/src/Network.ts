@@ -89,7 +89,7 @@ export const NetworkProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerEngineContextName(olds?.context);
-          const name = yield* dockerPhysicalName(id, olds, instanceId);
+          const name = yield* networkName(id, olds, instanceId);
           const info = yield* docker.network
             .inspect(name, context)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
@@ -149,8 +149,16 @@ export const NetworkProvider = () =>
     }),
   );
 
+/**
+ * Swarm (overlay) network names are capped at 63 characters, like service
+ * names; other drivers accept much longer ones. An overlay network over the
+ * cap could never be created, so capping it renames nothing.
+ */
+const networkName = (id: string, props: NetworkProps | undefined, instanceId: string) =>
+  dockerPhysicalName(id, props, instanceId, props?.driver === "overlay" ? 63 : undefined);
+
 const makeNetworkArgs = (id: string, props: NetworkProps | undefined, instanceId: string) =>
-  dockerPhysicalName(id, props, instanceId).pipe(
+  networkName(id, props, instanceId).pipe(
     Effect.map((name): Parameters<Docker["Service"]["network"]["create"]>[0] => ({
       name,
       driver: props?.driver ?? "bridge",
