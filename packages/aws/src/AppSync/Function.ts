@@ -62,8 +62,27 @@ export interface AppSyncFunction extends Resource<
     dataSourceName: string;
   },
   never,
-  Providers
+  Providers,
+  AppSyncFunctionLookup
 > {}
+
+/**
+ * Props for {@link AppSyncFunction.lookup}: find a function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type AppSyncFunctionLookup =
+  | {
+      /** The API the function belongs to. */
+      apiId: string;
+      /** The id of the existing function. */
+      functionId: string;
+    }
+  | {
+      /** The API the function belongs to. */
+      apiId: string;
+      /** The name of the existing function. */
+      name: string;
+    };
 
 /**
  * An AppSync pipeline function — a reusable step composed by `PIPELINE`
@@ -85,6 +104,16 @@ export interface AppSyncFunction extends Resource<
  * });
  * // reference from a PIPELINE resolver:
  * // pipelineFunctionIds: [step.functionId]
+ * ```
+ *
+ * ### Looking up an existing function
+ * `AppSyncFunction.lookup` references a function Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` with `functionId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing function
+ * ```typescript
+ * const authorize = AWS.AppSync.Function.lookup({ apiId, name: "authorize" });
  * ```
  *
  * @resource
@@ -218,6 +247,13 @@ export const FunctionProvider = () =>
         // doctrine.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* (props) {
+          const fn =
+            "functionId" in props
+              ? yield* getFunctionSafe(props.apiId, props.functionId)
+              : yield* findFunctionByName(props.apiId, props.name);
+          return fn?.functionId == null ? undefined : toAttributes(props.apiId, fn);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const apiId = output?.apiId ?? olds?.apiId;
           if (apiId === undefined) return undefined;

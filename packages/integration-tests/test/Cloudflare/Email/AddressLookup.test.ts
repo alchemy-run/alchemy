@@ -4,9 +4,9 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
+import { expectDeployFails } from "../../lookup.ts";
 import { testName } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { expectDeployFails } from "../Utils/Lookup.ts";
 import { emailRoutingScoped } from "./scope.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

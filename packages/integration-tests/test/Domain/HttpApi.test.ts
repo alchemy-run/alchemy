@@ -81,7 +81,6 @@ class Wallet extends Domain.Aggregate("Wallet", {
     Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount, at: e.at }),
   },
   reply: { Deposit: (s) => ({ balance: s.balance, at: s.at }) },
-  read: { middleware: [Session] },
 }) {}
 
 /** Only the wallet's owner reads its balance. */
@@ -95,12 +94,18 @@ class Balance extends Domain.View(
     state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
     initial: { owner: "", balance: 0 },
     evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
-    validate: Effect.fn(function* (_request, s) {
-      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
-    }),
   },
   { httpApiCacheControl: "private, max-age=5" },
 ) {}
+
+/** Who may read each key of Balance. */
+const BalanceLive = Balance.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, s) {
+      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
+    }),
+  ),
+);
 
 // ---------------------------------------------------------------- the HTTP surface
 
@@ -181,7 +186,6 @@ class Wallets extends Domain.Model("HttpWallets", {
 class WalletApi extends Domain.Api("WalletApi", {
   model: Wallets,
   commands: ["Deposit"],
-  aggregates: ["Wallet"],
 }) {}
 class LedgerApi extends Domain.Api("LedgerApi", {
   model: Wallets,
@@ -192,9 +196,6 @@ class LedgerApi extends Domain.Api("LedgerApi", {
 /** Every call the Api serves, listed in a different order than the Api serves them. */
 const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
   expose: [
-    "Wallet.events",
-    "Wallet.watch",
-    "Wallet.get",
     "Balance.snapshot",
     "Balance.list",
     "Balance.events",
@@ -210,7 +211,7 @@ const Hosted = Layer.mergeAll(
   SessionLive,
   SignedSessionLive,
   ServerCredential,
-  Wallets.layer(RatesLive),
+  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
 ).pipe(Layer.provide(InMemory), Layer.provideMerge(BunHttpServer.layerTest));
 
 const serve = <Id extends string, Groups extends HttpApiGroup.Constraint>(
@@ -362,12 +363,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
           yield* execute("GET", "/Balance/w-cache", { owner: "sam" }),
           yield* execute("GET", "/Balance/w-cache/watch", { owner: "sam" }),
           yield* execute("GET", "/Balance/w-cache", { owner: "kim" }),
-          yield* execute("GET", "/Wallet/w-cache", { owner: "sam" }),
         ];
         // Read the watch's first event, so its stream closes before the server stops.
         yield* responses[5]!.stream.pipe(Stream.take(1), Stream.runDrain);
         expect(responses.map((response) => response.status)).toEqual([
-          200, 200, 422, 401, 200, 200, 403, 200,
+          200, 200, 422, 401, 200, 200, 403,
         ]);
         expect(responses.map((response) => response.headers["cache-control"])).toEqual([
           // A command's receipt.
@@ -379,8 +379,6 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
           // The view's read, its live read, and its rejection.
           "private, max-age=5",
           "private, no-store",
-          "private, no-store",
-          // An aggregate without the annotation.
           "private, no-store",
         ]);
       }).pipe(Effect.provide(Served)),
@@ -475,8 +473,8 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         status: 403,
         body: { _tag: "NotOwner" },
       });
-      // An aggregate's `read` middleware guards its events too.
-      expect((yield* send("GET", "/Wallet/w-6/events")).status).toBe(401);
+      // The view's middleware guards its events too.
+      expect((yield* send("GET", "/Balance/w-6/events")).status).toBe(401);
     }).pipe(Effect.provide(Served)),
   );
 
@@ -513,7 +511,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         owner: "kim",
         body: { target: "w-8", input: { amount: 3, at } },
       });
-      const all = yield* listen("/Wallet/w-8/events", { owner: "kim" });
+      const all = yield* listen("/Balance/w-8/events", { owner: "kim" });
       const history = yield* Effect.forkChild(all.take(4));
       yield* send("POST", "/Deposit", {
         owner: "kim",
@@ -526,7 +524,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
 
       // `after` resumes from a cursor: only what came after it, then the frame.
       const [, second] = (yield* Fiber.join(history)).map(({ data }) => data);
-      const resumed = yield* listen(`/Wallet/w-8/events?after=${second.envelope.seq}`, {
+      const resumed = yield* listen(`/Balance/w-8/events?after=${second.envelope.seq}`, {
         owner: "kim",
       });
       const tail = (yield* resumed.take(2)).map(({ data }) =>
@@ -578,7 +576,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         body: { target: "w-10", input: { amount: 2, at } },
       });
       expect(deposit.status).toBe(200);
-      expect((yield* send("GET", "/Wallet/w-10", { owner: "sam" })).status).toBe(404);
+      expect((yield* send("GET", "/Balance/w-10", { owner: "sam" })).status).toBe(404);
       expect((yield* send("GET", "/Balance/w-10/watch", { owner: "sam" })).status).toBe(404);
     }).pipe(
       Effect.provide(
@@ -600,20 +598,26 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       },
       { description: "Add a cent to a purse." },
     ) {}
-    class Purse extends Domain.Aggregate(
-      "Purse",
+    class Purse extends Domain.Aggregate("Purse", {
+      id: Schema.String,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Credit],
+      decide: { Credit: () => [] },
+      evolve: { Credited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class PurseBalance extends Domain.View(
+      "PurseBalance",
       {
-        id: Schema.String,
+        from: [Purse],
+        key: Purse,
         state: Schema.Struct({ balance: Schema.Int }),
         initial: { balance: 0 },
-        commands: [Credit],
-        decide: { Credit: () => [] },
         evolve: { Credited: (_, e) => ({ balance: e.balance }) },
-        read: {},
       },
-      { description: "A purse, which keeps its own balance." },
+      { description: "A purse's balance." },
     ) {}
-    class Purses extends Domain.Model("Purses", { aggregates: [Purse] }) {}
+    class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [PurseBalance] }) {}
     class PurseApi extends Domain.Api(
       "PurseApi",
       {
@@ -622,13 +626,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       { description: "What a purse app reaches." },
     ) {}
     const spec = OpenApi.fromApi(
-      DomainHttp.toHttpApi(PurseApi, { expose: ["Credit", "Purse.get"] }).api,
+      DomainHttp.toHttpApi(PurseApi, { expose: ["Credit", "PurseBalance.get"] }).api,
     );
     expect(spec.info.description).toBe("What a purse app reaches.");
     expect(spec.paths["/Credit"]!.post!.description).toBe("Add a cent to a purse.");
-    expect(spec.paths["/Purse/{key}"]!.get!.description).toBe(
-      "A purse, which keeps its own balance.",
-    );
+    expect(spec.paths["/PurseBalance/{key}"]!.get!.description).toBe("A purse's balance.");
   });
 
   it("the OpenAPI document lists each endpoint with its schemas", () => {
@@ -641,9 +643,6 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       "/Balance/{key}/watch",
       "/Deposit",
       "/Rates",
-      "/Wallet/{key}",
-      "/Wallet/{key}/events",
-      "/Wallet/{key}/watch",
     ]);
 
     const deposit = spec.paths["/Deposit"]!.post!;
@@ -675,7 +674,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     const watch = spec.paths["/Balance/{key}/watch"]!.get!;
     expect(Object.keys(watch.responses["200"]!.content ?? {})).toEqual(["text/event-stream"]);
     expect(Object.keys(watch.responses).sort()).toEqual(["200", "401", "403"]);
-    const events = spec.paths["/Wallet/{key}/events"]!.get!;
+    const events = spec.paths["/Balance/{key}/events"]!.get!;
     expect(events.parameters.map((p) => [p.name, p.in]).sort()).toEqual([
       ["after", "query"],
       ["key", "path"],
@@ -693,11 +692,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     DomainHttp.toHttpApi(WalletApi, { expose: ["Withdraw"] });
     // @ts-expect-error an operation the view does not have
     DomainHttp.toHttpApi(WalletApi, { expose: ["Balance.nope"] });
-    // @ts-expect-error an aggregate has no `list`
-    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.list"] });
-    // every read of a view and an aggregate, live ones included
+    // @ts-expect-error an aggregate's state is not served
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.get"] });
+    // every read of a view, live ones included
     DomainHttp.toHttpApi(WalletApi, {
-      expose: ["Balance.get", "Balance.watch", "Balance.events", "Wallet.get", "Wallet.watch"],
+      expose: ["Balance.get", "Balance.watch", "Balance.events"],
     });
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi).group.endpoints)).toEqual([]);
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi, { expose: [] }).group.endpoints)).toEqual(
@@ -705,7 +704,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     );
   });
 
-  it("publishes exposed calls in the order the Api serves them: commands, views, streams, queries, then aggregates", () => {
+  it("publishes exposed calls in the order the Api serves them: commands, views, streams, then queries", () => {
     expect(
       Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
     ).toEqual([
@@ -716,9 +715,6 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       ["Balance.list", "GET", "/Balance/:key/list"],
       ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
       ["Rates", "QUERY", "/Rates"],
-      ["Wallet.get", "GET", "/Wallet/:key"],
-      ["Wallet.watch", "GET", "/Wallet/:key/watch"],
-      ["Wallet.events", "GET", "/Wallet/:key/events"],
     ]);
   });
 

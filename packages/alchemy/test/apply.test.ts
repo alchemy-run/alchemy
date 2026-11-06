@@ -55,6 +55,8 @@ import {
   lookupTargets,
   ModalResource,
   modalCalls,
+  OptionalProps,
+  optionalPropsReceived,
   type ModalResourceProps,
   PhasedTarget,
   ProbeBinding,
@@ -946,6 +948,24 @@ describe("basic operations", { tags: ["unit", "local"] }, () => {
 // ("alchemy"). The recomputed key missed the real state row, so the
 // resource was deleted from the cloud yet never removed from state — resurfacing
 // as an orphan deletion on every subsequent destroy, forever.
+// Every prop of `OptionalProps` is optional, so it may be declared with none.
+// Its provider reads `news` without a default, as most real providers do.
+describe("resources declared without props", { tags: ["unit", "local"] }, () => {
+  test.provider("reach their provider with empty props, and redeploy as a noop", (stack) =>
+    Effect.gen(function* () {
+      const program = OptionalProps("NoProps");
+
+      expect((yield* stack.deploy(program)).label).toEqual("NoProps");
+      expect(optionalPropsReceived.get("NoProps")).toEqual([{ op: "reconcile", news: {} }]);
+
+      expect(actionOfPlan(yield* stack.plan(program), "NoProps")).toBe("noop");
+
+      yield* stack.destroy();
+      optionalPropsReceived.delete("NoProps");
+    }),
+  );
+});
+
 describe("FQN separator in logical ID", { tags: ["unit", "local"] }, () => {
   test.provider("destroy clears state for a top-level logical ID containing '/'", (stack) =>
     Effect.gen(function* () {

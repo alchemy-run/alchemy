@@ -77,8 +77,18 @@ export interface Transformer extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  TransformerLookup
 > {}
+
+/**
+ * Props for {@link Transformer.lookup}: find a transformer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TransformerLookup {
+  /** The id of the existing transformer. */
+  transformerId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) transformer. A transformer describes
@@ -104,6 +114,16 @@ export interface Transformer extends Resource<
  *     template: "{ \"orderId\": transactionSets[0].St.transactionSetControlNumber }",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing transformer
+ * `Transformer.lookup` references a transformer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `transformerId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing transformer
+ * ```typescript
+ * const existing = AWS.B2BI.Transformer.lookup({ transformerId: "..." });
  * ```
  *
  * @resource
@@ -170,6 +190,15 @@ export const TransformerProvider = () =>
               return { action: "replace", deleteFirst: true } as const;
             }
           }
+        }),
+
+        lookup: Effect.fn(function* ({ transformerId }) {
+          const found = yield* b2bi
+            .getTransformer({ transformerId: transformerId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {

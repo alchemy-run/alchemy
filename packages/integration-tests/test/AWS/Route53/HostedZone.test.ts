@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import { Vpc } from "@alchemy.run/aws/EC2";
 import { HostedZone } from "@alchemy.run/aws/Route53";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -224,6 +225,166 @@ test.provider(
 
       yield* stack.destroy();
       yield* assertZoneGone(created.id);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
+);
+
+// Zone names are not unique within an account (one private zone per VPC with
+// the same name is the normal pattern), so name-only lookups must never adopt
+// another resource's zone. Names derive from the stage so concurrent users and
+// worktrees never see each other's zones.
+const stageZoneName = (stage: string, label: string) =>
+  `${label}-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.alchemy.`;
+const VPC_REGION = "us-west-2";
+
+test.provider(
+  "a private zone sharing a name with another VPC's zone is created, not adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = stageZoneName(stack.stage, "alchemy-hz-private-shared");
+
+      const vpcs = Effect.gen(function* () {
+        const vpcA = yield* Vpc("ZoneVpcA", {
+          cidrBlock: "10.81.0.0/16",
+          enableDnsSupport: true,
+          enableDnsHostnames: true,
+        });
+        const vpcB = yield* Vpc("ZoneVpcB", {
+          cidrBlock: "10.82.0.0/16",
+          enableDnsSupport: true,
+          enableDnsHostnames: true,
+        });
+        const zoneA = yield* HostedZone("ZoneA", {
+          name,
+          privateZone: true,
+          vpc: { vpcId: vpcA.vpcId, vpcRegion: VPC_REGION },
+        });
+        return { vpcA, vpcB, zoneA };
+      });
+
+      // Zone A exists first, as another stack's zone would.
+      const first = yield* stack.deploy(vpcs);
+
+      // Zone B: same name, other VPC. It must get its own zone.
+      const second = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { vpcA, vpcB, zoneA } = yield* vpcs;
+          const zoneB = yield* HostedZone("ZoneB", {
+            name,
+            privateZone: true,
+            vpc: { vpcId: vpcB.vpcId, vpcRegion: VPC_REGION },
+          });
+          return { vpcA, vpcB, zoneA, zoneB };
+        }),
+      );
+
+      expect(normalizeId(second.zoneA.id)).toBe(normalizeId(first.zoneA.id));
+      expect(normalizeId(second.zoneB.id)).not.toBe(normalizeId(first.zoneA.id));
+
+      const observedA = yield* route53.getHostedZone({ Id: normalizeId(second.zoneA.id) });
+      expect(observedA.VPCs?.map((v) => v.VPCId)).toEqual([second.vpcA.vpcId]);
+      const observedB = yield* route53.getHostedZone({ Id: normalizeId(second.zoneB.id) });
+      expect(observedB.VPCs?.map((v) => v.VPCId)).toEqual([second.vpcB.vpcId]);
+
+      // Zone A still belongs to ZoneA, not retagged as ZoneB.
+      const tagsA = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: normalizeId(second.zoneA.id),
+      });
+      const tagMapA = Object.fromEntries(
+        (tagsA.ResourceTagSet.Tags ?? []).map((t) => [t.Key, t.Value]),
+      );
+      expect(tagMapA["alchemy::id"]).toBe("ZoneA");
+
+      yield* stack.destroy();
+      yield* assertZoneGone(second.zoneA.id);
+      yield* assertZoneGone(second.zoneB.id);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "a same-named zone is adopted only through an explicit hostedZoneId",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = stageZoneName(stack.stage, "alchemy-hz-adopt");
+
+      // A zone created outside Alchemy with the same name.
+      const existing = yield* route53.createHostedZone({
+        Name: name,
+        CallerReference: `alchemy-test-adopt-${Date.now().toString(36)}`,
+      });
+      const existingId = normalizeId(existing.HostedZone.Id);
+      yield* Effect.addFinalizer(() =>
+        route53.deleteHostedZone({ Id: existingId }).pipe(Effect.ignore),
+      );
+
+      // Without hostedZoneId: a new zone, and the existing one is untouched.
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name });
+        }),
+      );
+      expect(normalizeId(created.id)).not.toBe(existingId);
+      const untouched = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: existingId,
+      });
+      expect(
+        (untouched.ResourceTagSet.Tags ?? []).some((tag) => tag.Key?.startsWith("alchemy::")),
+      ).toBe(false);
+
+      // With hostedZoneId: the existing zone replaces the created one.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name, hostedZoneId: existingId });
+        }),
+      );
+      expect(normalizeId(adopted.id)).toBe(existingId);
+      yield* assertZoneGone(created.id);
+      const adoptedTags = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: existingId,
+      });
+      const adoptedTagMap = Object.fromEntries(
+        (adoptedTags.ResourceTagSet.Tags ?? []).map((t) => [t.Key, t.Value]),
+      );
+      expect(adoptedTagMap["alchemy::id"]).toBe("Zone");
+
+      yield* stack.destroy();
+      yield* assertZoneGone(existingId);
+
+      // A hostedZoneId that no longer exists fails instead of creating a zone.
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* HostedZone("Zone", { name, hostedZoneId: existingId });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("AdoptedHostedZoneNotFound");
+      yield* stack.destroy();
+
+      // A first deploy with hostedZoneId adopts through read, with no prior state.
+      const another = yield* route53.createHostedZone({
+        Name: name,
+        CallerReference: `alchemy-test-adopt-fresh-${Date.now().toString(36)}`,
+      });
+      const anotherId = normalizeId(another.HostedZone.Id);
+      yield* Effect.addFinalizer(() =>
+        route53.deleteHostedZone({ Id: anotherId }).pipe(Effect.ignore),
+      );
+      const fresh = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name, hostedZoneId: anotherId });
+        }),
+      );
+      expect(normalizeId(fresh.id)).toBe(anotherId);
+
+      yield* stack.destroy();
+      yield* assertZoneGone(anotherId);
     }),
   { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
 );
