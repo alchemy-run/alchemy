@@ -26,6 +26,19 @@ export default class Agent extends Modal.Sandbox<Agent>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://agent");
+        if (url.pathname.endsWith("/echo")) {
+          // What arrived, for the getTcpPort fetch tests.
+          return yield* HttpServerResponse.json(
+            {
+              method: request.method,
+              path: url.pathname,
+              query: url.search,
+              probe: request.headers["x-probe"],
+              body: yield* request.text,
+            },
+            { status: 201, headers: { "x-echo": "sandbox" } },
+          );
+        }
         const key = url.searchParams.get("key") ?? "k";
         if (url.pathname === "/write") {
           yield* fs.writeFileString(`${mounted.path}/${key}.txt`, `volume ${key}`);

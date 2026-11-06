@@ -77,9 +77,17 @@ const report = yield* sandbox.files.readText("/tmp/report.json");
 
 ```typescript
 const sandbox = yield* sandboxes.create({ encryptedPorts: [3000] });
-const tunnels = yield* sandbox.tunnels();
-const url = tunnels[3000]!.url;
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
 ```
+
+`port.url` is the tunnel's public URL. A Worker in front of the sandbox can forward the request it received:
+
+```typescript
+return yield* port.fetch(yield* HttpServerRequest.HttpServerRequest);
+```
+
+`port.connect()` opens a TCP socket through the tunnel instead: TLS for `encryptedPorts`, plain TCP for `unencryptedPorts`.
 
 For a browser that shouldn't hold Modal credentials, use `sandbox.connectToken({ port: 3000 })`.
 

@@ -32,10 +32,11 @@ Run `alchemy deploy`. Modal builds the image; you don't need Docker.
 ```typescript
 const agents = yield* Modal.CreateSandbox(Agent);
 const agent = yield* agents.create({ timeout: "10 minutes" });
-const response = yield* agent.fetch(HttpClientRequest.get("/"));
+const port = yield* agent.getTcpPort();
+const response = yield* port.fetch(HttpClientRequest.get("/"));
 ```
 
-Provide `Modal.CreateSandboxHttp`. `fetch` goes through the sandbox's tunnel to the program's port.
+Provide `Modal.CreateSandboxHttp`. `getTcpPort()` is the program's port, reached through the sandbox's tunnel.
 
 ## Use bindings in the program
 

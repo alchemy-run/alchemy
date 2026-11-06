@@ -6,6 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import RuntimeFunction from "./fixtures/runtime-function.ts";
@@ -71,4 +72,68 @@ test(
     expect(body).toEqual({ volume: "volume m1", bucket: "bucket m1" });
   }),
   { tags: [...tags, "provider:cloudflare"], timeout: 600_000 },
+);
+
+test(
+  "getTcpPort fetch: client request",
+  Effect.gen(function* () {
+    const body = yield* get<{
+      status: number;
+      echo: string;
+      body: { method: string; path: string; query: string; probe: string; body: string };
+    }>("/port/client");
+    expect(body).toEqual({
+      status: 201,
+      echo: "sandbox",
+      body: {
+        method: "POST",
+        path: "/client/echo",
+        query: "?x=1",
+        probe: "client",
+        body: "hello client",
+      },
+    });
+  }),
+  { tags, timeout: 600_000 },
+);
+
+test(
+  "getTcpPort fetch: proxies a server request",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    // Sent once: a proxied body can't be replayed, so no retry here.
+    const response = yield* client.execute(
+      HttpClientRequest.post(`${url}/port/proxy/echo?x=2`).pipe(
+        HttpClientRequest.setHeader("x-probe", "proxy"),
+        HttpClientRequest.bodyText("hello proxy"),
+      ),
+    );
+    expect(response.status).toBe(201);
+    expect(response.headers["x-echo"]).toBe("sandbox");
+    expect(yield* response.json).toEqual({
+      method: "POST",
+      path: "/port/proxy/echo",
+      query: "?x=2",
+      probe: "proxy",
+      body: "hello proxy",
+    });
+  }),
+  { tags, timeout: 600_000 },
+);
+
+test(
+  "getTcpPort connect: a TCP socket through the tunnel",
+  Effect.gen(function* () {
+    const body = yield* get<{ statusLine: string; body: Record<string, string> }>("/port/connect");
+    expect(body.statusLine).toBe("HTTP/1.1 201 Created");
+    expect(body.body).toEqual({
+      method: "GET",
+      path: "/connect/echo",
+      query: "?x=3",
+      probe: "connect",
+      body: "",
+    });
+  }),
+  { tags, timeout: 600_000 },
 );

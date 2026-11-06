@@ -2,7 +2,7 @@ import * as persistent from "@distilled.cloud/modal/persistent";
 import * as sandbox from "@distilled.cloud/modal/sandbox";
 import * as router from "@distilled.cloud/modal/task_command_router";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Sandbox from "alchemy/Sandbox";
+import * as Sandbox from "alchemy/Sandbox";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
@@ -11,11 +11,15 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type * as HttpServerRequest from "effect/http/HttpServerRequest";
+import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
+import type * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import { buildImage, gpuConfig, ImageBuildOps, type ImageBuildSpec } from "./ImageBuild.ts";
 import { environmentOf, type ErrorOf, operations, seconds } from "./internal.ts";
+import { connectTcp } from "./internal/TcpConnect.ts";
 import { streamRouter, withRouter } from "./ModalBindings.ts";
 import { type ModalMounts, modalMountsOf, type SandboxMount } from "./Mounts.ts";
 
@@ -164,7 +168,7 @@ export interface SandboxCreateOptions {
   readonly outboundPolicy?: OutboundPolicy;
   /** Route outbound traffic through a `Modal.Proxy`'s static IPs. */
   readonly proxy?: { readonly proxyId: string };
-  /** Ports reachable through TLS tunnels (`sandbox.tunnels()`). */
+  /** Ports reachable through TLS tunnels (`sandbox.getTcpPort(port)`). */
   readonly encryptedPorts?: ReadonlyArray<number>;
   /** Ports reachable through plain TCP tunnels. */
   readonly unencryptedPorts?: ReadonlyArray<number>;
@@ -398,23 +402,49 @@ export interface SandboxHandleOf<R> {
     R
   >;
   /**
-   * Send a request to a port's tunnel: the URL's path and query are kept,
-   * the host is the tunnel's. Without a port, the `Modal.Sandbox` program's.
+   * A port inside the sandbox, reached through its tunnel: `fetch` sends a
+   * client request there, or proxies a server request a handler received;
+   * `connect` opens a TCP socket to it. The port needs a tunnel
+   * (`encryptedPorts`, `unencryptedPorts` or `h2Ports`); without a port
+   * number, the `Modal.Sandbox` program's.
    */
-  fetch(
-    port: number,
-    request: HttpClientRequest.HttpClientRequest,
-  ): Effect.Effect<HttpClientResponse.HttpClientResponse, SandboxFetchError, R>;
-  fetch(
-    request: HttpClientRequest.HttpClientRequest,
-  ): Effect.Effect<HttpClientResponse.HttpClientResponse, SandboxFetchError, R>;
+  getTcpPort(port?: number): Effect.Effect<SandboxPortOf<R>, SandboxPortError, R>;
 }
 
-/** Sending a request to a sandbox port. */
-export type SandboxFetchError =
-  | SandboxOpError<"getTunnels">
-  | SandboxUnexpectedResponse
-  | HttpClientError.HttpClientError;
+/** Looking up a sandbox port's tunnel. */
+export type SandboxPortError = SandboxOpError<"getTunnels"> | SandboxUnexpectedResponse;
+
+/**
+ * A port inside a sandbox, with the tunnel Modal opened to it. `fetch` keeps
+ * the request's method, path, query, headers and body, and sends it to the
+ * tunnel; given the server request a handler received, it proxies it and
+ * returns the server response.
+ */
+export interface SandboxPortOf<R> extends SandboxTunnel {
+  fetch(
+    request: HttpClientRequest.HttpClientRequest,
+  ): Effect.Effect<
+    HttpClientResponse.HttpClientResponse,
+    SandboxPortError | HttpClientError.HttpClientError,
+    R
+  >;
+  fetch(
+    request: HttpServerRequest.HttpServerRequest,
+  ): Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    SandboxPortError | HttpClientError.HttpClientError,
+    R
+  >;
+  /**
+   * A TCP socket to the port through its tunnel: TLS for an encrypted tunnel
+   * (`encryptedPorts`), plain TCP for an unencrypted one (`unencryptedPorts`).
+   * It connects when run.
+   */
+  connect(): Effect.Effect<Socket.Socket>;
+}
+
+/** A sandbox port as bindings return it. */
+export type SandboxPort = SandboxPortOf<RuntimeContext>;
 
 /**
  * A sandbox handle as bindings return it: calls run inside a deployed
@@ -427,15 +457,9 @@ export interface SandboxHandle
     Sandbox.SandboxProcesses<SandboxProcessError, ExecOptions>,
     Sandbox.SandboxFiles<SandboxFilesError, SandboxFileEntry>,
     Sandbox.SandboxPty<SandboxPtyError, SandboxPtyOptions>,
-    Sandbox.SandboxFetch<SandboxFetchError> {
+    Sandbox.SandboxPorts<SandboxPortError, SandboxPort> {
   readonly files: SandboxFilesOf<RuntimeContext>;
-  fetch(
-    port: number,
-    request: HttpClientRequest.HttpClientRequest,
-  ): Effect.Effect<HttpClientResponse.HttpClientResponse, SandboxFetchError, RuntimeContext>;
-  fetch(
-    request: HttpClientRequest.HttpClientRequest,
-  ): Effect.Effect<HttpClientResponse.HttpClientResponse, SandboxFetchError, RuntimeContext>;
+  getTcpPort(port?: number): Effect.Effect<SandboxPort, SandboxPortError, RuntimeContext>;
 }
 
 /** A sandbox handle whose calls need Modal credentials and an HTTP client. */
@@ -987,13 +1011,10 @@ export const sandboxHandle = (
     return out;
   });
 
-  const fetchPort = Effect.fn(function* (
-    port: number | undefined,
-    request: HttpClientRequest.HttpClientRequest,
-  ) {
+  const getTcpPort = Effect.fn(function* (port: number | undefined = target.program?.port) {
     if (port === undefined) {
       return yield* new SandboxUnexpectedResponse({
-        message: "fetch needs a port: create the sandbox from a Modal.Sandbox, or pass one",
+        message: "getTcpPort needs a port: create the sandbox from a Modal.Sandbox, or pass one",
       });
     }
     const tunnel = (yield* tunnelsOf(50))[port];
@@ -1002,11 +1023,25 @@ export const sandboxHandle = (
         message: `Port ${port} of sandbox ${sandboxId} has no tunnel; open it with encryptedPorts`,
       });
     }
-    const url = new URL(request.url, "http://sandbox");
-    // The user's own program, reached through its tunnel (allowed raw HTTP).
-    return yield* ops.http.execute(
-      HttpClientRequest.setUrl(request, `${tunnel.url}${url.pathname}${url.search}`),
-    );
+    const tls = tunnel.url.startsWith("https:");
+    // An unencrypted tunnel carries plain TCP, so HTTP to it is cleartext.
+    const origin = tls ? tunnel.url : `http://${tunnel.host}:${tunnel.port}`;
+    const sandboxPort: SandboxPortOf<never> = {
+      ...tunnel,
+      // The user's own program, reached through its tunnel (allowed raw HTTP).
+      fetch: Sandbox.portFetch((request) => {
+        const url = new URL(request.url, "http://sandbox");
+        // The tunnel routes by host, so a proxied request's own `host` goes.
+        return ops.http.execute(
+          HttpClientRequest.setUrl(
+            HttpClientRequest.removeHeader(request, "host"),
+            `${origin}${url.pathname}${url.search}`,
+          ),
+        );
+      }) as SandboxPortOf<never>["fetch"],
+      connect: () => connectTcp({ host: tunnel.host, port: tunnel.port, tls }),
+    };
+    return sandboxPort;
   });
 
   const handle: RawSandboxHandle = {
@@ -1129,13 +1164,7 @@ export const sandboxHandle = (
         status: result?.status ?? "GENERIC_STATUS_UNSPECIFIED",
       };
     }),
-    fetch: ((
-      portOrRequest: number | HttpClientRequest.HttpClientRequest,
-      request?: HttpClientRequest.HttpClientRequest,
-    ) =>
-      typeof portOrRequest === "number"
-        ? fetchPort(portOrRequest, request!)
-        : fetchPort(target.program?.port, portOrRequest)) as RawSandboxHandle["fetch"],
+    getTcpPort,
     terminate: Effect.fn(function* () {
       yield* ops
         .terminate({ sandboxId })

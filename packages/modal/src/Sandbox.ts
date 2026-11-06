@@ -119,7 +119,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * builds it into an image on Modal's builder (no Docker), and stores its
  * env, including the credentials its bindings need, in a Modal Secret.
  * `Modal.CreateSandbox(Agent)` then boots sandboxes that run the program and
- * serve its `fetch` handler; `sandbox.fetch(request)` calls it.
+ * serve its `fetch` handler; `sandbox.getTcpPort()` reaches it.
  *
  * Each sandbox is an isolated instance: give one to every user, session or
  * task, and terminate it when the work is done. A sandbox lives at most 24
@@ -190,7 +190,8 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const agent = yield* agents.create({ timeout: "10 minutes" });
- *         const response = yield* agent.fetch(HttpClientRequest.get("/"));
+ *         const port = yield* agent.getTcpPort();
+ *         const response = yield* port.fetch(HttpClientRequest.get("/"));
  *         const text = yield* response.text;
  *         yield* agent.terminate();
  *         return HttpServerResponse.text(text);
