@@ -254,27 +254,24 @@ test.provider(
       );
       expect(pack.certificatePackId).toEqual(domain!.certId);
 
-      // Wait for issuance to move the pack past the saved snapshot: its
-      // status, issued certificate, or validation records change.
-      const lifecycle = (p: {
-        status: string;
-        primaryCertificate?: string | null;
-        validationRecords?: ReadonlyArray<{ status?: string | null }> | null;
-      }) =>
+      // Wait for issuance to move the pack on from where it was adopted:
+      // its status, issued certificate, or DCV records change.
+      const lifecycle = (p: ssl.GetCertificatePackResponse) =>
         JSON.stringify([
           p.status,
-          p.primaryCertificate ?? undefined,
-          p.validationRecords?.map((r) => r.status ?? undefined),
+          p.primaryCertificate,
+          p.validationRecords,
+          p.dcvDelegationRecords,
         ]);
-      const saved = lifecycle(pack);
+      const adopted = yield* getPack(zoneId, pack.certificatePackId);
       const issued = yield* getPack(zoneId, pack.certificatePackId).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
-          until: (p) => p !== undefined && lifecycle(p) !== saved,
+          until: (p) => p !== undefined && lifecycle(p) !== lifecycle(adopted!),
           times: 24,
         }),
       );
-      expect(lifecycle(issued!)).not.toEqual(saved);
+      expect(lifecycle(issued!)).not.toEqual(lifecycle(adopted!));
 
       // Nothing an operator controls changed, so drift reports nothing.
       const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));

@@ -36,35 +36,9 @@ export type CertificatePackValidationMethod = "txt" | "http" | "email";
 export type CertificatePackValidityDays = 14 | 30 | 90 | 365;
 
 /**
- * Status of a certificate pack as reported by Cloudflare.
- */
-export type CertificatePackStatus =
-  | "initializing"
-  | "pending_validation"
-  | "deleted"
-  | "pending_issuance"
-  | "pending_deployment"
-  | "pending_deletion"
-  | "pending_expiration"
-  | "expired"
-  | "active"
-  | "initializing_timed_out"
-  | "validation_timed_out"
-  | "issuance_timed_out"
-  | "deployment_timed_out"
-  | "deletion_timed_out"
-  | "pending_cleanup"
-  | "staging_deployment"
-  | "staging_active"
-  | "deactivating"
-  | "inactive"
-  | "backup_issued"
-  | "holding_deployment";
-
-/**
  * A Domain Control Validation record for a certificate pack — create the
  * indicated TXT/CNAME record (or serve the HTTP token) to complete
- * validation when the pack is `pending_validation`.
+ * validation.
  */
 export interface CertificatePackValidationRecord {
   /** Name of the TXT record to create (for `txt` validation). */
@@ -81,8 +55,6 @@ export interface CertificatePackValidationRecord {
   cnameTarget?: string;
   /** Approver email addresses (for `email` validation). */
   emails?: string[];
-  /** Validation status of this record. */
-  status?: string;
 }
 
 export interface CertificatePackProps {
@@ -135,13 +107,6 @@ export interface CertificatePackAttributes {
   certificatePackId: string;
   /** Zone the pack belongs to. */
   zoneId: string;
-  /**
-   * Status of the pack when it was last deployed. Issuance is asynchronous —
-   * a freshly ordered pack starts in `initializing`/`pending_validation` and
-   * only reaches `active` once Domain Control Validation completes. Issuance
-   * progress is not drift, so `alchemy drift` does not refresh this value.
-   */
-  status: CertificatePackStatus;
   /** Hostnames the certificates cover. */
   hosts: string[];
   /** Certificate Authority the pack was ordered from. */
@@ -151,17 +116,16 @@ export interface CertificatePackAttributes {
   /** Validity period of the issued certificates, in days. */
   validityDays: number | undefined;
   /**
-   * Identifier of the primary certificate in the pack, if it was issued
-   * when the pack was last deployed.
-   */
-  primaryCertificate: string | undefined;
-  /**
-   * Domain Control Validation records outstanding when the pack was last
-   * deployed — create these TXT/CNAME records (or serve the HTTP tokens) to
-   * complete validation.
+   * Domain Control Validation records issued with the order — create these
+   * TXT/CNAME records (or serve the HTTP tokens) to complete validation.
+   * Cloudflare clears them once validation completes; the ones returned
+   * with the order are kept.
    */
   validationRecords: CertificatePackValidationRecord[] | undefined;
-  /** DCV Delegation records for delegated domain validation. */
+  /**
+   * DCV Delegation records for delegated domain validation, as returned
+   * with the order.
+   */
   dcvDelegationRecords: CertificatePackValidationRecord[] | undefined;
 }
 
@@ -183,9 +147,9 @@ export type CertificatePack = Resource<
  * error (Cloudflare code 1450).
  *
  * Issuance is asynchronous: the resource returns as soon as the order is
- * placed (status `initializing`/`pending_validation`) and does not wait for
- * `active`, because validation may require you to create DNS records first —
- * the outstanding records are exported as `validationRecords`.
+ * placed and does not wait for the certificates to be issued, because
+ * validation may require you to create DNS records first — the records to
+ * create are exported as `validationRecords`.
  *
  * The pack's `certificateAuthority`, `hosts`, and `validityDays` are
  * immutable — changing any of them replaces the pack (a new order).
@@ -485,12 +449,12 @@ const sameHosts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean 
 };
 
 /**
- * Keep the saved issuance state on a refreshed pack. Cloudflare moves a pack
- * through issuance (`status`, the issued certificate, the DCV records) after
- * reconcile returns, and again at every renewal; none of it is configuration,
- * so drift must not report it. What an operator controls — CA, validation
- * method, validity, and the host set — stays live. `hosts` keeps the saved
- * order while the set is unchanged, since Cloudflare may reorder it.
+ * Keep the saved DCV records on a refreshed pack. Cloudflare clears them once
+ * validation completes, and issues new ones at renewal; neither is
+ * configuration, so drift must not report it. What an operator controls —
+ * CA, validation method, validity, and the host set — stays live. `hosts`
+ * keeps the saved order while the set is unchanged, since Cloudflare may
+ * reorder it.
  */
 const keepLifecycle = (
   saved: CertificatePackAttributes,
@@ -498,8 +462,6 @@ const keepLifecycle = (
 ): CertificatePackAttributes => ({
   ...live,
   hosts: sameHosts(saved.hosts, live.hosts) ? saved.hosts : live.hosts,
-  status: saved.status,
-  primaryCertificate: saved.primaryCertificate,
   validationRecords: saved.validationRecords,
   dcvDelegationRecords: saved.dcvDelegationRecords,
 });
@@ -510,7 +472,6 @@ const toRecord = (record: {
   emails?: string[] | null;
   httpBody?: string | null;
   httpUrl?: string | null;
-  status?: string | null;
   txtName?: string | null;
   txtValue?: string | null;
 }): CertificatePackValidationRecord => ({
@@ -521,7 +482,6 @@ const toRecord = (record: {
   cname: record.cname ?? undefined,
   cnameTarget: record.cnameTarget ?? undefined,
   emails: record.emails ?? undefined,
-  status: record.status ?? undefined,
 });
 
 const toAttributes = (
@@ -531,12 +491,10 @@ const toAttributes = (
 ): CertificatePackAttributes => ({
   certificatePackId: pack.id,
   zoneId,
-  status: pack.status as CertificatePackStatus,
   hosts: [...pack.hosts],
   certificateAuthority: pack.certificateAuthority ?? "",
   validationMethod: validationMethod ?? pack.validationMethod ?? undefined,
   validityDays: pack.validityDays ?? undefined,
-  primaryCertificate: pack.primaryCertificate ?? undefined,
   validationRecords: pack.validationRecords?.map(toRecord) ?? undefined,
   dcvDelegationRecords: pack.dcvDelegationRecords?.map(toRecord) ?? undefined,
 });
