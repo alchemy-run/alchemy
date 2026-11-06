@@ -5,7 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import { expectDeployFails } from "../Utils/Lookup.ts";
+import { expectDeployFails } from "../../lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

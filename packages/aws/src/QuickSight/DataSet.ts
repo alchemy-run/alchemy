@@ -100,8 +100,18 @@ export interface DataSet extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  DataSetLookup
 > {}
+
+/**
+ * Props for {@link DataSet.lookup}: find a data set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataSetLookup {
+  /** The id of the existing data set. */
+  dataSetId: string;
+}
 
 /**
  * An Amazon QuickSight dataset — a prepared, queryable model built on top of
@@ -127,6 +137,16 @@ export interface DataSet extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data set
+ * `DataSet.lookup` references a data set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dataSetId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data set
+ * ```typescript
+ * const sales = AWS.QuickSight.DataSet.lookup({ dataSetId: "sales" });
  * ```
  *
  * @resource
@@ -165,6 +185,11 @@ export const DataSetProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dataSetId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readSet(accountId, dataSetId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dataSetId = output?.dataSetId ?? (yield* toId(id, olds));

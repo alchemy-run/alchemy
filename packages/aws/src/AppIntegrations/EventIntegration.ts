@@ -50,8 +50,18 @@ export interface EventIntegration extends Resource<
     source: string;
   },
   never,
-  Providers
+  Providers,
+  EventIntegrationLookup
 > {}
+
+/**
+ * Props for {@link EventIntegration.lookup}: find an event integration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventIntegrationLookup {
+  /** The event integration name of the existing event integration. */
+  eventIntegrationName: string;
+}
 
 /**
  * An Amazon AppIntegrations event integration. An event integration
@@ -82,6 +92,16 @@ export interface EventIntegration extends Resource<
  *   description: "Events from Example Partner",
  *   tags: { team: "integrations" },
  * });
+ * ```
+ *
+ * ### Looking up an existing event integration
+ * `EventIntegration.lookup` references an event integration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `eventIntegrationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event integration
+ * ```typescript
+ * const existing = AWS.AppIntegrations.EventIntegration.lookup({ eventIntegrationName: "my-event-integration" });
  * ```
  *
  * @resource
@@ -153,6 +173,13 @@ export const EventIntegrationProvider = () =>
               ),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ eventIntegrationName: name }) {
+          const live = yield* observe(name);
+          if (live === undefined) return undefined;
+          const attrs = yield* toAttrs(live);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.eventIntegrationName ?? (yield* createName(id, olds ?? {}));

@@ -6,9 +6,9 @@ import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { expectDeployFails } from "../../lookup.ts";
 import { testName } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { expectDeployFails } from "../Utils/Lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

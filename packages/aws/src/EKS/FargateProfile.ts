@@ -80,8 +80,20 @@ export interface FargateProfile extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FargateProfileLookup
 > {}
+
+/**
+ * Props for {@link FargateProfile.lookup}: find a Fargate profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FargateProfileLookup {
+  /** The cluster the profile belongs to. */
+  clusterName: string;
+  /** The name of the existing profile. */
+  fargateProfileName: string;
+}
 
 /**
  * An Amazon EKS Fargate profile — declares which pods (by namespace + labels)
@@ -117,6 +129,16 @@ export interface FargateProfile extends Resource<
  *     { namespace: "batch", labels: { compute: "fargate" } },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing Fargate profile
+ * `FargateProfile.lookup` references a Fargate profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName` and `fargateProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Fargate profile
+ * ```typescript
+ * const system = AWS.EKS.FargateProfile.lookup({ clusterName: "platform", fargateProfileName: "system" });
  * ```
  *
  * @resource
@@ -277,6 +299,8 @@ export const FargateProfileProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName, fargateProfileName }) =>
+          readProfile({ clusterName, fargateProfileName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
             | string

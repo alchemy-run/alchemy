@@ -124,8 +124,27 @@ export interface Queue extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 > {}
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type QueueLookup =
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The id of the existing queue. */
+      queueId: string;
+    }
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The display name of the existing queue. */
+      displayName: string;
+    };
 
 /**
  * An AWS Deadline Cloud queue — accepts render jobs within a farm and
@@ -153,6 +172,16 @@ export interface Queue extends Resource<
  *     rootPrefix: "attachments/",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` with `queueId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const existing = AWS.Deadline.Queue.lookup({ farmId, displayName: "main" });
  * ```
  *
  * @resource
@@ -244,6 +273,14 @@ export const QueueProvider = () =>
         // iterating every farm — treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "queueId" in props
+              ? yield* readQueueById(props.farmId, props.queueId, arnOf)
+              : yield* findQueueByDisplayName(props.farmId, props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const farmId = output?.farmId ?? olds?.farmId;
