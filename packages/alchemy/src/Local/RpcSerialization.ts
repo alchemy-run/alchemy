@@ -337,6 +337,17 @@ const serializeRpcArgs = (value: unknown): unknown => {
   if (Duration.isDuration(value)) {
     return encodeState(value);
   }
+  // A RegExp has no own enumerable fields, so the structural walk below
+  // would ship it as `{}` (e.g. a Worker's `build.output.codeSplitting.groups[].test`,
+  // which Rolldown's watcher in the sidecar then rejects). Ship its source and
+  // flags; as with `structuredClone`, `lastIndex` and the subclass are not kept.
+  if (NodeUtil.types.isRegExp(value)) {
+    return {
+      _tag: "~alchemy/Rpc/RegExp",
+      source: value.source,
+      flags: value.flags,
+    } satisfies RegExpMarker;
+  }
   if (typeof value === "function") {
     return null;
   }
@@ -361,6 +372,12 @@ interface ContextMarker {
   readonly description: string;
 }
 
+interface RegExpMarker {
+  readonly _tag: "~alchemy/Rpc/RegExp";
+  readonly source: string;
+  readonly flags: string;
+}
+
 const isEffectMarker = (value: object): value is EffectMarker =>
   "_tag" in value &&
   value._tag === "~alchemy/Rpc/Effect" &&
@@ -372,6 +389,14 @@ const isContextMarker = (value: object): value is ContextMarker =>
   value._tag === "~alchemy/Rpc/Context" &&
   "description" in value &&
   typeof value.description === "string";
+
+const isRegExpMarker = (value: object): value is RegExpMarker =>
+  "_tag" in value &&
+  value._tag === "~alchemy/Rpc/RegExp" &&
+  "source" in value &&
+  typeof value.source === "string" &&
+  "flags" in value &&
+  typeof value.flags === "string";
 
 const isDurationEnvelope = (value: object): value is { [DURATION_MARKER]: unknown } =>
   DURATION_MARKER in value && Object.keys(value).length === 1;
@@ -407,6 +432,8 @@ const deserializeRpcArgs = (value: unknown): unknown => {
       );
     } else if (isContextMarker(value)) {
       return Context.empty();
+    } else if (isRegExpMarker(value)) {
+      return new RegExp(value.source, value.flags);
     } else if (isDurationEnvelope(value)) {
       return decodeDuration(value[DURATION_MARKER]) ?? value;
     }

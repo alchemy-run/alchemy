@@ -1,3 +1,4 @@
+import * as NodeVm from "node:vm";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -120,6 +121,50 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
         };
         const client = roundTrip(handlers);
         expect(yield* client.take({ cb: () => {} })).toBe("null");
+      }),
+    );
+
+    it.effect("round-trips a RegExp nested inside an object (Worker build options)", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          take: (build: { output: { codeSplitting: { groups: Array<{ test: unknown }> } } }) => {
+            const test = build.output.codeSplitting.groups[0]!.test;
+            return Effect.succeed({
+              isRegExp: test instanceof RegExp,
+              source: (test as RegExp).source,
+              flags: (test as RegExp).flags,
+              matches: (test as RegExp).test("/repo/node_modules/alchemy/src/Rpc.ts"),
+            });
+          },
+        };
+        const client = roundTrip(handlers);
+        expect(
+          yield* client.take({
+            output: {
+              codeSplitting: { groups: [{ test: /[\\/]node_modules[\\/]alchemy[\\/]/i }] },
+            },
+          }),
+        ).toEqual({
+          isRegExp: true,
+          source: "[\\\\/]node_modules[\\\\/]alchemy[\\\\/]",
+          flags: "i",
+          matches: true,
+        });
+      }),
+    );
+
+    it.effect("round-trips RegExps inside arrays, from another realm and as return values", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          take: (tests: Array<unknown>) =>
+            Effect.succeed(tests.filter((test) => test instanceof RegExp)),
+        };
+        const client = roundTrip(handlers);
+        const returned = yield* client.take([/a/gy, NodeVm.runInNewContext("/b/u")]);
+        expect(returned.map((test) => test instanceof RegExp && String(test))).toEqual([
+          "/a/gy",
+          "/b/u",
+        ]);
       }),
     );
 
