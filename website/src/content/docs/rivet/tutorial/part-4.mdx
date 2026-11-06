@@ -5,6 +5,8 @@ sidebar:
   order: 4
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 Nothing in the room mentions Docker. The control plane and the pool are Layers, so you swap them for Hetzner's, move the Api onto a Hetzner Server, and the same room runs on Hetzner Cloud. This part costs money while it runs; the last step removes it.
 
 ## Prerequisites
@@ -13,9 +15,7 @@ Finish [Hetzner setup](/hetzner/setup), and install `@alchemy.run/hetzner`.
 
 ## Tear down the local rooms
 
-```sh
-pnpm alchemy destroy
-```
+<PackageManagers run="alchemy destroy" />
 
 This removes the Docker control plane, the pool and the API. Do it before you swap the providers below: a Stack without `Docker.providers()` can't delete Docker resources.
 
@@ -34,7 +34,7 @@ import * as Layer from "effect/Layer";
 +export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
 ```
 
-The control plane runs on a Hetzner Server behind a Load Balancer. The pool gets a Server of its own. `src/room.ts` doesn't change.
+The control plane runs on a Hetzner Server, behind an HTTPS edge at an `sslip.io` address. The pool gets a Server of its own. `src/room.ts` doesn't change.
 
 ## Give the API a Server
 
@@ -80,7 +80,7 @@ const Message = Schema.Struct({ author: Schema.String, text: Schema.String });
     const rooms = yield* Room;
 ```
 
-The control plane has a public address on Hetzner, so the API no longer joins a network. The `fetch` handler stays the same.
+The control plane has a public HTTPS address on Hetzner, so the API no longer joins a network. The `fetch` handler stays the same.
 
 ## Swap the providers
 
@@ -99,9 +99,7 @@ import * as Rivet from "@alchemy.run/rivet";
 
 ## Deploy
 
-```diff lang="sh"
-+pnpm alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The rooms start empty: their data was on the Docker control plane. The new control plane takes a few minutes to start.
 
@@ -118,9 +116,7 @@ Use the `url` the deploy printed. You have the same rooms running on Hetzner, wi
 
 The Servers and the Load Balancer cost money while they run:
 
-```sh
-pnpm alchemy destroy
-```
+<PackageManagers run="alchemy destroy" />
 
 :::note
 Hetzner's options, from more engines to Server sizes, are in [Hetzner](/rivet/hetzner). Every other cloud follows the same swap: [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes) and [Fly](/rivet/fly).

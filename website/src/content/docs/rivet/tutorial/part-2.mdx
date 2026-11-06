@@ -5,6 +5,8 @@ sidebar:
   order: 2
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 A room's messages have an author, a text and an order, so they belong in a table. Each room has its own SQLite database, so the lobby's table only ever holds the lobby's messages.
 
 ## Create the table
@@ -111,9 +113,7 @@ A body that doesn't match `Message` gets a 400, and never reaches the room.
 
 ## Deploy
 
-```diff lang="sh"
-+pnpm alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ## Talk in a room
 

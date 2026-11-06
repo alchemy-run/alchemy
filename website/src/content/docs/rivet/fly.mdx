@@ -38,6 +38,14 @@ export const Default = RivetFly.MachinePool("Default", { replicas: 2, region: "f
 
 The pool has no public address.
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on Fly Machines that take no traffic from Fly's proxy:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetFly.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
 ## Call it from a Fly Service
 
 ```typescript title="src/api.ts"
@@ -56,4 +64,4 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [MachineControlPlane](/providers/rivet/fly#machinecontrolplane) and [MachinePool](/providers/rivet/fly#machinepool).
+Every option, with its default, is in the reference: [MachineControlPlane](/providers/rivet/fly#machinecontrolplane), [MachinePool](/providers/rivet/fly#machinepool) and [ServicesPool](/providers/rivet/fly#servicespool).

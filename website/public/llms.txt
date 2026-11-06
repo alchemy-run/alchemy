@@ -717,9 +717,12 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 
 Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
 
-- [Rivet](https://alchemy.run/rivet) — Durable Objects on Rivet. Run the control plane and the nodes on your own cloud, keep each instance's data beside it, and call any instance by name from any runtime.
-- [What is Rivet?](https://alchemy.run/rivet/what-is-rivet) — The concepts behind Rivet — Actors, instances addressed by name, state that lives with them, control planes, namespaces, pools and the gateway — and how @alchemy.run/rivet models them as Durable Objects.
-- [Setup](https://alchemy.run/rivet/setup) — Install the Rivet provider and get Docker ready to run Rivet on your machine.
+- [Rivet](https://alchemy.run/rivet) — Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
+- [What is Rivet?](https://alchemy.run/rivet/what-is-rivet) — The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
+- [Setup](https://alchemy.run/rivet/setup) — Install the Rivet provider, the provider for the cloud you run it on, and get Docker ready to run Rivet on your machine.
+- [Control planes and namespaces](https://alchemy.run/rivet/namespaces) — What holds a Rivet app — a control plane you run or Rivet Cloud, divided into namespaces — how Alchemy gives each stage its own namespace, and when to give an environment a control plane of its own.
+- [Tokens and networks](https://alchemy.run/rivet/tokens-and-networks) — Who can reach a Rivet control plane and with what — the admin token and everything that holds it, the HTTPS address each control plane gets without a domain, nodes that only connect out, and the credentials a deploy needs in CI.
+- [Secrets](https://alchemy.run/rivet/secrets) — Give a Rivet Durable Object an API key or a password with Config, hand a control plane its object storage keys, and choose where each stage's values come from.
 - [Part 1: Your First Durable Object](https://alchemy.run/rivet/tutorial/part-1) — Run a Rivet control plane and pool on Docker, and deploy a chat room that counts its visitors.
 - [Part 2: Messages in SQL](https://alchemy.run/rivet/tutorial/part-2) — Give each room a SQL table of messages, and post and read them over HTTP.
 - [Part 3: Clear Idle Rooms](https://alchemy.run/rivet/tutorial/part-3) — Use a Durable Object alarm to clear a room's messages an hour after the last one.
@@ -727,9 +730,11 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 - [Three ways to build Actors](https://alchemy.run/rivet/actors) — Build Rivet Actors as Alchemy Durable Objects, with RivetKit, or with RivetKit's Effect SDK — what each one is for, and how all three deploy to the same control planes and pools.
 - [Durable Object](https://alchemy.run/rivet/durable-objects) — What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
 - [Storage](https://alchemy.run/rivet/storage) — What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
+- [Concurrency](https://alchemy.run/rivet/concurrency) — How a Rivet Durable Object runs calls in parallel, how a transaction keeps a read and a write together, and how Workers.InputGate gives code written for Cloudflare the same rule it has there.
 - [Calling a Durable Object](https://alchemy.run/rivet/calling) — How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
 - [RivetKit Actors](https://alchemy.run/rivet/rivetkit) — Deploy Actors written with RivetKit, unchanged, to a Rivet control plane and pool on any cloud.
 - [RivetKit Effect Actors](https://alchemy.run/rivet/rivetkit-effect) — Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
+- [Durable Streams](https://alchemy.run/rivet/durable-streams) — Append-only logs with a replayable history, one per key, served by Rivet Services — declare one with its message Schema, append, read from an offset, follow it live, and choose its wire format as a Layer.
 - [Control Plane](https://alchemy.run/rivet/control-planes) — What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
 - [Pool](https://alchemy.run/rivet/pools) — How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
 - [Docker](https://alchemy.run/rivet/docker) — Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
@@ -987,4 +992,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~218 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~220 KB) — only fetch it when you need to locate a specific resource's reference page.

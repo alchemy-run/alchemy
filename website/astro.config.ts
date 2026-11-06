@@ -1944,15 +1944,28 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "rivet/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Control planes and namespaces", link: "/rivet/namespaces" },
+                { label: "Tokens and networks", link: "/rivet/tokens-and-networks" },
+                { label: "Secrets", link: "/rivet/secrets" },
+              ],
+            },
+            {
               label: "Building Actors",
               items: [
                 { label: "Three ways to build Actors", link: "/rivet/actors" },
                 { label: "Durable Objects", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
+                { label: "Concurrency", link: "/rivet/concurrency" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
                 { label: "RivetKit Actors", link: "/rivet/rivetkit" },
                 { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
               ],
+            },
+            {
+              label: "Rivet Services",
+              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
             },
             {
               label: "Running Rivet",

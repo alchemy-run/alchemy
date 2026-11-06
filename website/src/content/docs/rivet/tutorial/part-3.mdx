@@ -5,6 +5,8 @@ sidebar:
   order: 3
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 A room nobody uses should forget its messages. Each room has one alarm: a time at which Rivet calls the room again, whether or not anyone else does. Set it on every post, and clear the room when it fires.
 
 ## Pick the idle time
@@ -56,9 +58,7 @@ import { Default } from "./cluster.ts";
 
 ## Deploy
 
-```diff lang="sh"
-+pnpm alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Post a message, then read it back an hour later. The list is empty. The visitor count stays, because it lives in key-value storage, not in the table.
 

@@ -3,7 +3,7 @@ title: Hetzner
 description: Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
 ---
 
-Host your Durable Objects on Hetzner Cloud, and the control plane runs on Servers with a Volume each, behind a Load Balancer. Each node in a pool is a Server of its own. It's where [Part 4 of the tutorial](/rivet/tutorial/part-4) runs the rooms.
+Host your Durable Objects on Hetzner Cloud, and the control plane runs on Servers with a Volume each, behind a private Load Balancer and an HTTPS edge. Each node in a pool is a Server of its own. It's where [Part 4 of the tutorial](/rivet/tutorial/part-4) runs the rooms.
 
 ```typescript title="src/cluster.ts"
 import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
@@ -18,7 +18,7 @@ Install `@alchemy.run/hetzner` and finish [Hetzner setup](/hetzner/setup).
 
 ## The control plane
 
-You get one engine on a Server, with its data on a Volume. A Load Balancer is the endpoint. A firewall blocks every other connection to the Server.
+You get one engine on a Server, with its data on a Volume, behind a Load Balancer on the private Network. A small edge Server runs Caddy in front of it and serves the engines over HTTPS at its own address under `sslip.io`, like `https://203-0-113-7.sslip.io`, with a certificate from Let's Encrypt, so you need no domain. A firewall blocks every other connection to the engines.
 
 ```typescript title="src/cluster.ts"
 export const Cluster = RivetHetzner.ServerControlPlane("Rivet", {
@@ -58,6 +58,14 @@ export const Default = RivetHetzner.ServerPool("Default", { replicas: 2, serverT
 
 Each node's firewall only allows SSH, which Alchemy uses to deploy it.
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) on a Server of its own, behind a firewall that drops every inbound connection:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetHetzner.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
 ## Call it from a Hetzner Service
 
 ```typescript title="src/api.ts"
@@ -84,4 +92,4 @@ export default class Api extends Hetzner.Service<Api>()(
 
 [Part 4 of the tutorial](/rivet/tutorial/part-4) deploys this.
 
-Every option, with its default, is in the reference: [ServerControlPlane](/providers/rivet/hetzner#servercontrolplane) and [ServerPool](/providers/rivet/hetzner#serverpool).
+Every option, with its default, is in the reference: [ServerControlPlane](/providers/rivet/hetzner#servercontrolplane), [ServerPool](/providers/rivet/hetzner#serverpool) and [ServicesPool](/providers/rivet/hetzner#servicespool).

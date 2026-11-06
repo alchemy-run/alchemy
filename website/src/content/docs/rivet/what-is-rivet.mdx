@@ -1,38 +1,42 @@
 ---
 title: What is Rivet?
-description: The concepts behind Rivet — Actors, instances addressed by name, state that lives with them, control planes, namespaces, pools and the gateway — and how @alchemy.run/rivet models them as Durable Objects.
+description: The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
 
-[Rivet](https://rivet.dev) is an open-source platform for stateful programs called **Actors**. An Actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet keeps every Actor's data, runs each one on demand, and routes calls to it by name.
+[Rivet](https://rivet.dev) is an open-source platform for stateful programs called **Actors**. An Actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet's **control plane** keeps every Actor's data and routes calls to it by name, and a **pool** of nodes runs the Actors' code.
 
-`@alchemy.run/rivet` presents Rivet's Actors as **Durable Objects**, with the same shape as Cloudflare's, and deploys everything Rivet needs into your Stack, on the cloud you choose. This page introduces each concept once, with the chat rooms the [tutorial](/rivet/tutorial/part-1) builds as the example.
+Take one small app: chat rooms. Each room is an Actor, and an API calls a room by its name. The API sends every call to the control plane's **gateway**, with a token. The control plane finds the room, starting it on a node in its pool if it's asleep, and the room answers from its own data. The nodes connect out to the control plane and take no traffic from anywhere else.
 
-Here is the whole picture, which the rest of this page explains piece by piece. A caller names a room; the control plane finds it, or starts it on a node in its pool; and the room answers from its own state.
-
-<DAG
+<Boundaries
   nodes={[
-    { id: "caller", label: "Callers", type: "Worker or Lambda", layer: 0 },
-    { id: "cp", label: "Control plane", type: "data and routing", tone: "accent", layer: 1 },
-    { id: "pool", label: "Pool", type: "nodes", layer: 2 },
-    { id: "lobby", label: "lobby", type: "Room", layer: 3 },
-    { id: "kitchen", label: "kitchen", type: "Room", layer: 3 },
+    { id: "api", label: "Api", type: "Worker or Lambda", col: 0, row: 0 },
+    { id: "gateway", label: "Gateway", type: "HTTPS", col: 0, row: 1, tone: "accent" },
+    { id: "engine", label: "Engine", type: "data and routing", col: 1, row: 1 },
+    { id: "kitchen", label: "kitchen", type: "Room", col: 0, row: 2 },
+    { id: "lobby", label: "lobby", type: "Room", col: 1, row: 2 },
   ]}
-  edges={[
-    { from: "caller", to: "cp", label: "lobby.join()" },
-    { from: "cp", to: "pool" },
-    { from: "pool", to: "lobby" },
-    { from: "pool", to: "kitchen" },
+  zones={[
+    { id: "cp", label: "Control plane", nodes: ["gateway", "engine"], labelAt: "right" },
+    { id: "pool", label: "Pool Default", nodes: ["lobby", "kitchen"], labelAt: "right" },
   ]}
-  caption="Callers only know the control plane. The control plane knows which node runs each room."
+  links={[
+    { from: "api", to: "gateway", label: "join() + token" },
+    { from: "lobby", to: "engine", label: "connects out" },
+  ]}
+  caption="Callers only know the gateway. Nodes connect out to the control plane, which knows which node runs each room."
 />
 
 ## Durable Objects: a class and its instances
 
-A Durable Object starts as a class. `Room` says what every room can do:
+An Actor starts as a class. In Alchemy, it's a `Rivet.DurableObject`, the same shape as a Cloudflare Durable Object. `Room` says what every room can do:
 
 ```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
 export default class Room extends Rivet.DurableObject<Room>()(
   "Room",
   { main: import.meta.url },
@@ -40,12 +44,7 @@ export default class Room extends Rivet.DurableObject<Room>()(
     return Effect.gen(function* () {
       const state = yield* Rivet.DurableObjectState;
       return {
-        join: () =>
-          Effect.gen(function* () {
-            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-            yield* state.storage.put("visitors", visitors);
-            return visitors;
-          }),
+        name: () => Effect.succeed(state.id.name),
       };
     });
   }).pipe(Effect.provide(Default)),
@@ -60,24 +59,24 @@ See [Durable Object](/rivet/durable-objects).
 
 You never create an instance. Every name exists from the start, and the first call to a name brings its instance to life:
 
-```typescript title="src/api.ts"
+```typescript
 const rooms = yield* Room;
-const visitors = yield* rooms.getByName("lobby").join();
+const lobby = rooms.getByName("lobby");
 ```
 
-However many callers ask for the lobby, from however many servers, they reach the same instance. There's never a second lobby with a different idea of who's in it. That's what lets a room count its visitors or keep its messages in order without coordinating with anything else: it's the only thing that knows about the lobby.
+However many callers ask for the lobby, from however many servers, they reach the same instance. There's never a second lobby with a different idea of who's in it, so a room can count its visitors or keep its messages in order without coordinating with anything else.
 
 ## State that lives with the instance
 
-Each instance has its own storage, kept by Rivet: key-value entries, a SQLite database, and one alarm.
+Each instance has its own storage, kept by the control plane: key-value entries, a SQLite database, and one alarm.
 
-```typescript title="src/room.ts"
-yield* state.storage.put("visitors", visitors);
-yield* (yield* state.storage.sql.exec("INSERT INTO messages (author, text) VALUES (?, ?)", author, text)).toArray();
-yield* state.storage.setAlarm(now + 60 * 60 * 1000);
+```typescript
+yield* state.storage.put("visitors", 3);
+yield* (yield* state.storage.sql.exec("INSERT INTO messages (text) VALUES (?)", text)).toArray();
+yield* state.storage.setAlarm(Date.now() + 60 * 60 * 1000);
 ```
 
-The lobby's messages live in the lobby's database and nobody else's, so a room never filters out other rooms' rows or fetches its state from somewhere else. The **alarm** is a time at which Rivet calls the room's `alarm` handler, whether or not anyone else calls it.
+The lobby's messages live in the lobby's database and nobody else's. The **alarm** is a time at which Rivet calls the room's `alarm` handler, whether or not anyone else calls it.
 
 See [Storage](/rivet/storage).
 
@@ -85,28 +84,25 @@ See [Storage](/rivet/storage).
 
 An instance doesn't run forever. When a room goes quiet, Rivet puts it to sleep and frees its node. The next call wakes it, on whichever node is free, and its data is exactly as it was.
 
-So you can have far more rooms than your nodes could hold at once: only the ones in use take up room on a node. A room's code starts again on every wake: anything it holds in memory is gone, and anything in its storage remains.
+So you can have far more rooms than your nodes could hold at once: only the ones in use take up room on a node. A room's code starts again on every wake. What it holds in memory is gone, and what's in its storage remains.
 
 ## Calls by name
 
 An instance answers calls through its methods. A caller names the instance and the method, and gets back a typed result:
 
-```typescript title="src/api.ts"
-const lobby = rooms.getByName("lobby");
-const visitors = yield* lobby.join();
+```typescript
+const visitors = yield* rooms.getByName("lobby").join();
 ```
 
-Besides a value, a method can return a `Stream` that delivers values as they're produced, or fail with a tagged error the caller catches by name. A room with a `fetch` handler answers HTTP requests too, and a caller forwards one with `lobby.fetch(request)`. A caller can be anything: a Cloudflare Worker, a Lambda, a container, or another Durable Object.
+A method can also return a `Stream`, or fail with a tagged error the caller catches by name. A room with a `fetch` handler answers HTTP requests too. A caller can be anything: a Cloudflare Worker, a Lambda, a container, or another Durable Object.
 
 See [Calling a Durable Object](/rivet/calling).
 
 ## Many calls at once
 
-An instance runs in one place, but it can take more than one call at once. While one call waits on another Durable Object or an HTTP request, the next one starts.
+An instance runs in one place, but it takes calls in parallel: one call's storage reads and writes can interleave with another's. A method that reads a value and writes it back runs as a **transaction**, which no other call's storage interleaves with.
 
-Storage is the exception. Once a call starts reading and writing, no other call touches storage until the first one waits on something else. So a method that reads a value and writes it back never loses another call's write. For a change that has to wait in the middle, or undo itself on failure, use a transaction.
-
-See [Storage](/rivet/storage#change-state-safely-while-calls-overlap).
+See [Concurrency](/rivet/concurrency).
 
 ## The control plane
 
@@ -118,50 +114,56 @@ See [Control Plane](/rivet/control-planes).
 
 ## Namespaces
 
-A control plane is divided into **namespaces**. Each namespace has its own pools and its own instances, so the same `Room` in two namespaces is two separate sets of rooms.
+A control plane is divided into **namespaces**. Each has its own pools and its own instances, so the same `Room` in two namespaces is two separate sets of rooms. Alchemy creates one namespace per stage, so your `dev` lobby and your `prod` lobby never meet, even on one control plane.
 
-Alchemy creates one namespace per stage. Your `dev` stage's lobby and your `prod` stage's lobby never meet, even on one control plane.
+See [Namespaces](/rivet/namespaces).
 
 ## Pools and nodes
 
-A **pool** is a group of machines, called **nodes**, that run your code. Each class runs on one pool. When a room wakes, the control plane starts it on one of its pool's nodes.
-
-Nodes connect out to the control plane and wait for work. Nothing connects in to them, so they need no public address and no load balancer, and a pool can run on a different cloud from its control plane.
+A **pool** is a group of machines, called **nodes**, that run your code. Each class runs on one pool. Nodes connect out to the control plane and wait for work, so they need no public address and no load balancer, and a pool can run on a different cloud from its control plane.
 
 See [Pool](/rivet/pools).
 
-## The gateway
+## The gateway and its token
 
-Callers don't talk to nodes. They send each call to the control plane's **gateway**, an HTTP endpoint that takes the class, the instance's name and the request, and passes it to the node running that instance, starting it first if it's asleep.
+Callers don't talk to nodes. They send each call to the control plane's **gateway**, an HTTPS endpoint that takes the class, the instance's name and the request, and passes it to the node running that instance. Every call carries a token, and the gateway refuses one without it.
 
-```text
-POST /gateway/Room/request/<path>?rvt-namespace=<stage>&rvt-key=lobby&rvt-method=getOrCreate
+See [Tokens and networks](/rivet/tokens-and-networks).
+
+## Rivet Services
+
+Rivet runs some Actors of its own. **Rivet Services** is a prebuilt node that hosts them: **Durable Streams**, append-only logs with a replayable history, and agentOS virtual machines. You run it as a pool next to yours, and callers reach its Actors through the same gateway.
+
+```typescript
+const log = yield* ChatLog;
+yield* log.append("lobby", { user: "sam", text: "hello" });
 ```
 
-So a caller needs only the control plane's address and a token, and no route to the nodes at all.
+See [Durable Streams](/rivet/durable-streams).
 
 ## Your control plane, or Rivet Cloud
 
-You can run the control plane yourself, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or let [Rivet Cloud](https://rivet.dev) run it for you. Either way, your nodes run in a pool you deploy, on any cloud.
+You can run the control plane yourself, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or let [Rivet Cloud](https://rivet.dev) run it for you. Either way, your nodes run in pools you deploy, on any cloud.
 
 See [Rivet Cloud](/rivet/rivet-cloud).
 
 ## How @alchemy.run/rivet models these concepts
 
-Each concept on this page is something you declare in your Stack.
+A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects). Its methods, `fetch` and `alarm` become a Rivet Actor, its storage is `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway. Actors already written with RivetKit, async or Effect, deploy the same way; see [Three ways to build Actors](/rivet/actors).
 
-A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects): its methods, `fetch` and `alarm` become a Rivet Actor, its storage becomes `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway.
-
-Actors you've already written with RivetKit, in its async or Effect form, deploy the same way: a `Rivet.DurableObject` given just their entry file runs them unchanged. See [Three ways to build Actors](/rivet/actors).
-
-A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, load balancer and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins:
+A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, HTTPS endpoint and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins, and so is a Services pool:
 
 ```typescript title="src/cluster.ts"
+import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
+import * as Layer from "effect/Layer";
+
 export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
 
 export const Default = RivetHetzner.ServerPool("Default").pipe(Layer.provide(Cluster));
+
+export const Services = RivetHetzner.ServicesPool("Services").pipe(Layer.provide(Cluster));
 ```
 
-A class names its pool with `Effect.provide(Default)`, and each deploy bundles every class on a pool into one program for its nodes. Because the control plane and the pool are just Layers, moving to another cloud changes this file and nothing else.
+A class names its pool with `Effect.provide(Default)`, and each deploy bundles every class on a pool into one program for its nodes. Because control planes and pools are Layers, moving to another cloud changes this file and nothing else.
 
-Next, build one: the [tutorial](/rivet/tutorial/part-1) puts these ideas to work on chat rooms, one step at a time. Or read the concepts in depth, starting with [Durable Object](/rivet/durable-objects), or pick a cloud from the [platforms](/rivet/docker).
+Next, build one: the [tutorial](/rivet/tutorial/part-1) builds chat rooms one step at a time.

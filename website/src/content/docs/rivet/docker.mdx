@@ -34,6 +34,14 @@ export const Default = RivetDocker.SwarmPool("Default", { replicas: 2 }).pipe(La
 
 Each deploy builds a node image with every class on the pool.
 
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a swarm service on the control plane's network, with no published ports:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetDocker.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
 ## Call it from a container
 
 Callers reach the control plane on its Docker network. Join it from a `Docker.Service`:
@@ -72,4 +80,4 @@ export const Cluster = RivetDocker.SwarmControlPlane("Rivet", { context: "my-ser
 
 `context` takes a Docker context name. See [Docker](/docker).
 
-Every option, with its default, is in the reference: [SwarmControlPlane](/providers/rivet/docker#swarmcontrolplane) and [SwarmPool](/providers/rivet/docker#swarmpool).
+Every option, with its default, is in the reference: [SwarmControlPlane](/providers/rivet/docker#swarmcontrolplane), [SwarmPool](/providers/rivet/docker#swarmpool) and [ServicesPool](/providers/rivet/docker#servicespool).

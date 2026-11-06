@@ -1,32 +1,25 @@
 ---
 title: Rivet
-description: Durable Objects on Rivet. Run the control plane and the nodes on your own cloud, keep each instance's data beside it, and call any instance by name from any runtime.
+description: Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import HubMap from "../../../components/HubMap.astro";
 
-`@alchemy.run/rivet` runs Durable Objects outside Cloudflare. A Durable Object is a class with one instance per name: a chat room, a game, a user's session. Each instance keeps its own data, in key-value storage and a SQL database, and can set an alarm to wake itself later.
+Rivet is an open-source platform for Actors: long-lived programs that each have a name and their own state, like one chat room, one game or one user's session. Rivet's engine stores each Actor's key-value and SQLite data, starts it on a node when it's called, puts it to sleep when it goes quiet, and sends every call for a name to the one Actor that owns it. You run the engine and its nodes on your own cloud, or use Rivet Cloud.
 
-You run Rivet yourself. A control plane stores every instance's data and routes calls to it. A pool of nodes runs your code. Both deploy in the same Stack as the rest of your app, on Docker, AWS, GCP, Kubernetes, Fly or Hetzner.
+In Alchemy, an Actor class is a `Rivet.DurableObject`, the same shape as a Cloudflare Durable Object, and the engine and its nodes are Layers in your Stack.
 
-<DAG
-  nodes={[
-    { id: "caller", label: "Callers", type: "Worker or Lambda", col: 0, row: 0 },
-    { id: "cp", label: "Control plane", type: "data and routing", tone: "accent", col: 1, row: 0 },
-    { id: "pool", label: "Pool", type: "runs your code", col: 2, row: 0 },
-  ]}
-  edges={[
-    { from: "caller", to: "cp", label: "room lobby" },
-    { from: "cp", to: "pool" },
-  ]}
-  caption="Callers name an instance. The control plane finds or starts it on a node in its pool."
-/>
+**New to Rivet?** Start with [What is Rivet?](/rivet/what-is-rivet).
 
-## A taste
+## A quick example
 
 A Durable Object declares what each instance can do:
 
 ```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
 export default class Room extends Rivet.DurableObject<Room>()(
   "Room",
   { main: import.meta.url },
@@ -35,20 +28,25 @@ export default class Room extends Rivet.DurableObject<Room>()(
       const state = yield* Rivet.DurableObjectState;
       return {
         join: () =>
-          Effect.gen(function* () {
-            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
-            yield* state.storage.put("visitors", visitors);
-            return visitors;
-          }),
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
       };
     });
   }).pipe(Effect.provide(Default)),
 ) {}
 ```
 
-`Default` is the pool it runs on, given the control plane it joins:
+`Default` is the pool of nodes it runs on, given the control plane it joins:
 
 ```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
 export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 
 export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
@@ -61,16 +59,14 @@ const rooms = yield* Room;
 const visitors = yield* rooms.getByName("lobby").join();
 ```
 
-Swap `RivetDocker` for `RivetHetzner`, `RivetAWS` or any other cloud, and the room doesn't change.
+Swap `RivetDocker` for `RivetAWS`, `RivetHetzner` or another cloud, and the room doesn't change.
 
 ## Where to start
 
-**New to Rivet?** [What is Rivet?](/rivet/what-is-rivet) walks through every concept once, with chat rooms as the example.
+**Want to build?** Install the provider in [Setup](/rivet/setup), then follow the [tutorial](/rivet/tutorial/part-1) from a visitor count on your machine to chat rooms on Hetzner.
 
-**Want to build one?** The [tutorial](/rivet/tutorial/part-1) builds chat rooms step by step, from a visitor count on your machine to rooms with messages and alarms, running on Hetzner.
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
 
-**Want the whole picture?** The concepts read as a manual, one idea per chapter: [Durable Object](/rivet/durable-objects), [Storage](/rivet/storage), [Calling a Durable Object](/rivet/calling), [Control Plane](/rivet/control-planes) and [Pool](/rivet/pools).
+## The docs
 
-**Already using RivetKit?** Your Actors deploy unchanged, async or Effect. See [Three ways to build Actors](/rivet/actors).
-
-**Choosing a cloud?** Each platform page shows what runs where: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway) and [Rivet Cloud](/rivet/rivet-cloud). Start with [Setup](/rivet/setup).
+<HubMap />

@@ -136,6 +136,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Platforms: l("cloud"),
   "Building Actors": l("boxes"),
   "Running Rivet": l("server-cog"),
+  "Rivet Services": l("waves"),
   Testing: l("flask-conical"),
   Domain: l("blocks"),
   // Reference tab: provider groups get their official brand marks.

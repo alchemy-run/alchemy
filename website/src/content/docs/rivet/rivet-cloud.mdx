@@ -19,7 +19,7 @@ export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
 
 Create a namespace in the Rivet dashboard. It shows your cluster's endpoint and a token. Set them before you deploy:
 
-```sh
+```sh title=".env"
 RIVET_ENDPOINT=https://my-cluster-api.onrivet.dev
 RIVET_NAMESPACE=my-namespace
 RIVET_TOKEN=...
