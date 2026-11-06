@@ -20,7 +20,7 @@ import type { Compute } from "./Compute.ts";
 import type { DomainOwnership } from "./DomainOwnership.ts";
 import { waitForAuthoritativeRecord } from "./internal/AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { ownershipRequiredOf } from "./internal/DomainOwnership.ts";
+import { ownershipRequiredOf, withoutRetriedCreate } from "./internal/DomainOwnership.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
@@ -337,7 +337,7 @@ const ProviderLive = () =>
             ? domain.status === "failed"
               ? (yield* createDomainRetry({ domainId: domain.id })).data
               : domain
-            : yield* createServiceDomain({ serviceId: appId, hostname }).pipe(
+            : yield* withoutRetriedCreate(createServiceDomain({ serviceId: appId, hostname })).pipe(
                 // A CNAME or ownership TXT published moments earlier, e.g. in
                 // the same deploy, may not be visible to Prisma's resolver yet.
                 Effect.retry({

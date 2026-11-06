@@ -8,14 +8,16 @@ import {
   getWorkspaceDomainOwnershipsVerification,
   getWorkspaces,
 } from "@distilled.cloud/prisma/management";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { AdoptPolicy, Unowned } from "alchemy/AdoptPolicy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
-import { waitForAuthoritativeRecord } from "./AuthoritativeDns.ts";
+import { AuthoritativeRecordCheck } from "./AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./DevStub.ts";
 import {
   DomainOwnershipOperationFailed,
@@ -23,6 +25,7 @@ import {
   PrismaDomainOwnershipRequired,
   type ProjectReference,
   resolveWorkspaceId,
+  withoutRetriedCreate,
 } from "./DomainOwnership.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
 import { isInputObject, isPrismaDevId } from "./Refs.ts";
@@ -125,15 +128,30 @@ const ownershipRequired = (domain: string, record: VerificationRecord, reason: s
     message: `${reason} Publish a TXT record named '${record.name}' with value '${record.value}', keep it, and redeploy.`,
   });
 
+const adoptAllowed = Effect.gen(function* () {
+  return (
+    Option.getOrUndefined(yield* Effect.serviceOption(AdoptPolicy)) ?? (yield* AlchemyContext).adopt
+  );
+});
+
+/**
+ * A domain ownership this resource did not record is taken only while it is
+ * `unverified`, which grants nothing, or with `--adopt`.
+ */
+const claim = (ownership: ApiDomainOwnership) =>
+  Effect.gen(function* () {
+    if (ownership.status === "unverified" || (yield* adoptAllowed)) return ownership;
+    return yield* new DomainOwnershipOperationFailed({
+      message: `Prisma domain ownership '${ownership.id}' for '${ownership.domain}' is '${ownership.status}' and was not created by this resource. Redeploy with --adopt to take it over.`,
+    });
+  });
+
 const createOwnership = (workspaceId: string, domain: string) =>
   Effect.gen(function* () {
-    const created = yield* createWorkspaceDomainOwnership({ workspaceId, domain });
-    if (created.httpStatus === 200 && created.data.status !== "unverified") {
-      return yield* new DomainOwnershipOperationFailed({
-        message: `A '${created.data.status}' Prisma domain ownership for '${domain}' appeared in workspace '${workspaceId}' while this deploy ran. Redeploy with --adopt to take it over.`,
-      });
-    }
-    return created.data;
+    const created = yield* withoutRetriedCreate(
+      createWorkspaceDomainOwnership({ workspaceId, domain }),
+    );
+    return created.httpStatus === 201 ? created.data : yield* claim(created.data);
   });
 
 /** Ask Prisma to look the record up again until it reports `verified`. */
@@ -153,6 +171,7 @@ const ProviderLive = () =>
   Provider.effect(
     DomainOwnershipProof,
     Effect.gen(function* () {
+      const checkRecord = yield* AuthoritativeRecordCheck;
       return {
         stables: ["domainOwnershipId", "workspaceId"],
         list: Effect.fn(function* () {
@@ -197,21 +216,25 @@ const ProviderLive = () =>
             ? undefined
             : output?.domainOwnershipId;
           const recorded = domainOwnershipId ? yield* getOwnership(domainOwnershipId) : undefined;
-          const existing =
+          const found =
             recorded && normalizeDomain(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
+          const existing =
+            found === undefined || found.id === domainOwnershipId ? found : yield* claim(found);
           if (existing?.status === "verified") return attrsFrom(existing);
           const record =
             existing?.verification ??
             (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain })).data;
           // Prisma looks the record up through a caching resolver, so it
           // must be visible at every authoritative nameserver first.
-          const visible = yield* waitForAuthoritativeRecord(
+          // When the nameservers cannot be found or reached, Prisma's own
+          // lookup decides.
+          const visibility = yield* checkRecord(
             { type: "TXT", name: record.name, value: record.value },
             { margin: "always" },
           );
-          if (!visible) {
+          if (visibility === "absent") {
             return yield* ownershipRequired(
               domain,
               record,
