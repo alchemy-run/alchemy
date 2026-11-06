@@ -1,3 +1,4 @@
+import { buildCacheRef, resolveBuildCache } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
@@ -641,11 +642,7 @@ export const LiveContainerProvider = () =>
             return { imageRef: published, digest };
           }
         }
-        const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
-        const cacheOptions = {
-          "cache-from": [`type=registry,ref=${cacheRef}`],
-          "cache-to": ["type=inline"],
-        };
+        const cacheOptions = resolveBuildCache(props.build?.cache, buildCacheRef(imageRef));
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -716,7 +713,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: imageRef,
                 context: build.context,
                 platform,
                 file: build.dockerfile,
@@ -759,7 +756,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: imageRef,
                 context: contextDir,
                 platform,
               },
