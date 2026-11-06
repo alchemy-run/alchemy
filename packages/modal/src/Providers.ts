@@ -16,7 +16,6 @@ import { Image, ImageProvider } from "./Image.ts";
 import { PersistentSandbox, PersistentSandboxProvider } from "./PersistentSandbox.ts";
 import { Proxy, ProxyProvider } from "./Proxy.ts";
 import { Queue, QueueProvider } from "./Queue.ts";
-import { RuntimeObjects, RuntimeObjectsProvider } from "./RuntimeObjects.ts";
 import { Sandbox, SandboxProvider } from "./Sandbox.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Server, ServerProvider } from "./Server.ts";
@@ -57,7 +56,6 @@ export const providers = () =>
       PersistentSandbox,
       Proxy,
       Queue,
-      RuntimeObjects,
       Sandbox,
       Secret,
       Server,
@@ -79,7 +77,6 @@ export const providers = () =>
         ImageProvider(),
         PersistentSandboxProvider(),
         ProxyProvider(),
-        RuntimeObjectsProvider(),
         QueueProvider(),
         SandboxProvider(),
         SecretProvider(),

@@ -16,6 +16,7 @@ import {
 } from "./internal.ts";
 import { declarable } from "./internal/Declared.ts";
 import type { Providers } from "./Providers.ts";
+import { isRuntimeName } from "./RuntimeOwner.ts";
 
 export class VolumeUnexpectedResponse extends Data.TaggedError("Modal.VolumeUnexpectedResponse")<{
   readonly message: string;
@@ -268,7 +269,7 @@ export const VolumeProvider = () =>
             );
             for (const item of items) {
               const name = item.label ?? item.metadata?.name;
-              if (!item.volumeId || !isGeneratedName(name)) continue;
+              if (!item.volumeId || !(isGeneratedName(name) || isRuntimeName(name))) continue;
               all.push({
                 volumeId: item.volumeId,
                 name: name ?? "",

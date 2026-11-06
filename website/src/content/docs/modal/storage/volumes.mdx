@@ -130,8 +130,12 @@ const home = yield* volumes.getOrCreate(`home-${user}`);
 yield* home.writeFile("/notes.md", notes);
 ```
 
-Volumes a runtime creates are deleted when the stack is destroyed. Keep them with `onDestroy: "retain"`:
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. A volume has only a name, so the tags become its name prefix. Find them by that prefix to clean them up:
 
 ```typescript
-const volumes = yield* Modal.CreateVolume(Agents, { onDestroy: "retain" });
+const prefix = Modal.runtimePrefix({ stack: "my-app", stage: "prod", id: "Api" });
+```
+
+```sh
+modal volume list --env agents | grep "$PREFIX"
 ```

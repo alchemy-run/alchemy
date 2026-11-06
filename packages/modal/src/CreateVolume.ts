@@ -4,7 +4,6 @@ import type * as Effect from "effect/Effect";
 import type { VolumesOps } from "./CreateVolumeHttp.ts";
 import type { Environment } from "./Environment.ts";
 import type { ErrorOf, OpError } from "./internal.ts";
-import type { CreateOptions } from "./RuntimeObjects.ts";
 import type { ensureVolume, lookupVolume } from "./Volume.ts";
 import type { VolumeAttributes } from "./Volume.ts";
 import type { ReadWriteVolumeClient } from "./VolumeClient.ts";
@@ -48,6 +47,12 @@ export type VolumesClient = VolumesClientOf<RuntimeContext>;
  * own namespace (or to nothing, for the workspace's default environment).
  * They aren't in Alchemy state: deleting the environment removes them.
  *
+ * Objects created at run time are tagged with the stack, stage and binding
+ * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when
+ * the stack is destroyed. A Modal volume has only a name, so the tags become
+ * its name prefix, `Modal.runtimePrefix({ stack, stage, id })`: list them
+ * with `modal volume list` and delete the ones whose name starts with it.
+ *
  * ### One volume per user
  * **Example:** From a Cloudflare Worker
  * ```typescript
@@ -85,7 +90,7 @@ export type VolumesClient = VolumesClientOf<RuntimeContext>;
 export interface CreateVolume extends Binding.Service<
   CreateVolume,
   "Modal.CreateVolume",
-  (environment?: Environment, options?: CreateOptions) => Effect.Effect<VolumesClient>
+  (environment?: Environment) => Effect.Effect<VolumesClient>
 > {}
 
 export const CreateVolume = Binding.Service<CreateVolume>("Modal.CreateVolume");

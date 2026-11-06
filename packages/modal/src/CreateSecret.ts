@@ -5,7 +5,6 @@ import type * as Redacted from "effect/Redacted";
 import type { SecretsOps } from "./CreateSecretHttp.ts";
 import type { Environment } from "./Environment.ts";
 import type { ErrorOf, OpError } from "./internal.ts";
-import type { CreateOptions } from "./RuntimeObjects.ts";
 import type { lookupSecret, putSecret } from "./Secret.ts";
 import type { SecretAttributes } from "./Secret.ts";
 
@@ -46,6 +45,12 @@ export type SecretsClient = SecretsClientOf<RuntimeContext>;
  * Bind it to a `Modal.Environment` to keep these runtime secrets in their
  * own namespace. They aren't in Alchemy state: deleting the environment
  * removes them.
+ *
+ * Objects created at run time are tagged with the stack, stage and binding
+ * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when
+ * the stack is destroyed. A Modal secret has only a name, so the tags become
+ * its name prefix, `Modal.runtimePrefix({ stack, stage, id })`: list them
+ * with `modal secret list` and delete the ones whose name starts with it.
  *
  * ### A user's token, injected at egress
  * **Example:** From a Cloudflare Worker
@@ -98,7 +103,7 @@ export type SecretsClient = SecretsClientOf<RuntimeContext>;
 export interface CreateSecret extends Binding.Service<
   CreateSecret,
   "Modal.CreateSecret",
-  (environment?: Environment, options?: CreateOptions) => Effect.Effect<SecretsClient>
+  (environment?: Environment) => Effect.Effect<SecretsClient>
 > {}
 
 export const CreateSecret = Binding.Service<CreateSecret>("Modal.CreateSecret");

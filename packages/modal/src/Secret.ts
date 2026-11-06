@@ -17,6 +17,7 @@ import {
 } from "./internal.ts";
 import { declarable } from "./internal/Declared.ts";
 import type { Providers } from "./Providers.ts";
+import { isRuntimeName } from "./RuntimeOwner.ts";
 
 export class SecretUnexpectedResponse extends Data.TaggedError("Modal.SecretUnexpectedResponse")<{
   readonly message: string;
@@ -236,7 +237,14 @@ export const SecretProvider = () =>
               (item) => item.createdAt,
             );
             for (const item of items) {
-              if (!item.secretId || !isGeneratedName(item.label ?? item.metadata?.name)) continue;
+              if (
+                !item.secretId ||
+                !(
+                  isGeneratedName(item.label ?? item.metadata?.name) ||
+                  isRuntimeName(item.label ?? item.metadata?.name)
+                )
+              )
+                continue;
               all.push({
                 secretId: item.secretId,
                 name: item.label ?? item.metadata?.name ?? "",

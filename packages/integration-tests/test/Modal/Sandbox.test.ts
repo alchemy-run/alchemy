@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Modal from "@alchemy.run/modal";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as sandbox from "@distilled.cloud/modal/sandbox";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -134,6 +135,22 @@ test(
       probe: "connect",
       body: "",
     });
+  }),
+  { tags, timeout: 600_000 },
+);
+
+test(
+  "a sandbox a runtime creates carries its stack, stage and host as tags",
+  Effect.gen(function* () {
+    const { sandboxId } = yield* get<{ sandboxId: string }>("/owned");
+    const { tags } = yield* sandbox.sandboxTagsGetV2({ sandboxId });
+    yield* sandbox.sandboxTerminateV2({ sandboxId });
+    const byName = Object.fromEntries((tags ?? []).map((t) => [t.tagName, t.tagValue]));
+    // The owner's keys win over a user tag of the same name; others stay.
+    expect(byName["alchemy::stack"]).toBe("ModalRuntimeStack");
+    expect(byName["alchemy::id"]).toBe("ModalRuntimeFunction");
+    expect(byName["alchemy::stage"]).toBeTruthy();
+    expect(byName.user).toBe("u1");
   }),
   { tags, timeout: 600_000 },
 );

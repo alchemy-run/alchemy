@@ -5,7 +5,7 @@ import { makeOpenModalBinding } from "./BindingHttp.ts";
 import { CreateVolume, type VolumeHandle, type VolumesClientOf } from "./CreateVolume.ts";
 import type { Environment } from "./Environment.ts";
 import { environmentOf, listAll, operations } from "./internal.ts";
-import { type CreateOptions, RuntimeStamp, stampedName, unstampedName } from "./RuntimeObjects.ts";
+import { ownedName, type RuntimeOwner, RuntimeOwnerOf, unownedName } from "./RuntimeOwner.ts";
 import { ensureVolume, lookupVolume, type VolumeAttributes } from "./Volume.ts";
 import { makeReadWriteVolumeClient } from "./VolumeClient.ts";
 import { VolumeFileOps } from "./VolumeFiles.ts";
@@ -31,20 +31,20 @@ const handleOf = (attributes: VolumeAttributes, ops: VolumesOps, name: string): 
 export const makeVolumesClient = (
   environment: Effect.Effect<string | undefined>,
   ops: VolumesOps,
-  prefix: Effect.Effect<string | undefined> = Effect.undefined,
+  owner: Effect.Effect<RuntimeOwner | undefined> = Effect.undefined,
 ): VolumesClientOf<never> => ({
   getOrCreate: (name) =>
-    Effect.flatMap(Effect.all([environment, prefix]), ([env, stamp]) =>
-      ensureVolume(ops.getOrCreate, stampedName(stamp, name), env),
+    Effect.flatMap(Effect.all([environment, owner]), ([env, stamp]) =>
+      ensureVolume(ops.getOrCreate, ownedName(stamp, name), env),
     ).pipe(Effect.map((attributes) => handleOf(attributes, ops, name))),
   get: (name) =>
-    Effect.flatMap(Effect.all([environment, prefix]), ([env, stamp]) =>
-      lookupVolume(ops.getOrCreate, stampedName(stamp, name), env),
+    Effect.flatMap(Effect.all([environment, owner]), ([env, stamp]) =>
+      lookupVolume(ops.getOrCreate, ownedName(stamp, name), env),
     ).pipe(Effect.map((attributes) => (attributes ? handleOf(attributes, ops, name) : undefined))),
   delete: (name) =>
     Effect.gen(function* () {
       const env = yield* environment;
-      const found = yield* lookupVolume(ops.getOrCreate, stampedName(yield* prefix, name), env);
+      const found = yield* lookupVolume(ops.getOrCreate, ownedName(yield* owner, name), env);
       if (!found) return;
       yield* ops
         .delete({ volumeId: found.volumeId, environmentName: environmentOf(env) })
@@ -53,7 +53,7 @@ export const makeVolumesClient = (
   list: () =>
     Effect.gen(function* () {
       const env = yield* environment;
-      const stamp = yield* prefix;
+      const stamp = yield* owner;
       const items = yield* listAll(
         (pagination) =>
           ops
@@ -63,7 +63,7 @@ export const makeVolumesClient = (
       );
       return items.flatMap((item) => {
         const name = item.label ?? item.metadata?.name;
-        const own = name ? unstampedName(stamp, name) : undefined;
+        const own = name ? unownedName(stamp, name) : undefined;
         return own ? [own] : [];
       });
     }),
@@ -79,18 +79,15 @@ export const makeVolumesClient = (
  */
 export const CreateVolumeHttp = Layer.effect(
   CreateVolume,
-  Effect.gen(function* () {
-    const runtimeStamp = yield* RuntimeStamp;
-    return yield* makeOpenModalBinding({
-      tag: "Modal.CreateVolume",
-      operations: VolumesOps,
-      role: "contributor",
-      environmentOf: (environment?: Environment, _options?: CreateOptions) => environment?.name,
-      make: Effect.fn(function* (ops, environment?: Environment, options?: CreateOptions) {
-        const name = environment ? yield* environment.name : Effect.undefined;
-        const stamp = yield* runtimeStamp("volume", environment, options);
-        return makeVolumesClient(name, ops, stamp);
-      }),
-    });
+  makeOpenModalBinding({
+    tag: "Modal.CreateVolume",
+    operations: VolumesOps,
+    role: "contributor",
+    environmentOf: (environment?: Environment) => environment?.name,
+    make: Effect.fn(function* (ops, environment?: Environment) {
+      const name = environment ? yield* environment.name : Effect.undefined;
+      const owner = yield* RuntimeOwnerOf();
+      return makeVolumesClient(name, ops, owner);
+    }),
   }),
 );

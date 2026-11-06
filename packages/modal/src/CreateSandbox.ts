@@ -99,7 +99,11 @@ export interface SandboxesClient {
   restore(
     snapshot: { readonly snapshotId: string },
     options?: { readonly name?: string },
-  ): Effect.Effect<SandboxHandle, ErrorOf<typeof restoreSandbox>, RuntimeContext>;
+  ): Effect.Effect<
+    SandboxHandle,
+    ErrorOf<typeof restoreSandbox> | SandboxOpError<"setTags">,
+    RuntimeContext
+  >;
 }
 
 /**
@@ -114,6 +118,14 @@ export interface SandboxesClient {
  *
  * Sandboxes are runtime objects: they aren't in Alchemy state. Stopping the
  * App (destroying the `Modal.App` resource) terminates every sandbox in it.
+ *
+ * Objects created at run time are tagged with the stack, stage and binding
+ * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when
+ * the stack is destroyed. List them by those tags to clean them up:
+ * `sandboxes.list({ tags: { "alchemy::stack": "my-app" } })`, or Modal's
+ * `SandboxList` with `tags`. Your own `tags` merge under the three. A
+ * persistent sandbox takes neither tags nor a name, so it carries no owner;
+ * it lives in the App.
  *
  * ### Create a sandbox per request
  * **Example:** Run a command and terminate

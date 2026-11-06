@@ -5,6 +5,7 @@ import { makeModalBinding } from "./BindingHttp.ts";
 import { CreateSandbox, type SandboxesClient, type SandboxUsageGroup } from "./CreateSandbox.ts";
 import type { Image } from "./Image.ts";
 import { timestampOf } from "./internal.ts";
+import { type RuntimeOwner, RuntimeOwnerOf, runtimeTags } from "./RuntimeOwner.ts";
 import type { Sandbox } from "./Sandbox.ts";
 import {
   createPersistentSandbox,
@@ -28,9 +29,17 @@ const hourOf = (value: Date | string | number, round: (n: number) => number): st
 export const makeSandboxesClient = (
   target: Effect.Effect<SandboxTarget>,
   ops: SandboxOps,
+  owner: Effect.Effect<RuntimeOwner | undefined> = Effect.undefined,
 ): SandboxesClient => ({
   appId: Effect.map(target, (t) => t.appId),
-  create: (options) => Effect.flatMap(target, (t) => createSandbox(ops, t, options)),
+  create: (options) =>
+    Effect.flatMap(Effect.all([target, owner]), ([t, o]) =>
+      createSandbox(ops, t, {
+        ...options,
+        // The owner's tags win over a user tag of the same key.
+        tags: o === undefined ? options?.tags : { ...options?.tags, ...runtimeTags(o) },
+      }),
+    ),
   fromName: (name) => Effect.flatMap(target, (t) => sandboxFromName(ops, t, name)),
   fromId: (sandboxId) => Effect.map(target, (t) => sandboxHandle(ops, sandboxId, t)),
   list: (options) => Effect.flatMap(target, (t) => listSandboxes(ops, t, options)),
@@ -72,7 +81,12 @@ export const makeSandboxesClient = (
       persistentSandboxHandle(ops, typeof box === "string" ? box : box.persistentSandboxId, t),
     ),
   restore: (snapshot, options) =>
-    Effect.flatMap(target, (t) => restoreSandbox(ops, t, snapshot, options)),
+    Effect.gen(function* () {
+      const restored = yield* restoreSandbox(ops, yield* target, snapshot, options);
+      const o = yield* owner;
+      if (o !== undefined) yield* restored.setTags(runtimeTags(o));
+      return restored;
+    }),
 });
 
 const isImage = (target: App | Image | Sandbox): target is Image => target.Type === "Modal.Image";
@@ -94,6 +108,7 @@ export const CreateSandboxHttp = Layer.effect(
     operations: SandboxOps,
     role: "contributor",
     make: Effect.fn(function* (resource: App | Image | Sandbox, ops) {
+      const owner = yield* RuntimeOwnerOf();
       if (isProgram(resource)) {
         const imageId = yield* resource.imageId;
         const appId = yield* resource.appId;
@@ -121,7 +136,7 @@ export const CreateSandboxHttp = Layer.effect(
             program: { secretId: t.secretId, command: t.command, port: t.port, mounts: t.mounts },
           })),
         );
-        return makeSandboxesClient(target, ops);
+        return makeSandboxesClient(target, ops, owner);
       }
       if (isImage(resource)) {
         const imageId = yield* resource.imageId;
@@ -131,7 +146,7 @@ export const CreateSandboxHttp = Layer.effect(
         const target = Effect.all({ imageId, appId, appName, environment }).pipe(
           Effect.map((t): SandboxTarget => t),
         );
-        return makeSandboxesClient(target, ops);
+        return makeSandboxesClient(target, ops, owner);
       }
       const appId = yield* resource.appId;
       const appName = yield* resource.name;
@@ -139,7 +154,7 @@ export const CreateSandboxHttp = Layer.effect(
       const target = Effect.all({ appId, appName, environment }).pipe(
         Effect.map((t): SandboxTarget => t),
       );
-      return makeSandboxesClient(target, ops);
+      return makeSandboxesClient(target, ops, owner);
     }),
   }),
 );

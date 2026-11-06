@@ -16,6 +16,7 @@ import {
 } from "./internal.ts";
 import { declarable } from "./internal/Declared.ts";
 import type { Providers } from "./Providers.ts";
+import { isRuntimeName } from "./RuntimeOwner.ts";
 
 export class DictUnexpectedResponse extends Data.TaggedError("Modal.DictUnexpectedResponse")<{
   readonly message: string;
@@ -204,7 +205,8 @@ export const DictProvider = () =>
               (item) => item.createdAt,
             );
             for (const item of items) {
-              if (!item.dictId || !isGeneratedName(item.name)) continue;
+              if (!item.dictId || !(isGeneratedName(item.name) || isRuntimeName(item.name)))
+                continue;
               all.push({ dictId: item.dictId, name: item.name ?? "", environment: env });
             }
           }

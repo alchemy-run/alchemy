@@ -32,6 +32,14 @@ export default class RuntimeFunction extends AWS.Lambda.Function<RuntimeFunction
               return yield* response.json;
             }).pipe(Effect.ensuring(Effect.ignore(agent.terminate())));
           });
+        if (url.pathname === "/owned") {
+          // Left running: the test reads its tags, then terminates it.
+          const agent = yield* agents.create({
+            timeout: "5 minutes",
+            tags: { user: "u1", "alchemy::stack": "spoofed" },
+          });
+          return yield* HttpServerResponse.json({ sandboxId: agent.sandboxId });
+        }
         if (url.pathname.startsWith("/port/")) {
           const agent = yield* agents.create({ timeout: "5 minutes" });
           return yield* Effect.gen(function* () {

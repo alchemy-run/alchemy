@@ -16,6 +16,7 @@ import {
 } from "./internal.ts";
 import { declarable } from "./internal/Declared.ts";
 import type { Providers } from "./Providers.ts";
+import { isRuntimeName } from "./RuntimeOwner.ts";
 
 export class QueueUnexpectedResponse extends Data.TaggedError("Modal.QueueUnexpectedResponse")<{
   readonly message: string;
@@ -210,7 +211,8 @@ export const QueueProvider = () =>
               (item) => item.createdAt,
             );
             for (const item of items) {
-              if (!item.queueId || !isGeneratedName(item.name)) continue;
+              if (!item.queueId || !(isGeneratedName(item.name) || isRuntimeName(item.name)))
+                continue;
               all.push({ queueId: item.queueId, name: item.name ?? "", environment: env });
             }
           }

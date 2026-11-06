@@ -7,7 +7,6 @@ import type { DictAttributes } from "./Dict.ts";
 import type { ReadWriteDictClient } from "./DictClient.ts";
 import type { Environment } from "./Environment.ts";
 import type { ErrorOf, OpError } from "./internal.ts";
-import type { CreateOptions } from "./RuntimeObjects.ts";
 
 /** A dict created or found at runtime: its attributes plus a read-write client. */
 export interface DictHandle extends ReadWriteDictClient {
@@ -48,6 +47,12 @@ export type DictsClient = DictsClientOf<RuntimeContext>;
  * own namespace (or to nothing, for the workspace's default environment).
  * They aren't in Alchemy state: deleting the environment removes them.
  *
+ * Objects created at run time are tagged with the stack, stage and binding
+ * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when
+ * the stack is destroyed. A Modal dict has only a name, so the tags become
+ * its name prefix, `Modal.runtimePrefix({ stack, stage, id })`: list them
+ * with `modal dict list` and delete the ones whose name starts with it.
+ *
  * ### One dict per user
  * **Example:** From a Cloudflare Worker
  * ```typescript
@@ -84,7 +89,7 @@ export type DictsClient = DictsClientOf<RuntimeContext>;
 export interface CreateDict extends Binding.Service<
   CreateDict,
   "Modal.CreateDict",
-  (environment?: Environment, options?: CreateOptions) => Effect.Effect<DictsClient>
+  (environment?: Environment) => Effect.Effect<DictsClient>
 > {}
 
 export const CreateDict = Binding.Service<CreateDict>("Modal.CreateDict");

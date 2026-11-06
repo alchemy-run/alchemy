@@ -33,7 +33,7 @@ export * from "./MountBucket.ts";
 export * from "./Mounts.ts";
 export * from "./MountVolume.ts";
 export * from "./Proxy.ts";
-export * from "./RuntimeObjects.ts";
+export * from "./RuntimeOwner.ts";
 export * from "./Queue.ts";
 export * from "./ReadApp.ts";
 export * from "./ReadAppHttp.ts";

@@ -91,6 +91,16 @@ return yield* port.fetch(yield* HttpServerRequest.HttpServerRequest);
 
 For a browser that shouldn't hold Modal credentials, use `sandbox.connectToken({ port: 3000 })`.
 
+## Find what a runtime created
+
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. List them by those tags to clean them up:
+
+```typescript
+const mine = yield* sandboxes.list({ tags: { "alchemy::stack": "my-app", "alchemy::stage": "prod" } });
+```
+
+Your own `tags` merge under the three. Stopping the App still terminates every sandbox in it.
+
 ## Size it
 
 ```typescript

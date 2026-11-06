@@ -7,7 +7,6 @@ import type { ErrorOf, OpError } from "./internal.ts";
 import type { ensureQueue, lookupQueue } from "./Queue.ts";
 import type { QueueAttributes } from "./Queue.ts";
 import type { ReadWriteQueueClient } from "./QueueClient.ts";
-import type { CreateOptions } from "./RuntimeObjects.ts";
 
 /** A queue created or found at runtime: its attributes plus a read-write client. */
 export interface QueueHandle extends ReadWriteQueueClient {
@@ -48,6 +47,12 @@ export type QueuesClient = QueuesClientOf<RuntimeContext>;
  * own namespace (or to nothing, for the workspace's default environment).
  * They aren't in Alchemy state: deleting the environment removes them.
  *
+ * Objects created at run time are tagged with the stack, stage and binding
+ * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when
+ * the stack is destroyed. A Modal queue has only a name, so the tags become
+ * its name prefix, `Modal.runtimePrefix({ stack, stage, id })`: list them
+ * with `modal queue list` and delete the ones whose name starts with it.
+ *
  * ### One queue per user
  * **Example:** From a Cloudflare Worker
  * ```typescript
@@ -84,7 +89,7 @@ export type QueuesClient = QueuesClientOf<RuntimeContext>;
 export interface CreateQueue extends Binding.Service<
   CreateQueue,
   "Modal.CreateQueue",
-  (environment?: Environment, options?: CreateOptions) => Effect.Effect<QueuesClient>
+  (environment?: Environment) => Effect.Effect<QueuesClient>
 > {}
 
 export const CreateQueue = Binding.Service<CreateQueue>("Modal.CreateQueue");

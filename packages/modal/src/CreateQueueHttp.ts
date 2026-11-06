@@ -7,7 +7,7 @@ import type { Environment } from "./Environment.ts";
 import { environmentOf, listAll, operations } from "./internal.ts";
 import { ensureQueue, lookupQueue, type QueueAttributes } from "./Queue.ts";
 import { QueueOps, makeReadWriteQueueClient } from "./QueueClient.ts";
-import { type CreateOptions, RuntimeStamp, stampedName, unstampedName } from "./RuntimeObjects.ts";
+import { ownedName, type RuntimeOwner, RuntimeOwnerOf, unownedName } from "./RuntimeOwner.ts";
 
 /** The operations the client calls, resolved by `ModalBindings.withCredentials`. */
 export const QueuesOps = operations({
@@ -30,20 +30,20 @@ const handleOf = (attributes: QueueAttributes, ops: QueuesOps, name: string): Qu
 export const makeQueuesClient = (
   environment: Effect.Effect<string | undefined>,
   ops: QueuesOps,
-  prefix: Effect.Effect<string | undefined> = Effect.undefined,
+  owner: Effect.Effect<RuntimeOwner | undefined> = Effect.undefined,
 ): QueuesClientOf<never> => ({
   getOrCreate: (name) =>
-    Effect.flatMap(Effect.all([environment, prefix]), ([env, stamp]) =>
-      ensureQueue(ops.getOrCreate, stampedName(stamp, name), env),
+    Effect.flatMap(Effect.all([environment, owner]), ([env, stamp]) =>
+      ensureQueue(ops.getOrCreate, ownedName(stamp, name), env),
     ).pipe(Effect.map((attributes) => handleOf(attributes, ops, name))),
   get: (name) =>
-    Effect.flatMap(Effect.all([environment, prefix]), ([env, stamp]) =>
-      lookupQueue(ops.getOrCreate, stampedName(stamp, name), env),
+    Effect.flatMap(Effect.all([environment, owner]), ([env, stamp]) =>
+      lookupQueue(ops.getOrCreate, ownedName(stamp, name), env),
     ).pipe(Effect.map((attributes) => (attributes ? handleOf(attributes, ops, name) : undefined))),
   delete: (name) =>
     Effect.gen(function* () {
       const env = yield* environment;
-      const found = yield* lookupQueue(ops.getOrCreate, stampedName(yield* prefix, name), env);
+      const found = yield* lookupQueue(ops.getOrCreate, ownedName(yield* owner, name), env);
       if (!found) return;
       yield* ops
         .delete({ queueId: found.queueId })
@@ -52,7 +52,7 @@ export const makeQueuesClient = (
   list: () =>
     Effect.gen(function* () {
       const env = yield* environment;
-      const stamp = yield* prefix;
+      const stamp = yield* owner;
       const items = yield* listAll(
         (pagination) =>
           ops
@@ -61,7 +61,7 @@ export const makeQueuesClient = (
         (item) => item.createdAt,
       );
       return items.flatMap((item) => {
-        const own = item.name ? unstampedName(stamp, item.name) : undefined;
+        const own = item.name ? unownedName(stamp, item.name) : undefined;
         return own ? [own] : [];
       });
     }),
@@ -77,18 +77,15 @@ export const makeQueuesClient = (
  */
 export const CreateQueueHttp = Layer.effect(
   CreateQueue,
-  Effect.gen(function* () {
-    const runtimeStamp = yield* RuntimeStamp;
-    return yield* makeOpenModalBinding({
-      tag: "Modal.CreateQueue",
-      operations: QueuesOps,
-      role: "contributor",
-      environmentOf: (environment?: Environment, _options?: CreateOptions) => environment?.name,
-      make: Effect.fn(function* (ops, environment?: Environment, options?: CreateOptions) {
-        const name = environment ? yield* environment.name : Effect.undefined;
-        const stamp = yield* runtimeStamp("queue", environment, options);
-        return makeQueuesClient(name, ops, stamp);
-      }),
-    });
+  makeOpenModalBinding({
+    tag: "Modal.CreateQueue",
+    operations: QueuesOps,
+    role: "contributor",
+    environmentOf: (environment?: Environment) => environment?.name,
+    make: Effect.fn(function* (ops, environment?: Environment) {
+      const name = environment ? yield* environment.name : Effect.undefined;
+      const owner = yield* RuntimeOwnerOf();
+      return makeQueuesClient(name, ops, owner);
+    }),
   }),
 );
