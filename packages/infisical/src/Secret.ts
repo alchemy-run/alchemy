@@ -81,14 +81,7 @@ export const SecretProvider = () =>
       const key = output ?? keyOf(olds);
       const live = yield* getSecret(key);
       if (!live) return undefined;
-      // A row at this key that replaced ours by hand is not adopted silently.
-      if (output && live.id !== output.id && !(yield* hasAlchemyTags(id, metadataOf(live)))) {
-        return yield* new SecretError({
-          message:
-            `Infisical secret ${output.name}: shared row ${live.id} was not made by this stack. ` +
-            `Delete it, or run alchemy state rm for this resource and deploy with --adopt.`,
-        });
-      }
+      yield* refuseReplacedRow(id, live, output);
       const attrs = attributes(key, live);
       return (yield* hasAlchemyTags(id, metadataOf(live))) ? attrs : Unowned(attrs);
     }),
@@ -116,11 +109,12 @@ export const SecretProvider = () =>
         ? undefined
         : ({ action: "update" } as const);
     }),
-    reconcile: Effect.fn(function* ({ id, instanceId, news }) {
+    reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
       const key = keyOf(news);
       const value = valueOf(news);
       const comment = news.comment ?? "";
       const live = yield* getSecret(key);
+      if (live) yield* refuseReplacedRow(id, live, output);
       const tags = { ...(yield* createInternalTags(id)), [instanceTag]: instanceId };
       const secretMetadata = Object.entries(tags).map(([key, value]) => ({ key, value }));
       if (!live) {
@@ -200,6 +194,23 @@ const getSecret = (key: Key) =>
 const metadataOf = (secret: {
   readonly secretMetadata?: ReadonlyArray<{ key: string; value?: string }>;
 }) => Object.fromEntries((secret.secretMetadata ?? []).map(({ key, value }) => [key, value]));
+
+/**
+ * A row at the key that replaced this stack's by hand is not taken over: the
+ * stack's own row was deleted, and someone else made this one.
+ */
+const refuseReplacedRow = Effect.fnUntraced(function* (
+  id: string,
+  live: infisical.GetSecretByNameV4ResponseSecret,
+  output: SecretAttributes | undefined,
+) {
+  if (!output || live.id === output.id || (yield* hasAlchemyTags(id, metadataOf(live)))) return;
+  return yield* new SecretError({
+    message:
+      `Infisical secret ${output.name}: shared row ${live.id} was not made by this stack. ` +
+      `Delete it, or run alchemy state rm for this resource and deploy with --adopt.`,
+  });
+});
 
 /** The live row holds the declared value and comment, under this instance's tags. */
 const current = Effect.fnUntraced(function* (

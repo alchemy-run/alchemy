@@ -138,7 +138,7 @@ export const ProjectIdentityProvider = () =>
       return live.name === name &&
         sameRoles(roles, ordered(news.roles)) &&
         oidcAuth !== undefined &&
-        sameOidcAuth(oidcAuth, withDefaults(news.oidcAuth))
+        sameOidcAuth(oidcAuth, stored(withDefaults(news.oidcAuth)))
         ? undefined
         : ({ action: "update" } as const);
     }),
@@ -180,11 +180,17 @@ export const ProjectIdentityProvider = () =>
               roles: roles.map((role) => ({ role, isTemporary: false })),
             });
           }
-          const current = yield* getOidcAuth(identity);
+          // A new identity has no auth method attached yet.
+          const current = observed ? yield* getOidcAuth(identity) : undefined;
           if (!current) {
             yield* infisical.attachOidcAuth({ identityId: identity.id, ...oidcRequest(oidcAuth) });
-          } else if (!sameOidcAuth(current, oidcAuth)) {
-            yield* infisical.updateOidcAuth({ identityId: identity.id, ...oidcRequest(oidcAuth) });
+          } else if (!sameOidcAuth(current, stored(oidcAuth))) {
+            // Infisical rejects the fields a linked auth template owns, so unlink it.
+            yield* infisical.updateOidcAuth({
+              identityId: identity.id,
+              templateId: null,
+              ...oidcRequest(oidcAuth),
+            });
           }
           return { id: identity.id, project, name, roles, oidcAuth };
         }),
@@ -296,12 +302,12 @@ const getOidcAuth = Effect.fnUntraced(function* (identity: {
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (!auth) return undefined;
-  // Infisical returns audiences comma-joined and trusted IPs as address and prefix.
+  // Infisical returns audiences as one string and trusted IPs as address and prefix.
   const ips = yield* Schema.decodeUnknownEffect(TrustedIps)(auth.accessTokenTrustedIps ?? []);
   return yield* Schema.decodeUnknownEffect(OidcAuthSchema)({
     ...oidcDefaults,
     ...auth,
-    boundAudiences: auth.boundAudiences === "" ? [] : auth.boundAudiences.split(","),
+    boundAudiences: policyValues(auth.boundAudiences),
     boundSubject: auth.boundSubject ?? "",
     boundClaims: auth.boundClaims ?? {},
     claimMetadataMapping: auth.claimMetadataMapping ?? {},
@@ -311,8 +317,40 @@ const getOidcAuth = Effect.fnUntraced(function* (identity: {
   });
 });
 
+/**
+ * Infisical splits each audience and bound-claim value on its top-level
+ * commas, trims the parts and joins them with ", ". A declaration is compared
+ * in that form, so `"a,b"` matches the `"a, b"` Infisical stores.
+ */
+const stored = (auth: Required<OidcAuth>): Required<OidcAuth> => ({
+  ...auth,
+  boundAudiences: auth.boundAudiences.flatMap(policyValues),
+  boundClaims: Object.fromEntries(
+    Object.entries(auth.boundClaims).map(([claim, value]) => [
+      claim,
+      policyValues(value).join(", "),
+    ]),
+  ),
+});
+
+const policyValues = (value: string) => {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of value) {
+    if (char === "{") depth += 1;
+    else if (char === "}" && depth > 0) depth -= 1;
+    if (char === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else current += char;
+  }
+  parts.push(current.trim());
+  return parts.filter((part) => part !== "");
+};
+
 const oidcRequest = (auth: Required<OidcAuth>) => ({
   ...auth,
-  boundAudiences: auth.boundAudiences.join(","),
+  boundAudiences: auth.boundAudiences.join(", "),
   accessTokenTrustedIps: auth.accessTokenTrustedIps.map((ipAddress) => ({ ipAddress })),
 });
