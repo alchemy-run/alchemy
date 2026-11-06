@@ -83,6 +83,20 @@ export const isUnsupportedHostError = (
   );
 };
 
+/**
+ * The address a host-less bind retries on. Without a host, Bun listens on
+ * `::` only and fails without a code on a machine with no IPv6 stack, where
+ * Node falls back to `0.0.0.0` on its own.
+ */
+export const ipv4FallbackHost = (
+  error: unknown,
+  host: string | undefined,
+  hasIPv6Interface?: boolean,
+): string | undefined =>
+  host === undefined && isUnsupportedHostError(error, "::", hasIPv6Interface)
+    ? "0.0.0.0"
+    : undefined;
+
 export interface Ports {
   /**
    * Finds an available port starting from the given one.
@@ -183,6 +197,8 @@ export const make = (options: PortsOptions) =>
         server.once("error", (error) => {
           server.close(() => {
             const code = errorCode(error);
+            const fallback = ipv4FallbackHost(error, host);
+            if (fallback !== undefined) return resume(bind(port, fallback));
             if (isUnsupportedHostError(error, host)) {
               // The host isn't available on this machine, so it can't hold the
               // port either — treat the probe as a success.

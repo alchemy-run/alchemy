@@ -139,6 +139,30 @@ describe("Port.isUnsupportedHostError", () => {
   });
 });
 
+describe("Port.ipv4FallbackHost", () => {
+  it("retries a host-less bind on IPv4 when Bun cannot listen on IPv6", () => {
+    expect(Port.ipv4FallbackHost(new Error("Failed to listen at ::"), undefined, false)).toBe(
+      "0.0.0.0",
+    );
+  });
+
+  it("keeps a host-less bind failure on a dual-stack machine", () => {
+    expect(
+      Port.ipv4FallbackHost(new Error("Failed to listen at ::"), undefined, true),
+    ).toBeUndefined();
+  });
+
+  it("does not retry a bind to an explicit host", () => {
+    expect(
+      Port.ipv4FallbackHost(new Error("Failed to listen at ::1"), "::1", false),
+    ).toBeUndefined();
+  });
+
+  it("does not retry a coded address conflict", () => {
+    expect(Port.ipv4FallbackHost({ code: "EADDRINUSE" }, undefined, false)).toBeUndefined();
+  });
+});
+
 describe("Port.viteSupportsPortZero", () => {
   it("accepts 8.2.1 and later", () => {
     expect(Port.viteSupportsPortZero("8.2.1")).toBe(true);
