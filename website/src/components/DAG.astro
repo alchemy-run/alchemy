@@ -116,12 +116,30 @@ const kindsShown = KIND_ORDER.filter((k) => nodes.some((n) => n.kind === k));
 
 // ---------- Layout ----------
 
+// Text is monospace, so its width is about 0.6em per character: labels at 13px,
+// subtitles and edge labels at 10.5px. Nodes and gaps grow to fit the widest.
+const textWidth = (text: string, px: number) => text.length * px * 0.6;
 // Domain nodes carry an icon beside their label, so they get a little more room.
-const NODE_W = nodes.some((n) => n.kind) ? 164 : 140;
+const ICON_W = 20;
+const NODE_W = Math.ceil(
+  Math.max(
+    nodes.some((n) => n.kind) ? 164 : 140,
+    ...nodes.map(
+      (n) =>
+        Math.max(
+          textWidth(n.label ?? n.id, 13) + (n.kind ? ICON_W : 0),
+          textWidth(n.type ?? "", 10.5),
+        ) + 28,
+    ),
+  ),
+);
 const NODE_H = 56;
 const NODE_H_TYPED = 64; // slightly taller when subtitle present
-// Grouped diagrams need room for borders and the labels on edges crossing them.
-const COL_GAP = (Astro.props as Props).groups?.length ? 116 : 80;
+// Gaps fit the widest edge label; grouped diagrams need room for borders
+// and the labels on edges crossing them.
+const COL_GAP = Math.ceil(
+  Math.max(groups.length > 0 ? 116 : 80, ...edges.map((e) => textWidth(e.label ?? "", 10.5) + 28)),
+);
 const ROW_GAP = 28;
 const PAD = 24;
 

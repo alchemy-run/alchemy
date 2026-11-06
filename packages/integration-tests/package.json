@@ -16,6 +16,7 @@
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/drizzle": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",

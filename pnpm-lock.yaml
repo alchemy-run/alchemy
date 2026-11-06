@@ -4117,6 +4117,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
 
+  examples/cluster-rooms:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../../packages/effect-cluster
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+
   examples/dev-stress:
     dependencies:
       '@alchemy.run/aws':
@@ -9150,6 +9165,43 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/effect-cluster:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
+    devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/fly':
+        specifier: workspace:*
+        version: link:../fly
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../gcp
+      '@alchemy.run/hetzner':
+        specifier: workspace:*
+        version: link:../hetzner
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+
   packages/fly:
     dependencies:
       '@alchemy.run/docker':
@@ -10199,6 +10251,9 @@ importers:
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../effect-cluster
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly

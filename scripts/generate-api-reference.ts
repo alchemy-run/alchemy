@@ -142,6 +142,11 @@ const sourceRoots: SourceRoot[] = [
     providerPrefix: "Rivet",
     sourceDisplayPrefix: "packages/rivet/src",
   },
+  {
+    srcRoot: "packages/effect-cluster/src",
+    providerPrefix: "Cluster",
+    sourceDisplayPrefix: "packages/effect-cluster/src",
+  },
 ];
 
 interface FileEntry {

@@ -50,6 +50,7 @@ function providersSidebarEntry() {
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
       { label: "Rivet", link: "/rivet" },
+      { label: "Effect Cluster", link: "/cluster" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -1988,6 +1989,50 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("Rivet"),
+          ],
+        },
+        {
+          label: "Effect Cluster",
+          items: [
+            { label: "Overview", link: "/cluster" },
+            { label: "What is Effect Cluster?", link: "/cluster/what-is-effect-cluster" },
+            { label: "Setup", link: "/cluster/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "cluster/tutorial" } }],
+            },
+            {
+              label: "Building",
+              items: [
+                { label: "Entities", link: "/cluster/entities" },
+                { label: "Calling an entity", link: "/cluster/calling" },
+                { label: "RPC middleware", link: "/cluster/middleware" },
+                { label: "Workflows", link: "/cluster/workflows" },
+                { label: "Singletons", link: "/cluster/singletons" },
+                { label: "Crons", link: "/cluster/crons" },
+                { label: "Existing programs", link: "/cluster/existing-programs" },
+              ],
+            },
+            {
+              label: "Running",
+              items: [
+                { label: "Databases", link: "/cluster/databases" },
+                { label: "Pools", link: "/cluster/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/cluster/docker" },
+                { label: "AWS", link: "/cluster/aws" },
+                { label: "GCP", link: "/cluster/gcp" },
+                { label: "Kubernetes", link: "/cluster/kubernetes" },
+                { label: "Fly", link: "/cluster/fly" },
+                { label: "Hetzner", link: "/cluster/hetzner" },
+                { label: "Cloudflare", link: "/cluster/cloudflare" },
+              ],
+            },
+            providerApiReferenceEntry("Cluster"),
           ],
         },
         {

@@ -1,0 +1,102 @@
+---
+title: Existing programs
+description: Deploy an Effect Cluster program you already have, unchanged, on a pool of its own, and call its entities from any runtime.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+An Effect Cluster program you already have deploys as it is. Alchemy bundles it, runs it on a pool of its own, and serves its entities through a gateway, so any runtime calls them like an entity declared with Alchemy.
+
+Your program runs on a pool of its own, beside the pools Alchemy builds, on the same database, so the two are one cluster:
+
+<Tree
+  nodes={[
+    { id: "swarm", label: "Docker swarm", type: "your cloud" },
+    { id: "default", label: "Default", type: "pool", parent: "swarm" },
+    { id: "room", label: "Room", type: "Cluster.Entity", parent: "default" },
+    { id: "legacy", label: "Legacy", type: "pool", parent: "swarm" },
+    { id: "program", label: "runner.ts", type: "your program", parent: "legacy", specs: [["entity", "Tally"]] },
+    { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true },
+  ]}
+  caption="The Legacy pool runs your program unchanged, as its own shard group. Its runners and the Default pool's share one database."
+/>
+
+## Your program
+
+A program is a module that launches your entities on Effect Cluster's HTTP runner with SQL storage, and reads its settings from its environment:
+
+```typescript title="src/runner.ts"
+import { NodeClusterHttp, NodeRuntime } from "@effect/platform-node";
+import { PgClient } from "@effect/sql-pg";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+import { TallyLive } from "./tally.ts";
+
+const Cluster = NodeClusterHttp.layer({ transport: "http", storage: "sql" }).pipe(
+  Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+
+Layer.launch(TallyLive.pipe(Layer.provide(Cluster))).pipe(NodeRuntime.runMain);
+```
+
+Each runner sets `HOST` and `PORT` to its own address, `DATABASE_URL` to the database, and `ASSIGNED_SHARD_GROUPS` and `AVAILABLE_SHARD_GROUPS` to the program's shard groups.
+
+## Deploy it
+
+`Cluster.Entity` takes your Effect Cluster entity, the module that exports it, and the program:
+
+```typescript title="src/Tally.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Effect from "effect/Effect";
+import { Legacy } from "./Cluster.ts";
+import { Tally as TallyEntity } from "./tally.ts";
+
+export const Tally = Cluster.Entity(TallyEntity, {
+  main: "./src/tally.ts",
+  program: "./src/runner.ts",
+}).pipe(Effect.provide(Legacy));
+```
+
+`main` exports the entity under its type's name; the gateway imports it to serve the entity's RPCs. The program is bundled into the pool's image and runs as its own process on every runner, with the gateway beside it.
+
+## Give it a pool of its own
+
+A program owns the pool it runs on, so give it a pool no other class uses:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
+
+export const Legacy = ClusterDocker.SwarmPool("Legacy").pipe(Layer.provide(Database));
+```
+
+Both pools share the database, so they're one cluster. Its entities keep the shard groups the program gives them, `default` unless it sets others; list them with the pool's `shardGroups` option.
+
+## Call it
+
+Callers yield it like any entity:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Tally } from "./Tally.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const tallies = yield* Tally;
+    return {
+      fetch: Effect.gen(function* () {
+        const visits = yield* tallies.getByName("visits");
+        return yield* HttpServerResponse.json({ count: yield* visits.Add({ amount: 1 }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
