@@ -1,0 +1,98 @@
+---
+title: Archil
+description: Run commands, processes and programs serverlessly against durable disks, in Firecracker microVMs, with Alchemy. Declare disks, sandboxes, images and branches in TypeScript.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Archil runs code against your data. A disk is a POSIX filesystem backed by object storage. Archil runs a shell command, a process or a whole program against it serverlessly: each call boots a Firecracker microVM with the disk mounted, runs to completion and shuts down, so you pay only for the call. Sandboxes are the long-lived form: microVMs that keep disks mounted, pause when idle and wake on the next request with their memory intact.
+
+The same disks mount on your own hosts in about 50 ms, keep recent data on fast storage in front of Archil's bucket or your own, and branch from checkpoints in milliseconds whatever their size.
+
+**New to Archil?** Start with [What is Archil?](/archil/what-is-archil).
+
+## A quick example
+
+A disk holds the files, and a Worker runs a command against it on each request:
+
+```typescript title="src/api.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Dataset = Archil.Disk("Dataset", {});
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const dataset = yield* Archil.ExecDisk(Dataset);
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
+        return HttpServerResponse.text(result.stdout);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Archil.ExecDiskHttp)),
+) {}
+```
+
+Or the program runs in a sandbox of its own, at a public `https://` URL, with the disk mounted:
+
+```typescript title="src/files.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Dataset } from "./api.ts";
+
+export default class Files extends Archil.Sandbox<Files>()(
+  "Files",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.map(fs.readDirectory(dataset.path), (names) =>
+        HttpServerResponse.text(names.join("\n")),
+      ).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Archil.MountDiskLive)),
+) {}
+```
+
+And the Stack deploys both:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/api.ts";
+import Files from "./src/files.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Archil.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    const files = yield* Files;
+    return { api: api.url, files: files.url };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Start with [Setup](/archil/setup) to connect your API key, then the [tutorial](/archil/tutorial/part-1), which builds a program on a disk one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

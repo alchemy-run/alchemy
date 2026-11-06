@@ -1,3 +1,4 @@
+import * as Archil from "@alchemy.run/archil";
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
@@ -28,6 +29,7 @@ export default Alchemy.Stack(
       Railway.providers(),
       Stripe.providers(),
       Turso.providers(),
+      Archil.providers(),
     ),
     state: Cloudflare.state(),
   },

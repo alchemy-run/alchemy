@@ -1,0 +1,90 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 2,
+          "flags": []
+        },
+        {
+          "tag": "COPY",
+          "line": 4,
+          "flags": [],
+          "sources": [
+            "."
+          ],
+          "destination": "/go/src/github.com/docker/docker"
+        },
+        {
+          "tag": "ADD",
+          "line": 5,
+          "flags": [],
+          "sources": [
+            "."
+          ],
+          "destination": "/"
+        },
+        {
+          "tag": "ADD",
+          "line": 6,
+          "flags": [],
+          "sources": [
+            "null"
+          ],
+          "destination": "/"
+        },
+        {
+          "tag": "COPY",
+          "line": 7,
+          "flags": [],
+          "sources": [
+            "nullfile"
+          ],
+          "destination": "/tmp"
+        },
+        {
+          "tag": "ADD",
+          "line": 8,
+          "flags": [],
+          "sources": [
+            "vimrc"
+          ],
+          "destination": "/tmp"
+        },
+        {
+          "tag": "COPY",
+          "line": 9,
+          "flags": [],
+          "sources": [
+            "bashrc"
+          ],
+          "destination": "/tmp"
+        },
+        {
+          "tag": "COPY",
+          "line": 10,
+          "flags": [],
+          "sources": [
+            "test file"
+          ],
+          "destination": "/tmp"
+        },
+        {
+          "tag": "ADD",
+          "line": 11,
+          "flags": [],
+          "sources": [
+            "test file"
+          ],
+          "destination": "/tmp/test file"
+        }
+      ]
+    }
+  ]
+}

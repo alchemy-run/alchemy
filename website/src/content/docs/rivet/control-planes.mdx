@@ -1,0 +1,85 @@
+---
+title: Control Plane
+description: What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+The control plane is the part of Rivet that remembers. It keeps every room's data, knows which node each room is running on, and routes every call to the right place. Your code runs on a pool's nodes; the control plane decides where.
+
+## What it does for a call
+
+When the Api calls the lobby, the call goes to the control plane. If the lobby is running, the control plane passes the call to its node. If it's asleep, the control plane starts it on a node in the lobby's pool first, with its data where the room can read it.
+
+That's why a caller needs nothing but the control plane's address, and why a pool's nodes need no public address at all: they connect out to the control plane, and calls reach them over that connection.
+
+## Run one
+
+A control plane is a Layer. Each cloud has its own:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+```
+
+It creates everything the control plane needs on that cloud: machines, disks, storage, an HTTPS endpoint, an admin token, and a namespace for your stage, so each stage's rooms are kept apart.
+
+## Give it to a pool
+
+A pool joins a control plane through `Layer.provide`:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Every pool given `Cluster` shares one control plane, so every Durable Object on those pools lives in one place, and they can all call each other.
+
+## Move it to another cloud
+
+Every control plane gives pools the same thing: an address, a token and a namespace. So moving to another cloud is a change to this one line:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+```
+
+The rooms, the Api and the calls between them stay as they are. The pool usually moves too, so its nodes run near the control plane. See [Pool](/rivet/pools).
+
+## Choose how many engines
+
+A control plane runs as one or more **engines**. One engine keeps its data on one disk, which is fine on your machine and risky anywhere else. Production control planes run three or more, so losing one loses nothing:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetAWS.Ec2ControlPlane("Rivet", {
+  instances: 3,
+  instanceType: "t3.medium",
+});
+```
+
+Each engine gets a disk of its own, and they share the durable copy of every room's data through object storage: S3 on AWS, Cloud Storage on GCP, Tigris on Fly. On Kubernetes and Hetzner you bring the bucket, as `objectStorage`. Each platform page lists its defaults.
+
+<Tree
+  nodes={[
+    { id: "cp", label: "Rivet", type: "RivetAWS.Ec2ControlPlane" },
+    { id: "e0", label: "engine 0", type: "us-east-1a", parent: "cp", specs: [["disk", "EBS 20 GiB"]] },
+    { id: "e1", label: "engine 1", type: "us-east-1b", parent: "cp", specs: [["disk", "EBS 20 GiB"]] },
+    { id: "e2", label: "engine 2", type: "us-east-1c", parent: "cp", specs: [["disk", "EBS 20 GiB"]] },
+    { id: "bucket", label: "Data", type: "S3 Bucket", parent: "cp", wide: true, tone: "accent" },
+  ]}
+  caption="Each engine writes to its own disk first, and the durable copy of every room's data goes to the shared bucket. Losing one engine loses nothing."
+/>
+
+## Use one you already run
+
+A control plane you run outside the Stack connects by its address and admin token:
+
+```typescript title="src/cluster.ts"
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+```
+
+It still creates a namespace for your stage. [Rivet Cloud](/rivet/rivet-cloud) runs the control plane for you.
+
+Next, [Pool](/rivet/pools): the nodes that run your code.

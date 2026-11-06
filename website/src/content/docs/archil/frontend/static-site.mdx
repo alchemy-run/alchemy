@@ -1,0 +1,149 @@
+---
+title: Static sites
+description: "Deploy a static site to Archil with Archil.Website.StaticSite: run your build command and serve its output from its own Archil sandbox at a public https URL."
+sidebar:
+  order: 4
+---
+
+`Archil.Website.StaticSite` runs your build command and serves the output
+directory from a small static-file server (`GET` assets, `/health`,
+optional SPA or 404 page). It runs as the
+[program](/archil/compute/programs) of its own
+[`Archil.Sandbox`](/archil/compute/sandboxes), at a public
+`https://3000-…archil.app` URL. Use it for Hugo, Zola, Eleventy, or any
+custom pipeline; for Vite projects, use
+[`Archil.Website.Vite`](/archil/frontend/vite).
+
+## Declare the Website
+
+`command` and `outdir` are required:
+
+```typescript
+// alchemy.run.ts
+import * as Archil from "@alchemy.run/archil";
+
+export const Website = Archil.Website.StaticSite("Website", {
+  command: "hugo --minify",
+  outdir: "public",
+});
+```
+
+The build is a [`Command.Build`](/providers/command/build): unchanged
+inputs skip it ([details](/command/memoization)). Narrow what it hashes
+with `memo: { include: [...] }`, or set `memo: false` to build on every
+deploy.
+
+## Add it to the Stack
+
+Yield the site from your Stack and return its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Archil from "@alchemy.run/archil";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export const Website = Archil.Website.StaticSite("Website", {
+  command: "hugo --minify",
+  outdir: "public",
+});
+
+export default Alchemy.Stack(
+  "MyStaticSite",
+  { providers: Archil.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `url` is the site's `https://3000-…archil.app` URL.
+
+## Size the sandbox
+
+`sandbox` sets the site's sandbox: size, image, timeouts and network
+policy:
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = Archil.Website.StaticSite("Website", {
+  command: "hugo --minify",
+  outdir: "public",
++  sandbox: { idleTtlSeconds: 0 },
+});
+```
+
+## Build from a subdirectory
+
+`cwd` is where `command` runs, and `outdir` is relative to it:
+
+```typescript
+export const Website = Archil.Website.StaticSite("Web", {
+  cwd: "apps/web",
+  command: "npm run build",
+  outdir: "dist",
+});
+```
+
+## Serve an SPA or a 404 page
+
+`spa: true` answers a request that matches no file with `index.html` and
+a 200, so the client-side router takes over:
+
+```typescript
+export const App = Archil.Website.StaticSite("App", {
+  command: "npm run build",
+  outdir: "dist",
+  spa: true,
+});
+```
+
+`errorPage` answers it with your page and a real 404 instead. Passing
+both fails the deploy:
+
+```typescript
+export const Docs = Archil.Website.StaticSite("Docs", {
+  command: "hugo --minify",
+  outdir: "public",
+  errorPage: "404.html",
+});
+```
+
+## Set environment variables
+
+`env` reaches the build command and the program's process:
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = Archil.Website.StaticSite("Website", {
+  command: "hugo --minify",
+  outdir: "public",
++  env: { HUGO_ENV: "production" },
+});
+```
+
+## Develop locally
+
+Under `alchemy dev`, `dev.command` runs instead of the build, and
+`site.url` is the address it prints (`dev.url` sets it when it can't be
+detected):
+
+```typescript
+export const Website = Archil.Website.StaticSite("Website", {
+  command: "hugo --minify",
+  outdir: "public",
+  dev: { command: "hugo server" },
+});
+```
+
+Without `dev`, the site builds and a local static server serves
+`outdir`. Wrap it in `Alchemy.remote()` to deploy the live sandbox even
+during dev.
+
+## Where next
+
+- [`Archil.Website.StaticSite` reference](/providers/archil/website#staticsite)
+- [Websites](/archil/frontend/websites) — the framework resources
+- [Programs](/archil/compute/programs) and
+  [Sandboxes](/archil/compute/sandboxes) — what the site runs on

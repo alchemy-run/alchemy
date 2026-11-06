@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "globalArgs": [
+    {
+      "tag": "ARG",
+      "line": 1,
+      "flags": [],
+      "vars": [
+        [
+          "foo",
+          null
+        ],
+        [
+          "bar",
+          "baz"
+        ]
+      ]
+    }
+  ],
+  "stages": [
+    {
+      "line": 2,
+      "image": "ubuntu",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ARG",
+          "line": 3,
+          "flags": [],
+          "vars": [
+            [
+              "abc",
+              "123 456"
+            ],
+            [
+              "def",
+              null
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
