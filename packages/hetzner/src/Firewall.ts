@@ -25,6 +25,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -536,7 +537,7 @@ export const FirewallProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name =
         output?.name ??
         (olds?.name !== undefined
@@ -553,6 +554,16 @@ export const FirewallProvider = () =>
             ? ((yield* findByName(name)) ?? (yield* findByLabels(id)))
             : yield* findByLabels(id);
       if (observed === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: observed.id,
+          claimedName: olds?.name,
+          foundName: observed.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(observed);
       const ours = yield* hasAlchemyLabels(id, compactLabels(observed.labels));
       return ours ? attrs : Unowned(attrs);

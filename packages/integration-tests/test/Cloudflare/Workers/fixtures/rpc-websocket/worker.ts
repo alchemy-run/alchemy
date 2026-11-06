@@ -47,6 +47,13 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
             Effect.flatten,
           );
         }
+        // `/hold/<object>/<label>`: `holdLater` over the HTTP RPC transport.
+        if (action === "hold") {
+          const client = yield* objects.getByName(name);
+          return HttpServerResponse.text(
+            yield* client.holdLater({ label: key }).pipe(Effect.orDie),
+          );
+        }
         if (action === "stats") {
           const client = yield* objects.getByName(name);
           return yield* HttpServerResponse.json(yield* client.stats().pipe(Effect.orDie));

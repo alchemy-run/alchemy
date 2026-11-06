@@ -94,5 +94,5 @@ test(
     expect(receipt.at).toBeLessThan(before + 15_000 + 30_000);
     expect(yield* cancel(base, `direct-${run}`)).toBe("Cancelled");
   }),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
 );

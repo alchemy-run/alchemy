@@ -11,7 +11,7 @@ The server decides. The app shows a change before the server confirms it, and co
 
 ## Offline intents
 
-The server still decides, but the app keeps working without a connection. It records what the user asked for, an intent, and never a fact only the server can establish. Intents wait in a queue, survive a reload, and go to the server in order once it can be reached. A conflict is just a rejection: a withdrawal made offline against money that's gone comes back `InsufficientFunds`. The rest of this page builds this.
+The server still decides, but the app keeps working without a connection. It records what the user asked for, an intent, and never a fact only the server can establish. Intents wait in a queue, survive a reload, and go to the server in order once it can be reached. A conflict is just a rejection: a withdrawal made offline against money that's gone comes back `InsufficientFunds`.
 
 ## A local copy of the server's aggregates
 

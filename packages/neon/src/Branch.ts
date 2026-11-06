@@ -115,6 +115,13 @@ export type BranchProps = {
    * one-way conversion on first deploy: the old tool's applied history is
    * copied into Alchemy's table and the old table is left frozen. No
    * baselining required.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -337,7 +344,7 @@ export const BranchProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.branchId) {
         return yield* getProjectBranch({
           project_id: output.projectId,
@@ -365,6 +372,8 @@ export const BranchProvider = () =>
       const match = matches[0];
       if (!match) return undefined;
       const attrs = yield* hydrateBranch(projectId, match);
+      // The generation a replacement is replacing is ours.
+      if (attrs && attrs.branchId === previous?.branchId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {

@@ -14,8 +14,10 @@ import * as Schedule from "effect/Schedule";
 import Api from "./fixtures/app/api.ts";
 import { Marker, PublicIp, SECRET_NAME, Site, VOLUME_PATH } from "./fixtures/app/shared.ts";
 import Worker from "./fixtures/app/worker.ts";
+import { flyApi } from "./limit.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  limit: flyApi,
   providers: Fly.providers(),
 });
 

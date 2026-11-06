@@ -86,8 +86,18 @@ export interface ReplicationGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationGroupLookup
 > {}
+
+/**
+ * Props for {@link ReplicationGroup.lookup}: find a replication group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationGroupLookup {
+  /** The id of the existing replication group. */
+  replicationGroupId: string;
+}
 
 /** Invalid desired topology rejected before AWS can start a partial create. */
 export class InvalidReplicationGroupConfiguration extends Data.TaggedError(
@@ -149,6 +159,16 @@ export const validateReplicationGroupProps = (
  *   multiAzEnabled: true,
  *   transitEncryptionEnabled: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing replication group
+ * `ReplicationGroup.lookup` references a replication group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication group
+ * ```typescript
+ * const existing = AWS.ElastiCache.ReplicationGroup.lookup({ replicationGroupId: "sessions" });
  * ```
  *
  * @resource
@@ -283,6 +303,10 @@ export const ReplicationGroupProvider = () =>
             return { action: "replace" } as const;
           }
           if (replacement(olds ?? {}, news ?? {})) return { action: "replace" } as const;
+        }),
+        lookup: Effect.fn(function* ({ replicationGroupId }) {
+          const found = yield* readGroup(replicationGroupId);
+          return found?.ARN ? yield* attrs(found) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = yield* readGroup(

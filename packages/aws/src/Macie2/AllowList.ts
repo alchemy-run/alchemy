@@ -52,8 +52,18 @@ export interface AllowList extends Resource<
     status: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AllowListLookup
 > {}
+
+/**
+ * Props for {@link AllowList.lookup}: find an allow list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AllowListLookup {
+  /** The id of the existing allow list. */
+  allowListId: string;
+}
 
 /**
  * An Amazon Macie allow list — text patterns or predefined words that Macie
@@ -78,6 +88,16 @@ export interface AllowList extends Resource<
  *     s3WordsList: { bucketName: bucket.bucketName, objectKey: "words.txt" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing allow list
+ * `AllowList.lookup` references an allow list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `allowListId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing allow list
+ * ```typescript
+ * const existing = AWS.Macie2.AllowList.lookup({ allowListId });
  * ```
  */
 const AllowListResource = Resource<AllowList>("AWS.Macie2.AllowList");
@@ -111,6 +131,10 @@ export const AllowListProvider = () =>
       return {
         stables: ["id", "arn"],
 
+        lookup: Effect.fn(function* ({ allowListId }) {
+          const live = yield* getAllowList(allowListId);
+          return live ? buildAllowListAttrs(allowListId, live) : undefined;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.id) return undefined;
           const live = yield* getAllowList(output.id);

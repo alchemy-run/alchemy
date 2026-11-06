@@ -26,9 +26,10 @@ import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
 import { sha256 } from "alchemy/Util/sha256";
-import { ANSI_RESET, ansiFg, colorsEnabled } from "alchemy/Util/Terminal";
+import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -81,18 +82,14 @@ type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
 };
 
 const workerStartedMessage = (elapsed: number, url: URL): string => {
+  const style = terminalStyle();
   const duration = `${Math.round(elapsed)}ms`;
-  if (!colorsEnabled()) {
-    return `Started in ${duration} → ${url}`;
-  }
-  return `Started in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET} → ${ansiFg(theme.color.info)}\x1b[4m${url}${ANSI_RESET}`;
+  return `Started in ${style.hex(theme.color.success)(duration)} → ${style.hex(theme.color.info).underline(String(url))}`;
 };
 
 const workerUpdatedMessage = (elapsed: number): string => {
   const duration = `${Math.round(elapsed)}ms`;
-  return colorsEnabled()
-    ? `Updated in ${ansiFg(theme.color.success)}${duration}${ANSI_RESET}`
-    : `Updated in ${duration}`;
+  return `Updated in ${terminalStyle().hex(theme.color.success)(duration)}`;
 };
 
 // Hosts that bind every interface — the dev server is then reachable at
@@ -571,14 +568,6 @@ export const LocalWorkerProvider = () =>
            */
           edgeDomain:
             typeof props.domain === "string" ? props.domain : (props.domain?.name ?? undefined),
-          /**
-           * The zone outbound `fetch()`es report in `CF-Worker`: the custom
-           * domain, else the first route's zone, as Wrangler derives it.
-           */
-          zone:
-            (typeof props.domain === "string" ? props.domain : props.domain?.name) ??
-            props.routes?.[0]?.zoneName ??
-            (props.routes?.[0] ? routePatternHost(props.routes[0].pattern.trim()) : undefined),
         };
       });
 
@@ -921,7 +910,6 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
-                      zone: worker.zone,
                       // `dev.access` populates the Worker's native `ctx.access`.
                       access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
@@ -1089,7 +1077,7 @@ export const LocalWorkerProvider = () =>
         proxy: WorkerProxy.WorkerProxyInstance,
         bundles: Stream.Stream<Bundle.BundleWatchEvent, E, R>,
       ) {
-        let start = Date.now();
+        let start = yield* Clock.currentTimeMillis;
         let status: "start" | "update" = "start";
         // Resolved once the first bundle is served (or its build or serve
         // failed): the instance's `start` returns at readiness, so a restart
@@ -1097,53 +1085,57 @@ export const LocalWorkerProvider = () =>
         // serve (`latestServes`) that restart hooks re-serve.
         const firstServe = yield* Deferred.make<void>();
         yield* bundles.pipe(
-          Stream.tap((event) => {
-            if (event._tag === "Start") {
-              start = Date.now();
-              if (status === "update") {
-                return Effect.all([
-                  Effect.log(`Rebuilding`),
-                  // Tells the proxy to queue requests until the updated
-                  // worker is ready.
-                  proxy.unset(),
+          Stream.tap((event) =>
+            Effect.gen(function* () {
+              if (event._tag === "Start") {
+                start = yield* Clock.currentTimeMillis;
+                if (status === "update") {
+                  yield* Effect.all([
+                    Effect.log(`Rebuilding`),
+                    // Tells the proxy to queue requests until the updated
+                    // worker is ready.
+                    proxy.unset(),
+                  ]);
+                }
+              } else if (event._tag === "Error") {
+                yield* Effect.all([
+                  Effect.logError(`Bundle error`, event.error),
+                  // No updated worker is coming from this build: answer
+                  // parked requests with the error now instead of after the
+                  // pending timeout.
+                  proxy.fail(event.error.message),
+                  Deferred.succeed(firstServe, undefined),
                 ]);
               }
-            } else if (event._tag === "Error") {
-              return Effect.all([
-                Effect.logError(`Bundle error`, event.error),
-                // No updated worker is coming from this build: answer
-                // parked requests with the error now instead of after the
-                // pending timeout.
-                proxy.fail(event.error.message),
-                Deferred.succeed(firstServe, undefined),
-              ]);
-            }
-            return Effect.void;
-          }),
+            }),
+          ),
           Stream.filterMap((event) =>
             event._tag === "Success" ? Result.succeed(event.output) : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
             serveWith(worker, bundle, proxy).pipe(
               Effect.exit,
-              Effect.tap((exit) => {
-                if (exit._tag === "Success") {
-                  // URL on first start only — vite-banner style; rebuild
-                  // lines stay compact.
-                  const message = Effect.log(
-                    status === "update"
-                      ? workerUpdatedMessage(Date.now() - start)
-                      : workerStartedMessage(Date.now() - start, proxy.url),
-                  );
-                  status = "update";
-                  return message;
-                } else {
-                  return Effect.all([
-                    Effect.logError(`Error`, Cause.squash(exit.cause)),
-                    proxy.fail(Cause.pretty(exit.cause)),
-                  ]);
-                }
-              }),
+              Effect.tap((exit) =>
+                Effect.gen(function* () {
+                  if (exit._tag === "Success") {
+                    const elapsed = (yield* Clock.currentTimeMillis) - start;
+                    // URL on first start only — vite-banner style; rebuild
+                    // lines stay compact.
+                    const message = Effect.log(
+                      status === "update"
+                        ? workerUpdatedMessage(elapsed)
+                        : workerStartedMessage(elapsed, proxy.url),
+                    );
+                    status = "update";
+                    yield* message;
+                  } else {
+                    yield* Effect.all([
+                      Effect.logError(`Error`, Cause.squash(exit.cause)),
+                      proxy.fail(Cause.pretty(exit.cause)),
+                    ]);
+                  }
+                }),
+              ),
               Effect.ensuring(Deferred.succeed(firstServe, undefined)),
             ),
           ),
@@ -1174,10 +1166,12 @@ export const LocalWorkerProvider = () =>
       };
 
       const runAssetsOnly = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const start = Date.now();
+        const start = yield* Clock.currentTimeMillis;
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveWith(worker, assetsOnlyBundle, proxy);
-        yield* Effect.log(workerStartedMessage(Date.now() - start, proxy.url));
+        yield* Effect.log(
+          workerStartedMessage((yield* Clock.currentTimeMillis) - start, proxy.url),
+        );
         return proxy.url;
       });
 
@@ -1288,7 +1282,6 @@ export const LocalWorkerProvider = () =>
                         cache: worker.dev.cache,
                         cf: worker.dev.cf,
                         workerd: worker.dev.workerd,
-                        zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
@@ -1347,7 +1340,7 @@ export const LocalWorkerProvider = () =>
         invalidate: Effect.Effect<void>,
         source?: NonNullable<ViteChildConfig["source"]>,
       ) {
-        const start = Date.now();
+        const start = yield* Clock.currentTimeMillis;
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
         yield* serveVite({ worker, rootDir, invalidate, source, proxy });
         const url = new URL(proxy.url);
@@ -1355,7 +1348,7 @@ export const LocalWorkerProvider = () =>
         // The programmatic vite API never prints the CLI's URL banner — and
         // vite's own URL is the internal (port-shuffled) server behind the
         // stable proxy, so advertise the proxy instead.
-        yield* Effect.log(workerStartedMessage(Date.now() - start, url));
+        yield* Effect.log(workerStartedMessage((yield* Clock.currentTimeMillis) - start, url));
         return url;
       });
 
@@ -1413,7 +1406,6 @@ export const LocalWorkerProvider = () =>
               streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
               cache: worker.dev.cache,
               cf: worker.dev.cf,
-              zone: worker.zone,
               access: worker.dev.access,
               workerd: worker.dev.workerd,
             },

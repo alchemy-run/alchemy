@@ -142,33 +142,32 @@ import { InsufficientFunds, MoneyWithdrawn, WithdrawMoney } from "./WithdrawMone
 type State = typeof State.Type;
 +
 +// The open account, if the current customer owns it.
-+const owned = Effect.fn(function* (s: State) {
-+  if (s._tag !== "Open") return yield* new NotOpen();
++const owned = Effect.fn(function* (account: State) {
++  if (account._tag !== "Open") return yield* new NotOpen();
 +  const actor = yield* CurrentActor;
-+  if (actor.customerId !== s.owner) return yield* new NotOwner();
-+  return s;
++  if (actor.customerId !== account.owner) return yield* new NotOwner();
++  return account;
 +});
-
-// An event can only follow an open account; anything else is a bug.
-    // ...
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
--    DepositMoney: (s, cmd) =>
--      s._tag !== "Open"
+// ...
+  decide: {
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+-    DepositMoney: (account, cmd) =>
+-      account._tag !== "Open"
 -        ? new NotOpen()
--        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
--    WithdrawMoney: (s, cmd) =>
--      s._tag !== "Open"
+-        : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+-    WithdrawMoney: (account, cmd) =>
+-      account._tag !== "Open"
 -        ? new NotOpen()
--        : cmd.amount > s.balance
--          ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
--          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
-+    DepositMoney: Effect.fn(function* (s, cmd) {
-+      const open = yield* owned(s);
+-        : cmd.amount > account.balance
+-          ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+-          : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
++    DepositMoney: Effect.fn(function* (account, cmd) {
++      const open = yield* owned(account);
 +      return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: open.balance + cmd.amount })];
 +    }),
-+    WithdrawMoney: Effect.fn(function* (s, cmd) {
-+      const open = yield* owned(s);
++    WithdrawMoney: Effect.fn(function* (account, cmd) {
++      const open = yield* owned(account);
 +      if (cmd.amount > open.balance) {
 +        return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
 +      }
@@ -178,7 +177,7 @@ type State = typeof State.Type;
   evolve: {
 ```
 
-`decide` can be an `Effect.fn` that reads what the middleware provides. `owned` checks the account is open and belongs to the customer asking. `OpenAccount` has no middleware: only the policy sends it.
+A handler can be an `Effect.fn` that reads what its command's middleware provides. `owned` checks the account is open and belongs to the customer asking. `OpenAccount` has no middleware: only the policy sends it.
 
 ## Refuse to register someone else
 
@@ -229,29 +228,27 @@ export class Customer extends Domain.Aggregate("Customer", {
   // ...
   commands: [RegisterCustomer],
   decide: {
--    RegisterCustomer: (s, cmd) =>
--      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
-+    RegisterCustomer: Effect.fn(function* (s, cmd, { id }) {
+-    RegisterCustomer: (customer, cmd) =>
+-      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
++    RegisterCustomer: Effect.fn(function* (customer, cmd, { id }) {
 +      const actor = yield* CurrentActor;
 +      if (actor.customerId !== id) return yield* new NotYou();
-+      if (s.name !== null) return yield* new AlreadyRegistered();
++      if (customer.name !== null) return yield* new AlreadyRegistered();
 +      return [new CustomerRegistered({ name: cmd.name })];
 +    }),
   },
   evolve: {
 ```
 
-The third argument to `decide` holds the id of the customer being registered, so a customer can register only themselves.
+The handler's third argument holds the id of the customer being registered, so a customer can register only themselves.
 
-## Let only the owner read the summary
+## Guard reads of the summary
 
 ```diff lang="typescript"
 // src/AccountSummary.view.ts
 import * as Domain from "@alchemy.run/domain";
-+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { Account } from "./Account.aggregate.ts";
-+import { CurrentActor } from "./CurrentActor.context.ts";
 +import { NotOwner } from "./NotOwner.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
 
@@ -262,17 +259,54 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 +  rejects: [NotOwner],
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
   initial: { owner: null, balance: 0 },
-    // ...
-    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
-  },
-+  validate: Effect.fn(function* (_request, summary) {
-+    const actor = yield* CurrentActor;
-+    if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
-+  }),
+  // ...
 }) {}
 ```
 
-A view guards its reads the same way. `validate` runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
+A view guards its reads the same way a command does: `Session` says who is asking, and `NotOwner` is how a read can be refused.
+
+## Let only the owner read the summary
+
+```diff lang="typescript"
+// src/AccountSummary.view.ts
+import * as Domain from "@alchemy.run/domain";
++import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Account } from "./Account.aggregate.ts";
++import { CurrentActor } from "./CurrentActor.context.ts";
+import { NotOwner } from "./NotOwner.rejection.ts";
+import { Session } from "./Session.middleware.ts";
+
+// ...
++
++export const AccountSummaryLive = AccountSummary.toLayer(
++  Effect.succeed(
++    Effect.fn(function* (_request, summary) {
++      const actor = yield* CurrentActor;
++      if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
++    }),
++  ),
++);
+```
+
+The view's Layer is its `validate`: one function, like every other Layer's handler. It runs on every read, and again on every change while a client watches. A summary that has no owner yet reads as empty, so a new customer can watch for their account to appear.
+
+## Provide the summary's Layer
+
+```diff lang="typescript"
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
++import * as Layer from "effect/Layer";
+import { Account } from "./Account.aggregate.ts";
+-import { AccountSummary } from "./AccountSummary.view.ts";
++import { AccountSummary, AccountSummaryLive } from "./AccountSummary.view.ts";
+// ...
+
+-export const BankHandlers = MainAccountProvisioningLive;
++export const BankHandlers = Layer.merge(MainAccountProvisioningLive, AccountSummaryLive);
+```
+
+A view that declares `middleware` or `rejects` needs its Layer, so `Bank.layer` is a type error until `BankHandlers` includes it. Every story and Worker that hosts the model gets it from there.
 
 ## Act as a customer in stories
 

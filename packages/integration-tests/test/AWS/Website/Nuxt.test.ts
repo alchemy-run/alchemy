@@ -381,7 +381,7 @@ test.provider(
         "regions needs the Web Function server",
       );
     }),
-  { tags: ["provider:aws", "provider:aws:website"] },
+  { tags: ["provider:aws", "provider:aws:website", "live"] },
 );
 
 // Type-level: each server form only accepts its own props.

@@ -127,8 +127,18 @@ export interface DBInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBInstanceLookup
 > {}
+
+/**
+ * Props for {@link DBInstance.lookup}: find a DocumentDB instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBInstanceLookup {
+  /** The db instance identifier of the existing DocumentDB instance. */
+  dbInstanceIdentifier: string;
+}
 
 /**
  * An Amazon DocumentDB instance — a compute member of a DocumentDB
@@ -146,6 +156,16 @@ export interface DBInstance extends Resource<
  *   dbClusterIdentifier: cluster.dbClusterIdentifier,
  *   dbInstanceClass: "db.t3.medium",
  * });
+ * ```
+ *
+ * ### Looking up an existing DocumentDB instance
+ * `DBInstance.lookup` references a DocumentDB instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DocumentDB instance
+ * ```typescript
+ * const existing = AWS.DocDB.DBInstance.lookup({ dbInstanceIdentifier: "my-documentdb-instance" });
  * ```
  *
  * @resource
@@ -297,6 +317,14 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbInstanceIdentifier: identifier }) {
+          const instance = yield* readInstance(identifier);
+          if (!instance?.DBInstanceArn) {
+            return undefined;
+          }
+          const tags = yield* readTags(instance.DBInstanceArn);
+          return toAttrs({ instance, tags });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

@@ -108,8 +108,8 @@ const assertRollback = (snapshot: Snapshot) => {
 };
 
 describe.concurrent.each([
-  { dev: true, stage: "alarm-callback-local" },
-  { dev: false, stage: "alarm-callback-live" },
+  { dev: true, stage: `${Test.defaultStage()}-alarm-callback-local` },
+  { dev: false, stage: `${Test.defaultStage()}-alarm-callback-live` },
 ])(
   "makeCallback (dev: $dev)",
   ({ dev, stage }) => {

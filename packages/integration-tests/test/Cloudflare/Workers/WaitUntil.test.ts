@@ -1,10 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/wait-until/stack.ts";
@@ -39,6 +42,301 @@ const getText = Effect.fn(function* (url: string) {
   return body;
 });
 
+// Journal labels are unique per run: the DO's storage outlives a run when
+// NO_DESTROY keeps the deployment.
+const run = crypto.randomUUID().slice(0, 8);
+
+const journalEntries = Effect.fn(function* (url: string, label: string, count: number, polls = 20) {
+  return yield* Effect.gen(function* () {
+    const text = yield* getText(`${url}/lifetime/entries/${label}`);
+    return yield* Effect.try({
+      try: () => (JSON.parse(text) as { entries: string[] }).entries,
+      catch: (cause) => new Error(`Invalid journal response: ${text}`, { cause }),
+    });
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("500 millis"),
+      until: (entries) => entries.length >= count,
+      times: polls,
+    }),
+  );
+});
+
+describe.skipIf(!!process.env.FAST)(
+  "waitUntil work outlives the event's response but not its scope",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    // Each case binds a resource to the event's scope and hands `waitUntil`
+    // work that uses it 200ms after the event returns. The scope must wait
+    // for that work: the work sees the resource `open`, and the release is
+    // journaled after it.
+    for (const [kind, response] of [
+      ["worker", "scheduled"],
+      ["nested", "scheduled"],
+      ["failing", "scheduled"],
+      ["stream", "streamed"],
+      ["scoped-acquire", "scheduled"],
+      ["nested-acquire", "scheduled"],
+      ["rpc", "scheduled"],
+      ["rpc-stream", "a,b"],
+      ["rpc-stream-wait-until", "a"],
+      ["queue", "scheduled"],
+      ["do", "scheduled"],
+      ["do-nested", "scheduled"],
+      ["do-failing", "scheduled"],
+      ["do-fails", "failed"],
+      ["do-scoped-acquire", "scheduled"],
+      ["do-stream", "a,b"],
+      ["do-stream-wait-until", "a"],
+      ["do-fetch", "scheduled"],
+      ["do-alarm", "scheduled"],
+    ] as const) {
+      test(
+        `the event's scope stays open for waitUntil work (${kind})`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          yield* expectUrlContains(`${url}/raw`, "ok", {
+            label: "wait-until worker propagation",
+          });
+          const label = `${kind}-${run}`;
+          expect(yield* getText(`${url}/lifetime/${kind}/${label}`)).toBe(response);
+          // A queue batch arrives after a second, and an early one can land
+          // on the precreate placeholder and be retried.
+          expect(yield* journalEntries(url, label, 2, kind === "queue" ? 80 : 20)).toEqual([
+            `${label}:open`,
+            `${label}:released`,
+          ]);
+        }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    test(
+      "the event's scope stays open for waitUntil work (failed handler)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `fails-${run}`;
+        const response = yield* requestWorker(
+          HttpClientRequest.get(`${url}/lifetime/fails/${label}?cb=${Date.now()}-${bust++}`),
+        );
+        expect(response.status).toBe(500);
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // The producer's trace reaches the fixture's `tail` handler.
+    test(
+      "the event's scope stays open for waitUntil work (tail)",
+      Effect.gen(function* () {
+        const { url, producerUrl } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `tail-${run}`;
+        yield* expectUrlContains(`${producerUrl}/${label}`, "logged", {
+          label: "tail producer",
+        });
+        expect(yield* journalEntries(url, label, 2, 80)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // The fixture's `* * * * *` trigger journals each tick under
+    // `cron-<minute>`. New schedules take up to 15 minutes to propagate, so
+    // keep the fixture with NO_DESTROY=1 before opting in; the local suite
+    // covers scheduled dispatch without waiting.
+    test.skipIf(process.env.CLOUDFLARE_TEST_CRON_DELIVERY !== "1")(
+      "the event's scope stays open for waitUntil work (scheduled)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const next = Math.ceil(Date.now() / 60_000) * 60_000;
+        // A trigger can miss its first tick after a deploy.
+        const ticks = [next, next + 60_000];
+        const entries = yield* Effect.forEach(ticks, (tick) =>
+          getText(`${url}/lifetime/entries/cron-${tick}`).pipe(
+            Effect.map((text) => (JSON.parse(text) as { entries: string[] }).entries),
+          ),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (entries) => entries.some((tick) => tick.length >= 2),
+            times: 75,
+          }),
+        );
+        const index = entries.findIndex((tick) => tick.length >= 2);
+        expect(index).toBeGreaterThanOrEqual(0);
+        const label = `cron-${ticks[index]}`;
+        expect(entries[index]).toEqual([`${label}:open`, `${label}:released`]);
+      }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // A HEAD response drops its streamed body without reading it.
+    test(
+      "the event's scope stays open for waitUntil work (HEAD of a streamed body)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `head-${run}`;
+        const response = yield* requestWorker(
+          HttpClientRequest.head(`${url}/lifetime/stream/${label}?cb=${Date.now()}-${bust++}`),
+        );
+        expect(response.status).toBe(200);
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    test(
+      "the event's scope stays open for waitUntil work (Durable Object WebSocket message)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `socket-${run}`;
+        const reply = yield* Effect.callback<string, Error>((resume) => {
+          const socket = new WebSocket(`${url.replace(/^http/, "ws")}/socket/${label}`);
+          socket.addEventListener("open", () => socket.send(label));
+          socket.addEventListener("message", (event) => {
+            resume(Effect.succeed(String(event.data)));
+            socket.close();
+          });
+          socket.addEventListener("error", () => resume(Effect.fail(new Error("socket error"))));
+          return Effect.sync(() => socket.close());
+        }).pipe(
+          Effect.timeout("10 seconds"),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 5 }),
+        );
+        expect(reply).toBe("scheduled");
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    // The event outlives these responses, but the responses must not wait
+    // for it: each hands off work that sleeps 3 seconds before journaling.
+    for (const [kind, response] of [
+      ["scoped", "scheduled"],
+      ["slow-stream", "streamed"],
+      ["do-slow-stream", "a,b"],
+    ] as const) {
+      test(
+        `waitUntil work does not hold the response (${kind})`,
+        Effect.gen(function* () {
+          const { url } = yield* stack;
+          yield* expectUrlContains(`${url}/raw`, "ok", {
+            label: "wait-until worker propagation",
+          });
+          const label = `${kind}-${run}`;
+          const [elapsed, body] = yield* getText(`${url}/lifetime/${kind}/${label}`).pipe(
+            Effect.timed,
+          );
+          expect(body).toBe(response);
+          expect(Duration.toMillis(elapsed)).toBeLessThan(2_500);
+          expect(yield* journalEntries(url, label, 1)).toEqual([`${label}:done`]);
+        }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+
+    test(
+      "the event's scope stays open for waitUntil work (HttpApi handler)",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `api-${run}`;
+        expect(yield* getText(`${url}/api/lifetime/${label}`)).toBe('"scheduled"');
+        expect(yield* journalEntries(url, label, 2)).toEqual([
+          `${label}:open`,
+          `${label}:released`,
+        ]);
+      }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+  },
+);
+
+/**
+ * Read a streamed body line by line, stopping after `take` lines when given.
+ * A body that ends with an error keeps the lines read before it.
+ */
+const readLines = Effect.fn(function* (url: string, take?: number) {
+  const lines: string[] = [];
+  const response = yield* requestWorker(
+    HttpClientRequest.get(`${url}?cb=${Date.now()}-${bust++}`).pipe(
+      HttpClientRequest.setHeader("cache-control", "no-cache"),
+      HttpClientRequest.setHeader("connection", "close"),
+    ),
+  );
+  const body = response.stream.pipe(Stream.decodeText, Stream.splitLines);
+  const exit = yield* (take === undefined ? body : body.pipe(Stream.take(take))).pipe(
+    Stream.runForEach((line) => Effect.sync(() => void lines.push(line))),
+    Effect.timeout("10 seconds"),
+    Effect.exit,
+  );
+  return { status: response.status, lines, failed: Exit.isFailure(exit) };
+});
+
+describe.skipIf(!!process.env.FAST)(
+  "a streamed result keeps the event's scope open until it ends",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    // Each body reads a resource bound to the event's scope as it streams.
+    // The resource must be open for every line, and released once the
+    // stream ends however it ends: drained, failing, or cancelled by the
+    // client.
+    for (const target of ["worker", "do-fetch", "do-rpc"] as const) {
+      for (const mode of ["complete", "fail", "cancel"] as const) {
+        test(
+          `${target} stream: ${mode}`,
+          Effect.gen(function* () {
+            const { url } = yield* stack;
+            yield* expectUrlContains(`${url}/raw`, "ok", {
+              label: "wait-until worker propagation",
+            });
+            const label = `stream-${target}-${mode}-${run}`;
+            const { status, lines } = yield* readLines(
+              `${url}/stream/${target}/${mode}/${label}`,
+              mode === "cancel" ? 2 : undefined,
+            );
+            expect(status).toBe(200);
+            // A failing Web stream drops the chunks still queued when it errors.
+            if (mode === "fail") expect(lines.length).toBeGreaterThan(0);
+            else expect(lines).toHaveLength(mode === "complete" ? 3 : 2);
+            expect(lines.every((line) => line === "open")).toBe(true);
+            expect(yield* journalEntries(url, label, 1)).toEqual([`${label}:released`]);
+          }).pipe(logLevel),
+          { timeout: 120_000 },
+        );
+      }
+    }
+  },
+);
+
 describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
@@ -47,20 +345,12 @@ describe.skipIf(!!process.env.FAST)(
       "concurrent background journal writes retain every entry",
       Effect.gen(function* () {
         const { url } = yield* stack;
-        yield* expectUrlContains(`${url}/bg-many`, "bg-many-scheduled");
-        const entries = yield* Effect.gen(function* () {
-          const text = yield* getText(`${url}/entries-many`);
-          return yield* Effect.try({
-            try: () => (JSON.parse(text) as { entries: string[] }).entries,
-            catch: (cause) => new Error(`Invalid journal response: ${text}`, { cause }),
-          });
-        }).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("500 millis"),
-            times: 8,
-            until: (entries) => entries.length === 40,
-          }),
-        );
+        yield* expectUrlContains(`${url}/raw`, "ok", {
+          label: "wait-until worker propagation",
+        });
+        const label = `parallel-${run}`;
+        expect(yield* getText(`${url}/bg-many/${label}`)).toBe("bg-many-scheduled");
+        const entries = yield* journalEntries(url, label, 40, 16);
         expect(entries.toSorted()).toEqual(
           Array.from({ length: 40 }, (_, i) => `parallel-${i}`).sort(),
         );

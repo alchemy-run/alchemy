@@ -72,18 +72,22 @@ class Account extends Domain.Aggregate("Account", {
   initial: { owner: "", balance: 0, frozen: false },
   commands: [Open, Deposit, Withdraw, Freeze, Stamp],
   decide: {
-    Open: (_, { owner }, { now }) => [new Opened({ owner, at: DateTime.toEpochMillis(now) })],
+    Open: (_, { owner }, { now, commandId, stream, version }) => [
+      new Opened({ owner, at: DateTime.toEpochMillis(now) }),
+    ],
     Deposit: (_, { amount }) => [new Deposited({ amount })],
-    Withdraw: (s, { amount }) =>
-      amount > s.balance
-        ? new InsufficientFunds({ balance: s.balance, requested: amount })
+    Withdraw: (account, { amount }) =>
+      amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: amount })
         : [new Withdrawn({ amount })],
     Freeze: Effect.fn(function* () {
       const operator = yield* Operator;
       if (operator === "guest") return yield* new NotAnOperator();
       return [new Frozen({ by: operator })];
     }),
-    Stamp: (_, __, { commandId, stream, version }) => [new Stamped({ commandId, stream, version })],
+    Stamp: (_, __, { now, commandId, stream, version }) => [
+      new Stamped({ commandId, stream, version }),
+    ],
   },
   evolve: {
     Opened: (s, e) => ({ ...s, owner: e.owner }),
@@ -191,15 +195,15 @@ const serve = (command: Domain.Aggregate.CommandOf<typeof Account>, operator = "
     const result = yield* accounts
       .send(a1, command, { commandId: `c-${command._tag}` })
       .pipe(Effect.provideService(Operator, operator), Effect.result);
-    return { result, state: yield* accounts.state(a1) };
+    return { result, state: yield* accounts.get(a1) };
   });
 
-describe("Domain Aggregate.predict", () => {
+describe("Domain Aggregate.predict", { tags: ["unit", "local"] }, () => {
   it.live("an accepted command: the same events and state as the server", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
       yield* accounts.send(a1, new Open({ owner: "sam" }));
-      const before = yield* accounts.state(a1);
+      const before = yield* accounts.get(a1);
       const command = new Deposit({ amount: 30 });
       const local = Account.predict(before, command, { id: "a-1", now, version: 1 });
       const remote = yield* serve(command);
@@ -215,7 +219,7 @@ describe("Domain Aggregate.predict", () => {
   it.live("a rejected command: the same rejection as the server", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
-      const before = yield* accounts.state(a1);
+      const before = yield* accounts.get(a1);
       const command = new Withdraw({ amount: 5 });
       const local = Account.predict(before, command, { id: "a-1", now });
       const remote = yield* serve(command);
@@ -361,14 +365,14 @@ describe("Domain Aggregate.predict", () => {
   );
 });
 
-describe("Domain View.evolve", () => {
+describe("Domain View.evolve", { tags: ["unit", "local"] }, () => {
   it.live("predicted events folded by the view give the server's view state", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
       const balances = yield* Balance;
       yield* accounts.send(a1, new Deposit({ amount: 50 }));
-      const before = yield* accounts.state(a1);
-      const view = yield* balances.query(a1, { atLeast: { stream: "Account/a-1", version: 1 } });
+      const before = yield* accounts.get(a1);
+      const view = yield* balances.get(a1, { atLeast: { stream: "Account/a-1", version: 1 } });
 
       const local = Account.predict(before, new Withdraw({ amount: 20 }), {
         id: "a-1",
@@ -388,7 +392,7 @@ describe("Domain View.evolve", () => {
       );
 
       const receipt = yield* accounts.send(a1, new Withdraw({ amount: 20 }));
-      const server = yield* balances.query(a1, {
+      const server = yield* balances.get(a1, {
         atLeast: { stream: receipt.stream, version: receipt.version },
       });
       expect(predicted).toEqual({ balance: 30, lines: 2 });
@@ -419,7 +423,7 @@ describe("Domain View.evolve", () => {
       // A key no route reaches keeps its state.
       expect(fold("a-3")).toBeNull();
       const server = (key: string) =>
-        flows.query(Account.ref(key), { atLeast }).pipe(Effect.map(Option.getOrNull));
+        flows.get(Account.ref(key), { atLeast }).pipe(Effect.map(Option.getOrNull));
       expect(yield* server("a-1")).toEqual(fold("a-1"));
       expect(yield* server("a-2")).toEqual(fold("a-2"));
     }).pipe(Effect.provide(Hosted)),
@@ -445,7 +449,7 @@ describe("Domain View.evolve", () => {
       const atLeast = { stream: receipt.stream, version: receipt.version };
       expect(fold("a-1")).toEqual({ total: 5 });
       expect(fold("a-2")).toBeNull();
-      expect(Option.getOrNull(yield* sent.query("a-1", { atLeast }))).toEqual(fold("a-1"));
+      expect(Option.getOrNull(yield* sent.get("a-1", { atLeast }))).toEqual(fold("a-1"));
     }).pipe(Effect.provide(Hosted)),
   );
 });
