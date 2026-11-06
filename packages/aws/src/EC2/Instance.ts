@@ -7,7 +7,7 @@ import type { Input } from "alchemy/Input";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -21,6 +21,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -283,8 +284,23 @@ export interface Instance extends Resource<
     /** IAM policy statements attached to the instance profile role. */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  InstanceLookup
 > {}
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type InstanceLookup =
+  | {
+      /** The id of the existing instance. */
+      instanceId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several running instances share it. */
+      name: string;
+    };
 
 export type InstanceServices = ServerHost | Credentials | Region | AWSEnvironment;
 
@@ -367,12 +383,23 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * }
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `instanceId` or its `Name` tag. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register an existing instance with a target group
+ * ```typescript
+ * const bastion = AWS.EC2.Instance.lookup({ name: "bastion" });
+ * const instanceId = bastion.instanceId;
+ * ```
+ *
  * @resource
  */
-export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> =
-  Platform("AWS.EC2.Instance", {
-    createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
-  });
+export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> &
+  LookupMethod<Instance> = Platform("AWS.EC2.Instance", {
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+});
 
 export const InstanceProvider = () =>
   Provider.effect(
@@ -781,6 +808,29 @@ export const InstanceProvider = () =>
 
           // Content-only changes were already handled by the resolved-subset
           // bundle-hash check above.
+        }),
+        lookup: Effect.fn(function* (props) {
+          const instance =
+            "instanceId" in props
+              ? yield* describeInstance(props.instanceId).pipe(
+                  Effect.catchTags({
+                    "InvalidInstanceID.NotFound": () => Effect.undefined,
+                    InstanceNotFound: () => Effect.undefined,
+                  }),
+                )
+              : yield* single(
+                  "AWS.EC2.Instance",
+                  `Name=${props.name}`,
+                  (yield* ec2.describeInstances({
+                    Filters: [nameTagFilter(props.name)],
+                  })).Reservations?.flatMap((r) => r.Instances ?? []).filter(
+                    (i) => i.State?.Name !== "terminated",
+                  ) ?? [],
+                  (i) => i.InstanceId,
+                );
+          return instance && instance.State?.Name !== "terminated"
+            ? yield* toAttributes(instance)
+            : undefined;
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId

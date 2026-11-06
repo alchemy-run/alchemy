@@ -42,6 +42,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Archil", link: "/archil" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -49,6 +50,8 @@ function providersSidebarEntry() {
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
+      { label: "Rivet", link: "/rivet" },
+      { label: "Effect Cluster", link: "/cluster" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -1401,6 +1404,65 @@ export default defineConfig({
           ],
         },
         {
+          label: "Archil",
+          items: [
+            { label: "Overview", link: "/archil" },
+            { label: "What is Archil?", link: "/archil/what-is-archil" },
+            { label: "Setup", link: "/archil/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "archil/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organization and keys", link: "/archil/organization-and-keys" },
+                { label: "Credentials and bindings", link: "/archil/security/credentials" },
+                { label: "Network", link: "/archil/security/network" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/archil/compute/choosing-a-runtime" },
+                { label: "Programs", link: "/archil/compute/programs" },
+                { label: "Sandboxes", link: "/archil/compute/sandboxes" },
+                { label: "Images", link: "/archil/compute/images" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Disks", link: "/archil/storage/disks" },
+                { label: "Mounting", link: "/archil/storage/mounting" },
+                { label: "Branches and checkpoints", link: "/archil/storage/branches" },
+                { label: "Your own bucket", link: "/archil/storage/your-own-bucket" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/archil/frontend/websites" },
+                { label: "Astro", link: "/archil/frontend/astro" },
+                { label: "Foldkit", link: "/archil/frontend/foldkit" },
+                { label: "Next.js", link: "/archil/frontend/nextjs" },
+                { label: "Nuxt", link: "/archil/frontend/nuxt" },
+                { label: "Octane", link: "/archil/frontend/octane" },
+                { label: "React Router", link: "/archil/frontend/react-router" },
+                { label: "SolidStart", link: "/archil/frontend/solidstart" },
+                { label: "Static sites", link: "/archil/frontend/static-site" },
+                { label: "SvelteKit", link: "/archil/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/archil/frontend/tanstack-start" },
+                { label: "vinext", link: "/archil/frontend/vinext" },
+                { label: "Vite", link: "/archil/frontend/vite" },
+                { label: "Vocs", link: "/archil/frontend/vocs" },
+                { label: "Waku", link: "/archil/frontend/waku" },
+              ]),
+            },
+            providerResourcesEntry("Archil"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1930,6 +1992,107 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
+          label: "Rivet",
+          items: [
+            { label: "Overview", link: "/rivet" },
+            { label: "What is Rivet?", link: "/rivet/what-is-rivet" },
+            { label: "Setup", link: "/rivet/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "rivet/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Control planes and namespaces", link: "/rivet/namespaces" },
+                { label: "Tokens and networks", link: "/rivet/tokens-and-networks" },
+                { label: "Secrets", link: "/rivet/secrets" },
+              ],
+            },
+            {
+              label: "Building Actors",
+              items: [
+                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Durable Objects", link: "/rivet/durable-objects" },
+                { label: "Storage", link: "/rivet/storage" },
+                { label: "Concurrency", link: "/rivet/concurrency" },
+                { label: "Calling a Durable Object", link: "/rivet/calling" },
+                { label: "RivetKit Actors", link: "/rivet/rivetkit" },
+                { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+              ],
+            },
+            {
+              label: "Rivet Services",
+              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+            },
+            {
+              label: "Running Rivet",
+              items: [
+                { label: "Control Plane", link: "/rivet/control-planes" },
+                { label: "Pool", link: "/rivet/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/rivet/docker" },
+                { label: "AWS", link: "/rivet/aws" },
+                { label: "GCP", link: "/rivet/gcp" },
+                { label: "Kubernetes", link: "/rivet/kubernetes" },
+                { label: "Fly", link: "/rivet/fly" },
+                { label: "Hetzner", link: "/rivet/hetzner" },
+                { label: "Railway", link: "/rivet/railway" },
+                { label: "Rivet Cloud", link: "/rivet/rivet-cloud" },
+              ],
+            },
+            providerApiReferenceEntry("Rivet"),
+          ],
+        },
+        {
+          label: "Effect Cluster",
+          items: [
+            { label: "Overview", link: "/cluster" },
+            { label: "What is Effect Cluster?", link: "/cluster/what-is-effect-cluster" },
+            { label: "Setup", link: "/cluster/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "cluster/tutorial" } }],
+            },
+            {
+              label: "Building",
+              items: [
+                { label: "Entities", link: "/cluster/entities" },
+                { label: "Calling an entity", link: "/cluster/calling" },
+                { label: "RPC middleware", link: "/cluster/middleware" },
+                { label: "Workflows", link: "/cluster/workflows" },
+                { label: "Singletons", link: "/cluster/singletons" },
+                { label: "Crons", link: "/cluster/crons" },
+                { label: "Existing programs", link: "/cluster/existing-programs" },
+              ],
+            },
+            {
+              label: "Running",
+              items: [
+                { label: "Databases", link: "/cluster/databases" },
+                { label: "Pools", link: "/cluster/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/cluster/docker" },
+                { label: "AWS", link: "/cluster/aws" },
+                { label: "GCP", link: "/cluster/gcp" },
+                { label: "Kubernetes", link: "/cluster/kubernetes" },
+                { label: "Fly", link: "/cluster/fly" },
+                { label: "Hetzner", link: "/cluster/hetzner" },
+                { label: "Cloudflare", link: "/cluster/cloudflare" },
+              ],
+            },
+            providerApiReferenceEntry("Cluster"),
           ],
         },
         {

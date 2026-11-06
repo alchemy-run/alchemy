@@ -650,18 +650,6 @@ const aggregateObject = (
               return live.send;
             }),
           );
-          const committed = { state: result.state, version: result.version };
-          yield* broadcast(({ key, subscription }) =>
-            Effect.gen(function* () {
-              // A subscriber behind this commit's first event reads the gap from storage.
-              const first = result.events[0]?.envelope.seq ?? Infinity;
-              const events =
-                subscription.mode === "events" && subscription.cursor < first - 1
-                  ? yield* eventsAfter(subscription.cursor)
-                  : result.events;
-              return yield* kit.push(key, subscription, committed, events);
-            }),
-          );
           return { sent, kick: routed.length > 0 };
         });
       const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
@@ -773,16 +761,6 @@ const aggregateObject = (
           reportDefects(sourceFor(id).read(target, key, after, limit)),
         bfHandoff: (id: string, target: string, key: string, through: number) =>
           reportDefects(sourceFor(id).handoff(target, key, through)),
-        // A live read of this instance: accept its WebSocket, then push on every commit.
-        fetch: accept((id, subscription) =>
-          Effect.gen(function* () {
-            const current = yield* currentMeta;
-            const events =
-              subscription.mode === "events" ? yield* eventsAfter(subscription.cursor) : [];
-            return yield* kit.push(id, subscription, current, events);
-          }),
-        ),
-        ...socketHandlers,
       };
     });
   });
@@ -1968,7 +1946,6 @@ const durableObjectPlatform = (
                           ),
                         ),
                       ),
-                    // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
                     changes: (id) =>
                       Stream.fromEffectSchedule(
                         unwrapDefects<{ state: Json; version: number }>(
@@ -1985,7 +1962,6 @@ const durableObjectPlatform = (
                           ),
                         (event) => event.envelope.seq,
                       ),
-                    connect: connectTo(namespace),
                   };
                 }),
               ),

@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { expectDeployFails, missingName } from "../Utils/Lookup.ts";
+import { expectDeployFails, missingName } from "../../lookup.ts";
 import { AsyncWorkflowWorker } from "./fixtures/workflow-async/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

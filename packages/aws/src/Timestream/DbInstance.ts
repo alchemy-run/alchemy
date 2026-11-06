@@ -155,8 +155,23 @@ export interface DbInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DbInstanceLookup
 > {}
+
+/**
+ * Props for {@link DbInstance.lookup}: find an InfluxDB instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DbInstanceLookup =
+  | {
+      /** The id of the existing instance. */
+      id: string;
+    }
+  | {
+      /** The name of the existing instance. */
+      name: string;
+    };
 
 /**
  * An Amazon Timestream for InfluxDB DB instance — a managed, single-tenant
@@ -183,6 +198,16 @@ export interface DbInstance extends Resource<
  *   vpcSecurityGroupIds: [securityGroup.groupId],
  *   password: Redacted.make("SuperSecretPassword1"),
  * });
+ * ```
+ *
+ * ### Looking up an existing InfluxDB instance
+ * `DbInstance.lookup` references an InfluxDB instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing InfluxDB instance
+ * ```typescript
+ * const metrics = AWS.Timestream.DbInstance.lookup({ name: "metrics" });
  * ```
  *
  * @resource
@@ -317,6 +342,11 @@ export const DbInstanceProvider = () =>
               (attrs): attrs is DbInstance["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* (props) {
+          return "id" in props
+            ? yield* readInstanceById(props.id)
+            : yield* findInstanceByName(props.name);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.id
             ? yield* readInstanceById(output.id)

@@ -117,8 +117,18 @@ export interface Component extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ComponentLookup
 > {}
+
+/**
+ * Props for {@link Component.lookup}: find a component this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComponentLookup {
+  /** The component build version arn of the existing component. */
+  componentBuildVersionArn: string;
+}
 
 /**
  * An EC2 Image Builder component — a YAML document that defines the build,
@@ -155,6 +165,16 @@ export interface Component extends Resource<
  *   parentImage: "arn:aws:imagebuilder:us-west-2:aws:image/amazon-linux-2023-x86/x.x.x",
  *   components: [{ componentArn: component.componentBuildVersionArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing component
+ * `Component.lookup` references a component Alchemy doesn't manage (created in the
+ * console or by another stack), found by `componentBuildVersionArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing component
+ * ```typescript
+ * const existing = AWS.ImageBuilder.Component.lookup({ componentBuildVersionArn: "my-component" });
  * ```
  *
  * @resource
@@ -226,6 +246,13 @@ export const ComponentProvider = () =>
           if (immutableVersionKeysChanged(olds, news, immutableKeys)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ componentBuildVersionArn: arn }) {
+          const component = yield* getComponent(arn);
+          if (component === undefined) return undefined;
+          const attrs = yield* toAttrs(component);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

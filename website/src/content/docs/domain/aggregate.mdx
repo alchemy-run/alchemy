@@ -66,12 +66,14 @@ Keep the statement, the transaction count and the monthly totals out of here. Th
 `decide` has one handler per command in `commands`. A handler receives the current state and the command, and returns the events to record or a rejection.
 
 ```typescript title="src/Account.aggregate.ts"
-WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : cmd.amount > s.balance
-      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+decide: {
+  WithdrawMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+},
 ```
 
 Read it as the business rule it is: an account that isn't open can't be withdrawn from; a withdrawal can't exceed the balance; otherwise, the money is withdrawn and here's the new balance.
@@ -95,10 +97,12 @@ const openFor = (s: State): Open | NotOpen => (s._tag === "Open" ? s : new NotOp
 Each handler starts from it. After the check, `o` is an `Open` account, so the rest of the rule reads its balance without another test.
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) => {
-  const o = openFor(s);
-  if (o._tag !== "Open") return o;
-  return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
+decide: {
+  DepositMoney: (account, cmd) => {
+    const o = openFor(account);
+    if (o._tag !== "Open") return o;
+    return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
+  },
 },
 ```
 
@@ -176,16 +180,18 @@ Optics are optional. They give the same states as the plain checks, with less re
 Some commands undo a step another process already took, like refunding a transfer whose credit failed. Refusing one would strand the money, so its handler records a fact for every state instead of rejecting.
 
 ```typescript title="packages/domain/src/Account/Account.aggregate.ts"
-RefundTransfer: (s, cmd) =>
-  s._tag === "Open"
-    ? [
-        new TransferRefunded({
-          transferId: cmd.transferId,
-          amount: cmd.amount,
-          balanceAfter: s.balance + cmd.amount,
-        }),
-      ]
-    : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
+decide: {
+  RefundTransfer: (account, cmd) =>
+    account._tag === "Open"
+      ? [
+          new TransferRefunded({
+            transferId: cmd.transferId,
+            amount: cmd.amount,
+            balanceAfter: account.balance + cmd.amount,
+          }),
+        ]
+      : [new RefundStranded({ transferId: cmd.transferId, amount: cmd.amount })],
+},
 ```
 
 `RefundStranded` tells a policy or a person that the account closed before the money came back. The [saga](/domain/saga) that sent the refund never has to handle a refusal it can do nothing about.
@@ -197,8 +203,8 @@ Some rules need more than the state and the command. Only the account's owner ma
 A command's [middleware](/domain/sessions) can provide that. When it does, the handler can be an `Effect.fn` and read it. In the example bank, the withdrawal handler first checks that the current actor may act on the account.
 
 ```typescript title="packages/domain/src/Account/Account.aggregate.ts"
-const authorized = Effect.fn(function* (s: AccountState) {
-  const o = openFor(s, yield* CurrentActor);
+const authorized = Effect.fn(function* (account: AccountState) {
+  const o = openFor(account, yield* CurrentActor);
   if (o._tag !== "Open") return yield* o;
   return o;
 });
@@ -257,10 +263,10 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
   initial: { _tag: "Free" },
   commands: [ClaimUsername],
   decide: {
-    ClaimUsername: (s, cmd) =>
-      s._tag === "Free"
+    ClaimUsername: (usernameClaim, cmd) =>
+      usernameClaim._tag === "Free"
         ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : s.customerId === cmd.customerId
+        : usernameClaim.customerId === cmd.customerId
           ? []
           : new UsernameTaken(),
   },
@@ -303,10 +309,10 @@ export class UsernameClaim extends Domain.Aggregate(
     initial: { _tag: "Free" },
     commands: [ClaimUsername],
     decide: {
-      ClaimUsername: (s, cmd) =>
-        s._tag === "Free"
+      ClaimUsername: (usernameClaim, cmd) =>
+        usernameClaim._tag === "Free"
           ? [new UsernameClaimed({ customerId: cmd.customerId })]
-          : s.customerId === cmd.customerId
+          : usernameClaim.customerId === cmd.customerId
             ? []
             : new UsernameTaken(),
     },
@@ -328,8 +334,8 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-The same client reads an instance's current state with `accounts.state(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Scheduling again under the same command id replaces the earlier command, even one that already ran. `unschedule` fails with `AlreadyExecuted`, `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
+The same client reads an instance's current state, as of its latest commit, with `accounts.get(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Scheduling again under the same command id replaces the earlier command, even one that already ran. `unschedule` fails with `AlreadyExecuted`, `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
 
-Clients outside the model send commands through an [Api](/domain/api). An aggregate with a `read` contract can also be read through one, so a client can fetch an account, watch it change, and follow its events.
+Clients outside the model send commands through an [Api](/domain/api). They never read an aggregate's state directly: a [view](/domain/view) projects what they may see of it, so the aggregate's state stays free to change with its rules.
 
 Next, [View](/domain/view): the query side, built from the events aggregates record.

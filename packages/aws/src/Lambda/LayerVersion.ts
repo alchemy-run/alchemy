@@ -138,8 +138,23 @@ export interface LayerVersion extends Resource<
     licenseInfo?: string;
   },
   never,
-  Providers
+  Providers,
+  LayerVersionLookup
 > {}
+
+/**
+ * Props for {@link LayerVersion.lookup}: find a layer version this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export interface LayerVersionLookup {
+  /** The layer's name or ARN. */
+  layerName: string;
+  /**
+   * The version to find.
+   * @default the latest version
+   */
+  version?: number;
+}
 
 /**
  * A version of a Lambda layer — a zip archive of libraries, a custom runtime,
@@ -187,6 +202,18 @@ export interface LayerVersion extends Resource<
  *   main: import.meta.resolve("./handler.ts"),
  *   layers: [deps],
  * });
+ * ```
+ *
+ * ### Looking up an existing layer version
+ * `LayerVersion.lookup` references a layer version Alchemy doesn't manage (created in the
+ * console or by another stack), found by `layerName` and an optional
+`version` (the latest by default). It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach an existing layer to a function
+ * ```typescript
+ * const otel = AWS.Lambda.LayerVersion.lookup({ layerName: "otel-collector" });
+ * const layerArn = otel.layerVersionArn;
  * ```
  *
  * @resource
@@ -372,6 +399,15 @@ export const LayerVersionProvider = () =>
             return { action: "update" } as const;
           }
           return { action: "noop" } as const;
+        }),
+        lookup: Effect.fn(function* ({ layerName, version }) {
+          const found =
+            version !== undefined
+              ? yield* getVersion(layerName, version)
+              : (yield* Lambda.listLayerVersions({ LayerName: layerName, MaxItems: 1 }).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+                ))?.LayerVersions?.[0];
+          return found ? snapshot(layerName, "", found) : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

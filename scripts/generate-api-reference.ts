@@ -14,8 +14,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
-import * as ts from "tsrs/unstable/ast";
-import type { Node, SourceFile } from "tsrs/unstable/ast";
+import * as ts from "tsrs/ast";
+import type { Node, SourceFile } from "tsrs/ast";
 import {
   docCommentLines,
   jsdocCopyId,
@@ -72,6 +72,11 @@ const sourceRoots: SourceRoot[] = [
     srcRoot: "packages/infisical/src",
     providerPrefix: "Infisical",
     sourceDisplayPrefix: "packages/infisical/src",
+  },
+  {
+    srcRoot: "packages/archil/src",
+    providerPrefix: "Archil",
+    sourceDisplayPrefix: "packages/archil/src",
   },
   {
     srcRoot: "packages/turso/src",
@@ -137,6 +142,16 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/docker/src",
   },
   { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
+  {
+    srcRoot: "packages/rivet/src",
+    providerPrefix: "Rivet",
+    sourceDisplayPrefix: "packages/rivet/src",
+  },
+  {
+    srcRoot: "packages/effect-cluster/src",
+    providerPrefix: "Cluster",
+    sourceDisplayPrefix: "packages/effect-cluster/src",
+  },
 ];
 
 interface FileEntry {

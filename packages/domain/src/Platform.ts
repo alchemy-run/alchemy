@@ -216,16 +216,6 @@ export interface AggregateKit {
     id: string,
     rows: ReadonlyArray<StoredEvent>,
   ) => Effect.Effect<ReadonlyArray<Delivery>>;
-  /**
-   * What a subscriber of instance `id` receives, given its current state and
-   * the events committed since (at least those after the subscription's cursor).
-   */
-  readonly push: (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ) => Effect.Effect<Push>;
 }
 
 /**
@@ -308,12 +298,6 @@ export interface AggregateStore {
    * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
-  /**
-   * Accept a WebSocket upgrade (the current request) for a live read of
-   * `key`, then push to it on every commit. Optional: without it, live reads
-   * are streamed responses over `changes` and `tail`.
-   */
-  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /** How much history has reached a consumer: see `View.History`. */

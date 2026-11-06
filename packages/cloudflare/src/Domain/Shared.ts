@@ -2,6 +2,7 @@ import type * as Backfill from "@alchemy.run/domain/Backfill";
 import * as FanOut from "@alchemy.run/domain/FanOut";
 import type { Delivery } from "@alchemy.run/domain/Platform";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Move from "alchemy/Workers/Workerd/DurableObjectMove";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -16,7 +17,6 @@ import {
   type DurableObjectJurisdiction,
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import * as Move from "../Workers/internal/DurableObjectMove.ts";
 import { makeRpcStub } from "../Workers/Rpc.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
@@ -793,7 +793,7 @@ const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
       Effect.catchCause((cause) =>
         Cause.pretty(cause).includes(MOVED)
           ? Effect.succeed({ moved: true } as const)
-          : Effect.die(Cause.squash(cause)),
+          : Effect.die(cause.pipe(Cause.squash)),
       ),
     );
     if ("moved" in asked) return "moved" as const;

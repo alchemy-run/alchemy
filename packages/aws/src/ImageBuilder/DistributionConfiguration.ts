@@ -60,8 +60,18 @@ export interface DistributionConfiguration extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DistributionConfigurationLookup
 > {}
+
+/**
+ * Props for {@link DistributionConfiguration.lookup}: find a distribution configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DistributionConfigurationLookup {
+  /** The distribution configuration arn of the existing distribution configuration. */
+  distributionConfigurationArn: string;
+}
 
 /**
  * An EC2 Image Builder distribution configuration — defines where and how
@@ -89,6 +99,16 @@ export interface DistributionConfiguration extends Resource<
  *   infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
  *   distributionConfigurationArn: distribution.distributionConfigurationArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing distribution configuration
+ * `DistributionConfiguration.lookup` references a distribution configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `distributionConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing distribution configuration
+ * ```typescript
+ * const existing = AWS.ImageBuilder.DistributionConfiguration.lookup({ distributionConfigurationArn: "my-distribution-configuration" });
  * ```
  *
  * @resource
@@ -140,6 +160,12 @@ export const DistributionConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ distributionConfigurationArn: arn }) {
+          const config = yield* getConfiguration(arn);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.distributionConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));

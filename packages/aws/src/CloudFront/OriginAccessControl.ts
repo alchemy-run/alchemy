@@ -81,8 +81,23 @@ export interface OriginAccessControl extends Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OriginAccessControlLookup
 > {}
+
+/**
+ * Props for {@link OriginAccessControl.lookup}: find an origin access control this stack doesn't
+ * manage, in the ambient account.
+ */
+export type OriginAccessControlLookup =
+  | {
+      /** The id of the existing origin access control. */
+      originAccessControlId: string;
+    }
+  | {
+      /** The name of the existing origin access control. */
+      name: string;
+    };
 
 /**
  * A CloudFront Origin Access Control for private origins.
@@ -95,6 +110,18 @@ export interface OriginAccessControl extends Resource<
  * const oac = yield* OriginAccessControl("SiteOriginAccess", {
  *   originType: "s3",
  * });
+ * ```
+ *
+ * ### Looking up an existing origin access control
+ * `OriginAccessControl.lookup` references an origin access control Alchemy doesn't manage (created in the
+ * console or by another stack), found by `originAccessControlId` or
+`name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Serve a bucket through an existing origin access control
+ * ```typescript
+ * const oac = AWS.CloudFront.OriginAccessControl.lookup({ name: "s3-sigv4" });
+ * const originAccessControlId = oac.originAccessControlId;
  * ```
  *
  * @resource
@@ -194,6 +221,17 @@ export const OriginAccessControlProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const existing =
+            "originAccessControlId" in props
+              ? yield* getCurrent({
+                  originAccessControlId: props.originAccessControlId,
+                } as OriginAccessControl["Attributes"])
+              : yield* getByName(props.name);
+          const oac = existing?.OriginAccessControl;
+          if (!oac?.Id || !oac.OriginAccessControlConfig) return undefined;
+          return toAttrs(oac, existing?.ETag, oac.OriginAccessControlConfig.Name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const existing =
