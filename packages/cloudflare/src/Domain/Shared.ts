@@ -1083,7 +1083,14 @@ type MigrationParams =
       readonly pages: ReadonlyArray<StoredPage & { readonly n: number }>;
     }
   /** Start the run, and wait until it is complete: each check's output is its progress. */
-  | { readonly op: "run"; readonly cls: string; readonly target: string; readonly plan: MovePlan }
+  | {
+      readonly op: "run";
+      readonly cls: string;
+      readonly target: string;
+      readonly plan: MovePlan;
+      /** The pages, when they fit in the params: no `add` instance to wait for first. */
+      readonly pages?: ReadonlyArray<StoredPage & { readonly n: number }>;
+    }
   /** A record of a complete pass over a class (see `Version.passMarker`): nothing to do. */
   | { readonly op: "mark" };
 
@@ -1114,6 +1121,20 @@ const migration = (params: MigrationParams) =>
         );
       return {};
     }
+    // Pages that came with the params: kept in parallel, in one step.
+    if (params.pages !== undefined && params.pages.length > 0)
+      yield* task(
+        "add",
+        call(
+          "keeping the pages",
+          Effect.forEach(
+            params.pages,
+            ({ n, ...page }) => object(pageObject(params.target, n)).mgAdd!(params.target, n, page),
+            { concurrency: 6, discard: true },
+          ),
+        ),
+        { retries: { limit: 10, delay: "2 seconds", backoff: "exponential" } },
+      );
     yield* task("begin", call("starting the run", root.mgBegin!(params.target, params.plan)), {
       retries: { limit: 10, delay: "2 seconds", backoff: "exponential" },
     });
@@ -1128,6 +1149,7 @@ const migration = (params: MigrationParams) =>
       );
       if (progress[0]!.phase === "complete") return { progress: progress[0]! };
       // Soon at first, then less often: each check is a step (an instance has 10,000).
-      yield* sleep(`wait-${check}`, `${Math.min(10_000, Math.round(500 * 1.25 ** check))} millis`);
+      // Each check is two steps (an instance has 10,000): once a second lasts over an hour.
+      yield* sleep(`wait-${check}`, "1 second");
     }
   });

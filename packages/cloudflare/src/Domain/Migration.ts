@@ -99,9 +99,11 @@ export class MigrationStillRunning extends Data.TaggedError("MigrationStillRunni
 const PAGE = 100;
 /** Pages one `add` instance hands over: its params stay well under the 1 MiB limit. */
 const PAGES_PER_ADD = 50;
+/** Pages up to this size go in the run's own params (Workflow params are limited to 1 MiB). */
+const INLINE_PAGES_BYTES = 512 * 1024;
 /** Instances one bulk call starts. */
 const BULK = 100;
-const POLL = "3 seconds";
+const POLL = "1 second";
 /** How many times an instance that started before the Worker reached its edge is started again, and how soon. */
 const MAX_RESTARTS = 30;
 const RESTART_DELAY = "2 seconds";
@@ -148,6 +150,11 @@ export const migrateModel = Effect.fn(function* ({
   const { accountId } = yield* yield* CloudflareEnvironment;
   const workflowName = news.workflowName;
   const started = yield* Clock.currentTimeMillis;
+  /** Log how long the move took to reach a phase: for finding where a deploy's time goes. */
+  const phase = (what: string) =>
+    Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      Effect.logInfo(`Domain migration ${news.domainClass}: ${what} at ${now - started}ms`),
+    );
   // Every object listed from here on is moved by this pass.
   const listedAt = Math.floor(started / 1000);
   // Each model's migration runs its own pass: a Worker's models migrate at once,
@@ -172,16 +179,22 @@ export const migrateModel = Effect.fn(function* ({
     ({ className, binding }) => news.namespaces[className] !== undefined && bound.has(binding),
   );
   const pages: Array<{ n: number; cls: string; bind: string; route: string; ids: string[] }> = [];
-  for (const { className, binding, route } of live) {
-    const objects = yield* durableObjects.listNamespaceObjects
-      .items({ accountId, id: news.namespaces[className]! })
-      .pipe(
-        Stream.filter((object) => object.hasStoredData === true),
-        Stream.runCollect,
-        // The upload deleted the class: nothing of it is left to move.
-        Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
-      );
-    const ids = Array.from(objects, (object) => object.id).filter(
+  // Every class listed at once.
+  const listings = yield* Effect.forEach(
+    live,
+    ({ className }) =>
+      durableObjects.listNamespaceObjects
+        .items({ accountId, id: news.namespaces[className]! })
+        .pipe(
+          Stream.filter((object) => object.hasStoredData === true),
+          Stream.runCollect,
+          // The upload deleted the class: nothing of it is left to move.
+          Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
+        ),
+    { concurrency: 8 },
+  );
+  for (const [index, { className, binding, route }] of live.entries()) {
+    const ids = Array.from(listings[index]!, (object) => object.id).filter(
       (id): id is string => typeof id === "string",
     );
     for (let i = 0; i < ids.length; i += PAGE)
@@ -194,6 +207,7 @@ export const migrateModel = Effect.fn(function* ({
       });
   }
   const total = pages.reduce((sum, page) => sum + page.ids.length, 0);
+  yield* phase(`listed ${total} objects of ${live.length} classes`);
 
   /** Start instances, a hundred per call; one started before is found started. */
   const create = (instances: ReadonlyArray<{ readonly id: string; readonly params: object }>) =>
@@ -293,16 +307,21 @@ export const migrateModel = Effect.fn(function* ({
     { kind: "status" },
   );
 
-  // Hand the run its pages, a few per instance (an instance's params are limited).
-  const adds = Array.from({ length: Math.ceil(pages.length / PAGES_PER_ADD) }, (_, i) => ({
-    id: `mg-add-${target}-${i}`,
-    params: {
-      op: "add",
-      cls: news.domainClass,
-      target,
-      pages: pages.slice(i * PAGES_PER_ADD, (i + 1) * PAGES_PER_ADD),
-    },
-  }));
+  // Pages that fit in the run's params go with it; more are handed over first, a few
+  // per instance (an instance's params are limited).
+  const inline = JSON.stringify(pages).length <= INLINE_PAGES_BYTES;
+  const adds = Array.from(
+    { length: inline ? 0 : Math.ceil(pages.length / PAGES_PER_ADD) },
+    (_, i) => ({
+      id: `mg-add-${target}-${i}`,
+      params: {
+        op: "add",
+        cls: news.domainClass,
+        target,
+        pages: pages.slice(i * PAGES_PER_ADD, (i + 1) * PAGES_PER_ADD),
+      },
+    }),
+  );
   yield* create(adds);
   for (const add of adds) {
     for (let attempt = 0, id = add.id; ; attempt++) {
@@ -336,7 +355,9 @@ export const migrateModel = Effect.fn(function* ({
       pages: pages.map(({ n, cls, ids }) => ({ n, cls, size: ids.length })),
       ...(news.walk ? { walk: true } : {}),
     },
+    ...(inline ? { pages } : {}),
   };
+  yield* phase(`handed over ${pages.length} pages${inline ? " with the run" : ""}`);
   let runId = `mg-run-${target}`;
   let restarts = 0;
   yield* create([{ id: runId, params: runParams }]);
@@ -344,7 +365,10 @@ export const migrateModel = Effect.fn(function* ({
   while (true) {
     const status = yield* instance(runId);
     const latest = progressOf(status.steps ?? [])?.[0];
-    if (latest !== undefined) progress = latest as typeof progress;
+    if (latest !== undefined) {
+      if (progress === undefined) yield* phase("run started");
+      progress = latest as typeof progress;
+    }
     if (status.status === "complete") break;
     if (status.status === "errored" || status.status === "terminated") {
       // Started on an edge that doesn't have the uploaded Worker yet, or reached an
@@ -375,6 +399,7 @@ export const migrateModel = Effect.fn(function* ({
     yield* Effect.sleep(POLL);
   }
 
+  yield* phase(`run complete, ${progress?.instances ?? 0} objects handled`);
   const skipped = progress?.skipped ?? {};
   for (const [className, count] of Object.entries(skipped))
     yield* session.note(
