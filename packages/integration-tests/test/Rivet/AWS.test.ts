@@ -47,7 +47,7 @@ describe.skipIf(!!process.env.FAST)(
     conformanceTests(test, { baseUrl: () => baseUrl, kind: "live" });
 
     test(
-      "Durable Streams: a Lambda appends to and reads a stream on Fargate Services, through CloudFront",
+      "Durable Streams: the front appends to and reads a stream on its cloud's Services pool",
       Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
         const read = (yield* Effect.suspend(() =>
