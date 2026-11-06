@@ -2,8 +2,10 @@ import { assert, describe, expect, it } from "@alchemy.run/test";
 import { getRouted, makeListener } from "@alchemy.run/test/IngressForwarder";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 import * as Ingress from "@/Local/Ingress.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
@@ -87,7 +89,7 @@ describe("Ingress.attach", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(services), Effect.scoped),
   );
 
-  it.live("a module that can't be imported fails with IngressError", () =>
+  it.live("a module the project doesn't install fails with IngressError", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         Ingress.attach(
@@ -98,7 +100,7 @@ describe("Ingress.attach", { tags: ["unit", "local"] }, () => {
       );
       assert(error._tag === "IngressError");
       expect(error.message).toBe(
-        "Ingress module @alchemy.run/no-such-router could not be imported",
+        `Ingress module @alchemy.run/no-such-router is not installed in ${process.cwd()}`,
       );
     }).pipe(Effect.provide(services), Effect.scoped),
   );
@@ -113,4 +115,58 @@ describe("Ingress.attach", { tags: ["unit", "local"] }, () => {
       expect(error.message).toBe(`Ingress module ${module} has no default-export Layer`);
     }).pipe(Effect.provide(services), Effect.scoped),
   );
+
+  it.live(
+    "resolves the module from the project, not from alchemy's install",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        // A project whose only dependency is a router package alchemy can't see.
+        const project = path.resolve(import.meta.dirname, "../../.tmp/ingress-project");
+        const router = path.join(project, "node_modules", "acme-router");
+        yield* fs.remove(project, { recursive: true }).pipe(Effect.ignore);
+        yield* fs.makeDirectory(path.join(router, "src"), { recursive: true });
+        yield* fs.writeFileString(
+          path.join(router, "package.json"),
+          JSON.stringify({
+            name: "acme-router",
+            type: "module",
+            exports: { "./IngressLive": { import: "./src/IngressLive.ts" } },
+          }),
+        );
+        yield* fs.writeFileString(
+          path.join(router, "src", "IngressLive.ts"),
+          'export { default } from "@alchemy.run/test/IngressForwarder";\n',
+        );
+        yield* Effect.addFinalizer(() =>
+          fs.remove(project, { recursive: true }).pipe(Effect.ignore),
+        );
+
+        const ingress = { module: "acme-router/IngressLive" };
+        // From alchemy's own directory the package isn't installed.
+        const outside = yield* Effect.flip(
+          Ingress.attach(ingress, target, new URL("http://localhost:1")),
+        );
+        expect(outside.message).toContain("acme-router/IngressLive is not installed in");
+
+        const listener = yield* makeListener("acme");
+        const origin = yield* inDirectory(project, Ingress.attach(ingress, target, listener));
+        expect((yield* getRouted(origin)).body).toMatch(/^acme /);
+      }).pipe(Effect.provide(services), Effect.scoped),
+    // Exclusive: changes the process's working directory.
+    { exclusive: true },
+  );
 });
+
+/** Run `effect` with the process's working directory set to `directory`. */
+const inDirectory = <A, E, R>(directory: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.cwd();
+      process.chdir(directory);
+      return previous;
+    }),
+    () => effect,
+    (previous) => Effect.sync(() => process.chdir(previous)),
+  );
