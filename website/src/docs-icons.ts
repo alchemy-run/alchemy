@@ -38,6 +38,10 @@ const custom: Record<string, string> = {
   // ships the pre-rebrand "S" glyph.
   stripe:
     '<g transform="scale(0.076923) translate(-100 -100)"><path fill="currentColor" fill-rule="evenodd" d="m120 392 272-57.683V120l-272 58.357z" clip-rule="evenodd"/></g>',
+  // Official E2B symbol (https://e2b.dev/brand/e2b-symbol-black-s.svg, from
+  // e2b.dev/brand), used verbatim: the mark's 16.26×14.5 bounds in its 32×30
+  // viewBox are scaled uniformly to the 24-wide box and centred vertically.
+  e2b: '<g transform="translate(-11.6223 -10.1455) scale(1.476393)"><path fill="currentColor" d="M24.1279 7.75171V11.7029H12.3447C12.0571 11.703 11.8232 11.9367 11.8232 12.2244V12.5027C11.8232 12.7903 12.0571 13.024 12.3447 13.0242H24.1279V16.9753H12.3447C12.0571 16.9755 11.8232 17.2092 11.8232 17.4968V17.7751C11.8233 18.0627 12.0572 18.2955 12.3447 18.2957H24.1279V22.2478H10.4717C9.03605 22.2475 7.87209 21.0829 7.87207 19.6472V10.3513C7.87229 8.91577 9.03617 7.75206 10.4717 7.75171H24.1279Z"/></g>',
 };
 
 const l = (name: string): string | undefined => lucide.icons[name]?.body;
@@ -57,6 +61,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Turso: b("turso"),
+  E2B: c("e2b"),
   Prisma: c("prisma"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
   PrismaColor: c("prismaColor"),
@@ -120,6 +125,8 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Guides: l("map"),
   Resources: l("boxes"),
   Concepts: l("book-text"),
+  Sandboxes: l("box"),
+  Events: l("bell"),
   Clusters: l("network"),
   Workloads: l("container"),
   Objects: l("file-code"),
@@ -139,6 +146,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   GitHub: b("github"),
   Neon: b("neon"),
   Turso: b("turso"),
+  E2B: c("e2b"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),

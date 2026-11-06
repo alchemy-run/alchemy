@@ -42,6 +42,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "E2B", link: "/e2b" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1398,6 +1399,43 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Turso"),
+          ],
+        },
+        {
+          label: "E2B",
+          items: [
+            { label: "Overview", link: "/e2b" },
+            { label: "Setup", link: "/e2b/setup" },
+            { label: "Concepts", link: "/e2b/concepts" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "e2b/tutorial" } }],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Templates", link: "/e2b/templates" },
+                { label: "Sandboxes", link: "/e2b/sandboxes" },
+                { label: "Snapshots & forks", link: "/e2b/snapshots" },
+                { label: "Template programs", link: "/e2b/programs" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [{ label: "Volumes", link: "/e2b/volumes" }],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Network & secrets", link: "/e2b/network-and-secrets" },
+                { label: "API keys", link: "/e2b/api-keys" },
+              ],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Lifecycle events", link: "/e2b/lifecycle-events" }],
+            },
+            providerResourcesEntry("E2B"),
           ],
         },
         {

@@ -1,0 +1,69 @@
+---
+title: "Part 1: Your First Template"
+description: Declare an E2B template and deploy it.
+sidebar:
+  order: 1
+---
+
+Build an API that runs code in sandboxes: a one-shot sandbox per request, and a sandbox per user that keeps their files.
+
+The finished code is in [`examples/e2b-agent-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/e2b-agent-sandbox).
+
+## Prerequisites
+
+Finish [E2B setup](/e2b/setup) and [Cloudflare setup](/cloudflare/setup).
+
+## Declare the template
+
+```typescript
+// src/Sandbox.ts
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as E2B from "@alchemy.run/e2b";
+
+export const Agent = E2B.Template("Agent", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git ripgrep
+  `,
+  cpuCount: 2,
+  memoryMB: 2048,
+});
+```
+
+Every sandbox boots from this image, with 2 vCPUs and 2 GiB of memory.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Agent } from "./src/Sandbox.ts";
+
+export default Alchemy.Stack(
+  "E2BAgentSandboxExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const agent = yield* Agent;
+    return { templateId: agent.templateId };
+  }),
+);
+```
+
+## Deploy
+
+```sh
+alchemy deploy
+```
+
+E2B builds the template on its side; you don't need Docker. The first build takes a minute or two. Later deploys rebuild only when the Dockerfile changes.
+
+## Next
+
+[Part 2](/e2b/tutorial/part-2) adds a Worker that creates sandboxes from this template.

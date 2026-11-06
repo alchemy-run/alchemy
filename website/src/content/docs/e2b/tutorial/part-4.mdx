@@ -1,0 +1,30 @@
+---
+title: "Part 4: Stages"
+description: Deploy separate copies of the Stack, each with its own templates and Worker.
+sidebar:
+  order: 4
+---
+
+## Deploy another stage
+
+```sh
+alchemy deploy --stage staging
+```
+
+Each stage gets its own template and Worker, named after the stage. Without `--stage`, you deploy to `live_$USER`.
+
+## Share one E2B team
+
+Stages share your E2B team. Sandboxes a stage's Worker creates carry the stage in their metadata (`alchemy::stage`), so you can list one stage's sandboxes without touching another's:
+
+```typescript
+const staging = yield* sandboxes.list({ metadata: { "alchemy::stage": "staging" } });
+```
+
+Destroying a stage leaves its sandboxes running until they time out.
+
+Volumes and templates you create at runtime have no metadata. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
+
+## Next
+
+[Part 5](/e2b/tutorial/part-5) deploys from CI.

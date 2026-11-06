@@ -1,0 +1,83 @@
+---
+title: Concepts
+description: How templates, snapshots, sandboxes, volumes, and secrets fit together, and which ones you declare versus create at runtime.
+---
+
+E2B gives you five things. Some you declare in your Stack. Most you create at runtime, one per user or per task.
+
+## Templates are images
+
+A template is the image a sandbox boots from. E2B builds it into a microVM snapshot, so a sandbox starts in well under a second.
+
+```typescript
+export const Agent = E2B.Template("Agent", { image: "node:22-bookworm" });
+```
+
+Declare the templates your app always needs. Build more at runtime with `E2B.CreateTemplate()`, for example one per repository. See [Templates](/e2b/templates).
+
+## Snapshots are warm bases
+
+A snapshot is a template after some work: a repository cloned, its dependencies installed, a server started. Sandboxes created from it resume with memory, so that work is already done.
+
+```typescript
+const warm = yield* E2B.Snapshot("Warm", {
+  template: Agent,
+  run: ["git clone https://github.com/my-org/app", "cd app && npm ci"],
+});
+```
+
+Take more at runtime with `sandbox.snapshot()` or `E2B.CreateSnapshot()`. See [Snapshots & forks](/e2b/snapshots).
+
+## Sandboxes are created at runtime
+
+A sandbox is short-lived: E2B kills it after its timeout, or pauses it with `autoPause`. You never declare one. You create them from a Worker with `E2B.CreateSandbox(base)`, and find them again by their metadata.
+
+```typescript
+const sandboxes = yield* E2B.CreateSandbox(Agent);
+const sandbox = yield* sandboxes.create({ metadata: { user }, autoPause: true });
+```
+
+Sandboxes a Worker creates carry the stack, stage and Worker in their metadata, and stay when you destroy the stack. See [Sandboxes](/e2b/sandboxes#clean-up).
+
+## Volumes hold files that outlive sandboxes
+
+A volume is a filesystem sandboxes mount by name. Declare a shared one, or create one per user at runtime.
+
+```typescript
+const volumes = yield* E2B.CreateVolume();
+const home = yield* volumes.getOrCreate(`home-${user}`);
+```
+
+You can read and write a volume's files without a sandbox. See [Volumes](/e2b/volumes).
+
+## Secrets never enter the sandbox
+
+A secret is a value E2B adds to the sandbox's outgoing requests, on the host, for the domains you choose. Code in the sandbox sees only a placeholder.
+
+```typescript
+network: {
+  allowOut: ["api.github.com"],
+  rules: { "api.github.com": [{ transform: { headers: { Authorization: `Bearer ${github.ref}` } } }] },
+},
+```
+
+See [Network & secrets](/e2b/network-and-secrets).
+
+## Two kinds of binding
+
+Every binding either acts on one resource you declared, or on any object of its kind:
+
+```typescript
+const fromAgent = yield* E2B.CreateSandbox(Agent); // sandboxes from this template
+const anyTemplate = yield* E2B.CreateSandbox(); // pass templateID per call
+const reports = yield* E2B.ReadVolume(Reports); // files of this volume
+const homes = yield* E2B.CreateVolume(); // any volume, by name
+```
+
+Both kinds return the same handles, and their calls take E2B's own parameters.
+
+## Access
+
+Every host that uses a binding gets its own E2B API key. Alchemy mints it at deploy with your access token and revokes it when the host is destroyed. Your own credentials never reach the host.
+
+E2B keys are not scoped, so a host's key still reaches the whole team. Data calls inside a sandbox use the sandbox's own token, and volume files use the volume's own token.

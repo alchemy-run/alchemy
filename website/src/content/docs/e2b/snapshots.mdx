@@ -1,0 +1,57 @@
+---
+title: Snapshots & forks
+description: Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
+---
+
+## A warm base at deploy time
+
+```typescript
+// alchemy.run.ts
+const warm = yield* E2B.Snapshot("Warm", {
+  template: Agent,
+  run: [
+    "git clone https://github.com/my-org/app /home/user/app",
+    "cd /home/user/app && npm ci",
+  ],
+});
+```
+
+Alchemy boots the template, runs the commands, snapshots the sandbox with its memory, and kills it. A command that exits non-zero fails the deploy with `SnapshotSetupFailed`. A deploy runs the setup again only when the template or the commands change.
+
+## Create sandboxes from it
+
+```typescript
+const sandboxes = yield* E2B.CreateSandbox(Warm);
+const sandbox = yield* sandboxes.create({ timeout: 600 });
+yield* sandbox.exec("cd app && npm test");
+```
+
+## Snapshot a running sandbox
+
+```typescript
+const snapshot = yield* sandbox.snapshot({ name: `session-${id}` });
+const restored = yield* sandboxes.create({ templateID: snapshot.snapshotID });
+```
+
+Pass `memory: false` to keep only the filesystem; sandboxes from it boot fresh.
+
+## Fork a sandbox
+
+```typescript
+const results = yield* sandbox.fork({ count: 3 });
+for (const result of results) {
+  if (result._tag === "Forked") yield* result.sandbox.exec("npm test -- --shard");
+}
+```
+
+E2B checkpoints the sandbox (it keeps running) and starts copies of it. Each fork succeeds or fails on its own.
+
+## Snapshots at runtime
+
+```typescript
+const snapshots = yield* E2B.CreateSnapshot();
+const info = yield* snapshots.create(`warm-${slug}`, { template: "node-22", run: ["npm ci"] });
+yield* snapshots.delete(`warm-${slug}`);
+```
+
+Runtime snapshots are not deleted when you destroy the Worker.

@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
@@ -28,6 +29,7 @@ export default Alchemy.Stack(
       Railway.providers(),
       Stripe.providers(),
       Turso.providers(),
+      E2B.providers(),
     ),
     state: Cloudflare.state(),
   },

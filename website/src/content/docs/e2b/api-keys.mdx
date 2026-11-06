@@ -1,0 +1,33 @@
+---
+title: API keys
+description: Create E2B API keys for your apps and CI.
+---
+
+E2B keys are not scoped: each one reaches the whole team. Use one key per app or CI system so you can revoke one without the others.
+
+Bindings already do this for you: each host gets its own key, revoked when the host is destroyed.
+
+## Set up access
+
+E2B mints API keys only with a personal access token, the one [setup](/e2b/setup) stores in your profile. In CI, set `E2B_ACCESS_TOKEN`.
+
+## Create a key
+
+```typescript
+// src/Keys.ts
+import * as E2B from "@alchemy.run/e2b";
+
+export const Ci = E2B.ApiKey("Ci", {});
+```
+
+`ci.key` is the key, as a `Redacted` value. E2B shows it once, so Alchemy keeps it in state. Renaming updates the key in place. Destroying it revokes it.
+
+## Team usage and events
+
+```typescript
+const team = yield* E2B.ReadTeam();
+const events = yield* team.events({ limit: 50 });
+const metrics = yield* team.metrics({ start, end });
+```
+
+Provide `E2B.ReadTeamHttp`.

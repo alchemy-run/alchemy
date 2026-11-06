@@ -1,0 +1,51 @@
+---
+title: Lifecycle events
+description: Handle sandbox lifecycle events in a Worker as E2B sends them.
+---
+
+## Handle events in a Worker
+
+```typescript
+// src/Events.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Events extends Cloudflare.Worker<Events>()(
+  "Events",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* E2B.consumeSandboxEvents({ events: ["sandbox.lifecycle.killed"] }, (event) =>
+      Effect.log(`${event.sandbox_id} killed: ${event.event_data?.kill_reason}`),
+    );
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }).pipe(Effect.provide(E2B.SandboxEventsLive)),
+) {}
+```
+
+Deploying creates an E2B webhook that points at the Worker. Destroying the Worker deletes it.
+
+## Events
+
+`sandbox.lifecycle.created`, `updated`, `paused`, `resumed`, `checkpointed`, and `killed`. Leave out `events` to get all of them. `event.event_data.sandbox_metadata` holds the sandbox's metadata, so you can tell whose sandbox it was.
+
+## Signatures
+
+Each request's `e2b-signature` is checked before your handler runs. An unsigned or wrongly signed request gets a 401. Alchemy creates the signing secret unless you pass `secret`.
+
+## Retries
+
+E2B tries each event up to three times. Keep your handler idempotent on `event.id`.
+
+## A webhook for an endpoint you don't deploy
+
+```typescript
+export const Lifecycle = E2B.Webhook("Lifecycle", {
+  url: "https://hooks.example.com/e2b",
+  events: ["sandbox.lifecycle.paused", "sandbox.lifecycle.killed"],
+  signatureSecret: Alchemy.Secret("E2B_WEBHOOK_SECRET"),
+});
+```
+
+Read its delivery history with `E2B.ReadWebhook(Lifecycle)`: `deliveries()` and `stats()`.

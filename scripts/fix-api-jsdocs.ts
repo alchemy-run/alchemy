@@ -24,6 +24,7 @@ const packages = [
   "doppler",
   "infisical",
   "turso",
+  "e2b",
   "planetscale",
   "neon",
   "prisma",

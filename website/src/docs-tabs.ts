@@ -32,6 +32,7 @@ export interface DocsTab {
 export const DOCS_CATEGORIES = [
   "Clouds",
   "Containers",
+  "Sandboxes",
   "Databases",
   "Auth",
   "Payments",
@@ -101,6 +102,8 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Kubernetes", "kubernetes", "Containers", "deployments · jobs · manifests · helm", [
     "/providers/kubernetes",
   ]),
+
+  hub("E2B", "e2b", "Sandboxes", "sandboxes · templates · volumes", ["/providers/e2b"]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
     "/providers/git",
   ]),

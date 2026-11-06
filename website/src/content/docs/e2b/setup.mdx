@@ -1,0 +1,50 @@
+---
+title: Setup
+description: Log Alchemy in to E2B.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [e2b.dev](https://e2b.dev). Alchemy logs in to E2B in your browser, finds your team, and mints a separate API key for each host that uses a binding.
+
+E2B keys are not scoped: a key reaches every sandbox, template, volume, and secret in the team. Use a separate team for tests.
+
+## Add the provider
+
+Install `@alchemy.run/e2b`:
+
+<PackageManagers add="@alchemy.run/e2b" />
+
+Then add `E2B.providers()` next to your cloud's providers:
+
+```typescript
+// alchemy.run.ts
+import * as E2B from "@alchemy.run/e2b";
+
+providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+```
+
+## Log in
+
+```sh
+alchemy profile edit --add E2B
+```
+
+Pick **Browser login** and sign in to E2B. The profile keeps the login, and its token refreshes itself. To paste an access token or API key instead, pick **Access token or API key**.
+
+See [Profiles](/environments/profiles) to learn how profiles work.
+
+## Use environment variables in CI
+
+Set `E2B_ACCESS_TOKEN` and Alchemy uses it instead of your profile:
+
+```sh
+E2B_ACCESS_TOKEN=sk_e2b_... alchemy deploy
+```
+
+An API key (`E2B_API_KEY`) is enough to deploy resources, but bindings and `E2B.ApiKey` need the access token: only it can mint keys.
+
+## Next steps
+
+- [Build the tutorial](/e2b/tutorial/part-1)
+- [Concepts](/e2b/concepts)

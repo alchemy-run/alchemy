@@ -564,6 +564,31 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents as Stack resources and bindings: templates, warm snapshots, sandboxes from any Worker, volumes, egress secrets, programs baked into templates, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/setup",
+        "e2b/concepts",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/network-and-secrets",
+        "e2b/api-keys",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",

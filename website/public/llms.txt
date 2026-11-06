@@ -713,6 +713,27 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 - [Tokens](https://alchemy.run/turso/tokens) — Create tokens for apps that run outside your Stack.
 - [Team & organization](https://alchemy.run/turso/organization) — Invite teammates and change your Turso organization's settings.
 
+## E2B
+
+E2B sandboxes for agents as Stack resources and bindings: templates, warm snapshots, sandboxes from any Worker, volumes, egress secrets, programs baked into templates, and lifecycle events.
+
+- [E2B](https://alchemy.run/e2b) — Run sandboxes for agents on E2B from your Workers, with templates, warm snapshots, volumes, and secrets that never enter the sandbox.
+- [Setup](https://alchemy.run/e2b/setup) — Log Alchemy in to E2B.
+- [Concepts](https://alchemy.run/e2b/concepts) — How templates, snapshots, sandboxes, volumes, and secrets fit together, and which ones you declare versus create at runtime.
+- [Part 1: Your First Template](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and deploy it.
+- [Part 2: Add a Worker](https://alchemy.run/e2b/tutorial/part-2) — Create sandboxes from a Worker, run code in them, and keep a sandbox per user.
+- [Part 3: Testing](https://alchemy.run/e2b/tutorial/part-3) — Deploy the Stack in a test, call the API, and check the result.
+- [Part 4: Stages](https://alchemy.run/e2b/tutorial/part-4) — Deploy separate copies of the Stack, each with its own templates and Worker.
+- [Part 5: CI/CD](https://alchemy.run/e2b/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
+- [Templates](https://alchemy.run/e2b/templates) — Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
+- [Sandboxes](https://alchemy.run/e2b/sandboxes) — Create sandboxes from a Worker, run commands, read and write files, and manage their lifecycle.
+- [Snapshots & forks](https://alchemy.run/e2b/snapshots) — Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
+- [Template programs](https://alchemy.run/e2b/programs) — Run your own Effect program, or a plain JavaScript program, in every sandbox.
+- [Volumes](https://alchemy.run/e2b/volumes) — Keep files that outlive sandboxes, mount them by name, and read or write them without a sandbox.
+- [Network & secrets](https://alchemy.run/e2b/network-and-secrets) — Limit where a sandbox can connect, and add credentials to its requests without the sandbox seeing them.
+- [API keys](https://alchemy.run/e2b/api-keys) — Create E2B API keys for your apps and CI.
+- [Lifecycle events](https://alchemy.run/e2b/lifecycle-events) — Handle sandbox lifecycle events in a Worker as E2B sends them.
+
 ## Better Auth
 
 Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.
@@ -930,7 +951,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [View](https://alchemy.run/domain/view) — How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
 - [Projection](https://alchemy.run/domain/projection) — How a projection consumes events into a store you own, in order per key, batched and replayable, and why it never sends commands.
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
-- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized per request and per row, paged by cursor, and consistent with the caller's own writes.
+- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized by its handler, paged by cursor, and consistent with the caller's own writes.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
@@ -953,10 +974,10 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
-- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
 
 ## API reference
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~213 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~216 KB) — only fetch it when you need to locate a specific resource's reference page.

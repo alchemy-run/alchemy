@@ -28,6 +28,7 @@ export CLOUDFLARE_EMAIL=alchemy-local@example.invalid
 export CLOUDFLARE_ACCOUNT_EMAIL="$CLOUDFLARE_EMAIL"
 
 export DOPPLER_TOKEN=alchemy-fake-local-doppler-token
+export E2B_API_KEY=alchemy-fake-local-e2b-api-key
 export FLY_API_TOKEN=alchemy-fake-local-fly-token
 
 export GITHUB_ACCESS_TOKEN=alchemy-fake-local-github-token
