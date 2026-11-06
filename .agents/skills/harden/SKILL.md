@@ -32,6 +32,16 @@ prepare-release invoked you). The user merges; you never do.
    Keep `stability.log` as the table you report: one line per run, plus what
    the census found.
 
+   For the examples (`pnpm test:examples --profile testing`, which also runs
+   each example's CLI lifecycle), take a census baseline of every cloud they
+   deploy to (Cloudflare, AWS, Fly, Hetzner, Neon) before the first run and
+   diff each run's census against it. Revert the `examples/*/migrations`
+   snapshot churn a run leaves behind.
+
+   Time a round from its files' timestamps, not by adding up per-test
+   durations: tests run concurrently. A round that takes much longer than the
+   last one is a finding; look for what serialized it.
+
 2. **List the failures and leaks.** Failed tests are the `^✗ ` lines in the
    summary. Each one's error follows it in the run output; the full record,
    including retried attempts, is in the run log under
@@ -63,6 +73,9 @@ prepare-release invoked you). The user merges; you never do.
    scope, denied outside it).
 
 4. **Verify each fix by rerunning the affected files, not the whole suite.**
+   For a provider fix, add a regression test that reproduces the failure
+   through a stack deploy, and run it once with the fix reverted to confirm it
+   fails.
    Rerun them several times when the failure was intermittent:
 
    ```sh
@@ -99,6 +112,11 @@ suite's retry — touching the same cloud object.
   (Cloudflare allows one event subscription per source per account; SES
   sending is account-wide) take the same `exclusive: "<label>"` in every file
   that touches it.
+- **Locks cost throughput.** Every holder of a label waits for every other,
+  so a label shared by several long tests runs them one after another. After
+  adding one, compare the round's wall time. When one test only needs headroom
+  under load another test creates by design (a benchmark saturating shared
+  capacity), give it the timeout its neighbors already have instead.
 - **Content-addressed ids.** Some APIs return the same id when you upload the
   same content twice (Cloudflare mTLS certificates). Whatever a run attached to
   that id comes back on the next upload, so its delete must be complete before
@@ -117,6 +135,19 @@ Each of these looked like a flaky test and was fixed in the provider:
 - **A write the API sometimes ignores.** Clearing a CA's hostname association
   occasionally didn't take. Re-send the write until a read shows it, and fail
   the delete with a typed error rather than continue and leak.
+- **A read-modify-write of a shared object.** Workers PUT a zone's whole
+  redirect phase with their own rules changed, so two Workers converging one
+  zone wrote back each other's rules as they last read them, resurrecting a
+  removed rule. Create and delete only your own items with the per-item API.
+- **A `read` that can't see a half-created resource.** A Fly Service creates
+  its App, then builds an image, then starts Machines; `read` looked only for
+  Machines, so recovery after a deploy interrupted mid-build found nothing and
+  the App leaked. `read` must report whatever the create made first. Test it
+  by interrupting the deploy as soon as that first piece appears, destroying,
+  and asserting it's gone.
+- **A forward the platform silently drops.** Fly's builder mirror sometimes
+  never forwards a pushed image to `registry.fly.io`. Wait a bounded time for
+  it to land, then push again, rather than waiting longer.
 - **A cold read with an unresolved Output.** Treating an unresolved id as
   absent read a different singleton (the zone's managed CA) and reported a
   conflict. Return `undefined` until the id resolves.
@@ -144,6 +175,14 @@ Each of these looked like a flaky test and was fixed in the provider:
   (Cloudflare bindings on an AWS Lambda) fails its teardown when that cloud's
   session expires, and leaks its resources. Refresh sessions (`aws sso login`)
   before each round, and rerun the file to clean up.
+- **Stopping a run mid-way skips teardown** of the tests in flight, and so
+  does a test timeout bun only stops waiting on (the Bun adapter now
+  interrupts first; the symptom was a delete finishing in ~100ms while the
+  deploy went on creating). Census after any stopped run.
+- **Commit to a side branch without touching the checkout** while a suite
+  runs from it: build the commit with a temporary index (`GIT_INDEX_FILE`,
+  `git read-tree`, `git update-index --cacheinfo`, `git commit-tree`) and push
+  it, so the running suite's files never change.
 - **An error with an empty message hides the cause.** Give the tagged error a
   `message` getter naming what failed, so the next occurrence is diagnosable.
 
