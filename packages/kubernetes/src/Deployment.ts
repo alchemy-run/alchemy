@@ -412,6 +412,39 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit cache
+ * backends as `{ from, to }`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: {
+ *     cache: {
+ *       from: [{ type: "gha", scope: "api" }],
+ *       to: [{ type: "gha", scope: "api", mode: "max" }],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked

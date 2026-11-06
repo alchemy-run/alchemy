@@ -156,22 +156,53 @@ export interface Image extends Resource<
  * });
  * ```
  *
- * ### Private Base Images and Registry Caches
- * **Example:** Build FROM a private base image with a registry cache
+ * ### Private Base Images
+ * **Example:** Build FROM a private base image
  * ```typescript
  * // Dockerfile: FROM registry.example.com/base:v1
  * const image = yield* Docker.Image("app", {
  *   name: "registry.example.com/app",
- *   build: {
- *     context: "./app",
- *     // Every stage's layers at registry.example.com/app:buildcache.
- *     cache: true,
- *   },
- *   // Authenticates the base-image pull and cache import/export, then the push.
+ *   build: { context: "./app" },
+ *   // Authenticates the base-image pull, then the push.
  *   registry: {
  *     server: "registry.example.com",
  *     username: "deploy",
  *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit cache
+ * backends as `{ from, to }`.
+ *
+ * **Example:** Cache layers in the image's registry
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "registry.example.com/app",
+ *   build: { context: "./app", cache: true },
+ *   registry: {
+ *     server: "registry.example.com",
+ *     username: "deploy",
+ *     password: Config.Redacted("REGISTRY_PASSWORD"),
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const image = yield* Docker.Image("app", {
+ *   name: "my-app",
+ *   build: {
+ *     context: "./app",
+ *     cache: {
+ *       from: [{ type: "gha", scope: "app" }],
+ *       to: [{ type: "gha", scope: "app", mode: "max" }],
+ *     },
  *   },
  * });
  * ```

@@ -253,6 +253,33 @@ export interface ImageLookup {
  * });
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit cache
+ * backends as `{ from, to }`.
+ *
+ * **Example:** Cache layers in the ECR repository
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: true,
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: {
+ *     from: [{ type: "gha", scope: "app" }],
+ *     to: [{ type: "gha", scope: "app", mode: "max" }],
+ *   },
+ * });
+ * ```
+ *
  * ### Consuming the Image
  * **Example:** Reference from a Task Definition
  * ```typescript

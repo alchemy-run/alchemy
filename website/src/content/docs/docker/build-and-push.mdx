@@ -112,13 +112,33 @@ const image = yield* Docker.Image("app", {
 });
 ```
 
-`cache: true` keeps every stage's layers at the image's own repository
-with a `:buildcache` tag, and the build authenticates with `registry`. A
-fresh machine, such as a CI runner, then skips the unchanged steps instead
-of rerunning the whole Dockerfile. For another backend (`gha`, `s3`,
-`local`), pass [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-as `{ from, to }`. Every resource that builds an image takes the same
-`cache` option.
+Without `cache`, builds reuse the local BuildKit cache of the machine
+they run on and push nothing but the image. A fresh machine, such as a
+CI runner, has no local cache and reruns the whole Dockerfile.
+`cache: true` keeps every stage's layers next to the image, at its
+repository's `:buildcache` tag, and the build authenticates with
+`registry`. Fresh machines then skip the unchanged steps.
+
+For another backend, pass [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+as JSON, here GitHub Actions' cache:
+
+```typescript
+build: {
+  context: "./app",
+  cache: {
+    from: [{ type: "gha", scope: "app" }],
+    to: [{ type: "gha", scope: "app", mode: "max" }],
+  },
+}
+```
+
+Exporting a cache needs a builder that supports it: the `docker` driver
+with the containerd image store, or a `docker-container` builder (what
+`docker/setup-buildx-action` creates in CI). The cache never changes the
+image, so turning it on doesn't rebuild anything. Every resource that
+builds an image takes the same `cache` option: Cloudflare Containers,
+ECS, Cloud Run and Kubernetes workloads under `build`, `AWS.ECR.Image`
+and Lambda container images next to `buildArgs`.
 
 ## Mirror and pin remote images
 
