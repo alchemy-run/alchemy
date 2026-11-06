@@ -276,8 +276,18 @@ export interface ExperimentTemplate extends Resource<
     roleArn: string;
   },
   never,
-  Providers
+  Providers,
+  ExperimentTemplateLookup
 > {}
+
+/**
+ * Props for {@link ExperimentTemplate.lookup}: find an experiment template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ExperimentTemplateLookup {
+  /** The id of the existing experiment template. */
+  experimentTemplateId: string;
+}
 
 /**
  * An AWS Fault Injection Service (FIS) experiment template — a reusable
@@ -369,6 +379,16 @@ export interface ExperimentTemplate extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing experiment template
+ * `ExperimentTemplate.lookup` references an experiment template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `experimentTemplateId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing experiment template
+ * ```typescript
+ * const chaos = AWS.FIS.ExperimentTemplate.lookup({ experimentTemplateId: "EXT123456789" });
  * ```
  *
  * @resource
@@ -544,6 +564,10 @@ export const ExperimentTemplateProvider = () =>
             );
           }),
 
+        lookup: Effect.fn(function* ({ experimentTemplateId }) {
+          const template = yield* getTemplate(experimentTemplateId);
+          return template === undefined ? undefined : toAttrs(template);
+        }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const template = output?.id
             ? yield* getTemplate(output.id)

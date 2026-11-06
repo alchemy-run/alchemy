@@ -16,7 +16,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
@@ -766,8 +766,20 @@ export interface Function extends Resource<
       localMountPath: string;
     }[];
   },
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FunctionLookup {
+  /**
+   * The function's name, or its full or partial ARN.
+   */
+  functionName: string;
+}
 
 /**
  * Lambda refused to publish a version or create the alias for a Function
@@ -1367,6 +1379,20 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
+ * ### Looking up an existing function
+ * `Function.lookup` references a function Alchemy doesn't manage (deployed
+ * by another tool or stack), found by `functionName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared function.
+ *
+ * **Example:** Invoke an existing function
+ * ```typescript
+ * const resize = AWS.Lambda.Function.lookup({ functionName: "image-resize" });
+ *
+ * // init
+ * const invoke = yield* AWS.Lambda.InvokeFunction(resize);
+ * ```
+ *
  * @resource
  */
 export const Function: Platform<
@@ -1376,7 +1402,8 @@ export const Function: Platform<
   FunctionContext,
   {},
   FunctionZipProps
-> = Platform(FunctionTypeId, {
+> &
+  LookupMethod<Function> = Platform(FunctionTypeId, {
   // The custom-domain front door integrates the Function's own ARN, so it
   // composes AFTER the Function resource is declared.
   onCreate: (resource, props) =>
@@ -1468,10 +1495,10 @@ export const Function: Platform<
                       Layer.effectContext(
                         buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
+                  Effect.runPromiseExitWith(services),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1484,7 +1511,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromise,
+                    Effect.runPromiseWith(services),
                   );
                 }
                 if (deadline.fired) {
@@ -2905,6 +2932,29 @@ export const FunctionProvider = () =>
             reservedConcurrentExecutions,
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
+        }),
+        lookup: Effect.fn(function* ({ functionName }) {
+          const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          const fn = result?.Configuration;
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) return undefined;
+          const functionUrl = yield* readFunctionUrlConfig(fn.FunctionName, undefined).pipe(
+            Effect.map((config) => config?.FunctionUrl),
+          );
+          return {
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            qualifiedArn: fn.FunctionArn,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: fn.Role.split("/").pop()!,
+            code: { hash: fn.CodeSha256 ?? "" },
+            ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+            ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
+            ...(fn.Runtime === undefined ? {} : { runtime: fn.Runtime }),
+            ...(fn.Handler === undefined ? {} : { handler: fn.Handler }),
+          } satisfies Function["Attributes"];
         }),
         // Account/region collection: exhaustively paginate `listFunctions`
         // (its `Functions` items are `FunctionConfiguration`s, the same shape

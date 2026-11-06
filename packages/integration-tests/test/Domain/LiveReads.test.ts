@@ -22,7 +22,6 @@ class Counter extends Domain.Aggregate("Counter", {
   commands: [Increment],
   decide: { Increment: (_, { by }) => [new Incremented({ by })] },
   evolve: { Incremented: (s, e) => ({ total: s.total + e.by }) },
-  read: {},
 }) {}
 
 class Totals extends Domain.View("Totals", {
@@ -61,7 +60,6 @@ class CounterApi extends Domain.Api("CounterApi", {
   commands: ["Increment"],
   views: ["Totals"],
   streams: ["Bumps"],
-  aggregates: ["Counter"],
 }) {}
 
 const Hosted = Counters.layer(BumpWriterLive).pipe(Layer.provideMerge(InMemory));
@@ -81,17 +79,13 @@ const Wire = CounterApi.layerClient.pipe(
 type Client = Effect.Success<typeof CounterApi.client>;
 type Frame = { readonly envelope: { readonly seq: number } } | Domain.Read.CaughtUp;
 
-/** A key's live reads, the same for an aggregate, a view and a stream. */
+/** A key's live reads, the same for a view and a stream. */
 interface LiveReads {
   readonly watch: (key: string) => Stream.Stream<{ readonly cursor: number }, unknown>;
   readonly events: (key: string, after?: number) => Stream.Stream<Frame, unknown>;
 }
 
-const readsOf = (api: Client): Record<"aggregate" | "view" | "stream", LiveReads> => ({
-  aggregate: {
-    watch: (key: string) => api.Counter.watch(key),
-    events: (key: string, after?: number) => api.Counter.events(key, { after }),
-  },
+const readsOf = (api: Client): Record<"view" | "stream", LiveReads> => ({
   view: {
     watch: (key: string) => api.Totals.watch(key),
     events: (key: string, after?: number) => api.Totals.events(key, { after }),
@@ -128,7 +122,7 @@ for (const [transport, layer] of [
   ["over the wire", Wire],
 ] as const) {
   describe(`Domain live reads ${transport}`, { tags: ["unit", "local"] }, () => {
-    for (const kind of ["aggregate", "view", "stream"] as const) {
+    for (const kind of ["view", "stream"] as const) {
       it.live(`${kind} events mark the end of their history`, () =>
         Effect.gen(function* () {
           const api = yield* seed;
@@ -185,10 +179,8 @@ for (const [transport, layer] of [
     it.live("watch sends the state with its cursor", () =>
       Effect.gen(function* () {
         const api = yield* seed;
-        const [aggregate] = yield* api.Counter.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
         const [view] = yield* api.Totals.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
         const [stream] = yield* api.Bumps.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
-        expect(aggregate).toEqual({ state: { total: 6 }, cursor: 3 });
         expect(view).toEqual({ state: { total: 6 }, cursor: 3 });
         expect(stream!.state?.event).toEqual(new Bumped({ by: 3 }));
         expect(stream!.cursor).toBe(3);

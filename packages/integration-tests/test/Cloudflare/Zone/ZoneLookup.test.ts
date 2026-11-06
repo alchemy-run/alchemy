@@ -8,8 +8,8 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { expectDeployFails } from "../../lookup.ts";
 import { testName } from "../../names.ts";
-import { expectDeployFails } from "../Utils/Lookup.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

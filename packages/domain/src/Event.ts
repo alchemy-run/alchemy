@@ -1,6 +1,5 @@
 import * as Schema from "effect/Schema";
 import type { Annotations as DomainAnnotations } from "./Annotations.ts";
-import type * as Telemetry from "./Telemetry.ts";
 
 /**
  * Field map shared by every Domain message builder.
@@ -28,18 +27,11 @@ export interface Any extends Schema.Top {
 }
 
 /**
- * What an Event takes after its fields: its `Domain.Annotations`, every
- * annotation `Schema.TaggedClass` takes, and the span `attributes` it records.
+ * What an Event takes after its fields: its `Domain.Annotations`, and every
+ * annotation `Schema.TaggedClass` takes.
  */
 export type Annotations<Tag extends string, F extends Fields> = DomainAnnotations &
-  Schema.Annotations.Declaration<Instance<Tag, F>, readonly [Schema.TaggedStruct<Tag, F>]> & {
-    /**
-     * Span attributes to record for this event, on every span it passes
-     * through. Nothing from it is recorded unless you return it here, and a
-     * `Redacted` value is recorded as `<redacted>`.
-     */
-    readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
-  };
+  Schema.Annotations.Declaration<Instance<Tag, F>, readonly [Schema.TaggedStruct<Tag, F>]>;
 
 /**
  * A fact your domain recorded, named in the past tense. Aggregates record
@@ -68,13 +60,12 @@ export type Annotations<Tag extends string, F extends Fields> = DomainAnnotation
  * The third argument is its annotations, which are the event Schema's
  * annotations too.
  *
- * **Example:** A description and span attributes
+ * **Example:** A description
  * ```typescript
  * export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
  *   amount: Schema.Int,
  * }, {
  *   description: "Money arrived in an account. The amount is in cents.",
- *   attributes: (e) => ({ "account.deposit": e.amount }),
  * }) {}
  * ```
  *
@@ -85,7 +76,7 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
   fields: F = {} as F,
   annotations: Annotations<Tag, F> = {},
 ): EventClass<Tag, F> => {
-  const { attributes, ...schemaAnnotations } = annotations;
+  const schemaAnnotations = annotations;
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base: new (...args: any[]) => object = Schema.TaggedClass<Instance<Tag, F>>(tag)(
     tag,
@@ -96,7 +87,6 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
     static readonly kind = "Event" as const;
     static readonly annotations: DomainAnnotations = schemaAnnotations;
     static readonly tag: Tag = tag;
-    static readonly attributes = attributes;
   } as unknown as EventClass<Tag, F>;
 };
 
@@ -111,6 +101,4 @@ export interface EventClass<Tag extends string, F extends Fields> extends Schema
   readonly kind: "Event";
   readonly annotations: DomainAnnotations;
   readonly tag: Tag;
-  /** Span attributes the event adds, if it declares any. */
-  readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
 }

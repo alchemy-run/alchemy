@@ -1465,6 +1465,40 @@ export const unsupportedLookupProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// OptionalProps — every prop optional, and a provider that reads `news`
+// without a default, as most real providers do. It records the props each
+// lifecycle operation received, keyed by logical id.
+export interface OptionalProps extends Resource<
+  "Test.OptionalProps",
+  { label?: string },
+  { label: string }
+> {}
+
+export const OptionalProps = Resource<OptionalProps>("Test.OptionalProps");
+
+/** Props each `diff` / `reconcile` received, keyed by logical id. */
+export const optionalPropsReceived = new Map<string, { op: string; news: unknown }[]>();
+
+export const optionalPropsProvider = () =>
+  Provider.succeed(OptionalProps, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "diff", news },
+      ]);
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "reconcile", news },
+      ]);
+      return { label: news.label ?? id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1488,6 +1522,7 @@ export const TestLayers = () =>
     capturedConfigHostProvider(),
     lookupTargetProvider(),
     unsupportedLookupProvider(),
+    optionalPropsProvider(),
     ProbeBindingLive,
   );
 

@@ -10,7 +10,7 @@ import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
@@ -947,8 +947,20 @@ export interface Service extends Resource<
     };
   },
   TaskBindingContract,
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The name or ARN of the cluster the service runs in. */
+  cluster: string;
+  /** The name of the existing service. */
+  serviceName: string;
+}
 
 export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -1332,28 +1344,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cluster` and `serviceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const web = AWS.ECS.Service.lookup({ cluster: "shared", serviceName: "web" });
+ * const serviceArn = web.serviceArn;
+ * ```
+ *
  * @resource
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("AWS.ECS.Service", {
-    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
-    // Compose the managed load balancer (owned ALB/listeners or shared-listener
-    // rules + target groups) as REAL namespaced child resources before the core
-    // service resource is declared.
-    transformProps: (id, props) => transformServiceProps(id, props),
-    // Autoscaling references the service's own Output attributes (cluster/name/
-    // target-group ARNs), so it composes AFTER the resource exists.
-    onCreate: (resource, props) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-      composeServiceScaling(
-        resource as Service,
-        props as ServiceProps,
-        // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-        // surface through the deploy like any resource-construction error.
-      ) as Effect.Effect<void, never, any>,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("AWS.ECS.Service", {
+  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+  // Compose the managed load balancer (owned ALB/listeners or shared-listener
+  // rules + target groups) as REAL namespaced child resources before the core
+  // service resource is declared.
+  transformProps: (id, props) => transformServiceProps(id, props),
+  // Autoscaling references the service's own Output attributes (cluster/name/
+  // target-group ARNs), so it composes AFTER the resource exists.
+  onCreate: (resource, props) =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
+    composeServiceScaling(
+      resource as Service,
+      props as ServiceProps,
+      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
+      // surface through the deploy like any resource-construction error.
+    ) as Effect.Effect<void, never, any>,
+});
 
 /** The BYO task reference, when the props use the `task:` form. */
 /**
@@ -3213,6 +3236,25 @@ export const ServiceProvider = () =>
               return { action: "update" } as const;
             }
           }
+        }),
+        lookup: Effect.fn(function* ({ cluster, serviceName }) {
+          const described = yield* ecs
+            .describeServices({ cluster, services: [serviceName], include: ["TAGS"] })
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
+          const service = described?.services?.[0];
+          if (!service?.serviceArn || service.status === "INACTIVE") return undefined;
+          return {
+            serviceArn: service.serviceArn as ServiceArn,
+            serviceName: service.serviceName!,
+            clusterArn: service.clusterArn as ClusterArn,
+            taskDefinitionArn: service.taskDefinition!,
+            status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(
+              service,
+              undefined,
+              ecsTagRecord(service.tags),
+            ),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterArn = output?.clusterArn ?? clusterArnOf(olds?.cluster);
