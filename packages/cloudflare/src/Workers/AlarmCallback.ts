@@ -20,8 +20,9 @@ import * as Scope from "effect/Scope";
 import * as Tracer from "effect/Tracer";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
-import { fromDurableObjectStorage, inStorageTransaction } from "./DurableObjectStorage.ts";
+import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
+import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 
 type InvocationServices = RuntimeContext | DurableObjectState | Scope.Scope;
 interface RetryPolicy {
@@ -217,7 +218,7 @@ const makeAlarmCallback = <Payload, E, R>(
 
     const raw = state.raw.storage;
     const transaction = <A, R>(effect: Effect.Effect<A, CallbackError, R>) =>
-      inStorageTransaction(raw, effect).pipe(
+      inStorageTransaction(raw, effect, (effect) => state.storage.transaction(effect)).pipe(
         Effect.mapError((cause) =>
           cause._tag === "CallbackError"
             ? cause

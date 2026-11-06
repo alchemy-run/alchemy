@@ -4,7 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
-import { inStorageTransaction, type SqlStorageValue } from "./DurableObjectStorage.ts";
+import type { SqlStorageValue } from "./DurableObjectStorage.ts";
+import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 
 // ---------------------------------------------------------------------------
 // Scheduled Events — SQLite-backed cron/timer for Durable Objects
@@ -18,7 +19,9 @@ const ensureTable = Effect.gen(function* () {
 const inTransaction = <A, R>(effect: Effect.Effect<A, never, R>) =>
   Effect.gen(function* () {
     const ctx = yield* DurableObjectState;
-    return yield* inStorageTransaction(ctx.raw.storage, effect).pipe(Effect.orDie);
+    return yield* inStorageTransaction(ctx.raw.storage, effect, (effect) =>
+      ctx.storage.transaction(effect),
+    ).pipe(Effect.orDie);
   });
 
 export interface ScheduledEvent {

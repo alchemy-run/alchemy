@@ -239,22 +239,6 @@ function withStorageTransaction<A, E, R>(
   });
 }
 
-/**
- * @internal Runs scheduler bookkeeping inside the caller's transaction, so a
- * job scheduled in a transaction commits or rolls back with it, or in a new
- * transaction when the caller has none.
- */
-export const inStorageTransaction = <A, E, R>(
-  storage: cf.DurableObjectStorage,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | DurableObjectStorageError, R> =>
-  Effect.withFiber((fiber) => {
-    const owned = fiber.getRef(ActiveStorageTransactions).get(storage);
-    return owned === undefined
-      ? withStorageTransaction(storage, effect)
-      : Effect.andThen(checkTransactionOwner(owned), effect);
-  });
-
 // ---------------------------------------------------------------------------
 // SqlStorage — Effect-native wrapper around cf.SqlStorage
 // ---------------------------------------------------------------------------
