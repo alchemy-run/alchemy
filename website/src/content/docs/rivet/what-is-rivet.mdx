@@ -13,24 +13,27 @@ Take one small app: chat rooms. Each room is an Actor, and an API calls a room b
   nodes={[
     { id: "api", label: "Api", type: "Worker or Lambda", col: 0, row: 1 },
     { id: "gateway", label: "Gateway", type: "HTTPS", col: 1, row: 1, tone: "accent" },
-    { id: "pool", label: "Default", type: "pool config", col: 2, row: 1 },
-    { id: "data", label: "Room data", type: "key-value, SQLite", col: 3, row: 1 },
-    { id: "lobby", label: "lobby", type: "Room", col: 1, row: 3 },
-    { id: "kitchen", label: "kitchen", type: "Room", col: 2, row: 3 },
-    { id: "garden", label: "garden", type: "Room", col: 3, row: 3 },
+    { id: "engine", label: "Engine", type: "routes calls", col: 2, row: 1 },
+    { id: "data", label: "Instance data", type: "key-value, SQLite", col: 3, row: 1 },
+    { id: "lobby", label: "lobby", type: "Room", col: 0, row: 3 },
+    { id: "kitchen", label: "kitchen", type: "Room", col: 1, row: 3 },
+    { id: "studio", label: "studio", type: "Transcoder", col: 3, row: 3 },
   ]}
   groups={[
-    { id: "cp", label: "Control plane", nodes: ["gateway"] },
-    { id: "ns", label: "Namespace dev", parent: "cp", nodes: ["pool", "data"], dashed: true },
-    { id: "nodes", label: "Default's nodes, on any cloud", nodes: [] },
-    { id: "node1", label: "node 1", parent: "nodes", nodes: ["lobby", "kitchen"] },
-    { id: "node2", label: "node 2", parent: "nodes", nodes: ["garden"] },
+    { id: "cp", label: "Control plane", nodes: ["gateway", "engine"] },
+    { id: "ns", label: "Namespace dev", parent: "cp", nodes: ["data"], dashed: true },
+    { id: "default", label: "Pool Default, on AWS", nodes: [] },
+    { id: "node1", label: "node 1", parent: "default", nodes: ["lobby"] },
+    { id: "node2", label: "node 2", parent: "default", nodes: ["kitchen"] },
+    { id: "media", label: "Pool Media, on Fly", nodes: [] },
+    { id: "node3", label: "node 1", parent: "media", nodes: ["studio"] },
   ]}
   edges={[
     { from: "api", to: "gateway", label: "join() + token" },
-    { from: "nodes", to: "pool", label: "connect out" },
+    { from: "default", to: "cp", label: "connects out" },
+    { from: "media", to: "cp", label: "connects out" },
   ]}
-  caption="The control plane keeps the stage's pools and every room's data in its namespace. A pool's nodes connect out to it, and the gateway hands each call to the node running that room, over that connection."
+  caption="Each pool is a set of nodes for its classes, on any cloud: Default runs the rooms, Media the transcoders. Both connect out to the control plane, which keeps every instance's data in the stage's namespace and routes each call to the node running it."
 />
 
 ## Durable Objects: a class and its instances
