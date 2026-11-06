@@ -356,7 +356,7 @@ export const NodegroupProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupNotReady,
+            while: (error) => error._tag === "EKS.NodegroupNotReady",
             schedule: waitSchedule,
           }),
         );
@@ -367,7 +367,7 @@ export const NodegroupProvider = () =>
             state ? Effect.fail(new NodegroupStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupStillExists,
+            while: (error) => error._tag === "EKS.NodegroupStillExists",
             schedule: waitSchedule,
           }),
         );
@@ -388,7 +388,7 @@ export const NodegroupProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupUpdateNotComplete,
+            while: (error) => error._tag === "EKS.NodegroupUpdateNotComplete",
             schedule: waitSchedule,
           }),
         );

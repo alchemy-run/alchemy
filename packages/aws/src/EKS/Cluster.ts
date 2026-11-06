@@ -756,7 +756,7 @@ export const ClusterProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof ClusterNotReady,
+            while: (error) => error._tag === "EKS.ClusterNotReady",
             schedule: updateRetrySchedule,
           }),
         );
@@ -769,7 +769,7 @@ export const ClusterProvider = () =>
             state ? Effect.fail(new ClusterStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof ClusterStillExists,
+            while: (error) => error._tag === "EKS.ClusterStillExists",
             schedule: updateRetrySchedule,
           }),
         );
@@ -797,7 +797,7 @@ export const ClusterProvider = () =>
               }),
             ),
             Effect.retry({
-              while: (error) => error instanceof ClusterUpdateNotComplete,
+              while: (error) => error._tag === "EKS.ClusterUpdateNotComplete",
               schedule: updateRetrySchedule,
             }),
           );

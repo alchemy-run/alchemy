@@ -207,7 +207,7 @@ export const FargateProfileProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileNotReady,
+            while: (error) => error._tag === "EKS.FargateProfileNotReady",
             schedule: waitSchedule,
           }),
         );
@@ -218,7 +218,7 @@ export const FargateProfileProvider = () =>
             state ? Effect.fail(new FargateProfileStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileStillExists,
+            while: (error) => error._tag === "EKS.FargateProfileStillExists",
             schedule: waitSchedule,
           }),
         );
@@ -319,13 +319,10 @@ export const FargateProfileProvider = () =>
                   Effect.fail(new FargateProfileBusy()),
                 ),
                 Effect.retry({
-                  while: (error) => error instanceof FargateProfileBusy,
+                  while: (error) => error._tag === "EKS.FargateProfileBusy",
                   schedule: busySchedule,
                 }),
-                Effect.catchIf(
-                  (error) => error instanceof FargateProfileBusy,
-                  () => Effect.void,
-                ),
+                Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
               );
 
             yield* session.note(`Creating EKS Fargate profile ${fargateProfileName}...`);
@@ -372,13 +369,10 @@ export const FargateProfileProvider = () =>
                 ResourceInUseException: () => Effect.fail(new FargateProfileBusy()),
               }),
               Effect.retry({
-                while: (error) => error instanceof FargateProfileBusy,
+                while: (error) => error._tag === "EKS.FargateProfileBusy",
                 schedule: busySchedule,
               }),
-              Effect.catchIf(
-                (error) => error instanceof FargateProfileBusy,
-                () => Effect.void,
-              ),
+              Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
             );
           yield* waitForProfileDeleted(output.clusterName, output.fargateProfileName);
         }),

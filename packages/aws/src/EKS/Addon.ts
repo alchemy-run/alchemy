@@ -386,7 +386,7 @@ const waitForAddonActive = Effect.fn(function* ({
       }),
     ),
     Effect.retry({
-      while: (error) => error instanceof AddonNotReady,
+      while: (error) => error._tag === "AddonNotReady",
       // Flat 5s polls, ~20 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
@@ -412,7 +412,7 @@ const waitForAddonDeleted = Effect.fn(function* ({
       addon ? Effect.fail(new AddonStillExists({ clusterName, addonName })) : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error instanceof AddonStillExists,
+      while: (error) => error._tag === "AddonStillExists",
       // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
       schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
