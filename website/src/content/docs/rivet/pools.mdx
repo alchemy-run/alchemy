@@ -1,0 +1,90 @@
+---
+title: Pool
+description: How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+A pool is a group of machines, called nodes, that run your Durable Objects. Each class runs on one pool. When a room wakes, the control plane starts it on one of its pool's nodes.
+
+## Declare it
+
+A pool is a Layer, given the control plane it joins:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+```
+
+The nodes connect out to the control plane and wait for rooms to run. Nothing connects in to them, so they need no public address and no load balancer.
+
+## Put a class on it
+
+A class names its pool by providing it:
+
+```typescript title="src/room.ts"
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    // ...
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+Each deploy builds one program for the pool, holding every class it runs, and rolls it out to the nodes.
+
+## Share a pool
+
+Classes with similar needs share a pool and its machines. The rooms and the greeter run on the same nodes:
+
+<Tree
+  nodes={[
+    { id: "pool", label: "Default", type: "pool: Room, Greeter" },
+    { id: "n1", label: "node 1", parent: "pool", dashed: true },
+    { id: "n2", label: "node 2", parent: "pool", dashed: true },
+    { id: "lobby", label: "lobby", type: "Room", parent: "n1" },
+    { id: "sam", label: "sam", type: "Greeter", parent: "n1" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "n2" },
+  ]}
+  caption="Every node in a pool runs every class on it. The control plane starts each instance on one of them, so a node holds instances of both classes."
+/>
+
+One pool is the right start. Fewer pools means fewer machines idling.
+
+## Split them
+
+A class with different needs gets a pool of its own, so it can't crowd out the rest. Rooms that transcode audio need bigger machines than rooms that only chat:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetAWS.EcsPool("Default").pipe(Layer.provide(Cluster));
+
+export const Media = RivetAWS.EcsPool("Media", { cpu: 2048, memory: 4096 }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+Both join the same control plane, so a room on `Default` still calls a class on `Media` by name.
+
+## Scale it
+
+More nodes run more rooms at once:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetDocker.SwarmPool("Default", { replicas: 3 }).pipe(Layer.provide(Cluster));
+```
+
+A single room still runs on one node at a time, so more nodes help a pool with many busy rooms, not one very busy room.
+
+## Run it on another cloud
+
+A pool works with any control plane it can reach. Its nodes only connect out, so the control plane can be anywhere:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+
+export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cluster));
+```
+
+Keep the two close when you can: every call to a room passes through the control plane.
+
+Next, choose a platform: [Docker](/rivet/docker), [AWS](/rivet/aws), [GCP](/rivet/gcp), [Kubernetes](/rivet/kubernetes), [Fly](/rivet/fly), [Hetzner](/rivet/hetzner), [Railway](/rivet/railway) or [Rivet Cloud](/rivet/rivet-cloud).

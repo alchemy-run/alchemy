@@ -569,7 +569,9 @@ export const JobDefinitionProvider = () =>
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 180,
+          // ECS caps an image reference at 255 characters: the registry host,
+          // this name and a 64-character tag must all fit.
+          maxLength: 128,
           lowercase: true,
         });
 
