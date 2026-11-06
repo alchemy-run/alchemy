@@ -11,8 +11,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = (id: number) =>
   networks.getNetwork({ id }).pipe(
     Effect.as("found" as const),
@@ -24,7 +22,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a network",
   (stack) =>
     Effect.gen(function* () {
@@ -134,7 +132,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when ip range is not a supernet",
   (stack) =>
     Effect.gen(function* () {
@@ -194,7 +192,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed network",
   (stack) =>
     Effect.gen(function* () {
@@ -233,7 +231,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "a subnet without a range gets the first free /24 and redeploys unchanged",
   (stack) =>
     Effect.gen(function* () {

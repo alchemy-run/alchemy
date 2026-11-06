@@ -200,7 +200,7 @@ pnpm docs:gen   # -> website/src/content/docs/providers/{Cloud}/{Resource}.md
 This is the only doc generator that produces user-facing output. ([scripts/generate-api-reference.ts](./scripts/generate-api-reference.ts)) does the following:
 
 1. Discovers documented files across its configured source roots — `packages/{cloud}/src/{Service}/` plus flat single-provider packages like `packages/better-auth/src/` (mapped onto a synthetic provider directory, e.g. `BetterAuth/`)
-2. Parses TypeScript with the TypeScript 7 API shipped by `tsrs` (`tsrs/unstable/*`)
+2. Parses TypeScript with the TypeScript 7 API shipped by `tsrs` (`tsrs/ast`, `tsrs/async`)
 3. Extracts the page-level summary plus Markdown section/example blocks from JSDoc on the export tagged `@resource`, `@binding`, `@layer`, or `@primitive` (a building block exported as its module's `make`, e.g. `Domain.Event`; its page is named after the file)
 4. Writes one markdown file per page at `website/src/content/docs/providers/{Provider}/{Name}.md`
 

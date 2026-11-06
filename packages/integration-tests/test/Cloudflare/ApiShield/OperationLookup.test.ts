@@ -7,8 +7,8 @@ import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import { expectDeployFails } from "../../lookup.ts";
 import { testName } from "../../names.ts";
-import { expectDeployFails } from "../Utils/Lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

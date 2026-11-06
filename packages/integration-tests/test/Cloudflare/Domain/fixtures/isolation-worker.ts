@@ -65,7 +65,7 @@ export default class DomainIsolationWorker extends Cloudflare.Worker<DomainIsola
           const key = decodeURIComponent(saga[2]!);
           const run = yield* openAccount.start(key, { owner: saga[3]! });
           yield* run.result;
-          return yield* HttpServerResponse.json(yield* accounts.state(key));
+          return yield* HttpServerResponse.json(yield* accounts.get(key));
         }
         const route = ROUTE.exec(path);
         if (!route) return HttpServerResponse.text("Not Found", { status: 404 });
@@ -77,9 +77,9 @@ export default class DomainIsolationWorker extends Cloudflare.Worker<DomainIsola
         }
         if (route[2] === "owners")
           return yield* HttpServerResponse.json(
-            Option.getOrNull(yield* owners.query(Account.ref(id)).pipe(Effect.orDie)),
+            Option.getOrNull(yield* owners.get(Account.ref(id)).pipe(Effect.orDie)),
           );
-        return yield* HttpServerResponse.json(yield* accounts.state(id));
+        return yield* HttpServerResponse.json(yield* accounts.get(id));
       }).pipe(
         // Answer a failure with its cause, so a failed test shows why.
         Effect.catchCause((cause) =>

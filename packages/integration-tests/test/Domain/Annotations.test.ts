@@ -42,7 +42,9 @@ class Wallet extends Domain.Aggregate(
     initial: { balance: 0 },
     commands: [Deposit, Close],
     decide: {
-      Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+      Deposit: (wallet, cmd) => [
+        new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
+      ],
       Close: () => [],
     },
     evolve: { Deposited: (_, e) => ({ balance: e.balance }) },

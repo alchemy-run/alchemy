@@ -69,8 +69,6 @@ export class MoneyWithdrawn extends Domain.Event(
 ) {}
 ```
 
-The same argument holds the span `attributes` the event records. See [Observability](/domain/observability).
-
 ## Only decide creates events
 
 Events are created in exactly one place: an aggregate's `decide` handler, as its answer to a command.
@@ -162,11 +160,11 @@ A view can record events of its own as it folds, such as one `StatementLine` per
 
 ## Follow an instance's events
 
-A client can read an instance's history directly, then keep receiving new events as they're recorded.
+A client reads an account's history through a view that follows it, then keeps receiving new events as they're recorded. `AccountSummary` declares no events of its own, so it emits every event it applies.
 
 ```typescript title="packages/server/test/followAccount.ts"
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  yield* bank.Account.events(accountId).pipe(
+  yield* bank.AccountSummary.events(accountId).pipe(
     Stream.filter(Domain.Read.isEvent),
     Stream.runForEach(({ event, envelope }) =>
       Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),

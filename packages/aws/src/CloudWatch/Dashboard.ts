@@ -142,8 +142,18 @@ export interface Dashboard extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 > {}
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DashboardLookup {
+  /** The dashboard name of the existing dashboard. */
+  dashboardName: string;
+}
 
 /**
  * An Amazon CloudWatch dashboard. The `DashboardBody` is a structured,
@@ -194,6 +204,16 @@ export interface Dashboard extends Resource<
  * // runtime
  * const result = yield* getDashboard();
  * const body = JSON.parse(result.DashboardBody ?? "{}");
+ * ```
+ *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dashboardName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const existing = AWS.CloudWatch.Dashboard.lookup({ dashboardName: "my-dashboard" });
  * ```
  *
  * @resource
@@ -253,6 +273,9 @@ export const DashboardProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dashboardName: name }) {
+          return yield* readDashboard(name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.dashboardName ?? (yield* createDashboardName(id, olds ?? {}));

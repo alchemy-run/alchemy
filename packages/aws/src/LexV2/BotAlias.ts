@@ -100,8 +100,27 @@ export interface BotAlias extends Resource<
     tags: Record<string, string>;
   },
   BotAliasBinding,
-  Providers
+  Providers,
+  BotAliasLookup
 > {}
+
+/**
+ * Props for {@link BotAlias.lookup}: find a bot alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BotAliasLookup =
+  | {
+      /** The bot the alias points to. */
+      botId: string;
+      /** The id of the existing alias. */
+      botAliasId: string;
+    }
+  | {
+      /** The bot the alias points to. */
+      botId: string;
+      /** The name of the existing alias. */
+      botAliasName: string;
+    };
 
 /**
  * An alias of an Amazon Lex V2 bot — a stable pointer to a numbered bot
@@ -135,6 +154,16 @@ export interface BotAlias extends Resource<
  *   sessionId: "user-123",
  *   text: "hello",
  * });
+ * ```
+ *
+ * ### Looking up an existing bot alias
+ * `BotAlias.lookup` references a bot alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `botId` with `botAliasId` or `botAliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing bot alias
+ * ```typescript
+ * const live = AWS.LexV2.BotAlias.lookup({ botId, botAliasName: "live" });
  * ```
  *
  * @resource
@@ -270,6 +299,13 @@ export const BotAliasProvider = () =>
         // the parent bot's deletion.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* (props) {
+          const observed =
+            "botAliasId" in props
+              ? yield* describeAlias(props.botId, props.botAliasId)
+              : yield* findAliasByName(props.botId, props.botAliasName);
+          return observed === undefined ? undefined : yield* attributesOf(observed);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const botId = output?.botId ?? olds?.botId;
           if (botId === undefined) return undefined;

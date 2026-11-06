@@ -89,8 +89,18 @@ export interface DBClusterEndpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterEndpointLookup
 > {}
+
+/**
+ * Props for {@link DBClusterEndpoint.lookup}: find a DB cluster endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterEndpointLookup {
+  /** The identifier of the existing custom endpoint. */
+  dbClusterEndpointIdentifier: string;
+}
 
 /**
  * A custom Aurora cluster endpoint — a DNS name that routes to a chosen
@@ -116,6 +126,17 @@ export interface DBClusterEndpoint extends Resource<
  *   endpointType: "ANY",
  *   staticMembers: [reporting.dbInstanceIdentifier],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB cluster endpoint
+ * `DBClusterEndpoint.lookup` references a DB cluster endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterEndpointIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB cluster endpoint
+ * ```typescript
+ * const analytics = AWS.RDS.DBClusterEndpoint.lookup({ dbClusterEndpointIdentifier: "analytics" });
+ * const endpoint = analytics.endpoint;
  * ```
  *
  * @resource
@@ -189,6 +210,12 @@ export const DBClusterEndpointProvider = () =>
           if (olds?.dbClusterIdentifier !== news.dbClusterIdentifier) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterEndpointIdentifier }) {
+          const endpoint = yield* readEndpoint(dbClusterEndpointIdentifier);
+          return endpoint?.DBClusterEndpointIdentifier
+            ? toAttrs({ endpoint, tags: {} })
+            : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

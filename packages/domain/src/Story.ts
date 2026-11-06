@@ -1101,7 +1101,7 @@ const make =
                 never,
                 Aggregate.ClientImpl
               >;
-              const current = yield* client.state(s.ref);
+              const current = yield* client.get(s.ref);
               if (typeof s.expected === "function") {
                 const assert = s.expected as (state: unknown) => void;
                 yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
@@ -1119,7 +1119,7 @@ const make =
                 never,
                 View.Host<unknown, Key.Any, unknown>
               >;
-              const current = yield* host.query(s.key).pipe(Effect.orDie);
+              const current = yield* host.get(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
                 if (Option.isSome(current))
                   return yield* fail(

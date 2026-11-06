@@ -89,8 +89,24 @@ export interface IPSet extends Resource<
     addresses: string[];
   },
   never,
-  Providers
+  Providers,
+  IPSetLookup
 > {}
+
+/**
+ * Props for {@link IPSet.lookup}: find an IP set this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface IPSetLookup {
+  /** The name of the existing IP set. */
+  ipSetName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 IP set — a named collection of IP addresses and CIDR ranges
@@ -124,6 +140,17 @@ export interface IPSet extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing IP set
+ * `IPSet.lookup` references an IP set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ipSetName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing IP set
+ * ```typescript
+ * const blocked = AWS.WAFv2.IPSet.lookup({ ipSetName: "blocked" });
+ * const ipSetArn = blocked.ipSetArn;
  * ```
  *
  * @resource
@@ -253,6 +280,11 @@ export const IPSetProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ ipSetName, scope = defaultScope }) {
+          const found = yield* findIPSet(scope, ipSetName, undefined);
+          return found?.IPSet ? toAttrs(found.IPSet, scope) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

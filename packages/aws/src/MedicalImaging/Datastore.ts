@@ -59,8 +59,23 @@ export interface Datastore extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatastoreLookup
 > {}
+
+/**
+ * Props for {@link Datastore.lookup}: find a datastore this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DatastoreLookup =
+  | {
+      /** The id of the existing datastore. */
+      datastoreId: string;
+    }
+  | {
+      /** The name of the existing datastore. */
+      datastoreName: string;
+    };
 
 /**
  * An AWS HealthImaging data store — a HIPAA-eligible store for DICOM P10
@@ -90,6 +105,16 @@ export interface Datastore extends Resource<
  * const datastore = yield* Datastore("Imaging", {});
  * // startDICOMImportJob and image-set APIs address the store by id
  * const id = datastore.datastoreId;
+ * ```
+ *
+ * ### Looking up an existing datastore
+ * `Datastore.lookup` references a datastore Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datastoreId` or `datastoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing datastore
+ * ```typescript
+ * const existing = AWS.MedicalImaging.Datastore.lookup({ datastoreName: "analytics" });
  * ```
  *
  * @resource
@@ -266,6 +291,14 @@ export const DatastoreProvider = () =>
           // tags → default update
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "datastoreId" in props ? props.datastoreId : undefined,
+            "datastoreName" in props ? props.datastoreName : "",
+          );
+          if (found === undefined) return undefined;
+          return yield* toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.datastoreName ?? (yield* toName(id, olds ?? {}));
           const properties = yield* observe(output?.datastoreId, name);

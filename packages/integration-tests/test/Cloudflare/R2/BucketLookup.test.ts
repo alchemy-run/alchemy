@@ -5,8 +5,8 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import { expectDeployFails, missingName } from "../../lookup.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { expectDeployFails, missingName } from "../Utils/Lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

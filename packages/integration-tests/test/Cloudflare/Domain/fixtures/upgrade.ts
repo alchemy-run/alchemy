@@ -114,9 +114,9 @@ export const upgradeWorker = ({
         }
         if (route[2] === "owners")
           return yield* HttpServerResponse.json(
-            Option.getOrNull(yield* model.owners.query(Account.ref(id)).pipe(Effect.orDie)),
+            Option.getOrNull(yield* model.owners.get(Account.ref(id)).pipe(Effect.orDie)),
           );
-        return yield* HttpServerResponse.json(yield* model.accounts.state(id));
+        return yield* HttpServerResponse.json(yield* model.accounts.get(id));
       }).pipe(
         // Answer a failure with its cause, so a failed test shows why.
         Effect.catchCause((cause) =>

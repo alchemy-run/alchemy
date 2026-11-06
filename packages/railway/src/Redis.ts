@@ -269,6 +269,10 @@ export {
   CommandError as RedisCommandError,
   UrlMissing as RedisUrlMissing,
 } from "@alchemy.run/redis/Errors";
+// Clients' runtime effects require redis's `RuntimeContext` twin, so it shows
+// up in users' inferred types. Exporting it here lets TypeScript name it
+// through this package without users depending on @alchemy.run/redis.
+export type { RuntimeContext as RedisRuntimeContext } from "@alchemy.run/redis/RuntimeContext";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
   resourceName: string;
