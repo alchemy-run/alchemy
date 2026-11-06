@@ -9,6 +9,8 @@ allowBuilds:
   "@google/genai": false
   core-js-pure: false
   protobufjs: false
+  # RivetKit's cbor-x: an optional native speedup; cbor-x falls back to JS.
+  cbor-extract: false
   esbuild: true
   sharp: true
   vue-demi: false

@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -219,6 +220,13 @@ export type WorkerPoolProps = PlatformProps & {
    * Bundler configuration for `main`, and the image build's layer `cache`.
    */
   build?: Bundle.BundleConfig & BuildCacheOptions;
+  /**
+   * Environment image for `main`: a Dockerfile path, or inline content
+   * (`{ content }`), the bundled program is layered on top of. Use it to
+   * install packages the bundle keeps external.
+   * @default a bun base image
+   */
+  dockerfile?: string | InlineDockerfile;
 };
 
 export type WorkerPool = Resource<
@@ -833,7 +841,12 @@ export const WorkerPoolProvider = () =>
       if (output !== undefined && news.main !== undefined) {
         const images = yield* makeImageSource;
         const hash = yield* images.hash({
-          source: { main: news.main, handler: news.handler, build: news.build },
+          source: {
+            main: news.main,
+            handler: news.handler,
+            build: news.build,
+            dockerfile: news.dockerfile,
+          },
           isExternal: news.isExternal,
           bootstrap: bootstrapFor(news),
         });
@@ -908,6 +921,7 @@ export const WorkerPoolProvider = () =>
               main: news.main,
               handler: news.handler ?? "default",
               build: news.build,
+              dockerfile: news.dockerfile,
             },
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,

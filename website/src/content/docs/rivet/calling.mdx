@@ -1,0 +1,141 @@
+---
+title: Calling a Durable Object
+description: How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
+---
+
+import Sequence from "../../../components/diagrams/Sequence.astro";
+
+A caller reaches a room by naming it. It doesn't need to know where the room runs, or whether it's running at all: it sends the call to the control plane, and the control plane finds the room or starts it.
+
+<Sequence
+  actors={[
+    { id: "api", label: "Api", type: "Worker or Lambda" },
+    { id: "gateway", label: "Gateway", type: "control plane" },
+    { id: "lobby", label: "lobby", type: "Room, on a node" },
+  ]}
+  steps={[
+    { from: "api", to: "gateway", label: "join() on lobby, with the token" },
+    { note: "lobby is asleep", over: "gateway" },
+    { from: "gateway", to: "lobby", label: "start on a free node" },
+    { from: "gateway", to: "lobby", label: "join()" },
+    { from: "lobby", to: "api", label: "4", dashed: true },
+  ]}
+  caption="The caller names the room and the gateway does the rest: it starts the room if it's asleep, then passes the call on. The caller never needs a route to the nodes."
+/>
+
+## Get the class
+
+A caller yields the class in its Construction phase, like any other binding:
+
+```typescript title="src/api.ts"
+Effect.gen(function* () {
+  const rooms = yield* Room;
+  return {
+    fetch: Effect.gen(function* () {
+      // ...
+    }),
+  };
+});
+```
+
+`rooms` is the class's namespace: every room, addressed by name. Yielding it gives the caller the control plane's address and a token to call it with. It works the same in a Cloudflare Worker, a Lambda, a container or a Hetzner Service, because the caller only speaks HTTP.
+
+## Name an instance
+
+```typescript title="src/api.ts"
+const lobby = rooms.getByName("lobby");
+```
+
+`getByName` doesn't contact anything. It returns a stub for the lobby, and the first call through the stub reaches it. A name nobody has used before gets a fresh room.
+
+## Call a method
+
+```typescript title="src/api.ts"
+const visitors = yield* lobby.join();
+```
+
+The stub has the class's methods, typed from it, so `join()` returns an `Effect<number>` because the room's `join` does. Each call runs in the room, against the lobby's state, wherever the lobby is running.
+
+## Stream results
+
+A method that returns a `Stream` sends its values as they're produced, rather than all at the end. A room can stream its messages instead of returning them as one array:
+
+```typescript title="src/room.ts"
+history: () =>
+  Stream.fromIterableEffect(
+    Effect.gen(function* () {
+      const rows = yield* sql.exec<{ author: string; text: string }>(
+        "SELECT author, text FROM messages",
+      );
+      return yield* rows.toArray();
+    }),
+  ),
+```
+
+The caller consumes it like any other stream:
+
+```typescript title="src/api.ts"
+yield* lobby.history().pipe(Stream.runForEach((message) => Effect.log(message.text)));
+```
+
+## Fail with a typed error
+
+When a room says no, it fails with a tagged error. A full room refuses another visitor:
+
+```typescript title="src/room.ts"
+export class RoomFull extends Data.TaggedError("RoomFull")<{ readonly limit: number }> {}
+```
+
+```typescript title="src/room.ts"
+join: () => (visitors >= 50 ? Effect.fail(new RoomFull({ limit: 50 })) : admit()),
+```
+
+The error crosses the wire with its tag and its fields, so the caller catches it by name:
+
+```typescript title="src/api.ts"
+yield* lobby.join().pipe(
+  Effect.catchTag("RoomFull", (error) => Effect.log(`the lobby holds ${error.limit}`)),
+);
+```
+
+## Forward an HTTP request
+
+A room with a `fetch` handler answers HTTP requests. A caller forwards the request it received:
+
+```typescript title="src/api.ts"
+const request = yield* HttpServerRequest.HttpServerRequest;
+return yield* lobby.fetch(request);
+```
+
+The room sees the request as it arrived, and its response goes back to the caller unchanged.
+
+## Call one Durable Object from another
+
+A Durable Object calls another the same way an Api does: it yields the class in its Construction phase. A `Greeter` that welcomes people into a room:
+
+```typescript title="src/greeter.ts"
+export default class Greeter extends Rivet.DurableObject<Greeter>()(
+  "Greeter",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.gen(function* () {
+      return {
+        welcome: (room: string) =>
+          rooms
+            .getByName(room)
+            .join()
+            .pipe(Effect.map((visitors) => `you're visitor ${visitors}`)),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+The call goes through the control plane too, even when both run on the same pool.
+
+## Keep the room's code out of the caller
+
+Importing `Room` brings its implementation into the caller's bundle. To import only the declaration, split the class from its code. See [Durable Object](/rivet/durable-objects#keep-its-code-out-of-its-callers).
+
+Next, [RivetKit Actors](/rivet/rivetkit): Actors written with Rivet's own library, deployed as they are.

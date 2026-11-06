@@ -1,0 +1,136 @@
+---
+title: "Part 2: Messages in SQL"
+description: Give each room a SQL table of messages, and post and read them over HTTP.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A room's messages have an author, a text and an order, so they belong in a table. Each room has its own SQLite database, so the lobby's table only ever holds the lobby's messages.
+
+## Create the table
+
+```diff lang="typescript"
+// src/room.ts
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
++      const sql = state.storage.sql;
++
++      yield* (yield* sql.exec(
++        "CREATE TABLE IF NOT EXISTS messages (author TEXT NOT NULL, text TEXT NOT NULL)",
++      )).toArray();
+
+      return {
+```
+
+The inner Effect runs before a room's first call, so this is where the room sets up its table. `exec` returns a cursor, and `toArray` reads it to the end, which runs the statement.
+
+## Post a message
+
+```diff lang="typescript"
+// src/room.ts
+      return {
+        join: () =>
+          Effect.gen(function* () {
+            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+            yield* state.storage.put("visitors", visitors);
+            return visitors;
+          }),
++        post: (author: string, text: string) =>
++          Effect.gen(function* () {
++            yield* (yield* sql.exec(
++              "INSERT INTO messages (author, text) VALUES (?, ?)",
++              author,
++              text,
++            )).toArray();
++          }),
+      };
+```
+
+The values follow the query, one for each `?`.
+
+## Read the messages
+
+```diff lang="typescript"
+// src/room.ts
++        messages: () =>
++          Effect.gen(function* () {
++            const rows = yield* sql.exec<{ author: string; text: string }>(
++              "SELECT author, text FROM messages",
++            );
++            return yield* rows.toArray();
++          }),
+      };
+```
+
+The type argument describes each row, so the Api gets typed messages back.
+
+## Describe a message
+
+```diff lang="typescript"
+// src/api.ts
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import * as Schema from "effect/Schema";
+import { Cluster } from "./cluster.ts";
+import Room from "./room.ts";
++
++const Message = Schema.Struct({ author: Schema.String, text: Schema.String });
+```
+
+The Api checks every posted message against this schema before the room sees it.
+
+## Accept posts
+
+```diff lang="typescript"
+// src/api.ts
+        if (action === "join") {
+          return yield* HttpServerResponse.json({ visitors: yield* room.join() });
+        }
++        if (action === "messages" && request.method === "POST") {
++          return yield* HttpServerRequest.schemaBodyJson(Message).pipe(
++            Effect.flatMap((message) => room.post(message.author, message.text)),
++            Effect.as(HttpServerResponse.empty({ status: 201 })),
++            Effect.catchTag("SchemaError", () =>
++              Effect.succeed(HttpServerResponse.empty({ status: 400 })),
++            ),
++          );
++        }
+        return HttpServerResponse.empty({ status: 404 });
+```
+
+A body that doesn't match `Message` gets a 400, and never reaches the room.
+
+## List them
+
+```diff lang="typescript"
+// src/api.ts
++        if (action === "messages") {
++          return yield* HttpServerResponse.json(yield* room.messages());
++        }
+        return HttpServerResponse.empty({ status: 404 });
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+## Talk in a room
+
+```sh
+curl -X POST localhost:3000/lobby/messages \
+  -H 'content-type: application/json' \
+  -d '{"author":"sam","text":"hello"}'
+curl localhost:3000/lobby/messages
+# [{"author":"sam","text":"hello"}]
+curl localhost:3000/kitchen/messages
+# []
+```
+
+Each room only sees its own messages.
+
+You have rooms that keep a conversation, in a database of their own.
+
+:::note
+Next, clear rooms that go quiet in [Part 3](/rivet/tutorial/part-3). Everything a room can store is in [Storage](/rivet/storage).
+:::
