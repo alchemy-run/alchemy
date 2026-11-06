@@ -136,9 +136,10 @@ export interface CertificatePackAttributes {
   /** Zone the pack belongs to. */
   zoneId: string;
   /**
-   * Current status of the pack. Issuance is asynchronous — a freshly
-   * ordered pack starts in `initializing`/`pending_validation` and only
-   * reaches `active` once Domain Control Validation completes.
+   * Status of the pack when it was last deployed. Issuance is asynchronous —
+   * a freshly ordered pack starts in `initializing`/`pending_validation` and
+   * only reaches `active` once Domain Control Validation completes. Issuance
+   * progress is not drift, so `alchemy drift` does not refresh this value.
    */
   status: CertificatePackStatus;
   /** Hostnames the certificates cover. */
@@ -149,11 +150,15 @@ export interface CertificatePackAttributes {
   validationMethod: string | undefined;
   /** Validity period of the issued certificates, in days. */
   validityDays: number | undefined;
-  /** Identifier of the primary certificate in the pack, once issued. */
+  /**
+   * Identifier of the primary certificate in the pack, if it was issued
+   * when the pack was last deployed.
+   */
   primaryCertificate: string | undefined;
   /**
-   * Outstanding Domain Control Validation records — create these
-   * TXT/CNAME records (or serve the HTTP tokens) to complete validation.
+   * Domain Control Validation records outstanding when the pack was last
+   * deployed — create these TXT/CNAME records (or serve the HTTP tokens) to
+   * complete validation.
    */
   validationRecords: CertificatePackValidationRecord[] | undefined;
   /** DCV Delegation records for delegated domain validation. */
@@ -272,7 +277,7 @@ export const CertificatePackProvider = () =>
       // Owned path: refresh by our persisted pack id.
       if (output?.certificatePackId) {
         const observed = yield* getPack(zoneId, output.certificatePackId);
-        if (observed) return toAttributes(zoneId, observed);
+        if (observed) return keepLifecycle(output, toAttributes(zoneId, observed));
         return undefined;
       }
 
@@ -478,6 +483,26 @@ const sameHosts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean 
   const set = new Set(a);
   return b.every((host) => set.has(host));
 };
+
+/**
+ * Keep the saved issuance state on a refreshed pack. Cloudflare moves a pack
+ * through issuance (`status`, the issued certificate, the DCV records) after
+ * reconcile returns, and again at every renewal; none of it is configuration,
+ * so drift must not report it. What an operator controls — CA, validation
+ * method, validity, and the host set — stays live. `hosts` keeps the saved
+ * order while the set is unchanged, since Cloudflare may reorder it.
+ */
+const keepLifecycle = (
+  saved: CertificatePackAttributes,
+  live: CertificatePackAttributes,
+): CertificatePackAttributes => ({
+  ...live,
+  hosts: sameHosts(saved.hosts, live.hosts) ? saved.hosts : live.hosts,
+  status: saved.status,
+  primaryCertificate: saved.primaryCertificate,
+  validationRecords: saved.validationRecords,
+  dcvDelegationRecords: saved.dcvDelegationRecords,
+});
 
 const toRecord = (record: {
   cname?: string | null;
