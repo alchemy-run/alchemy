@@ -19,7 +19,7 @@ Function routes each request at the edge — uploaded files go to S3,
 everything else streams from the server.
 
 :::note[Verified version line]
-This page tracks `@solidjs/start` **2.x** with
+Verified with `@solidjs/start` **2.x** and
 `@solidjs/vite-plugin-nitro-2` — the Vite-native line where
 `solidStart()` is a plain Vite plugin and nitro is a second plugin.
 :::
@@ -193,9 +193,7 @@ export const Website = AWS.Website.SolidStart("Website", {
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs SolidStart's own Vite dev server (native HMR)
 instead of deploying anything; `site.url` is the dev server's

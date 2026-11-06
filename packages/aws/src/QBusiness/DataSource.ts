@@ -120,8 +120,31 @@ export interface DataSource extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataSourceLookup =
+  | {
+      /** The application the data source belongs to. */
+      applicationId: string;
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The id of the existing data source. */
+      dataSourceId: string;
+    }
+  | {
+      /** The application the data source belongs to. */
+      applicationId: string;
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The display name of the existing data source. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business data source — a connector that syncs documents from
@@ -164,6 +187,17 @@ export interface DataSource extends Resource<
  *   syncSchedule: "cron(0 12 * * ? *)",
  *   configuration: { ... },
  * });
+ * ```
+ *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and `indexId`, with `dataSourceId` or
+`displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const wiki = AWS.QBusiness.DataSource.lookup({ applicationId, indexId, displayName: "wiki" });
  * ```
  *
  * @resource
@@ -314,6 +348,13 @@ export const DataSourceProvider = () =>
         // account-wide without iterating every application — treated as a
         // sub-resource per the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "dataSourceId" in props
+              ? yield* readDataSourceById(props.applicationId, props.indexId, props.dataSourceId)
+              : yield* findDataSourceByName(props.applicationId, props.indexId, props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           const indexId = output?.indexId ?? olds?.indexId;

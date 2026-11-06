@@ -1040,8 +1040,7 @@ provider(
 );
 
 for (const property of ["fifo", "queueName"] as const) {
-  // Distinct names: the variants run concurrently and the rejection asserts
-  // no queue exists under its name.
+  // Distinct names: the variants run concurrently.
   const nameFor = (selfBound: boolean) =>
     `alchemy-test-sqs-${selfBound ? "unresolved" : "resolved"}-${property.toLowerCase()}`;
   const unresolvedIdentity = (selfBound: boolean) =>
@@ -1086,17 +1085,24 @@ for (const property of ["fifo", "queueName"] as const) {
     { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
   );
 
-  // A self-bound queue is precreated before its upstream resolves.
+  // A self-bound queue is precreated to break its cycle, and the engine
+  // resolves props from outside the cycle first: the upstream output is known
+  // at precreate, so the queue gets its real identity and its policy binding.
   provider(
-    `rejects unresolved ${property} on a self-bound queue before creating one with the wrong identity`,
+    `precreates a self-bound queue with a ${property} resolved from outside the cycle`,
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        const result = yield* stack.deploy(unresolvedIdentity(true)).pipe(Effect.flip);
-        expect(JSON.stringify(result)).toContain("UnresolvedQueueIdentity");
-        const queues = yield* SQS.listQueues({ QueueNamePrefix: nameFor(true) });
-        expect(queues.QueueUrls ?? []).toEqual([]);
+        const queue = yield* stack.deploy(unresolvedIdentity(true));
+        // A standard queue: the name carries no `.fifo` suffix.
+        expect(queue.queueName).toBe(nameFor(true));
+        const { Attributes } = yield* SQS.getQueueAttributes({
+          QueueUrl: queue.queueUrl,
+          AttributeNames: ["Policy"],
+        });
+        expect(Attributes?.Policy).toContain("SelfBound");
         yield* stack.destroy();
+        yield* assertQueueDeleted(queue.queueUrl);
       }),
     { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 120_000 },
   );

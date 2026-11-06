@@ -5,6 +5,8 @@ import type { HookOptions } from "node:test";
 import type { AlchemyContext } from "alchemy/AlchemyContext";
 import type { CompiledStack, StackDefinition } from "alchemy/Stack";
 import type { Stage } from "alchemy/Stage";
+import * as Cause from "effect/Cause";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -90,6 +92,27 @@ interface AfterEachFn {
 
 const DEFAULT_HOOK_TIMEOUT: HookOptions = { timeout: 120_000 };
 
+/** The timeout bun applies to a test, from its options. */
+const timeoutOf = (options: bun.TestOptions | undefined): number | undefined =>
+  typeof options === "number" ? options : options?.timeout;
+
+/**
+ * Interrupt `eff` shortly before bun's own timeout. When bun times a test or
+ * hook out it only stops waiting: the effect keeps running, so the file's
+ * `afterAll` destroy races a deploy still creating resources, and whatever
+ * that deploy creates afterwards is never cleaned up. Interrupting it first
+ * lets the engine record what it created, so the destroy that follows finds
+ * it.
+ */
+const DEADLINE_MARGIN_MS = 5_000;
+const withDeadline = <A, E, R>(
+  eff: Effect.Effect<A, E, R>,
+  timeout: number | undefined,
+): Effect.Effect<A, E | Cause.TimeoutError, R> =>
+  timeout === undefined || timeout <= DEADLINE_MARGIN_MS * 2
+    ? eff
+    : eff.pipe(Effect.timeout(Duration.millis(timeout - DEADLINE_MARGIN_MS)));
+
 /**
  * Build the per-file test API. Configure providers / state once at the top of
  * the test file:
@@ -118,32 +141,34 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   // which `destroy(Stack)` closes mid-file in self-contained tests — and is
   // closed by the fallback afterAll below.
   const sidecar = Core.makeSidecarHandle(options);
-  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope, sidecar);
+  const runEff = <A>(eff: TestEffect<A>, timeout?: number) =>
+    Core.run(withDeadline(eff, timeout), options, sharedScope, sidecar);
 
   const test = ((name, eff, opts) => {
-    bun.test(name, () => runEff(eff), opts);
+    bun.test(name, () => runEff(eff, timeoutOf(opts)), opts);
   }) as TestFn;
 
   test.skip = (name, eff, opts) => {
-    bun.test.skip(name, () => runEff(eff), opts);
+    bun.test.skip(name, () => runEff(eff, timeoutOf(opts)), opts);
   };
   test.skipIf = (condition) => (name, eff, opts) => {
-    bun.test.skipIf(condition)(name, () => runEff(eff), opts);
+    bun.test.skipIf(condition)(name, () => runEff(eff, timeoutOf(opts)), opts);
   };
   test.only = (name, eff, opts) => {
-    bun.test.only(name, () => runEff(eff), opts);
+    bun.test.only(name, () => runEff(eff, timeoutOf(opts)), opts);
   };
   test.todo = (name, eff, opts) => {
-    bun.test.todo(name, () => runEff(eff), opts);
+    bun.test.todo(name, () => runEff(eff, timeoutOf(opts)), opts);
   };
 
   const runProvider = (
     name: string,
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
+    timeout?: number,
   ) => {
     const scratch = Core.scratchStack(options, name);
     return Core.run(
-      Core.withProviders(fn(scratch), options, scratch.name),
+      withDeadline(Core.withProviders(fn(scratch), options, scratch.name), timeout),
       { ...options, state: scratch.state },
       sharedScope,
       sidecar,
@@ -151,19 +176,20 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
   };
 
   const provider = ((name, fn, opts) => {
-    bun.test(name, () => runProvider(name, fn), opts);
+    bun.test(name, () => runProvider(name, fn, timeoutOf(opts)), opts);
   }) as ProviderFn;
   provider.skip = (name, fn, opts) => {
-    bun.test.skip(name, () => runProvider(name, fn), opts);
+    bun.test.skip(name, () => runProvider(name, fn, timeoutOf(opts)), opts);
   };
   provider.skipIf = (condition) => (name, fn, opts) => {
-    bun.test.skipIf(condition)(name, () => runProvider(name, fn), opts);
+    bun.test.skipIf(condition)(name, () => runProvider(name, fn, timeoutOf(opts)), opts);
   };
   test.provider = provider;
 
   const beforeAll: BeforeAllFn = <A>(eff: TestEffect<A>, hookOptions?: HookOptions) => {
     let result: A;
-    bun.beforeAll(() => runEff(eff).then((v) => (result = v)), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
+    const options = hookOptions ?? DEFAULT_HOOK_TIMEOUT;
+    bun.beforeAll(() => runEff(eff, options.timeout).then((v) => (result = v)), options);
     return Effect.sync(() => result);
   };
 

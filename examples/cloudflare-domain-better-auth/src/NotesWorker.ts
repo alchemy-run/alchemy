@@ -7,12 +7,13 @@ import * as Layer from "effect/Layer";
 import { Auth, AuthLive } from "./Auth.ts";
 import { AuthDb } from "./Database.ts";
 import { NotesModel } from "./Notes.model.ts";
+import { NotesLive } from "./Notes.view.ts";
 import { NotesApi } from "./NotesApi.api.ts";
 import { SessionLive } from "./Session.ts";
 
-const NotesLive = SessionLive.pipe(
+const ServerLive = SessionLive.pipe(
   Layer.provideMerge(AuthLive),
-  Layer.provideMerge(NotesModel.layer(Layer.empty)),
+  Layer.provideMerge(NotesModel.layer(NotesLive)),
   Layer.provide(Layer.mergeAll(DomainCloudflare.layerDurableObjects(), CloudflareD1(AuthDb))),
 );
 
@@ -34,5 +35,5 @@ export default class NotesWorker extends Cloudflare.Worker<NotesWorker>()(
         return yield* api.fetch;
       }),
     };
-  }).pipe(Effect.provide(NotesLive)),
+  }).pipe(Effect.provide(ServerLive)),
 ) {}

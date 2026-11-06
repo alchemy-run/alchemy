@@ -396,6 +396,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
             env[key] = output.pipe(Output.map(packEnvValue));
             return key;
           }),
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {

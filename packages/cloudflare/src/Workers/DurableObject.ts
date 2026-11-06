@@ -241,7 +241,10 @@ const restrictToJurisdiction = (
 
 export interface DurableObjectProps {
   /**
-   * Name of the exported `DurableObject` class.
+   * Name of the exported `DurableObject` class. Set it when the class must
+   * keep a name that differs from the logical id (the binding's name in
+   * `env`). Changing it later ships a `renamed_classes` migration, which
+   * keeps the namespace and its stored objects.
    *
    * @default name
    */
@@ -335,7 +338,7 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "transferredFrom" | "errors">,
+      props?: Pick<DurableObjectProps, "className" | "transferredFrom" | "errors">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -519,6 +522,23 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *     return HttpServerResponse.text(String(yield* counter.get()));
  *   }),
  * };
+ * ```
+ *
+ * ### Keeping an Existing Class Name
+ * The class form names the binding (`env.Counter`, the logical id that
+ * drives migrations) and, by default, the exported class. Pass
+ * `className` when the physical class must keep a different name, for
+ * example when converting a Worker whose classes were declared with the
+ * async form: the same logical id and the same class name mean no
+ * migration, so the namespace and its stored objects are kept in place.
+ *
+ * **Example:** Converting an async-form binding without a migration
+ * ```typescript
+ * // Before: env: { LENS_DO: Cloudflare.DurableObject("LENS_DO", { className: "LensServer" }) }
+ * export class LensDo extends Cloudflare.DurableObject<LensDo, LensShape>()(
+ *   "LENS_DO",
+ *   { className: "LensServer" },
+ * ) {}
  * ```
  *
  * ### Cross-Worker Binding
@@ -762,8 +782,8 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```
  *
  * ### Background Work & Scopes
- * Every RPC call and fetch into a Durable Object gets its own Effect
- * `Scope`. When the method finishes, the bridge closes that scope and
+ * Every RPC call, fetch, alarm and WebSocket event in a Durable Object gets
+ * its own Effect `Scope`. When the method finishes, the bridge closes that scope and
  * registers the close promise with workerd's `state.waitUntil` — so
  * finalizers added with `Effect.addFinalizer` inside a method run *after*
  * the result is returned to the caller, without blocking it, and the
@@ -771,7 +791,9 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *
  * For ad-hoc background work, `state.waitUntil(effect)` forks an Effect
  * with the caller's full context and keeps the object alive until it
- * settles.
+ * settles. The call's scope stays open until then too, so the work can use
+ * what the method acquired on it, and its spans and logs are exported with
+ * the call's. What the work acquires itself is released when it finishes.
  *
  * Attach cleanup to method scopes, not the constructor (init) closure —
  * the constructor runs once per in-memory instance under
@@ -1383,6 +1405,23 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const propsOrImpl = args[1];
     const tag = Context.Service(namespace);
 
+    // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
+    // carry `transferredFrom` so the host's local binding drives a
+    // data-preserving transfer migration, `errors` so stubs decode the
+    // declared RPC error classes, and `className` so the physical class
+    // keeps a name that differs from the logical id (the binding's name
+    // in `env`). Every place the physical name flows reads `className`:
+    // the binding, the namespace accessor, the export the generated entry
+    // turns into `export class <className>`, and the bridge's lookup of
+    // that export.
+    const classProps =
+      isClassForm && !Effect.isEffect(propsOrImpl)
+        ? (propsOrImpl as
+            | Pick<DurableObjectProps, "className" | "transferredFrom" | "errors">
+            | undefined)
+        : undefined;
+    const className = classProps?.className ?? namespace;
+
     const binding = (
       scriptName?: Input<string>,
       transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[],
@@ -1396,7 +1435,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
             {
               type: "durable_object_namespace",
               name: namespace,
-              className: namespace,
+              className,
               scriptName,
               transferredFrom: normalizeTransferredFrom(transferredFrom),
             },
@@ -1438,8 +1477,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
+          // The provider keys the namespace map by physical class name.
           namespaceId: worker.durableObjectNamespaces.pipe(
-            Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[namespace]),
+            Output.map((durableObjectNamespaces) => durableObjectNamespaces?.[className]),
           ),
           getByName: (name: string, options?: DurableObjectGetDurableObjectOptions) =>
             makeRpcStub(ns!.getByName(name, options), stubOptions),
@@ -1454,14 +1494,6 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
         return makeNamespace(binding);
       });
-
-    // Class-form declarations (`DurableObject<Self>()("Name", props?)`) can
-    // carry `transferredFrom` so the host's local binding drives a
-    // data-preserving transfer migration.
-    const classProps =
-      isClassForm && !Effect.isEffect(propsOrImpl)
-        ? (propsOrImpl as Pick<DurableObjectProps, "transferredFrom" | "errors"> | undefined)
-        : undefined;
 
     const make = Effect.fn(function* (
       impl: Effect.Effect<Effect.Effect<DurableObjectShape>, never, DurableObjectState>,
@@ -1488,7 +1520,9 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.asVoid,
         );
       }
-      yield* (yield* Worker).export(namespace, {
+      // Exports are keyed by physical class name: the generated entry emits
+      // `export class <key>` and the bridge resolves its export by that key.
+      yield* (yield* Worker).export(className, {
         kind: "durableObject",
         // initialize the object's constructor (apply infra dependencies)
         constructor,
@@ -1529,7 +1563,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     } else {
       // Tagged Effect DO. Yielding the class resolves the `tag`, which
       // forces the `CounterLive` Layer (built by `Counter.make(impl)`) to
-      // run so `worker.export(namespace, …)` is invoked — without this,
+      // run so `worker.export(className, …)` is invoked — without this,
       // the class would never be registered with the Worker's exports
       // map and the deployed bundle would have no DO class for
       // Cloudflare to instantiate.

@@ -2,11 +2,26 @@
 title: Eventarc
 description: React to Firestore changes, Cloud Storage events, and audit-logged Google API calls with GCP.Eventarc.consumeEvents.
 ---
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 Eventarc delivers events from Google services as CloudEvents: a
 Firestore document was created, an object was written, an API was
 called. `consumeEvents` creates the trigger and runs your handler for
 each event.
+
+## Triggers filter events
+
+Google services report what happens in your project as **events**, in the CloudEvents format: a type, a source, attributes, and data. An Eventarc **trigger** delivers the events that match all of its filters to one service.
+
+<Fanout
+  item={{ title: "CloudEvent", lines: ['"type": "…firestore.document.v1.created"', '"database": "shop"', '"document": "orders/o_104"'] }}
+  group="Eventarc triggers"
+  routes={[
+    { label: "OrderCreated", condition: ["type = …document.v1.created", "database = shop", "document matches orders/{id}"], target: { label: "Auditor", type: "Cloud Run service" } },
+    { label: "OrderDeleted", condition: ["type = …document.v1.deleted", "database = shop"], target: { label: "Cleanup", type: "Cloud Run service" }, match: false },
+  ]}
+  caption="A new order document matches every filter of the OrderCreated trigger, so Auditor gets it. The trigger for deletions ignores it."
+/>
 
 ## React to new Firestore documents
 

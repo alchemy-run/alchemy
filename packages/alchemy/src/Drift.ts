@@ -664,6 +664,7 @@ export const plan = (stack: {
           Mode: persisted.providerMode,
           RuntimeContext: undefined!,
           Providers: undefined,
+          Lookup: undefined as never,
         } as ResourceLike,
         // Drift repairs from the persisted bindings verbatim — surface them
         // as noop rows so the renderer shows the binding topology without

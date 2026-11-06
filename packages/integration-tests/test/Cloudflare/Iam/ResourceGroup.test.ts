@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -16,8 +17,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic names — the same on every run (never Date.now()/random).
-const RG_NAME = "alchemy-iam-rg-crud";
-const RG_NAME_RENAMED = "alchemy-iam-rg-crud-renamed";
+const RG_NAME = testName("alchemy-iam-rg-crud");
+const RG_NAME_RENAMED = testName("alchemy-iam-rg-crud-renamed");
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -140,7 +141,6 @@ test.provider(
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Iam.ResourceGroup("ListRg", {
-            name: "alchemy-iam-rg-list",
             scope: {
               key: accountScopeKey,
               objects: [{ key: "*" }],

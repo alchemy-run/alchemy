@@ -14,8 +14,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
-import * as ts from "tsrs/unstable/ast";
-import type { Node, SourceFile } from "tsrs/unstable/ast";
+import * as ts from "tsrs/ast";
+import type { Node, SourceFile } from "tsrs/ast";
 import {
   docCommentLines,
   jsdocCopyId,

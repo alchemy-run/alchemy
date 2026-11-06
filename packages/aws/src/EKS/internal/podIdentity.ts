@@ -6,9 +6,9 @@
  */
 import * as eks from "@distilled.cloud/aws/eks";
 import * as iam from "@distilled.cloud/aws/iam";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createInternalTags, hasTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -25,13 +25,6 @@ export class EKSPodIdentityConflict extends Data.TaggedError("EKSPodIdentityConf
   readonly message: string;
   readonly cause?: unknown;
 }> {}
-
-export const toClientRequestToken = (id: string, action: string) =>
-  createPhysicalName({
-    id: `${id}-${action}`,
-    maxLength: 64,
-    delimiter: "-",
-  });
 
 /**
  * Ensure the pod-identity IAM role exists (trusts `pods.eks.amazonaws.com`).
@@ -183,6 +176,7 @@ export const ensureAssociation = Effect.fn(function* ({
   serviceAccount: string;
   roleArn: string;
 }) {
+  const random = yield* SecureRandom.SecureRandom;
   let state = yield* findAssociation({
     clusterName,
     namespace,
@@ -196,7 +190,7 @@ export const ensureAssociation = Effect.fn(function* ({
         serviceAccount,
         roleArn,
         tags: yield* createInternalTags(id),
-        clientRequestToken: yield* toClientRequestToken(id, "assoc"),
+        clientRequestToken: yield* random.uuidV4(),
       })
       .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
     state = yield* findAssociation({
@@ -214,7 +208,7 @@ export const ensureAssociation = Effect.fn(function* ({
       clusterName,
       associationId: state.associationId,
       roleArn,
-      clientRequestToken: yield* toClientRequestToken(id, "assoc-update"),
+      clientRequestToken: yield* random.uuidV4(),
     });
   }
   return {

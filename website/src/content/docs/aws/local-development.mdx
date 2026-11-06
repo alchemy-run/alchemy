@@ -4,6 +4,7 @@ description: alchemy dev runs your AWS stack on your machine — Lambda in Docke
 ---
 
 import Terminal from "../../../components/Terminal.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 `alchemy dev` runs your AWS stack entirely on your machine — no
 AWS account, no credentials, no config. Lambda functions execute
@@ -207,9 +208,7 @@ The default image is our patched release
 To wipe everything inside the emulator without recreating the
 container, point [`nuke`](/cli/nuke) at the local providers:
 
-```sh
-bun alchemy unsafe nuke --local --include 'AWS.*'
-```
+<PackageManagers run="alchemy unsafe nuke --local --include 'AWS.*'" />
 
 `--local` enumerates and deletes through each provider's local
 implementation, so it only ever sees emulated resources — no

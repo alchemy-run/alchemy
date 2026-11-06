@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
 import * as Telemetry from "alchemy/Telemetry";
@@ -33,6 +34,9 @@ export class TracingTarget extends Cloudflare.DurableObject<TracingTarget>()(
   ),
 ) {}
 
+/** A request-scoped store entered by JavaScript code around Effect code (`/als`). */
+const requestStore = new AsyncLocalStorage<string>();
+
 /** Sampled flag of the span the surrounding `withSpan` opened. */
 const currentSampled = Effect.currentSpan.pipe(
   Effect.map((span) => span.sampled),
@@ -55,6 +59,8 @@ const currentSampled = Effect.currentSpan.pipe(
  * - `/rpc`    — a Durable Object RPC whose method opens spans.
  * - `/enqueue` — sends to the queue this Worker consumes; the consumer
  *   opens spans per message.
+ * - `/als`    — Effect code run inside a JavaScript AsyncLocalStorage store
+ *   reports the store it sees, directly and inside a child span.
  * - `/sampled` — reports Effect's `sampled` flag for a span and its child.
  */
 export const tracedWorkerImpl = Effect.gen(function* () {
@@ -154,6 +160,33 @@ export const tracedWorkerImpl = Effect.gen(function* () {
         return yield* HttpServerResponse.json({
           marker: "native-did-enqueue",
           id: requestId,
+        });
+      }
+
+      if (url.pathname === "/als") {
+        // JavaScript code (framework middleware, a request-context library)
+        // enters its own AsyncLocalStorage store and calls back into Effect.
+        // The Effect code, and a span it opens, must still see that store.
+        const stores = yield* operation(
+          Effect.gen(function* () {
+            const context = yield* Effect.context<never>();
+            const readStore = Effect.sync(() => requestStore.getStore());
+            return yield* Effect.promise(() =>
+              requestStore.run("from-middleware", () =>
+                Effect.runPromiseWith(context)(
+                  Effect.all({
+                    direct: readStore,
+                    child: readStore.pipe(Effect.withSpan("als.child")),
+                  }),
+                ),
+              ),
+            );
+          }),
+        );
+        return yield* HttpServerResponse.json({
+          marker: "native-did-als",
+          id: requestId,
+          ...stores,
         });
       }
 

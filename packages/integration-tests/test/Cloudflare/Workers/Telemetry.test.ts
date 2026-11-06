@@ -9,6 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as pathe from "pathe";
+import { stageSuffix } from "../../names.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import OtelCustomWorker from "./fixtures/otel-custom-worker.ts";
@@ -24,7 +25,7 @@ const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/otel-collecto
 // the collector gets a deterministic custom hostname on the standing test
 // zone instead.
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
-const collectorHost = `otel-collector-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`;
+const collectorHost = `otel-collector-${stageSuffix()}.${zoneName}`;
 
 // The OTLP sink both traced fixtures export to. Declared identically in
 // both deploy steps so the second deploy keeps it.
@@ -230,6 +231,18 @@ describe(
           );
           expect(rpcCallers.length).toBeGreaterThan(0);
           expect(rpcCallers.every((name) => name === "otel-event-flush.worker")).toBe(true);
+
+          // A streamed body's span ends after the handler returned; it still
+          // reaches the collector because the body owns the event's
+          // telemetry scope until it settles.
+          yield* expectUrlContains(`${flushUrl}/stream`, "tail", {
+            timeout: "120 seconds",
+            label: "event-flush worker streamed body",
+          });
+          yield* expectUrlContains(collected, "otel-event-flush.stream-tail", {
+            timeout: "120 seconds",
+            label: "deployed streamed body batch",
+          });
         }),
       { timeout: 600_000 },
     );

@@ -20,6 +20,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -223,7 +224,7 @@ export const ZoneProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       let zone: CloudZone | undefined;
       if (output?.zoneId !== undefined) {
         zone = yield* getZoneBy(String(output.zoneId));
@@ -248,6 +249,16 @@ export const ZoneProvider = () =>
         }
       }
       if (zone === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.zoneId,
+          foundId: zone.id,
+          claimedName: olds?.name === undefined ? undefined : normalizeName(olds.name),
+          foundName: zone.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(zone);
       return (yield* hasAlchemyLabels(id, tagRecord(zone.labels))) ? attrs : Unowned(attrs);
     }),
