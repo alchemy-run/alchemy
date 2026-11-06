@@ -139,18 +139,19 @@ test(
   { tags, timeout: 600_000 },
 );
 
-test(
+test.provider(
   "a sandbox a runtime creates carries its stack, stage and host as tags",
-  Effect.gen(function* () {
-    const { sandboxId } = yield* get<{ sandboxId: string }>("/owned");
-    const { tags } = yield* sandbox.sandboxTagsGetV2({ sandboxId });
-    yield* sandbox.sandboxTerminateV2({ sandboxId });
-    const byName = Object.fromEntries((tags ?? []).map((t) => [t.tagName, t.tagValue]));
-    // The owner's keys win over a user tag of the same name; others stay.
-    expect(byName["alchemy::stack"]).toBe("ModalRuntimeStack");
-    expect(byName["alchemy::id"]).toBe("ModalRuntimeFunction");
-    expect(byName["alchemy::stage"]).toBeTruthy();
-    expect(byName.user).toBe("u1");
-  }),
+  () =>
+    Effect.gen(function* () {
+      const { sandboxId } = yield* get<{ sandboxId: string }>("/owned");
+      const { tags } = yield* sandbox.sandboxTagsGetV2({ sandboxId });
+      yield* sandbox.sandboxTerminateV2({ sandboxId });
+      const byName = Object.fromEntries((tags ?? []).map((t) => [t.tagName, t.tagValue]));
+      // The owner's keys win over a user tag of the same name; others stay.
+      expect(byName["alchemy::stack"]).toBe("ModalRuntimeStack");
+      expect(byName["alchemy::id"]).toBe("ModalRuntimeFunction");
+      expect(byName["alchemy::stage"]).toBeTruthy();
+      expect(byName.user).toBe("u1");
+    }),
   { tags, timeout: 600_000 },
 );
