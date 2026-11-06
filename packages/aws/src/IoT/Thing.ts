@@ -36,8 +36,18 @@ export interface Thing extends Resource<
     thingArn: string;
   },
   never,
-  Providers
+  Providers,
+  ThingLookup
 > {}
+
+/**
+ * Props for {@link Thing.lookup}: find a thing this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ThingLookup {
+  /** The thing name of the existing thing. */
+  thingName: string;
+}
 
 /**
  * An AWS IoT Thing — the cloud representation of a physical device.
@@ -54,6 +64,16 @@ export interface Thing extends Resource<
  *   thingName: "temperature-sensor-01",
  *   attributes: { location: "warehouse-a", model: "acme-t1000" },
  * });
+ * ```
+ *
+ * ### Looking up an existing thing
+ * `Thing.lookup` references a thing Alchemy doesn't manage (created in the
+ * console or by another stack), found by `thingName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing thing
+ * ```typescript
+ * const existing = AWS.IoT.Thing.lookup({ thingName: "my-thing" });
  * ```
  *
  * @resource
@@ -84,6 +104,16 @@ export const ThingProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ thingName }) {
+          const found = yield* iot
+            .describeThing({ thingName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!found) return undefined;
+          return {
+            thingName,
+            thingArn: found.thingArn!,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const thingName = output?.thingName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot

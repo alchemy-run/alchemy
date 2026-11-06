@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@alchemy.run/test";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { makeBucketState, type BucketObjects } from "@/State/BucketState.ts";
@@ -43,7 +44,7 @@ describe("BucketState lease", { tags: ["unit", "local"] }, () => {
         const second = yield* open;
         yield* first.list(request);
         return yield* Effect.exit(second.list(request));
-      }).pipe(Effect.scoped),
+      }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     expect(Exit.isFailure(exit)).toBe(true);

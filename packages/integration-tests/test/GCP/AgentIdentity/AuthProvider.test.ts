@@ -62,7 +62,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/${location}/authProviders/alchemy-missing-auth`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -53,8 +53,27 @@ export type ZoneTransferTsig = Resource<
   ZoneTransferTsigProps,
   ZoneTransferTsigAttributes,
   never,
-  Providers
+  Providers,
+  ZoneTransferTsigLookup
 >;
+
+/**
+ * Props for {@link ZoneTransferTsig.lookup}: find a TSIG key this stack
+ * doesn't manage, by its id or its name.
+ */
+export type ZoneTransferTsigLookup =
+  | {
+      /**
+       * The id of the existing TSIG key.
+       */
+      tsigId: string;
+    }
+  | {
+      /**
+       * The name of the existing TSIG key.
+       */
+      name: string;
+    };
 
 /**
  * A Secondary DNS TSIG key
@@ -81,6 +100,21 @@ export type ZoneTransferTsig = Resource<
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
  *   port: 53,
+ *   tsigId: tsig.tsigId,
+ * });
+ * ```
+ *
+ * ### Looking up an existing key
+ * `ZoneTransferTsig.lookup` references a TSIG key Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `tsigId` or
+ * `name`. It is read during plan/deploy and never created, updated or
+ * deleted. Its secret is never read.
+ *
+ * **Example:** Authenticate a new peer with an existing key
+ * ```typescript
+ * const tsig = Cloudflare.DNS.ZoneTransferTsig.lookup({ name: "transfer-key" });
+ * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
+ *   ip: "192.0.2.53",
  *   tsigId: tsig.tsigId,
  * });
  * ```
@@ -113,6 +147,14 @@ export const ZoneTransferTsigProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "tsigId" in props
+          ? yield* getTsig(accountId, props.tsigId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -221,7 +263,9 @@ const findByName = (accountId: string, name: string) =>
 
 const createTsigName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+    // A TSIG name is a domain name, so a generated one is a single label of at
+    // most 63 characters.
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 63 }));
   });
 
 const toAttributes = (

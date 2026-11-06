@@ -120,8 +120,18 @@ export interface Studio extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  StudioLookup
 > {}
+
+/**
+ * Props for {@link Studio.lookup}: find a studio this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StudioLookup {
+  /** The id of the existing studio. */
+  studioId: string;
+}
 
 /**
  * An Amazon EMR Studio — a web-based IDE for notebooks and interactive
@@ -157,6 +167,16 @@ export interface Studio extends Resource<
  *   description: "Data-science notebooks",
  *   tags: { team: "analytics" },
  * });
+ * ```
+ *
+ * ### Looking up an existing studio
+ * `Studio.lookup` references a studio Alchemy doesn't manage (created in the
+ * console or by another stack), found by `studioId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing studio
+ * ```typescript
+ * const existing = AWS.EMR.Studio.lookup({ studioId: "..." });
  * ```
  *
  * @resource
@@ -301,6 +321,13 @@ export const StudioProvider = () =>
           if ((n.encryptionKeyArn ?? undefined) !== (o.encryptionKeyArn ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ studioId }) {
+          const studio = yield* readStudio(studioId);
+          if (!studio) return undefined;
+          const attrs = yield* toAttrs(studio);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

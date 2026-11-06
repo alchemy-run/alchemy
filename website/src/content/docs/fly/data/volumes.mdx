@@ -2,6 +2,7 @@
 title: Volumes
 description: A disk in one region, attached to one Machine.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 A Fly Volume is a disk in one [region](/fly/compute/regions),
 attached to one Machine.
@@ -13,6 +14,19 @@ There is no standalone Volume resource. Create disks with
 
 Fly cannot share one Volume across two Machines. `count: 3` creates
 three Volumes in one name-group, one per replica.
+
+<Tree
+  nodes={[
+    { id: "iad", label: "iad", type: "region" },
+    { id: "m1", label: "Machine 1", type: "replica", parent: "iad" },
+    { id: "v1", label: "data", type: "Volume · 1 GB", parent: "m1", tone: "accent" },
+    { id: "m2", label: "Machine 2", type: "replica", parent: "iad" },
+    { id: "v2", label: "data", type: "Volume · 1 GB", parent: "m2", tone: "accent" },
+    { id: "m3", label: "Machine 3", type: "replica", parent: "iad" },
+    { id: "v3", label: "data", type: "Volume · 1 GB", parent: "m3", tone: "accent" },
+  ]}
+  caption="With count: 3, each Machine gets a Volume of its own, in its own region. The Volumes don't share data, so keep anything every replica needs in Postgres or a bucket."
+/>
 
 ## Mount into a Service
 

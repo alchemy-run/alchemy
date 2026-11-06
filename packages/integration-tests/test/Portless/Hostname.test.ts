@@ -19,7 +19,7 @@ const withStage = (stage: string) => Effect.provideService(Stage, stage);
 const withEnv = (env: Record<string, string>) =>
   Effect.provide(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(env)));
 
-describe("hostname grammar", () => {
+describe("hostname grammar", { tags: ["unit"] }, () => {
   it("names a service <stage>.<kebab id>.<domain>.localhost", () => {
     expect(routedName("Api", "dev-alice", "myapp")).toBe("dev-alice.api.myapp");
     expect(routedName("ExampleService", "dev-example-feature", "example")).toBe(
@@ -57,7 +57,7 @@ describe("hostname grammar", () => {
   });
 });
 
-describe("Portless.Origin", () => {
+describe("Portless.Origin", { tags: ["unit"] }, () => {
   it("is the origin of the service a string domain names", () => {
     const origin = Portless.Origin("Web", { proxy: { domain: "myapp" } }).pipe(
       withStage("dev_alice"),

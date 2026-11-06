@@ -149,6 +149,25 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
     );
   });
 
+  describe("method lookup", () => {
+    it.effect("never dispatches Object.prototype members", () =>
+      Effect.gen(function* () {
+        const webHandler = HttpEffect.toWebHandler(safeHttpEffect(Rpc.serveRpc(shape, fallback)));
+        for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) {
+          const response = yield* Effect.promise(() =>
+            webHandler(
+              new Request(`http://rpc${Rpc.RPC_PATH_PREFIX}${name}`, {
+                method: "POST",
+                body: "[]",
+              }),
+            ),
+          );
+          expect(response.status).toBe(404);
+        }
+      }),
+    );
+  });
+
   describe("streaming methods (Stream)", () => {
     const collect = <T>(streamLike: any) =>
       Effect.gen(function* () {
