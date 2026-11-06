@@ -97,6 +97,16 @@ test.provider(
       const v1 = yield* stack.deploy(program(1));
       expect(yield* fetchClass(v1.url, "First")).toBe("First");
 
+      // The second deploy updates both Workers in place: B adds `Second`,
+      // A binds it.
+      const plan = yield* stack.plan(program(2));
+      const actionOf = (logicalId: string) =>
+        (Object.values(plan.resources) as any[]).find(
+          (node) => node.resource.LogicalId === logicalId,
+        )?.action;
+      expect(actionOf("CircularDoHost")).toBe("update");
+      expect(actionOf("CircularDoCaller")).toBe("update");
+
       // B's update waits on the gate; A must not fail its upload on the
       // `Second` class B hasn't exported yet.
       const v2 = yield* stack.deploy(program(2));
