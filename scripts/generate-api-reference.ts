@@ -74,6 +74,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/infisical/src",
   },
   {
+    srcRoot: "packages/archil/src",
+    providerPrefix: "Archil",
+    sourceDisplayPrefix: "packages/archil/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",

@@ -30,6 +30,9 @@
       "path": "./submodules/distilled/packages/daytona/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/archil/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/rivet/tsconfig.json"
     },
     {
@@ -119,6 +122,9 @@
     },
     {
       "path": "./packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./packages/archil/tsconfig.json"
     },
     {
       "path": "./packages/rivet/tsconfig.json"

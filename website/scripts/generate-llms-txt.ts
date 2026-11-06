@@ -564,6 +564,38 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Archil — start here",
+    intro:
+      "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
+    pages: { slugs: ["archil/index", "archil/what-is-archil", "archil/setup"] },
+  },
+  {
+    heading: "Archil — Tutorial",
+    pages: { directory: "archil/tutorial" },
+  },
+  {
+    heading: "Archil — Accounts & access",
+    pages: {
+      slugs: [
+        "archil/organization-and-keys",
+        "archil/security/credentials",
+        "archil/security/network",
+      ],
+    },
+  },
+  {
+    heading: "Archil — Compute",
+    pages: { directory: "archil/compute" },
+  },
+  {
+    heading: "Archil — Frontend",
+    pages: { directory: "archil/frontend" },
+  },
+  {
+    heading: "Archil — Storage",
+    pages: { directory: "archil/storage" },
+  },
+  {
     heading: "Rivet",
     intro:
       "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",
