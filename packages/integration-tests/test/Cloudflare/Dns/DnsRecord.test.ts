@@ -28,15 +28,18 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 const NAME_DEFAULT = `${testName("alchemy-dnsrecord-default")}.${zoneName}`;
 const NAME_UPDATE = `${testName("alchemy-dnsrecord-update")}.${zoneName}`;
 const NAME_REPLACE = `${testName("alchemy-dnsrecord-replace")}.${zoneName}`;
+const NAME_RENAMED = `${testName("alchemy-dnsrecord-renamed")}.${zoneName}`;
+const NAME_SIBLING = `${testName("alchemy-dnsrecord-sibling")}.${zoneName}`;
 const NAME_ADOPT = `${testName("alchemy-dnsrecord-adopt")}.${zoneName}`;
 const NAME_ADOPT_RELATIVE = testName("alchemy-dnsrecord-relative-adopt");
 const NAME_ADOPT_RELATIVE_FQDN = `${NAME_ADOPT_RELATIVE}.${zoneName}`;
 const NAME_LIST = `${testName("alchemy-dnsrecord-list")}.${zoneName}`;
 const NAME_MX = `${testName("alchemy-dnsrecord-mx")}.${zoneName}`;
-const NAME_MX_AMBIG = `${testName("alchemy-dnsrecord-mx-ambig")}.${zoneName}`;
+const NAME_MX_PRIORITY = `${testName("alchemy-dnsrecord-mx-priority")}.${zoneName}`;
 const NAME_SVCB = `_alchemy-dnsrecord._tcp.${zoneName}`;
 const NAME_SVCB_ADOPT = `_alchemy-dnsrecord-adopt._tcp.${zoneName}`;
 const NAME_HTTPS = `${testName("alchemy-dnsrecord-https")}.${zoneName}`;
+const NAME_CNAME_ADOPT = `${testName("alchemy-dnsrecord-cname-adopt")}.${zoneName}`;
 
 const SVCB_DATA_V1 = {
   priority: 1,
@@ -137,6 +140,7 @@ test.provider(
       expect(live.name).toEqual(NAME_DEFAULT);
       expect(live.type).toEqual("A");
       expect(live.content).toEqual("203.0.113.10");
+      expect(live.comment).toEqual("Managed by Alchemy (DefaultA)");
 
       yield* stack.destroy();
 
@@ -315,7 +319,7 @@ test.provider(
 );
 
 test.provider(
-  "changing the record type triggers replacement",
+  "changing the name and type updates the record in place",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
@@ -329,41 +333,92 @@ test.provider(
             name: NAME_REPLACE,
             type: "A",
             content: "203.0.113.30",
-          }).pipe(adopt(true));
+          });
         }),
       );
 
       expect(initial.type).toEqual("A");
 
-      const replaced = yield* stack.deploy(
+      const changed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.DNS.Record("ReplaceRecord", {
             zoneId,
-            name: NAME_REPLACE,
+            name: NAME_RENAMED,
             type: "TXT",
             content: '"alchemy-replace-test"',
-          }).pipe(adopt(true));
+          });
         }),
       );
 
-      // (name, type) is the record's identity — a new physical record exists.
-      expect(replaced.recordId).not.toEqual(initial.recordId);
-      expect(replaced.type).toEqual("TXT");
+      // The Cloudflare record id is the record's identity.
+      expect(changed.recordId).toEqual(initial.recordId);
+      expect(changed.name).toEqual(NAME_RENAMED);
+      expect(changed.type).toEqual("TXT");
 
-      // The old A record was deleted as part of the replacement.
-      const oldRecord = yield* findRecord(zoneId, NAME_REPLACE, "A");
-      expect(oldRecord).toBeUndefined();
-
-      const live = yield* getRecord(zoneId, replaced.recordId);
+      const live = yield* getRecord(zoneId, initial.recordId);
+      expect(live.name).toEqual(NAME_RENAMED);
       expect(live.type).toEqual("TXT");
+      expect(yield* findRecord(zoneId, NAME_REPLACE, "A")).toBeUndefined();
 
       yield* stack.destroy();
+
+      expect(yield* findRecord(zoneId, NAME_RENAMED, "TXT")).toBeUndefined();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
+);
+
+// #2943: a lone record with different content at the same name is a
+// sibling, not this record, so it's neither adopted nor overwritten.
+test.provider(
+  "a second record at a name is created beside the existing one",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_SIBLING, "TXT");
+
+      const verification = Effect.gen(function* () {
+        return yield* Cloudflare.DNS.Record("Verification", {
+          zoneId,
+          name: NAME_SIBLING,
+          type: "TXT",
+          content: '"google-site-verification=abc"',
+        });
+      });
+      const first = yield* stack.deploy(verification);
+
+      const both = yield* stack.deploy(
+        Effect.gen(function* () {
+          return {
+            verification: yield* verification,
+            spf: yield* Cloudflare.DNS.Record("Spf", {
+              zoneId,
+              name: NAME_SIBLING,
+              type: "TXT",
+              content: '"v=spf1 include:_spf.google.com ~all"',
+            }),
+          };
+        }),
+      );
+
+      expect(both.verification.recordId).toEqual(first.recordId);
+      expect(both.spf.recordId).not.toEqual(first.recordId);
+      const live = yield* listByNameType(zoneId, NAME_SIBLING, "TXT");
+      expect(live.map((r) => r.content).sort()).toEqual([
+        '"google-site-verification=abc"',
+        '"v=spf1 include:_spf.google.com ~all"',
+      ]);
+
+      yield* stack.destroy();
+
+      expect(yield* listByNameType(zoneId, NAME_SIBLING, "TXT")).toEqual([]);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
 test.provider(
-  "adoption — existing record errors without adopt, takes over with adopt(true)",
+  "adoption — a matching record errors without adopt, is taken over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
@@ -394,6 +449,22 @@ test.provider(
         );
       expect(pre.id).toBeDefined();
 
+      // A record with different content is a sibling, not this record:
+      // nothing to adopt, so a new record is created beside it.
+      const sibling = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("AdoptedRecord", {
+            zoneId,
+            name: NAME_ADOPT,
+            type: "A",
+            content: "203.0.113.41",
+          });
+        }),
+      );
+      expect(sibling.recordId).not.toEqual(pre.id);
+      yield* stack.destroy();
+      expect((yield* getRecord(zoneId, pre.id!)).content).toEqual("203.0.113.40");
+
       // Without `adopt`: DNS records carry no ownership markers, so the
       // engine cannot prove we created it and refuses to take it over.
       const error = yield* stack
@@ -403,7 +474,7 @@ test.provider(
               zoneId,
               name: NAME_ADOPT,
               type: "A",
-              content: "203.0.113.41",
+              content: "203.0.113.40",
             });
           }),
         )
@@ -414,28 +485,89 @@ test.provider(
       expect(error).toBeInstanceOf(OwnedBySomeoneElse);
 
       // With `adopt(true)`: the engine takes over the pre-existing record
-      // (same physical id) and converges it to the desired content.
+      // (same physical id) and stamps it with the default comment.
       const adopted = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.DNS.Record("AdoptedRecord", {
             zoneId,
             name: NAME_ADOPT,
             type: "A",
-            content: "203.0.113.41",
+            content: "203.0.113.40",
           }).pipe(adopt(true));
         }),
       );
-
       expect(adopted.recordId).toEqual(pre.id);
-      expect(adopted.content).toEqual("203.0.113.41");
+      expect((yield* getRecord(zoneId, pre.id!)).comment).toEqual(
+        "Managed by Alchemy (AdoptedRecord)",
+      );
 
-      const live = yield* getRecord(zoneId, adopted.recordId);
+      // Once adopted, the record is tracked by its id and its content
+      // updates in place.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("AdoptedRecord", {
+            zoneId,
+            name: NAME_ADOPT,
+            type: "A",
+            content: "203.0.113.41",
+          });
+        }),
+      );
+
+      expect(updated.recordId).toEqual(pre.id);
+      expect(updated.content).toEqual("203.0.113.41");
+
+      const live = yield* getRecord(zoneId, updated.recordId);
       expect(live.content).toEqual("203.0.113.41");
 
       yield* stack.destroy();
 
       const gone = yield* findRecord(zoneId, NAME_ADOPT, "A");
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
+);
+
+// A CNAME is exclusive at its name, so the one there is this record
+// whatever it points at.
+test.provider(
+  "adoption takes over a CNAME that points elsewhere",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRecords(zoneId, NAME_CNAME_ADOPT, "CNAME");
+
+      const pre = yield* dns.createRecord({
+        zoneId,
+        name: NAME_CNAME_ADOPT,
+        type: "CNAME",
+        content: `old.${zoneName}`,
+        ttl: 1,
+      });
+
+      const cname = Cloudflare.DNS.Record("AdoptedCname", {
+        zoneId,
+        name: NAME_CNAME_ADOPT,
+        type: "CNAME",
+        content: `new.${zoneName}`,
+      });
+
+      const error = yield* stack.deploy(cname).pipe(
+        Effect.as(undefined),
+        Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+      );
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const adopted = yield* stack.deploy(cname.pipe(adopt(true)));
+      expect(adopted.recordId).toEqual(pre.id);
+      expect(adopted.content).toEqual(`new.${zoneName}`);
+      expect((yield* getRecord(zoneId, pre.id!)).content).toEqual(`new.${zoneName}`);
+
+      yield* stack.destroy();
+
+      expect(yield* findRecord(zoneId, NAME_CNAME_ADOPT, "CNAME")).toBeUndefined();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
@@ -464,7 +596,7 @@ test.provider(
               zoneId,
               name: NAME_SVCB_ADOPT,
               type: "SVCB",
-              content: SVCB_DATA_V2,
+              content: SVCB_DATA_V1,
             });
           }),
         )
@@ -480,15 +612,27 @@ test.provider(
             zoneId,
             name: NAME_SVCB_ADOPT,
             type: "SVCB",
-            content: SVCB_DATA_V2,
+            content: SVCB_DATA_V1,
           }).pipe(adopt(true));
         }),
       );
-
       expect(adopted.recordId).toEqual(pre.id);
-      expect(adopted.data).toEqual(SVCB_DATA_V2);
 
-      const live = yield* getRecord(zoneId, adopted.recordId);
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("AdoptedStructuredSvcb", {
+            zoneId,
+            name: NAME_SVCB_ADOPT,
+            type: "SVCB",
+            content: SVCB_DATA_V2,
+          });
+        }),
+      );
+
+      expect(updated.recordId).toEqual(pre.id);
+      expect(updated.data).toEqual(SVCB_DATA_V2);
+
+      const live = yield* getRecord(zoneId, updated.recordId);
       expect("data" in live ? live.data : undefined).toEqual(SVCB_DATA_V2);
 
       yield* stack.destroy();
@@ -525,14 +669,14 @@ test.provider(
             zoneId,
             name: NAME_ADOPT_RELATIVE,
             type: "TXT",
-            content: "adopted",
+            content: "pre-existing",
           }).pipe(adopt(true));
         }),
       );
 
       expect(adopted.recordId).toEqual(pre.id);
       expect(adopted.name).toEqual(NAME_ADOPT_RELATIVE_FQDN);
-      expect(adopted.content).toEqual("adopted");
+      expect(adopted.content).toEqual("pre-existing");
 
       yield* stack.destroy();
 
@@ -640,64 +784,48 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
 
-// When multiple candidates survive the content/priority filter, adoption must
-// fail with an actionable error instead of picking one arbitrarily.
+// Priority is part of an MX record's identity: the same host at another
+// priority is a sibling, not this record.
 test.provider(
-  "adoption fails with an actionable error when the match stays ambiguous",
+  "an MX record with the same host at another priority is not adopted",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
       yield* stack.destroy();
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
+      yield* purgeRecords(zoneId, NAME_MX_PRIORITY, "MX");
 
-      // Same content on both records — only priority differs. A declaration
-      // without a priority cannot select one.
-      yield* dns
-        .createRecord({
-          zoneId,
-          name: NAME_MX_AMBIG,
-          type: "MX",
-          content: `${testName("mx")}.${zoneName}`,
-          priority: 1,
-          ttl: 1,
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
-      yield* dns.createRecord({
+      const host = `${testName("mx-priority")}.${zoneName}`;
+      const pre = yield* dns.createRecord({
         zoneId,
-        name: NAME_MX_AMBIG,
+        name: NAME_MX_PRIORITY,
         type: "MX",
-        content: `${testName("mx")}.${zoneName}`,
+        content: host,
         priority: 10,
         ttl: 1,
       });
 
-      const error = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.DNS.Record("AmbiguousMx", {
-              zoneId,
-              name: NAME_MX_AMBIG,
-              type: "MX",
-              content: `${testName("mx")}.${zoneName}`,
-            }).pipe(adopt(true));
-          }),
-        )
-        .pipe(
-          Effect.as(undefined),
-          Effect.catchCause((cause) => Effect.succeed(findError(cause))),
-        );
-      expect(error).toBeInstanceOf(Cloudflare.DNS.AmbiguousDnsRecordError);
-      expect(String(error)).toContain("Multiple DNS records");
+      const record = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.DNS.Record("PriorityMx", {
+            zoneId,
+            name: NAME_MX_PRIORITY,
+            type: "MX",
+            content: host,
+            priority: 20,
+          });
+        }),
+      );
 
-      yield* purgeRecords(zoneId, NAME_MX_AMBIG, "MX");
+      expect(record.recordId).not.toEqual(pre.id);
+      const preLive = yield* getRecord(zoneId, pre.id!);
+      expect("priority" in preLive ? preLive.priority : undefined).toEqual(10);
+
       yield* stack.destroy();
+
+      const leftovers = yield* listByNameType(zoneId, NAME_MX_PRIORITY, "MX");
+      expect(leftovers.map((r) => r.id)).toEqual([pre.id]);
+      yield* purgeRecords(zoneId, NAME_MX_PRIORITY, "MX");
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
@@ -740,21 +868,6 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:dns", "provider:cloudflare:zone", "live"] },
 );
-
-/**
- * Pull the first failure/defect value out of a Cause regardless of whether
- * the engine raised it as a typed failure or a defect.
- */
-const findError = (cause: Cause.Cause<unknown>): unknown =>
-  cause.reasons
-    .map((reason) =>
-      Cause.isFailReason(reason)
-        ? reason.error
-        : Cause.isDieReason(reason)
-          ? reason.defect
-          : undefined,
-    )
-    .find((value) => value !== undefined);
 
 /**
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
@@ -821,3 +934,13 @@ test.provider(
     timeout: 120000,
   },
 );
+
+// Type-level: Cloudflare rejects MX and URI records without a priority, so
+// the props type requires one. Checked by the type-checker, never run.
+export const _priorityIsRequired = (zoneId: string): Cloudflare.DNS.RecordProps[] => [
+  // @ts-expect-error MX needs a priority
+  { zoneId, name: "mx", type: "MX", content: "mail.example.com" },
+  // @ts-expect-error URI needs a priority
+  { zoneId, name: "uri", type: "URI", content: '10 1 "https://example.com"' },
+  { zoneId, name: "mx", type: "MX", content: "mail.example.com", priority: 10 },
+];

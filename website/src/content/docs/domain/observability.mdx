@@ -1,6 +1,6 @@
 ---
 title: Observability
-description: Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+description: Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
 ---
 
 A model records what it does as it does it. Every command, every event it commits, and every policy, view, projection and saga that reacts to it gets a span, named after the building block. The spans connect into traces that follow a flow from a click to everything it caused.
@@ -37,7 +37,7 @@ Domain.send Account.WithdrawMoney           the Worker, where the Api received i
 
 Each event carries the span that committed it, so the policies and views that react to it continue the same trace, however long the delivery took.
 
-A [query](/domain/query) is a `Domain.query <Name>` span in the Worker, with `domain.outcome`, the rows it returned (`domain.query.rows`) and the rows `visible` hid (`domain.query.hidden`). Waiting for the caller's own write adds a `Domain.caughtUp <Projection>` span. Nothing from the query's input is recorded unless the `attributes` option of its `toLayer` returns it.
+A [query](/domain/query) is a `Domain.query <Name>` span in the Worker, with `domain.outcome` and the rows it returned (`domain.query.rows`). Waiting for the caller's own write adds a `Domain.caughtUp <Projection>` span. A view's or stream's `validate` is a `Domain.validate <Name>` span with `domain.mode`. Nothing from an input is recorded unless its handler annotates it.
 
 ## Trace the browser
 
@@ -80,29 +80,24 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 
 ## Record what matters to you
 
-Nothing from a command or event is recorded unless you ask for it. Return the attributes you want from `attributes`, on the declaration:
+Nothing from a command, an event or a query's input is recorded unless a handler asks for it. Every handler runs inside the engine's span for it, already named (`Domain.decide Account.WithdrawMoney`, `Domain.query AccountLedger`, `Domain.projection Ledger`), so plain Effect annotates that span:
 
-```typescript title="packages/domain/src/Account/WithdrawMoney.command.ts"
-attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+```typescript title="packages/domain/src/Account/Account.aggregate.ts"
+decide: {
+  WithdrawMoney: Effect.fn(function* (account, cmd, { now }) {
+    // Recorded on this command's decide span; nothing else from it is.
+    yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
+    const o = yield* authorized(account);
+    // ...
+  }),
+},
 ```
 
-Commands, events and rejections all accept it. Events and rejections take it as a third argument: `Domain.Event("MoneyWithdrawn", { amount: Cents }, { attributes: (e) => ({ ... }) })`.
+An effectful `decide`, a query's handler, a view's `validate`, a policy, a saga step, a projection and an external system's operation all work the same way. Use a plain `Effect.fn`: naming it would add a span of its own, nested under the engine's.
 
 ## Keep secrets out
 
-A `Redacted` value is recorded as `<redacted>`, even when you return it from `attributes`. Make a secret field `Schema.Redacted(...)` and it never reaches a trace, or a log.
-
-## Annotate from a handler
-
-An effectful `decide`, a policy, a saga step and a projection all run inside their span, so plain Effect annotates it:
-
-```typescript
-WithdrawMoney: Effect.fn(function* (s, cmd) {
-  yield* Effect.annotateCurrentSpan("bank.tier", s.tier);
-  yield* Effect.log("large withdrawal");
-  // ...
-}),
-```
+Record only what you annotate, and never annotate a secret. Make a secret field `Schema.Redacted(...)`, and unwrap it only where it's used, so it never reaches a trace or a log by accident.
 
 Logs from a handler carry the span's trace and its `domain.*` attributes, so they line up with the trace that caused them.
 

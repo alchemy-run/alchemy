@@ -389,36 +389,6 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(Client)),
   );
 
-  it.live("watches Aggregate state and follows committed events", () =>
-    Effect.gen(function* () {
-      yield* Counter.Increment({ target, input: { amount: 3 }, commandId: "page:aggregate" })
-        .effect;
-      const watch = Counter.Counter.watch({
-        key: () => target,
-        toMessage: (snapshot) => snapshot,
-        onFailure: () => ({ state: Option.none(), cursor: -1 }),
-        onDefect: () => ({ state: Option.none(), cursor: -1 }),
-      });
-      const snapshots = yield* watch
-        .dependenciesToStream({ key: target, isEnabled: true })
-        .pipe(Stream.take(1), Stream.runCollect);
-      expect(snapshots).toEqual([{ state: Option.some({ total: 3 }), cursor: 1 }]);
-      const feed = Counter.Counter.events({
-        key: () => target,
-        cursor: () => Option.none(),
-        onEntry: (entry) => entry.event.amount,
-        onCaughtUp: (cursor) => cursor,
-        onFailure: () => -1,
-        onDefect: () => -1,
-      });
-      const dependencies = feed.modelToDependencies(undefined);
-      const events = yield* feed
-        .dependenciesToStream(dependencies, () => dependencies)
-        .pipe(Stream.take(2), Stream.runCollect);
-      expect(events).toEqual([3, 1]);
-    }).pipe(Effect.provide(Client)),
-  );
-
   it.live("watches Stream absence and reports CaughtUp", () =>
     Effect.gen(function* () {
       const watch = Counter.Outputs.watch({

@@ -77,8 +77,20 @@ export interface KnowledgeBase extends Resource<
      * embedding model and vector store.
      */
     roleArn: string;
-  }
+  },
+  never,
+  undefined,
+  KnowledgeBaseLookup
 > {}
+
+/**
+ * Props for {@link KnowledgeBase.lookup}: find a knowledge base this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KnowledgeBaseLookup {
+  /** The knowledge base id of the existing knowledge base. */
+  knowledgeBaseId: string;
+}
 
 /**
  * An Amazon Bedrock knowledge base — a managed RAG index that embeds source
@@ -121,6 +133,16 @@ export interface KnowledgeBase extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing knowledge base
+ * `KnowledgeBase.lookup` references a knowledge base Alchemy doesn't manage (created in the
+ * console or by another stack), found by `knowledgeBaseId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing knowledge base
+ * ```typescript
+ * const existing = AWS.Bedrock.KnowledgeBase.lookup({ knowledgeBaseId: "my-knowledge-base" });
  * ```
  *
  * @resource
@@ -216,6 +238,19 @@ export const KnowledgeBaseProvider = () =>
             );
             return results.filter((r): r is KnowledgeBase["Attributes"] => r !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ knowledgeBaseId: kbId }) {
+          if (kbId === undefined) return undefined;
+          const kb = yield* getKbOrUndefined(kbId);
+          if (kb === undefined || kb.status === "DELETING") return undefined;
+          const attrs = {
+            knowledgeBaseId: kb.knowledgeBaseId,
+            knowledgeBaseArn: kb.knowledgeBaseArn,
+            name: kb.name,
+            roleArn: kb.roleArn,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const kbId =

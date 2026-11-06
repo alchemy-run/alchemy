@@ -42,9 +42,6 @@ export class Statement extends Domain.View("Statement", {
     AccountOpened: (_, e) => ({ customerId: e.customerId }),
     OwnerChanged: (_, e) => ({ customerId: e.customerId }),
   },
-  validate: Effect.fn(function* (_request, statement) {
-    yield* mustOwn(statement?.customerId ?? null);
-  }),
   events: [StatementLine],
   emit: {
     MoneyDeposited: line("deposit"),
@@ -55,3 +52,12 @@ export class Statement extends Domain.View("Statement", {
     SettlementReceived: line("settlement"),
   },
 }) {}
+
+/** Who may read each key of Statement. */
+export const StatementLive = Statement.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, statement) {
+      yield* mustOwn(statement?.customerId ?? null);
+    }),
+  ),
+);

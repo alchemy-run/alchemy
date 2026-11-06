@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 2,
+          "flags": [],
+          "heredocs": [
+            {
+              "name": "EOF",
+              "content": "hi\n",
+              "stripTabs": true,
+              "quoted": false
+            }
+          ],
+          "sources": [
+            "\u003c\u003c-EOF"
+          ],
+          "destination": "/a"
+        }
+      ]
+    }
+  ]
+}

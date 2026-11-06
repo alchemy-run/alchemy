@@ -21,6 +21,7 @@ import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
 import {
   type LookupNotFoundError,
@@ -51,6 +52,8 @@ import {
   KindStablesResource,
   lookupCalls,
   LookupTarget,
+  OptionalProps,
+  optionalPropsReceived,
   lookupTargets,
   ModalResource,
   NoPrecreateBindingTarget,
@@ -3761,6 +3764,47 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
 // `Resource.lookup(props)` finds a resource no stack manages through its
 // provider's `lookup`. It resolves at plan time like a ref, but from the
 // provider instead of state, and never becomes a node in the plan.
+// Every prop of `OptionalProps` is optional, so it may be declared with none.
+// Its provider reads `news` without a default, as most real providers do.
+describe("resources declared without props", { tags: ["unit", "local"] }, () => {
+  test(
+    "plan a create with empty props",
+    Effect.gen(function* () {
+      const plan = yield* OptionalProps("PlanNoProps").pipe(makePlan);
+      expect(plan.resources.PlanNoProps?.action).toBe("create");
+      expect((plan.resources.PlanNoProps as any)?.props).toEqual({});
+    }),
+  );
+
+  // A row created before declarations defaulted to `{}` holds `undefined`
+  // props; the same declaration still plans as a noop, and diff sees `{}`.
+  test(
+    "plan a noop over a row created with undefined props",
+    Effect.gen(function* () {
+      yield* seed({
+        PlanLegacy: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "PlanLegacy",
+          fqn: "PlanLegacy",
+          namespace: undefined,
+          resourceType: "Test.OptionalProps",
+          status: "created",
+          // What an engine wrote before declarations defaulted to `{}`.
+          props: undefined as never,
+          attr: { label: "PlanLegacy" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const plan = yield* OptionalProps("PlanLegacy").pipe(makePlan);
+      expect(plan.resources.PlanLegacy?.action).toBe("noop");
+      expect(optionalPropsReceived.get("PlanLegacy")).toEqual([{ op: "diff", news: {} }]);
+      optionalPropsReceived.delete("PlanLegacy");
+    }),
+  );
+});
+
 describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
   test(
     "resolves through the provider's lookup and is not planned",
@@ -6152,6 +6196,68 @@ describe("resource selection patterns", { tags: ["unit", "local"] }, () => {
       );
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("A -> B");
+    }),
+  );
+});
+
+describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
+  const protectedRow = (state: ResourceState): ResourceState => ({
+    ...state,
+    removalPolicy: "protect",
+  });
+  const created = (props: TestResourceProps) =>
+    createTestResourceState({ logicalId: "A", status: "created", props });
+  const refusalOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.exit(effect).pipe(
+      Effect.map((exit) =>
+        Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
+      ),
+    );
+  const declare = (props: TestResourceProps, protect = true) =>
+    Effect.gen(function* () {
+      yield* TestResource("A", props).pipe(RemovalPolicy.protect(protect));
+    });
+
+  test(
+    "protect() on the declaration alone refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({ A: created({ replaceString: "v1" }) });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  test(
+    "a new replacement of a replaced row (restart) is refused",
+    Effect.gen(function* () {
+      yield* seed({
+        A: protectedRow(
+          createReplacedState({
+            logicalId: "A",
+            props: { replaceString: "v2" },
+            old: created({ replaceString: "v1" }),
+          }),
+        ),
+      });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v3" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  test(
+    "resuming an in-flight replacement is refused",
+    Effect.gen(function* () {
+      yield* seed({
+        A: protectedRow(
+          createReplacingState({
+            logicalId: "A",
+            props: { replaceString: "v2" },
+            old: created({ replaceString: "v1" }),
+          }),
+        ),
+      });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
     }),
   );
 });

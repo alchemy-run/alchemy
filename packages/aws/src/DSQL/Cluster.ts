@@ -88,8 +88,18 @@ export interface Cluster extends Resource<
     deletionProtectionEnabled: boolean;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * An Amazon Aurora DSQL cluster — a serverless, distributed SQL database with
@@ -148,6 +158,17 @@ export interface Cluster extends Resource<
  * Automatic conversion of a different tool's existing history is refused
  * because DSQL cannot atomically combine the table DDL and history copy.
  * Convert that history explicitly before adopting an already-migrated database.
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing cluster
+ * ```typescript
+ * const db = AWS.DSQL.Cluster.lookup({ clusterId: "abcdefghijklmnopqrstuvwxyz" });
+ * const endpoint = db.endpoint;
+ * ```
  *
  * @resource
  */
@@ -240,6 +261,13 @@ export const ClusterProvider = () =>
           if (yield* diffMigrations({ news, output })) {
             return { action: "update" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const { region } = yield* AWSEnvironment.current;
+          const cluster = yield* readCluster(clusterId);
+          if (cluster === undefined || cluster.status === "DELETED") return undefined;
+          return { ...toAttrs(cluster, region), migrationsHashes: {} };
         }),
 
         read: Effect.fn(function* ({ id, instanceId, output }) {

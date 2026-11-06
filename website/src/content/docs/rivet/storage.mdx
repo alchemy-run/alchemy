@@ -1,0 +1,158 @@
+---
+title: Storage
+description: What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
+---
+
+Every room keeps its own data. Nothing else can read it, and it outlives the room going to sleep, the node it ran on, and every deploy.
+
+A room keeps three kinds of data: key-value entries for small values, a SQL database for anything with structure, and one alarm to wake itself later. All three come from the room's state:
+
+```typescript title="src/room.ts"
+const state = yield* Rivet.DurableObjectState;
+```
+
+## Keep small values as keys
+
+A room's visitor count is one number. A key holds it:
+
+```typescript title="src/room.ts"
+yield* state.storage.put("visitors", 3);
+const visitors = yield* state.storage.get<number>("visitors");
+```
+
+`get` returns `undefined` for a key the room never set, so a new room starts from nothing without any setup. A value can be anything you'd put in a variable: numbers, strings, objects, arrays, even a `Date` or a `Map`.
+
+`delete` removes a key and says whether it was there:
+
+```typescript title="src/room.ts"
+const existed = yield* state.storage.delete("visitors");
+```
+
+## List keys by prefix
+
+Keys sort as strings, so a shared prefix groups them. A room that keeps a draft per author can list them all:
+
+```typescript title="src/room.ts"
+const drafts = yield* state.storage.list<string>({ prefix: "draft:" });
+for (const [key, text] of drafts) {
+  // ...
+}
+```
+
+`list` returns a `Map` in key order. `start` and `end` narrow it to a range, `limit` caps it, and `reverse: true` walks it backwards.
+
+`deleteAll` empties every key at once. The room's SQL tables stay.
+
+## Keep structured data in SQL
+
+A room's messages have an author, a text, and an order. That's a table:
+
+```typescript title="src/room.ts"
+yield* (yield* state.storage.sql.exec(
+  "CREATE TABLE IF NOT EXISTS messages (author TEXT NOT NULL, text TEXT NOT NULL)",
+)).toArray();
+```
+
+Each room has its own SQLite database, so the lobby's `messages` table holds only the lobby's messages. There's no room column to filter by, and no other room's rows to skip.
+
+`exec` takes the query and then one value for each `?`:
+
+```typescript title="src/room.ts"
+yield* (yield* state.storage.sql.exec(
+  "INSERT INTO messages (author, text) VALUES (?, ?)",
+  author,
+  text,
+)).toArray();
+```
+
+`exec` returns a cursor, and the statement runs as you read it. `toArray` reads every row, so call it even on a statement that returns none.
+
+The type argument describes each row:
+
+```typescript title="src/room.ts"
+const rows = yield* state.storage.sql.exec<{ author: string; text: string }>(
+  "SELECT author, text FROM messages",
+);
+const messages = yield* rows.toArray();
+```
+
+`one` reads the only row instead, and fails with `SqlRowCountMismatch` when there are none or several.
+
+## Create tables when the room starts
+
+The inner Effect runs before a room's first call, so it's where the room sets up its tables:
+
+```typescript title="src/room.ts"
+return Effect.gen(function* () {
+  const state = yield* Rivet.DurableObjectState;
+  yield* (yield* state.storage.sql.exec(
+    "CREATE TABLE IF NOT EXISTS messages (author TEXT NOT NULL, text TEXT NOT NULL)",
+  )).toArray();
+  return {
+    // ...
+  };
+});
+```
+
+`IF NOT EXISTS` makes it safe to run every time the room wakes. When a later version of the room needs a new column, add an `ALTER TABLE` the same way, guarded so it runs once.
+
+## Set an alarm
+
+A room has one alarm: a time at which Rivet calls the room's `alarm` handler, whether or not anyone calls the room. The chat room uses it to clear its messages an hour after the last one:
+
+```typescript title="src/room.ts"
+const now = yield* Effect.sync(() => Date.now());
+yield* state.storage.setAlarm(now + 60 * 60 * 1000);
+```
+
+The time is in milliseconds since the epoch. Setting the alarm again moves it, so setting it on every post keeps pushing it back until the room has been quiet for an hour.
+
+When it fires, Rivet runs `alarm`:
+
+```typescript title="src/room.ts"
+alarm: () =>
+  Effect.gen(function* () {
+    yield* (yield* state.storage.sql.exec("DELETE FROM messages")).toArray();
+  }),
+```
+
+`getAlarm` returns when the alarm is due, or `null`. `deleteAlarm` cancels it. An alarm moved or cancelled after it came due, but before `alarm` started, doesn't run. A room that needs several timers keeps them in a table and sets the alarm to the earliest.
+
+If `alarm` fails, Rivet runs it again: up to six more times, two seconds after the first failure and twice as long after each one since, unless the handler set a new alarm before failing. That's how Cloudflare retries alarms too.
+
+## Change state safely while calls overlap
+
+A room runs calls in parallel, so two calls' reads and writes can interleave. A read followed by a write that depends on it belongs in a transaction. See [Concurrency](/rivet/concurrency).
+
+## Group changes in a transaction
+
+When a change reads before it writes, has to wait in the middle, or must undo itself on failure, run it as a transaction. Admitting someone from the waiting list moves them in one go:
+
+```typescript title="src/room.ts"
+yield* state.storage.transaction(
+  Effect.gen(function* () {
+    const waiting = (yield* state.storage.get<number>("waiting")) ?? 0;
+    const visitors = (yield* state.storage.get<number>("visitors")) ?? 0;
+    yield* state.storage.put("waiting", waiting - 1);
+    yield* state.storage.put("visitors", visitors + 1);
+  }),
+);
+```
+
+Its writes commit together if it succeeds and roll back if it fails, alarms included: an alarm set or cancelled inside takes effect when the transaction commits. No other call touches storage until it finishes, whatever it waits on.
+
+A transaction runs for at most 30 seconds. Past that it's interrupted, rolled back, and dies with `Rivet.TransactionTimedOut`, so a transaction stuck waiting can't hold the room forever. Pass a timeout of your own as the second argument:
+
+```typescript title="src/room.ts"
+yield* state.storage.transaction(
+  Effect.gen(function* () {
+    const visitors = (yield* state.storage.get<number>("visitors")) ?? 0;
+    yield* state.storage.put("visitors", visitors + 1);
+  }),
+  { timeout: "5 seconds" },
+);
+```
+
+A call back into this room from inside a transaction can't use storage until the transaction finishes, and the transaction is waiting on it. Rivet spots that, even through other Durable Objects, and fails the call back with HTTP 508 instead of letting both wait. See [Concurrency](/rivet/concurrency#calls-that-would-wait-on-themselves).
+
+Next, [Concurrency](/rivet/concurrency): what happens when calls reach a room at once.

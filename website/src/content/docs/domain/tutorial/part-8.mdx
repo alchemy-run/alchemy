@@ -40,10 +40,6 @@ export class AccountSummary extends Domain.View("AccountSummary", {
 +    MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter, movements: v.movements + 1 }),
 +    MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter, movements: v.movements + 1 }),
   },
-  validate: Effect.fn(function* (_request, summary) {
-    const actor = yield* CurrentActor;
-    if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
-  }),
 }) {}
 ```
 
@@ -57,10 +53,6 @@ export class AccountSummary extends Domain.View("AccountSummary", {
   from: [Account],
   key: Account,
   // ...
-  validate: Effect.fn(function* (_request, summary) {
-    const actor = yield* CurrentActor;
-    if (summary?.owner && summary.owner !== actor.customerId) return yield* new NotOwner();
-  }),
 +  version: 1,
 }) {}
 ```
@@ -129,8 +121,9 @@ export class DailyDeposits extends Domain.View("DailyDeposits", {
 ```diff lang="typescript"
 // src/Bank.model.ts
 import * as Domain from "@alchemy.run/domain";
+import * as Layer from "effect/Layer";
 import { Account } from "./Account.aggregate.ts";
-import { AccountSummary } from "./AccountSummary.view.ts";
+import { AccountSummary, AccountSummaryLive } from "./AccountSummary.view.ts";
 import { Customer } from "./Customer.aggregate.ts";
 +import { DailyDeposits } from "./DailyDeposits.view.ts";
 import {
@@ -146,7 +139,7 @@ export class Bank extends Domain.Model("Bank", {
   policies: [MainAccountProvisioning],
 }) {}
 
-export const BankHandlers = MainAccountProvisioningLive;
+export const BankHandlers = Layer.merge(MainAccountProvisioningLive, AccountSummaryLive);
 ```
 
 ## Expose the totals
@@ -164,7 +157,7 @@ export class BankApi extends Domain.Api("BankApi", {
 }) {}
 ```
 
-The totals declare no `validate`, so any client of the Api can read them.
+The totals declare no `middleware` or `rejects`, so they need no Layer, and any client of the Api can read them.
 
 ## Deploy and wait for the history
 

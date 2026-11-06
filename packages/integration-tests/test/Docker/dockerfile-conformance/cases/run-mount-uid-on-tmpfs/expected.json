@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "uid not allowed for \"tmpfs\" type mounts"
+}

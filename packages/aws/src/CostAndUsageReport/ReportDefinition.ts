@@ -138,8 +138,18 @@ export interface ReportDefinition extends Resource<
     s3Region: string;
   },
   never,
-  Providers
+  Providers,
+  ReportDefinitionLookup
 > {}
+
+/**
+ * Props for {@link ReportDefinition.lookup}: find a report definition this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReportDefinitionLookup {
+  /** The name of the existing report definition. */
+  reportName: string;
+}
 
 /**
  * An AWS Cost and Usage Report (CUR) definition — the most granular billing
@@ -201,6 +211,16 @@ export interface ReportDefinition extends Resource<
  *   s3Prefix: "athena-cur",
  *   s3Region: bucket.region,
  * });
+ * ```
+ *
+ * ### Looking up an existing report definition
+ * `ReportDefinition.lookup` references a report definition Alchemy doesn't manage (created in the
+ * console or by another stack), found by `reportName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing report definition
+ * ```typescript
+ * const existing = AWS.CostAndUsageReport.ReportDefinition.lookup({ reportName: "..." });
  * ```
  *
  * @resource
@@ -322,6 +342,13 @@ export const ReportDefinitionProvider = () =>
               .flatMap((page) => page.ReportDefinitions ?? [])
               .map((r) => toAttributes(accountId, r));
           }),
+        lookup: Effect.fn(function* ({ reportName: name }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const observed = yield* findReport(name);
+          if (!observed) return undefined;
+          const attrs = toAttributes(accountId, observed);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const name = output?.reportName ?? (yield* createName(id, olds ?? {}));

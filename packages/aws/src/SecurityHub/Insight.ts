@@ -40,8 +40,23 @@ export interface Insight extends Resource<
     groupByAttribute: string;
   },
   never,
-  Providers
+  Providers,
+  InsightLookup
 > {}
+
+/**
+ * Props for {@link Insight.lookup}: find an insight this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type InsightLookup =
+  | {
+      /** The ARN of the existing insight. */
+      insightArn: string;
+    }
+  | {
+      /** The name of the existing insight. */
+      name: string;
+    };
 
 /**
  * A Security Hub custom insight — a saved finding query grouped by an
@@ -66,6 +81,16 @@ export interface Insight extends Resource<
  * const { InsightResults } = yield* getInsightResults({
  *   InsightArn: insight.insightArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing insight
+ * `Insight.lookup` references an insight Alchemy doesn't manage (created in the
+ * console or by another stack), found by `insightArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing insight
+ * ```typescript
+ * const critical = AWS.SecurityHub.Insight.lookup({ name: "critical-findings" });
  * ```
  */
 const InsightResource = Resource<Insight>("AWS.SecurityHub.Insight");
@@ -107,6 +132,14 @@ export const InsightProvider = () =>
 
       return {
         stables: ["insightArn"],
+        lookup: Effect.fn(function* (props) {
+          if ("insightArn" in props) {
+            const live = yield* getInsight(props.insightArn);
+            return live ? buildAttrs(live) : undefined;
+          }
+          const match = (yield* listInsights).find((i) => i.Name === props.name);
+          return match ? buildAttrs(match) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.insightArn) {
             const live = yield* getInsight(output.insightArn);

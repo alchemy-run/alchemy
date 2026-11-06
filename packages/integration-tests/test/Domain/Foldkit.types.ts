@@ -79,18 +79,6 @@ Counter.Total.watch<{ id: typeof CounterId.Type }, number>({
   // @ts-expect-error all callbacks produce the selected Message type
   onDefect: () => "failed",
 });
-Counter.Counter.watch(watchOptions);
-Counter.Counter.events({
-  key: () => target,
-  cursor: () => Option.none(),
-  onEntry: (entry) => {
-    const amount: number = entry.event.amount;
-    return amount;
-  },
-  onCaughtUp: (cursor) => cursor,
-  onFailure: () => 0,
-  onDefect: () => 0,
-});
 Counter.Outputs.watch({
   key: () => target,
   toMessage: (snapshot) =>
@@ -162,7 +150,6 @@ class QueryApi extends Domain.Api("QueryApi", {
   commands: [],
   views: [],
   streams: [],
-  aggregates: [],
   queries: ["Entries", "Count"],
 }) {}
 const Queries = Foldkit.make(QueryApi);

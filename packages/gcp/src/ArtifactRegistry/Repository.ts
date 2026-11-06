@@ -68,6 +68,13 @@ export type RepositoryProps = {
    */
   kmsKeyName?: string;
   /**
+   * The upstream a `REMOTE_REPOSITORY` proxies and caches, e.g.
+   * `{ dockerRepository: { publicRepository: "DOCKER_HUB" } }` to pull
+   * Docker Hub images through Artifact Registry. Immutable — changing it
+   * replaces the repository.
+   */
+  remoteRepositoryConfig?: artifactregistry.RemoteRepositoryConfig;
+  /**
    * Docker repository config. Only applied when `format` is `DOCKER`.
    */
   dockerConfig?: {
@@ -321,6 +328,10 @@ export const RepositoryProvider = () =>
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.kmsKeyName ?? previousKms;
       const mavenChanged = mavenKey(news.mavenConfig) !== mavenKey(olds?.mavenConfig);
+      const remoteChanged =
+        olds !== undefined &&
+        JSON.stringify(news.remoteRepositoryConfig ?? null) !==
+          JSON.stringify(olds.remoteRepositoryConfig ?? null);
 
       const replace =
         (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
@@ -328,7 +339,8 @@ export const RepositoryProvider = () =>
         previousFormat !== nextFormat ||
         previousMode !== nextMode ||
         previousKms !== nextKms ||
-        mavenChanged;
+        mavenChanged ||
+        remoteChanged;
 
       if (!replace) return undefined;
       return {
@@ -397,6 +409,7 @@ export const RepositoryProvider = () =>
               description: news.description,
               labels: desiredLabels,
               kmsKeyName: news.kmsKeyName,
+              remoteRepositoryConfig: news.remoteRepositoryConfig,
               dockerConfig: desiredDocker,
               mavenConfig: desiredMaven,
               cleanupPolicies: news.cleanupPolicies,
