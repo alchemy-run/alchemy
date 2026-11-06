@@ -87,6 +87,14 @@ export interface InstanceProps extends PlatformProps {
    */
   userData?: string | Redacted.Redacted<string>;
   /**
+   * Size of the root EBS volume in GiB, set on the AMI's root device at
+   * launch. Defaults to the AMI's size. Raising it grows the live volume in
+   * place; EBS volumes cannot shrink, so lowering it fails. Growing the
+   * filesystem is the guest's job: cloud-init does it at boot, and a running
+   * instance needs `growpart` and `resize2fs` (or `xfs_growfs`).
+   */
+  rootVolumeSize?: number;
+  /**
    * Whether to associate a public IPv4 address on launch.
    */
   associatePublicIpAddress?: boolean;
@@ -673,7 +681,9 @@ export const InstanceProvider = () =>
         },
         tags: Record<string, string>,
         clientToken: string,
+        blockDeviceMappings: ec2.BlockDeviceMapping[] | undefined,
       ): ec2.RunInstancesRequest => ({
+        BlockDeviceMappings: blockDeviceMappings,
         ...hosted.buildLaunchTemplateData(
           {
             imageId: news.imageId,
@@ -693,6 +703,25 @@ export const InstanceProvider = () =>
         MaxCount: 1,
         ClientToken: clientToken,
       });
+
+      // The root device's name is the AMI's (`/dev/sda1`, `/dev/xvda`, …).
+      const rootVolumeMappings = (news: InstanceProps) =>
+        news.rootVolumeSize === undefined
+          ? Effect.succeed(undefined)
+          : ec2.describeImages({ ImageIds: [news.imageId] }).pipe(
+              Effect.flatMap((images) => {
+                const deviceName = images.Images?.[0]?.RootDeviceName;
+                return deviceName
+                  ? Effect.succeed([
+                      { DeviceName: deviceName, Ebs: { VolumeSize: news.rootVolumeSize } },
+                    ])
+                  : Effect.fail(
+                      new RootVolumeUnresolved({
+                        message: `AMI ${news.imageId} names no root device`,
+                      }),
+                    );
+              }),
+            );
 
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
@@ -787,6 +816,7 @@ export const InstanceProvider = () =>
           if (
             olds.instanceType !== news.instanceType ||
             olds.sourceDestCheck !== news.sourceDestCheck ||
+            olds.rootVolumeSize !== news.rootVolumeSize ||
             !deepEqual(olds.metadataOptions ?? {}, news.metadataOptions ?? {}) ||
             olds.main !== news.main ||
             olds.handler !== news.handler ||
@@ -910,10 +940,17 @@ export const InstanceProvider = () =>
           // returns the first instance, and a relaunch after the instance was
           // terminated sends a new token.
           if (instance === undefined) {
+            const blockDeviceMappings = yield* rootVolumeMappings(news);
             const launch = (previous: string) =>
               ec2
                 .runInstances(
-                  buildRunInstancesRequest(news, runtime, desiredTags, `${generation}-${previous}`),
+                  buildRunInstancesRequest(
+                    news,
+                    runtime,
+                    desiredTags,
+                    `${generation}-${previous}`,
+                    blockDeviceMappings,
+                  ),
                 )
                 .pipe(
                   Effect.retry({
@@ -1047,6 +1084,34 @@ export const InstanceProvider = () =>
             }
           }
 
+          // Sync root volume size — observed root EBS volume vs desired. EBS
+          // grows in place; a smaller size is an error, since it cannot shrink.
+          if (news.rootVolumeSize !== undefined) {
+            const rootDevice = instance.RootDeviceName;
+            const volumeId = instance.BlockDeviceMappings?.find((m) => m.DeviceName === rootDevice)
+              ?.Ebs?.VolumeId;
+            if (!volumeId) {
+              return yield* new RootVolumeUnresolved({
+                message: `instance ${instanceId} has no EBS root volume`,
+              });
+            }
+            const { Volumes } = yield* ec2.describeVolumes({ VolumeIds: [volumeId] });
+            const observedSize = Volumes?.[0]?.Size;
+            if (observedSize === undefined) {
+              return yield* new RootVolumeUnresolved({
+                message: `root volume ${volumeId} reports no size`,
+              });
+            }
+            if (observedSize > news.rootVolumeSize) {
+              return yield* new RootVolumeUnresolved({
+                message: `root volume ${volumeId} is ${observedSize} GiB; EBS cannot shrink it to ${news.rootVolumeSize} GiB`,
+              });
+            }
+            if (observedSize < news.rootVolumeSize) {
+              yield* ec2.modifyVolume({ VolumeId: volumeId, Size: news.rootVolumeSize });
+            }
+          }
+
           // Sync tags — observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (instance.Tags ?? [])
@@ -1117,6 +1182,10 @@ const isTerminating = (instance: ec2.Instance) =>
 
 class InstanceLaunchFailed extends Data.TaggedError("InstanceLaunchFailed")<{
   id: string;
+  message: string;
+}> {}
+
+class RootVolumeUnresolved extends Data.TaggedError("RootVolumeUnresolved")<{
   message: string;
 }> {}
 
