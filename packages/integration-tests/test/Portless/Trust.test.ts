@@ -96,7 +96,7 @@ test.skipIf(!supported)(
       expect(yield* calls).toEqual([]);
     }),
   ),
-  { exclusive: true },
+  { exclusive: true, tags: ["unit"] },
 );
 
 test.skipIf(!supported)(
@@ -109,7 +109,7 @@ test.skipIf(!supported)(
       expect(yield* calls).toEqual(["trust"]);
     }),
   ),
-  { exclusive: true },
+  { exclusive: true, tags: ["unit"] },
 );
 
 test.skipIf(!supported)(
@@ -123,7 +123,7 @@ test.skipIf(!supported)(
       expect(yield* calls).toEqual(["trust"]);
     }),
   ),
-  { exclusive: true },
+  { exclusive: true, tags: ["unit"] },
 );
 
 test.skipIf(!supported)(
@@ -134,5 +134,5 @@ test.skipIf(!supported)(
       expect(error._tag).toBe("ProxyTrustNotEstablished");
     }),
   ),
-  { exclusive: true },
+  { exclusive: true, tags: ["unit"] },
 );
