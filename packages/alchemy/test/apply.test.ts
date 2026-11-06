@@ -1749,6 +1749,67 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
       }),
     );
 
+    // #3103: a cycle member's first pass runs against its peer's previous
+    // output, so it can fail on something the peer applies in this same
+    // deploy (a Worker binding a Durable Object class its peer adds). It
+    // must retry once the peer has updated instead of failing the deploy.
+    test.provider("update retries a cycle member after its peer finishes updating", (stack) =>
+      Effect.gen(function* () {
+        yield* mutualBindingStack({ aString: "a-value" }).pipe(stack.deploy);
+
+        const aTried = yield* Deferred.make<void>();
+        const bUpdated = yield* Deferred.make<void>();
+        const aAttempts: boolean[] = [];
+
+        const output = yield* mutualBindingStack({ aString: "a-next", bString: "b-next" }).pipe(
+          stack.deploy,
+          hook({
+            update: (id) =>
+              id === "A"
+                ? Effect.gen(function* () {
+                    const ready = yield* Deferred.isDone(bUpdated);
+                    aAttempts.push(ready);
+                    yield* Deferred.succeed(aTried, void 0);
+                    if (!ready) return yield* new ResourceFailure();
+                  })
+                : // B updates only after A's first attempt, so A goes first.
+                  Deferred.await(aTried).pipe(Effect.andThen(Deferred.succeed(bUpdated, void 0))),
+          }),
+        );
+
+        expect(aAttempts).toEqual([false, true]);
+        expect(output.A.env).toEqual({ PEER: "b-next" });
+        expect(output.B.env).toEqual({ PEER: "a-next" });
+        expect((yield* getState("A"))?.status).toEqual("updated");
+        expect((yield* getState("B"))?.status).toEqual("updated");
+      }),
+    );
+
+    test.provider("update still fails a cycle member that fails after its peer updates", (stack) =>
+      Effect.gen(function* () {
+        yield* mutualBindingStack({ aString: "a-value" }).pipe(stack.deploy);
+
+        let aAttempts = 0;
+        // `hook` turns the deploy's ResourceFailure into `true`.
+        const failed = yield* mutualBindingStack({ aString: "a-next", bString: "b-next" }).pipe(
+          stack.deploy,
+          hook({
+            update: (id) =>
+              id === "A"
+                ? Effect.suspend(() => {
+                    aAttempts++;
+                    return Effect.fail(new ResourceFailure());
+                  })
+                : Effect.void,
+          }),
+        );
+
+        expect(failed).toBe(true);
+        expect(aAttempts).toEqual(2);
+        expect((yield* getState("A"))?.status).toEqual("updating");
+      }),
+    );
+
     describe("from replacing state", () => {
       test.provider("replacing noop recovery creates downstream resources", (stack) =>
         Effect.gen(function* () {
