@@ -1,0 +1,108 @@
+---
+title: Annotations
+description: Describe every declaration in an @alchemy.run/domain model, show the descriptions in MCP tools, CLI help and OpenAPI, and add keys of your own for tooling built on the model.
+---
+
+Annotations are data about a declaration for what is built on the model: tool lists, CLI help, API docs, diagrams, code generators. Every declaration takes them as its last argument, the way Effect's `Schema.TaggedError` takes them after its fields, and keeps them as `X.annotations`.
+
+## Describe a declaration
+
+Give each declaration a `description`, written for the person or agent who will call it or read about it.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command(
+  "WithdrawMoney",
+  {
+    target: AccountId,
+    input: { amount: Schema.Int },
+    events: [MoneyWithdrawn],
+    rejects: [NotOpen, InsufficientFunds],
+  },
+  { description: "Take money out of an account. The amount is in cents." },
+) {}
+```
+
+Every building block takes annotations the same way: events, commands, rejections, aggregates, views, streams, queries, policies, projections, sagas, external systems, models and Apis. A declaration without them has `X.annotations` equal to `{}`.
+
+## Where descriptions show
+
+The surfaces built from an [Api](/domain/api) show the descriptions of what it serves. For a command, the description replaces the sentence the surface would otherwise generate. For a query, a view or a stream, it follows the sentence that says what the call does.
+
+```typescript title="src/AgentTools.ts"
+import * as DomainAi from "@alchemy.run/domain/Ai";
+import { BankApi } from "./BankApi.ts";
+
+const { toolkit } = DomainAi.toToolkit(BankApi, {
+  expose: ["WithdrawMoney", "AccountSummary.get"],
+});
+// BankApi_WithdrawMoney_send:  "Take money out of an account. The amount is in cents."
+// BankApi_AccountSummary_get:  "Get the current AccountSummary of a key. An account's balance and owner."
+```
+
+The same descriptions are the [MCP](/domain/mcp) tool descriptions, the subcommand help of [`toCli`](/domain/cli), and the operation descriptions in the OpenAPI document of [`toHttpApi`](/domain/http-api).
+
+The Api's own description heads the CLI's root help and is the OpenAPI document's `info.description`:
+
+```typescript title="src/BankApi.ts"
+export class BankApi extends Domain.Api(
+  "BankApi",
+  { model: Bank, commands: ["WithdrawMoney"], views: ["AccountSummary"] },
+  { description: "What a customer of the bank reaches." },
+) {}
+```
+
+## A rejection's annotations are its Schema's
+
+A [rejection](/domain/command#annotate-a-rejection) is a `Schema.TaggedError`, so its annotations are also its Schema's, and it takes any annotation Effect's Schema does. An HTTP API answers with the status in `httpApiStatus`, and the error's JSON Schema carries the description.
+
+```typescript title="src/NotOwner.rejection.ts"
+export class NotOwner extends Domain.Rejection("NotOwner", {}, {
+  httpApiStatus: 403,
+  description: "Only the account's owner may do this.",
+}) {}
+```
+
+An event's annotations are its Schema's annotations too.
+
+## Add keys of your own
+
+`Domain.Annotations` is an interface you can augment, like Effect's Schema annotations. Declare a key once, and every declaration accepts it and types it when you read it back.
+
+```typescript title="src/annotations.ts"
+declare module "@alchemy.run/domain" {
+  interface Annotations {
+    /** Example calls, for docs and for an agent's prompt. */
+    readonly examples?: ReadonlyArray<unknown>;
+  }
+}
+```
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command(
+  "WithdrawMoney",
+  {
+    target: AccountId,
+    input: { amount: Schema.Int },
+    events: [MoneyWithdrawn],
+    rejects: [NotOpen, InsufficientFunds],
+  },
+  {
+    description: "Take money out of an account. The amount is in cents.",
+    examples: [{ target: "a-1", input: { amount: 2_000 } }],
+  },
+) {}
+```
+
+A key nobody declared is a type error, so a misspelled `descripton` never compiles.
+
+## Build on them
+
+A model lists its declarations, so tooling can walk it and read each one's annotations. This builds a glossary of the bank's commands:
+
+```typescript title="scripts/glossary.ts"
+const glossary = Bank.commands.map(
+  (command) => `${command.tag}: ${command.annotations.description ?? "Undocumented."}`,
+);
+```
+
+The surfaces read only `description`, and [`toHttpApi`](/domain/http-api#paths-and-methods) reads `httpApiCacheControl` for the `cache-control` of a query's or a read's answers. Every other key is yours to use.

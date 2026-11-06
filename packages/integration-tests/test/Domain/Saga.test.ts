@@ -55,12 +55,12 @@ class Wallet extends Domain.Aggregate("Wallet", {
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
     Close: () => [new Closed()],
-    Debit: (s, cmd) =>
-      s.balance < cmd.amount
-        ? new Insufficient({ balance: s.balance })
+    Debit: (wallet, cmd) =>
+      wallet.balance < cmd.amount
+        ? new Insufficient({ balance: wallet.balance })
         : [new Debited({ transfer: cmd.transfer, amount: cmd.amount })],
-    Credit: (s, cmd) =>
-      s.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
+    Credit: (wallet, cmd) =>
+      wallet.open ? [new Credited({ transfer: cmd.transfer, amount: cmd.amount })] : new NotOpen(),
     Refund: (_, cmd) => [new Refunded({ transfer: cmd.transfer, amount: cmd.amount })],
   },
   evolve: {
@@ -95,8 +95,8 @@ class Transfer extends Domain.Aggregate("Transfer", {
   initial: { requested: false },
   commands: [RequestTransfer],
   decide: {
-    RequestTransfer: (s, cmd) =>
-      s.requested
+    RequestTransfer: (transfer, cmd) =>
+      transfer.requested
         ? []
         : [
             new Requested({
@@ -304,7 +304,7 @@ const checks = Story.make(Checks, {
   stub: [Sanctions],
 });
 
-describe("Domain.Saga", () => {
+describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
       Story.given(alice, new Opened({ balance: 100 })),
@@ -433,7 +433,7 @@ describe("Domain.Saga", () => {
       const run = yield* debits.start("t-1", { from: "alice", amount: 40 });
       yield* run.result;
       // Debited once: the retry's send had the same command id.
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Retries.layer(DebitTwiceLive).pipe(Layer.provide(InMemory)))),
   );
 
@@ -449,7 +449,7 @@ describe("Domain.Saga", () => {
       const second = yield* transfers.start("t-9", input);
       expect(second.executionId).toBe(first.executionId);
       expect(yield* first.result).toEqual({ approvedBy: null });
-      expect((yield* wallets.state(alice)).balance).toBe(60);
+      expect((yield* wallets.get(alice)).balance).toBe(60);
     }).pipe(Effect.provide(Bank.layer(Handlers).pipe(Layer.provide(InMemory)))),
   );
 });

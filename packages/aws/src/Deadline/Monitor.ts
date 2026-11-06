@@ -101,8 +101,23 @@ export interface Monitor extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MonitorLookup
 > {}
+
+/**
+ * Props for {@link Monitor.lookup}: find a monitor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type MonitorLookup =
+  | {
+      /** The id of the existing monitor. */
+      monitorId: string;
+    }
+  | {
+      /** The monitor's subdomain. */
+      subdomain: string;
+    };
 
 /**
  * An AWS Deadline Cloud monitor — the hosted web console where artists and
@@ -131,6 +146,16 @@ export interface Monitor extends Resource<
  *   roleArn: monitorRole.roleArn,
  * });
  * return { monitorUrl: monitor.url };
+ * ```
+ *
+ * ### Looking up an existing monitor
+ * `Monitor.lookup` references a monitor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `monitorId` or `subdomain`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing monitor
+ * ```typescript
+ * const studio = AWS.Deadline.Monitor.lookup({ subdomain: "studio" });
  * ```
  *
  * @resource
@@ -210,6 +235,14 @@ export const MonitorProvider = () =>
               .filter((state): state is MonitorState => state !== undefined)
               .map((state) => state.attrs);
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "monitorId" in props
+              ? yield* readMonitorById(props.monitorId, arnOf)
+              : yield* findMonitorBySubdomain(props.subdomain, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const subdomain = output?.subdomain ?? olds?.subdomain;

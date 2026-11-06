@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -35,8 +36,8 @@ const hit = Effect.fn(function* (path: string) {
 // Deterministic tunnel names: identical on every run so a crashed run never
 // leaks a uniquely-named tunnel. The fixture routes purge any leftover tunnel
 // with the same name before creating, making each run self-healing.
-const writeName = "alchemy-tunnel-test-write";
-const readWriteName = "alchemy-tunnel-test-readwrite";
+const writeName = testName("alchemy-tunnel-test-write");
+const readWriteName = testName("alchemy-tunnel-test-readwrite");
 
 describe(
   "Tunnel runtime bindings",

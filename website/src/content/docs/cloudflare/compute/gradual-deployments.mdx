@@ -2,6 +2,7 @@
 title: Gradual deployments
 description: Roll out Worker deploys incrementally — upload preview versions, canary a percentage of live traffic, ramp to 100%, pin users to a version during the rollout, and verify which version served each request.
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Every deploy of a Worker uploads an immutable
 [version](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/),
@@ -34,6 +35,24 @@ yield* Cloudflare.Worker("Api", {
 
 Each request is routed independently by percentage. Raise the number
 and re-deploy to ramp; remove the prop (or set `100`) to promote.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "v1", label: "version 12", type: "live" },
+    { id: "v2", label: "version 13", type: "new search index" },
+  ]}
+  bars={[
+    { lane: "v1", start: 0, end: 3, label: "100%" },
+    { lane: "v1", start: 3, end: 6, label: "90%" },
+    { lane: "v1", start: 6, end: 8, label: "50%" },
+    { lane: "v2", start: 3, end: 6, label: "10%", tone: "warn" },
+    { lane: "v2", start: 6, end: 8, label: "50%", tone: "warn" },
+    { lane: "v2", start: 8, end: 10, label: "100%" },
+  ]}
+  marks={[{ at: 3, label: "traffic: 10" }, { at: 6, label: "traffic: 50" }, { at: 8, label: "promote" }]}
+  caption="Each deploy moves the split. Until promotion, both versions serve live traffic, chosen per request."
+/>
 
 The first deploy of a script always goes to 100%, since there is nothing
 to split with. `traffic: 0` uploads the version without deploying it

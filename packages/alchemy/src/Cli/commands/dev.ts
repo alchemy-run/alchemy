@@ -64,6 +64,7 @@ export const devCommand = Command.make(
         ),
       );
       for (const [key, value] of Object.entries(env)) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports provider dev env onto this process for spawned sidecars, not config reading
         process.env[key] ??= value;
       }
       // Every CA the stack's local runtimes trust: workerd reads the files

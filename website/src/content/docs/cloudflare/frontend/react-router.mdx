@@ -16,7 +16,7 @@ resource, no Wrangler config, no manual entrypoint. In React Server
 Components mode the build emits **multiple server environments** (`rsc`
 and `ssr`) instead of the single `ssr` environment most SSR frameworks
 produce, and `viteEnvironments` is the prop that tells Alchemy how those
-environments assemble into one Worker. The configuration on this page is
+environments assemble into one Worker. This configuration is
 a supported, live-tested shape: Alchemy's test suite deploys it to real
 Cloudflare and asserts that server-rendered HTML and client routes both
 serve.
@@ -236,9 +236,7 @@ single-environment SSR build — needs no `viteEnvironments` at all.
 
 ## Deploy and verify
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 This exact shape is exercised by Alchemy's live test suite ("Vite:
 React Router RSC deploys from a distilled manifest"): the test deploys

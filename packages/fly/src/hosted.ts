@@ -30,6 +30,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { flyHostBundle, flyOidcToken } from "./internal/Oidc.ts";
 import { buildOnRemoteBuilder } from "./internal/RemoteBuilder.ts";
 import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
 import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
@@ -59,7 +60,12 @@ export const createFlyHostRuntimeContext =
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
       ) as Effect.Effect<void, never, any>;
     };
-    return Object.assign(base, { serve });
+    // A Service runs on Fly Machines, which mint OIDC tokens for their
+    // bindings to exchange with AWS and GCP (see `internal/Oidc.ts`).
+    return Object.assign(
+      base,
+      type === "Fly.Service" ? { serve, oidcToken: flyOidcToken } : { serve },
+    );
   };
 
 export const FLY_REGISTRY = "registry.fly.io";
@@ -200,9 +206,12 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const buckets: { name: string; id?: string; values?: Record<string, string> }[] = [];
   const postgres: { clusterId: string; variableName?: string }[] = [];
   const targets: BoundTarget[] = [];
+  const callers = new Set<string>();
   for (const binding of active) {
     const target = binding?.data?.target;
     if (target !== undefined) targets.push(target);
+    const caller = coerceBindingName(binding?.data?.caller?.appName);
+    if (caller !== undefined) callers.add(caller);
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
@@ -256,7 +265,7 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets };
+  return { env, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
 };
 
 /**
@@ -377,7 +386,7 @@ export const createFlyHostedSupport = ({
       plugins?: rolldown.RolldownPluginOption,
     ) {
       return yield* Bundle.build(
-        {
+        flyHostBundle({
           ...props.build?.input,
           input: entry,
           cwd,
@@ -394,7 +403,7 @@ export const createFlyHostedSupport = ({
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
-        },
+        }),
         {
           ...props.build?.output,
           format: "esm",

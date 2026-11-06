@@ -12,6 +12,9 @@
       "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/s3/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {

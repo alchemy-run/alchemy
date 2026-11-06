@@ -173,7 +173,25 @@ export interface ProjectAttributes {
   createdOn: string;
 }
 
-export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, Providers>;
+export type Project = Resource<
+  TypeId,
+  ProjectProps,
+  ProjectAttributes,
+  never,
+  Providers,
+  ProjectLookup
+>;
+
+/**
+ * Props for {@link Project.lookup}: find a Pages project this stack doesn't
+ * manage, by its name.
+ */
+export interface ProjectLookup {
+  /**
+   * The name of the existing project (its `<name>.pages.dev` subdomain).
+   */
+  name: string;
+}
 
 /**
  * A Cloudflare Pages project (direct-upload).
@@ -233,6 +251,20 @@ export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, P
  * });
  * ```
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach a custom domain to an existing project
+ * ```typescript
+ * const project = Cloudflare.Pages.Project.lookup({ name: "my-site" });
+ * const domain = yield* Cloudflare.Pages.Domain("site-domain", {
+ *   projectName: project.name,
+ *   name: "www.example.com",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/pages/
  *
  * @resource
@@ -250,7 +282,7 @@ export const isProject = (value: unknown): value is Project =>
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["projectId", "accountId", "name", "subdomain", "createdOn"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -268,6 +300,11 @@ export const ProjectProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getProject(accountId, name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -283,7 +320,7 @@ export const ProjectProvider = () =>
       const observed = yield* getProject(acct, name);
       return observed ? Unowned(toAttributes(observed, acct)) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = news.name ?? output?.name ?? (yield* createProjectName(id));
 

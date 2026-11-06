@@ -95,8 +95,18 @@ export interface Room extends Resource<
     roomId: string;
   },
   RoomBinding,
-  Providers
+  Providers,
+  RoomLookup
 > {}
+
+/**
+ * Props for {@link Room.lookup}: find a room this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RoomLookup {
+  /** The ARN of the existing room. */
+  roomArn: string;
+}
 
 /**
  * An Amazon IVS Chat room — a virtual space where chat participants
@@ -149,6 +159,16 @@ export interface Room extends Resource<
  * );
  * // on the Function effect:
  * // .pipe(Effect.provide(Lambda.RoomMessageReviewEventSource))
+ * ```
+ *
+ * ### Looking up an existing room
+ * `Room.lookup` references a room Alchemy doesn't manage (created in the
+ * console or by another stack), found by `roomArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing room
+ * ```typescript
+ * const existing = AWS.IVSChat.Room.lookup({ roomArn: "..." });
  * ```
  *
  * @resource
@@ -255,6 +275,13 @@ export const RoomProvider = () =>
 
       return {
         stables: ["roomArn", "roomId"],
+
+        lookup: Effect.fn(function* ({ roomArn }) {
+          const room = yield* getByIdentifier(roomArn);
+          if (room === undefined) return undefined;
+          const attrs = yield* toAttrs(room);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const room = output?.roomArn

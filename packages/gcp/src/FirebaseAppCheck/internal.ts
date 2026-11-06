@@ -1,6 +1,7 @@
 import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -140,7 +141,11 @@ export const toDisplayName = (id: string, explicit: string | undefined, existing
     });
   });
 
-export const randomUuid4 = () => Effect.sync(() => crypto.randomUUID());
+export const randomUuid4 = () =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    return yield* random.uuidV4();
+  });
 
 export const toToken = (explicit: string | undefined, existing?: string) =>
   Effect.gen(function* () {

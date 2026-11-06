@@ -121,20 +121,12 @@ export interface SourceContext {
 /**
  * Runtime settings of a Worker beyond its bindings, Durable Objects,
  * Hyperdrives, queue consumers and assets: cron triggers, Workflows, tail
- * consumers, the Cache API, `request.cf`, the zone, Access and the workerd
+ * consumers, the Cache API, `request.cf`, Access and the workerd
  * process overrides.
  */
 export type DevWorkerOptions = Pick<
   RuntimeWorker,
-  | "workflows"
-  | "crons"
-  | "tails"
-  | "streamingTails"
-  | "cache"
-  | "cf"
-  | "zone"
-  | "access"
-  | "workerd"
+  "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access" | "workerd"
 >;
 
 /**
