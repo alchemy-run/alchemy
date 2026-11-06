@@ -32,7 +32,7 @@ const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 interface Route {
   readonly host: string;
   readonly listener: URL;
-  /** The latest attach owns the route; an earlier scope closing leaves it alone. */
+  /** The latest attach for a target owns its route; an earlier scope closing leaves it alone. */
   readonly owner: symbol;
 }
 
@@ -98,15 +98,18 @@ export const make = (): Layer.Layer<Router> =>
             );
           }
           const host = `${slug(target.stage)}.${slug(ingress.name ?? target.id)}.${slug(target.stack)}.localhost`;
+          // One forwarder serves every stack in the process (test files share
+          // one), so a route is the resource's whole identity, not its fqn.
+          const key = JSON.stringify([target.stack, target.stage, target.fqn]);
           return Effect.acquireRelease(
             Effect.sync(() => {
-              const owner = Symbol(target.fqn);
-              routes.set(target.fqn, { host, listener, owner });
+              const owner = Symbol(key);
+              routes.set(key, { host, listener, owner });
               return owner;
             }),
             (owner) =>
               Effect.sync(() => {
-                if (routes.get(target.fqn)?.owner === owner) routes.delete(target.fqn);
+                if (routes.get(key)?.owner === owner) routes.delete(key);
               }),
           ).pipe(Effect.as(`http://${host}:${port}`));
         },
