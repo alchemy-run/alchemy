@@ -42,12 +42,13 @@ const retryUntilReady = Schedule.max([
 /** GET a routed origin until the freshly started workerd answers 200. */
 const getRoutedReady = (origin: string, path = "/") =>
   getRouted(origin, path).pipe(
+    Effect.orDie,
     Effect.flatMap((answer: Answer) =>
       answer.status === 200
         ? Effect.succeed(answer)
         : Effect.fail(new NotReady({ status: answer.status, body: answer.body })),
     ),
-    Effect.retry({ while: (e) => e instanceof NotReady, schedule: retryUntilReady }),
+    Effect.retry({ while: (e) => e._tag === "NotReady", schedule: retryUntilReady }),
     Effect.orDie,
   );
 
@@ -61,7 +62,7 @@ const getRawReady = (url: string) =>
       ? body
       : yield* Effect.fail(new NotReady({ status: response.status, body }));
   }).pipe(
-    Effect.retry({ while: (e) => e instanceof NotReady, schedule: retryUntilReady }),
+    Effect.retry({ while: (e) => e._tag === "NotReady", schedule: retryUntilReady }),
     Effect.orDie,
   );
 
