@@ -3,6 +3,7 @@ import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docke
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import type { MountCapability } from "alchemy/Mount";
 import { type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import { Resource } from "alchemy/Resource";
 import type { ProcessServices } from "alchemy/Runtime/Process";
@@ -512,6 +513,11 @@ export interface AnyContainerApplicationProps extends Omit<
   ssh?: ContainerSshConfiguration;
   authorizedKeys?: Containers.UserSSHPublicKeyList;
   imagePreparationTimeout?: Duration.Input;
+  /**
+   * @internal Dockerfile lines contributed by mount bindings, folded in from
+   * the bindings by the provider before the image is computed.
+   */
+  imageInstall?: ReadonlyArray<string>;
   main?: string;
   image?: string;
   context?: string;
@@ -952,6 +958,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Environment variables injected into the container runtime via the binding.
      */
     env?: Record<string, any>;
+    /**
+     * Filesystem clients bound by mount bindings (e.g. `Archil.MountDisk`):
+     * installed into the generated image so the program can mount at run
+     * time. Cloudflare Containers provide FUSE by default.
+     */
+    mounts?: ReadonlyArray<MountCapability>;
   },
   Providers
 > {

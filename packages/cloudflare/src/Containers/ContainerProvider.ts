@@ -7,6 +7,7 @@ import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
+import { collectMountCapabilities, mountInstallLines, MountUnsupported } from "alchemy/Mount";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
@@ -155,6 +156,37 @@ const digestFromImageRef = (imageRef: string) => {
   if (separator === -1) return undefined;
   const digest = imageRef.slice(separator + 1);
   return isRegistryDigest(digest) ? digest : undefined;
+};
+
+/**
+ * Fold the capabilities mount bindings bound onto the Container into its
+ * props, so every path that builds the image (diff and reconcile) sees the
+ * same install lines. Mount clients can only be installed into an image
+ * Alchemy generates (`main`), not a pre-built `image` or a Dockerfile path
+ * built verbatim.
+ */
+const withMountCapabilities = <P extends AnyContainerApplicationProps>(
+  id: string,
+  news: P,
+  bindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>,
+): Effect.Effect<P, MountUnsupported> => {
+  const capabilities = collectMountCapabilities(bindings);
+  if (capabilities.length === 0) return Effect.succeed(news);
+  if (!news.main) {
+    return Effect.fail(
+      new MountUnsupported({
+        host: id,
+        capability: capabilities[0]!.id,
+        requirement: "image",
+        message: `Container ${id} can't install the ${capabilities
+          .map((c) => c.id)
+          .join(
+            ", ",
+          )} mount client: it runs a pre-built image. Give it a \`main\` (optionally with \`image\` or an inline \`dockerfile\` as its base).`,
+      }),
+    );
+  }
+  return Effect.succeed({ ...news, imageInstall: mountInstallLines(capabilities) });
 };
 
 export const LiveContainerProvider = () =>
@@ -433,6 +465,7 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            props.imageInstall,
           );
           const imageHash = (yield* sha256Object({
             bundleHash,
@@ -712,6 +745,7 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            props.imageInstall,
           );
           yield* docker.materialize({
             context: contextDir,
@@ -1317,10 +1351,11 @@ export const LiveContainerProvider = () =>
           // An Effect-native (`main`) Container carries its program as an
           // Effect in `exports`, which `isResolved` never accepts. Strip it so
           // a guest-code change still reaches the image hash comparison.
-          const news = stripEffects(desired);
-          if (!isResolved(news)) return;
-          yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+          const declared = stripEffects(desired);
+          if (!isResolved(declared)) return;
+          yield* validateContainerConfiguration(declared, output?.schedulingPolicy);
           if (!isResolved(newBindings)) return;
+          const news = yield* withMountCapabilities(id, declared, newBindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
 
           const oldName =
@@ -1482,7 +1517,8 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news: declared = {}, bindings, output, session }) {
+          const news = yield* withMountCapabilities(id, declared, bindings);
           yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts.

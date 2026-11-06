@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ADD",
+          "line": 2,
+          "flags": [],
+          "sources": [
+            "https://example.com/file.tar.gz"
+          ],
+          "destination": "/tmp/"
+        }
+      ]
+    }
+  ]
+}

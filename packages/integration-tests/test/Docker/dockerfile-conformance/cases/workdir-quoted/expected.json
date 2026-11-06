@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "WORKDIR",
+          "line": 2,
+          "flags": [],
+          "value": "/my app"
+        }
+      ]
+    }
+  ]
+}

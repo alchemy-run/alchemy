@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine:3.5",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "something"
+          }
+        }
+      ]
+    }
+  ]
+}

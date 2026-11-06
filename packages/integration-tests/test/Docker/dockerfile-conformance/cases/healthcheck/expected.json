@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "HEALTHCHECK",
+          "line": 2,
+          "flags": [
+            {
+              "name": "interval",
+              "value": "30s"
+            },
+            {
+              "name": "timeout",
+              "value": "3s"
+            },
+            {
+              "name": "retries",
+              "value": "3"
+            }
+          ]
+        },
+        {
+          "tag": "HEALTHCHECK",
+          "line": 3,
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
