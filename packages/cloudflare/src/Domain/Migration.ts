@@ -171,8 +171,8 @@ export const migrateModel = Effect.fn(function* ({
   const live = news.classes.filter(
     ({ className, binding }) => news.namespaces[className] !== undefined && bound.has(binding),
   );
-  const pages: Array<{ n: number; className: string; route: string; ids: string[] }> = [];
-  for (const { className, route } of live) {
+  const pages: Array<{ n: number; cls: string; bind: string; route: string; ids: string[] }> = [];
+  for (const { className, binding, route } of live) {
     const objects = yield* durableObjects.listNamespaceObjects
       .items({ accountId, id: news.namespaces[className]! })
       .pipe(
@@ -185,7 +185,13 @@ export const migrateModel = Effect.fn(function* ({
       (id): id is string => typeof id === "string",
     );
     for (let i = 0; i < ids.length; i += PAGE)
-      pages.push({ n: pages.length, className, route, ids: ids.slice(i, i + PAGE) });
+      pages.push({
+        n: pages.length,
+        cls: className,
+        bind: binding,
+        route,
+        ids: ids.slice(i, i + PAGE),
+      });
   }
   const total = pages.reduce((sum, page) => sum + page.ids.length, 0);
 
@@ -327,7 +333,7 @@ export const migrateModel = Effect.fn(function* ({
     cls: news.domainClass,
     target,
     plan: {
-      pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
+      pages: pages.map(({ n, cls, ids }) => ({ n, cls, size: ids.length })),
       ...(news.walk ? { walk: true } : {}),
     },
   };
@@ -358,7 +364,7 @@ export const migrateModel = Effect.fn(function* ({
     const where =
       progress === undefined
         ? "starting"
-        : `${progress.instances}/${total} moved (${progress.done}/${progress.subtrees} pages${progress.refused > 0 ? `, ${progress.refused} calls refused` : ""})`;
+        : `${progress.instances} objects handled (${progress.done}/${progress.subtrees} parts${progress.refused > 0 ? `, ${progress.refused} calls refused` : ""})`;
     if (elapsed > timeout)
       return yield* new MigrationStillRunning({
         message: `Moving Domain objects to ${news.domainClass} is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,

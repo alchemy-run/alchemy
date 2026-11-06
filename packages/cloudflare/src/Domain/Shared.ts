@@ -375,17 +375,26 @@ const router = (
     // after the one that removed it. It keeps its data, and answers every call
     // so that callers try again later, as they do for any object on older code.
     if (impl === undefined)
-      return Effect.succeed(
-        dynamic((prop) =>
-          prop === "alarm" || LOCAL.has(prop)
-            ? () => Effect.void
-            : prop === "fetch"
-              ? Effect.succeed(
-                  HttpServerResponse.text(`${parsed.route} isn't in the code this runs yet`, {
-                    status: 503,
-                  }),
-                )
-              : () => Effect.die(new Error(`${parsed.route} isn't in the code this runs yet`)),
+      return Effect.as(
+        Effect.logWarning(
+          `domain object ${parsed.route}/${parsed.key} started on code without its route`,
+        ),
+        undefined,
+      ).pipe(
+        Effect.andThen(() =>
+          Effect.succeed(
+            dynamic((prop) =>
+              prop === "alarm" || LOCAL.has(prop)
+                ? () => Effect.void
+                : prop === "fetch"
+                  ? Effect.succeed(
+                      HttpServerResponse.text(`${parsed.route} isn't in the code this runs yet`, {
+                        status: 503,
+                      }),
+                    )
+                  : () => Effect.die(new Error(`${parsed.route} isn't in the code this runs yet`)),
+            ),
+          ),
         ),
       );
     const inner = yield* impl;
@@ -634,7 +643,7 @@ const MIGRATION_ROUTE = "~migration";
  *   names its consumer objects, which move with it.
  */
 type MoveItem =
-  | { readonly c: string; readonly r: string; readonly id: string }
+  | { readonly c: string; readonly b?: string; readonly r: string; readonly id: string }
   | { readonly r: string; readonly n: string }
   | { readonly s: string; readonly i: string; readonly g?: number };
 
@@ -647,7 +656,8 @@ interface MovePass extends FanOut.Pass {
 export interface MovePlan {
   readonly pages: ReadonlyArray<{
     readonly n: number;
-    readonly className: string;
+    /** The page's old class. Keys travel in Workflow params, which the API snake-cases: one word each. */
+    readonly cls: string;
     readonly size: number;
   }>;
   /**
@@ -665,9 +675,11 @@ export const RUN_ROOT = "~run";
 const DIRECTORY = "#dir:";
 const RUNS = "#runs";
 
-/** A page of ids the deploy listed, as the root keeps it. */
+/** A page of ids the deploy listed, as the root keeps it (one-word keys: see `MovePlan`). */
 interface StoredPage {
-  readonly className: string;
+  readonly cls: string;
+  /** The binding the code reaches the class by: `Billing.AccountAggregate.BeforeVersions` for one from before versions. */
+  readonly bind?: string;
   readonly route: string;
   readonly ids: ReadonlyArray<string>;
 }
@@ -700,12 +712,20 @@ type ListedItem = Extract<MoveItem, { readonly id: string }>;
  */
 const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
   Effect.gen(function* () {
-    const legacy = classes.env?.[item.c];
+    const legacy = classes.env?.[item.b ?? item.c];
     const shared = classes.env?.[classes.className];
-    if (legacy === undefined || shared === undefined) return "skipped" as const;
+    if (legacy === undefined || shared === undefined) {
+      yield* Effect.logWarning(
+        `domain move skipped ${JSON.stringify(item)}: ${legacy === undefined ? "no binding for its class" : `no binding for ${classes.className}`}`,
+      );
+      return "skipped" as const;
+    }
     const id = legacy.idFromString(item.id);
     const name = yield* orDie<string | null>(makeRpcStub<Stub>(legacy.get(id)).domainName!());
-    if (name === null) return "skipped" as const;
+    if (name === null) {
+      yield* Effect.logWarning(`domain move skipped ${JSON.stringify(item)}: it knows no name`);
+      return "skipped" as const;
+    }
     const scoped = id.jurisdiction === undefined ? shared : shared.jurisdiction(id.jurisdiction);
     const target = makeRpcStub<Stub>(scoped.getByName(`${item.r}/${name}`));
     return (yield* orDie<boolean>(target.domainMove!(waitMillis)))
@@ -867,11 +887,12 @@ const migrationObject = (classes: Classes): ObjectImpl =>
                 ? [{ path: `${pass.target}${DIRECTORY}` }, { path: `${pass.target}${RUNS}` }]
                 : []),
             ],
-            frontierSize: 0,
+            // Listed at the root into a few hundred entries: the directory's levels never
+            // nest relay calls (Cloudflare limits how deep calls within a Worker go).
             samePlan: (a, b) =>
               a.walk === b.walk &&
-              a.pages.map((page) => `${page.className}#${page.n}`).join(",") ===
-                b.pages.map((page) => `${page.className}#${page.n}`).join(","),
+              a.pages.map((page) => `${page.cls}#${page.n}`).join(",") ===
+                b.pages.map((page) => `${page.cls}#${page.n}`).join(","),
           },
           { waitMillis: MIGRATION_PASS_MS, againMillis: 1_000 },
         );
@@ -939,7 +960,7 @@ const migrationObject = (classes: Classes): ObjectImpl =>
             );
             return {
               entries: (page?.ids ?? []).map((id) => ({
-                ref: { c: page!.className, r: page!.route, id },
+                ref: { c: page!.cls, ...(page!.bind ? { b: page!.bind } : {}), r: page!.route, id },
               })),
             } satisfies FanOut.Listed<MoveItem>;
           }),

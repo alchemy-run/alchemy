@@ -354,9 +354,9 @@ const BackfillLive = () =>
             instanceId: id,
           });
         }
-        yield* session.note(`Backfilling ${where()} (${Math.round(elapsed / 1000)}s) ...`, {
-          kind: "status",
-        });
+        const line = `Backfilling ${where()} (${Math.round(elapsed / 1000)}s) ...`;
+        yield* session.note(line, { kind: "status" });
+        yield* Effect.logInfo(line);
         yield* Effect.sleep(POLL);
       }
     }),
