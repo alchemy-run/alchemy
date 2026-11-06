@@ -62,9 +62,10 @@ export default Layer.effect(
         const port = yield* portOf(listener.href).pipe(Effect.mapError(fail));
 
         // One claim per resource: attaching the same resource again takes the route over, and
-        // a resource of the same name routed elsewhere in this process is refused.
+        // a resource of the same name routed elsewhere in this process is refused. One router
+        // serves every stack in the process, so the resource is its stack, stage and fqn.
         const held = yield* Claims.claim(hostname, {
-          instanceId: `ingress:${target.fqn}`,
+          instanceId: `ingress:${target.stack}/${target.stage}/${target.fqn}`,
           fqn: target.fqn,
         }).pipe(Effect.mapError(fail));
         // The same resource attached to the same listener again changes nothing.

@@ -27,8 +27,8 @@ const program = Effect.gen(function* () {
 });
 
 /** The target a resource's provider builds for a resource of this id. */
-const targetOf = (id: string): Ingress.Target => ({
-  stack: "ingress-test",
+const targetOf = (id: string, stack = "ingress-test"): Ingress.Target => ({
+  stack,
   stage: "dev_alice",
   fqn: id,
   id,
@@ -36,13 +36,13 @@ const targetOf = (id: string): Ingress.Target => ({
 });
 
 /** Routes a target to a listener in a scope the test closes itself. */
-const attach = (config: Ingress.Ingress, id: string, url: string) =>
+const attach = (config: Ingress.Ingress, id: string, url: string, stack?: string) =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
     const close = Scope.close(scope, Exit.void);
     // A failed assertion must not leave a claim behind for the next test.
     yield* Effect.addFinalizer(() => close);
-    const origin = yield* Ingress.attach(config, targetOf(id), new URL(url)).pipe(
+    const origin = yield* Ingress.attach(config, targetOf(id, stack), new URL(url)).pipe(
       Scope.provide(scope),
     );
     return { origin, close };
@@ -130,6 +130,12 @@ test.provider(
       expect(yield* routeOf(deployed.stateDirectory, hostname)).toMatchObject({
         port: second.port,
       });
+      expect(yield* answers(a.origin)).toBe("second");
+
+      // The same id in another stack of this process gets the same name, and is refused rather
+      // than taking the route over.
+      const elsewhere = yield* Effect.flip(attach(config, "Web", first.url, "other-stack"));
+      expect(elsewhere.message).toContain("already routed");
       expect(yield* answers(a.origin)).toBe("second");
 
       // Closing the latest removes its route and nothing else.
