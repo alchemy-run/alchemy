@@ -407,6 +407,32 @@ const bindSameStackRefs = (
   }
 };
 
+/** The FQNs a declared resource or Action depends on, for selection and ordering. */
+const upstreamOf = (stack: StackSpec<any>) => (node: ResourceLike | ActionLike) =>
+  Object.keys(
+    Output.upstreamAny(
+      isAction(node) ? [node.Input, node.Captures] : [node.Props, stack.bindings[node.FQN] ?? []],
+    ),
+  );
+
+/**
+ * The declared resources a plan with `selection` covers: all of them, or the
+ * closed `include` / `exclude` selection (with dependencies) that {@link make}
+ * plans. Reads no state and calls no provider.
+ */
+export const selectedResources = (stack: StackSpec<any>, selection: ResourceSelection) =>
+  Effect.gen(function* () {
+    const resources = Object.values(stack.resources);
+    const actions = Object.values(stack.actions ?? {});
+    bindSameStackRefs(stack, resources, actions);
+    const selected = yield* selectResources(
+      [...resources, ...actions],
+      upstreamOf(stack),
+      selection,
+    );
+    return selected === undefined ? resources : resources.filter((node) => selected.has(node.FQN));
+  });
+
 const makePlan = <A>(
   stack: StackSpec<A>,
   options: FilteredPlanOptions = {},
@@ -421,14 +447,7 @@ const makePlan = <A>(
     const declaredActions = Object.values(stack.actions ?? {});
     const declared = [...declaredResources, ...declaredActions];
     bindSameStackRefs(stack, declaredResources, declaredActions);
-    const upstream = (node: ResourceLike | ActionLike) =>
-      Object.keys(
-        Output.upstreamAny(
-          isAction(node)
-            ? [node.Input, node.Captures]
-            : [node.Props, stack.bindings[node.FQN] ?? []],
-        ),
-      );
+    const upstream = upstreamOf(stack);
     const selected = yield* selectResources(declared, upstream, options);
     const resources = declaredResources.filter((node) => !selected || selected.has(node.FQN));
     const actions = declaredActions.filter((node) => !selected || selected.has(node.FQN));

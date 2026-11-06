@@ -16,6 +16,7 @@ import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import * as Apply from "../Apply.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
+import { preflightCredentials } from "../Auth/Preflight.ts";
 import { withProfileOverride } from "../Auth/Resolve.ts";
 import { emit, type PlannedAction, type PlannedResource } from "../Events.ts";
 import * as Plan from "../Plan.ts";
@@ -278,6 +279,16 @@ export const plan = Effect.fn("Alchemist.plan")(function* <
   // `operation` is "deploy" here; a generic `O` doesn't narrow.
   const deploy: DeployPlanOptions = input;
   const built = yield* buildStack(input.stack, deploy);
+  // Before planning reads anything from the cloud, check that the stored
+  // credentials can manage the resources this plan covers (e.g. OAuth
+  // scopes). Local dev runs emulate most resources, so they skip it.
+  if (!deploy.dev) {
+    const resources = yield* Plan.selectedResources(built.stack, {
+      include: deploy.include,
+      exclude: deploy.exclude,
+    });
+    yield* preflightCredentials(resources).pipe(Effect.provide(built.context));
+  }
   const native = yield* Plan.make(built.stack, {
     force: deploy.force,
     include: deploy.include,
