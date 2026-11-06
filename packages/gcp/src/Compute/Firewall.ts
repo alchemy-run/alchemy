@@ -598,6 +598,13 @@ export const FirewallProvider = () =>
               ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
+          // Compute rejects the delete while a create or patch is still in
+          // flight on the rule.
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotReady",
+            times: 12,
+            schedule: Schedule.spaced("5 seconds"),
+          }),
           Effect.catchTag("NotFound", () => Effect.void),
         );
     }),

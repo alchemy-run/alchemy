@@ -30,6 +30,9 @@
       "path": "./submodules/distilled/packages/daytona/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/rivet/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
@@ -116,6 +119,12 @@
     },
     {
       "path": "./packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./packages/effect-cluster/tsconfig.json"
     },
     {
       "path": "./packages/planetscale/tsconfig.json"

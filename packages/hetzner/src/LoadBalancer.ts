@@ -1279,7 +1279,18 @@ const syncTargets = (
           schedule: backoff,
         }),
         Effect.flatMap(({ action }) => waitForAction(action)),
-        Effect.catchIf(alreadyThere, () => Effect.void),
+        // A rejected add is only fine when the target is in fact there.
+        Effect.catchIf(alreadyThere, (error) =>
+          getById(loadBalancerId).pipe(
+            Effect.flatMap((current) =>
+              observedTargets(current?.targets).some(
+                (existing) => targetKey(existing) === targetKey(target),
+              )
+                ? Effect.void
+                : Effect.fail(error),
+            ),
+          ),
+        ),
       );
     }
   });
