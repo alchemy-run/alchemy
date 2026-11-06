@@ -622,7 +622,7 @@ export const ServerProviderLocal = () =>
       } satisfies LocalProvider.LocalProviderSpec<
         Server,
         LocalProvider.DefaultLocalConfig<Server>,
-        Ingress.IngressServices
+        Effect.Services<ReturnType<typeof Ingress.attach>>
       >;
     }),
   );

@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { forwarderConfig, getRouted } from "@alchemy.run/test/IngressForwarder";
+import { getRouted } from "@alchemy.run/test/IngressForwarder";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Output from "alchemy/Output";
@@ -455,7 +455,7 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
             const site = yield* AWS.Website.Vite("RoutedSite", {
               rootDir: app.cwd,
               domain: { router },
-              dev: { ingress: forwarderConfig() },
+              dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } },
             });
             return { routerUrl: router.url, siteUrl: site.url };
           }),

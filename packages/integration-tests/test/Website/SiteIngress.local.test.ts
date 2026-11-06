@@ -8,8 +8,8 @@ import * as Prisma from "@alchemy.run/prisma";
 import * as Railway from "@alchemy.run/railway";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { forwarderConfig, getRouted } from "@alchemy.run/test/IngressForwarder";
-import type { IngressConfig } from "alchemy/Local/Ingress";
+import { getRouted } from "@alchemy.run/test/IngressForwarder";
+import type { Ingress } from "alchemy/Local/Ingress";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -22,14 +22,14 @@ const fixtureEntries = ["index.html", "package.json", "src"];
 
 type ViteSite = (
   id: string,
-  props: { rootDir: string; dev: { ingress: IngressConfig } },
+  props: { rootDir: string; dev: { ingress: Ingress } },
 ) => Effect.Effect<{ url: unknown }, any, any>;
 
 /**
  * Every site composite builds its server as `"Build"`; the route must be called
  * after the site instead, so two sites never share a name. Each composite runs
- * Vite's own dev server behind the real `alchemy dev` sidecar, which resolves
- * the forwarder from `@alchemy.run/test` (the package contributes it).
+ * Vite's own dev server behind the real `alchemy dev` sidecar, which imports
+ * `@alchemy.run/test`'s forwarder as the ingress module.
  */
 const siteRoutedAfterItsId = (
   provider: string,
@@ -50,7 +50,10 @@ const siteRoutedAfterItsId = (
         });
 
         const site = yield* stack.deploy(
-          vite("RoutedSite", { rootDir, dev: { ingress: forwarderConfig() } }),
+          vite("RoutedSite", {
+            rootDir,
+            dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } },
+          }),
         );
 
         const origin = site.url as string;
