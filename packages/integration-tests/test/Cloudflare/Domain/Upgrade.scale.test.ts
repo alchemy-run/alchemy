@@ -13,8 +13,8 @@ import { backdatePasses, doBindings, movedBy, namespacesOf, tagsOf, untilListed 
  * #2976: a Worker with ten models deployed before Domain versions existed has
  * 61 classes. Upgrading it by renaming each class would list 123 exports (the
  * classes under their new names, and a rename entry for each old one), over
- * Cloudflare's limit of 100. Upgraded straight to the shared class, it keeps
- * each class under its own name while its objects move: 62 exports.
+ * Cloudflare's limit of 100. Upgraded straight to one class per model, it keeps
+ * each old class under its own name while its objects move: 71 exports.
  */
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -26,6 +26,10 @@ const kinds = ["checking", "savings"] as const;
 const accounts = Array.from({ length: MODELS }, (_, n) =>
   kinds.map((kind) => ({ n, kind, id: `a-${n}`, owner: `${kind}-${n}` })),
 ).flat();
+
+/** Each model's class, `Bank<n>.Domain`, from a Worker's namespaces. */
+const modelClasses = (namespaces: Record<string, string | null | undefined>) =>
+  Object.fromEntries(Object.entries(namespaces).filter(([cls]) => cls.endsWith(".Domain")));
 
 const serving = (url: string, version: number | null) =>
   json<{ version: number | null }>(url, "/version").pipe(
@@ -96,7 +100,8 @@ test.provider(
       );
       yield* serving(url, 1);
       const upgraded = yield* namespacesOf(scriptName);
-      expect(upgraded).toEqual({ ...legacy, AlchemyDomain: upgraded.AlchemyDomain });
+      expect(upgraded).toEqual({ ...legacy, ...modelClasses(upgraded) });
+      expect(Object.keys(modelClasses(upgraded)).length).toBe(MODELS);
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
       // The first model keeps the directory they all had; the others' bindings to it are left out.
       const bindings = yield* doBindings(scriptName);
@@ -121,11 +126,15 @@ test.provider(
           Effect.andThen(doBindings(scriptName)),
           Effect.repeat({
             schedule: Schedule.spaced("30 seconds"),
-            until: (bindings) => Object.keys(bindings).length === 1,
+            until: (bindings) => Object.keys(bindings).length === MODELS,
             times: 4,
           }),
         );
-      expect(remaining).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      expect(remaining).toEqual(
+        Object.fromEntries(
+          Array.from({ length: MODELS }, (_, n) => [`Bank${n}.Domain`, `Bank${n}.Domain`]),
+        ),
+      );
       yield* everyAccountReads(url);
       // And it takes new writes.
       yield* call(url, "POST", `/3/savings/open/b-3/new`);

@@ -115,7 +115,7 @@ const oldClassesDeleted = (
       }),
     );
     yield* serving(url, "v1b");
-    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["AlchemyDomain"]);
+    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["Ledger.Domain"]);
     yield* everyAccountReads(url, balances);
   });
 

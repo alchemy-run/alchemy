@@ -102,10 +102,15 @@ test(
 );
 
 test(
-  "every object of every model on a Worker lives in one Durable Object class",
+  "every object of a model lives in one Durable Object class, named after the model",
   Effect.gen(function* () {
     const { workerName } = yield* stack;
-    expect(Object.keys(yield* boundClasses(workerName))).toEqual(["AlchemyDomain"]);
+    expect(Object.keys(yield* boundClasses(workerName)).sort()).toEqual([
+      "Audit.Domain",
+      "Billing.Domain",
+      "Sales.Domain",
+      "Support.Domain",
+    ]);
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );

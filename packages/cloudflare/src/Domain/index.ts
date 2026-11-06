@@ -1423,6 +1423,8 @@ const legacyClassesOf = (current: string, legacyName: string): ReadonlyArray<Leg
 
 /** Each saga workflow's version 0 class, and its class from before versions. */
 const sagaLegacyNames = new Map<string, string>();
+/** Each saga workflow's version 0 class, and the model that runs it. */
+const sagaModels = new Map<string, string>();
 
 /** The models each Worker hosts, by name. */
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
@@ -1467,9 +1469,8 @@ const durableObjectPlatform = (
         Effect.provide(effect, init);
       const inJurisdiction = (namespace: Namespace): Namespace =>
         jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
-      // Version 1: every object of every model in one class (see `Shared.ts`).
-      const shared =
-        version !== undefined && version >= 1 ? yield* inInit(sharedClasses(random)) : undefined;
+      // Version 1: every object of a model in one class, `Billing.Domain` (see `Shared.ts`).
+      const oneClassPerModel = version !== undefined && version >= 1;
       /**
        * Each model's old classes, which a deploy moves to the shared class: a
        * route's version 0 class, and its class from before versions.
@@ -1494,6 +1495,9 @@ const durableObjectPlatform = (
       // Workflow. Models that share a definition never share its data.
       const hostFor = ({ modelName, legacyData }: HostedModel) =>
         Effect.gen(function* () {
+          const shared = oneClassPerModel
+            ? yield* inInit(sharedClasses(random, modelName))
+            : undefined;
           const named = (name: string) =>
             version === undefined ? name : className(modelName, name);
           const object = (name: string, impl: ObjectImpl) =>
@@ -2048,6 +2052,7 @@ const durableObjectPlatform = (
                       yield* Migration(named("DomainMigration"), {
                         scriptName: worker.workerName as unknown as string,
                         workflowName: shared.workflowName as string,
+                        domainClass: shared.className,
                         classes: movers,
                         namespaces: worker.durableObjectNamespaces as unknown as Record<
                           string,
@@ -2123,9 +2128,10 @@ const durableObjectPlatform = (
               else {
                 const current = className(model.modelName, `${saga}Workflow`);
                 const legacyName = `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`;
-                if (shared !== undefined) {
+                if (oneClassPerModel) {
                   mover(model.modelName, current, legacyName);
                   sagaLegacyNames.set(current, legacyName);
+                  sagaModels.set(current, model.modelName);
                   yield* inInit(
                     recordBeforeVersions(model.modelName, legacyName, model.legacyData, current),
                   );
@@ -2136,7 +2142,7 @@ const durableObjectPlatform = (
                     legacyName,
                     model.legacyData,
                     `${saga}Workflow`,
-                    shared !== undefined,
+                    oneClassPerModel,
                   ),
                 );
               }
@@ -2152,9 +2158,9 @@ const durableObjectPlatform = (
 
 /**
  * Host a domain model on Cloudflare Durable Objects. Every aggregate, view,
- * policy, projection, stream and saga run of every model on the Worker is a
- * Durable Object of one class, `AlchemyDomain`, declared while the model's
- * Layer is built, so there are no bindings to write. One instance per
+ * policy, projection, stream and saga run of a model is a Durable Object of
+ * one class named after the model, `Billing.Domain`, declared while the
+ * model's Layer is built, so there are no bindings to write. One instance per
  * aggregate id, per view key, and per policy and source, named after its
  * model, its definition and its key (`Billing.AccountAggregate/a-1`).
  *
@@ -2274,17 +2280,23 @@ export function layerDurableObjects({
             version !== undefined && version >= 1
               ? // Saga runs in the shared class too, each workflow's on its own route.
                 makeEngine(jurisdiction, (name, impl) =>
-                  Effect.flatMap(sharedClasses(random), (shared) =>
-                    shared.object(
-                      name,
-                      impl,
-                      legacyClassesOf(
-                        name,
-                        // Recorded when the model is hosted, before its sagas register.
-                        sagaLegacyNames.get(name) ??
-                          name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
-                      ),
+                  Effect.flatMap(
+                    sharedClasses(
+                      random,
+                      // Recorded when the model is hosted, before its sagas register.
+                      sagaModels.get(name) ?? name.slice(0, name.indexOf(".")),
                     ),
+                    (shared) =>
+                      shared.object(
+                        name,
+                        impl,
+                        legacyClassesOf(
+                          name,
+                          // Recorded when the model is hosted, before its sagas register.
+                          sagaLegacyNames.get(name) ??
+                            name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
+                        ),
+                      ),
                   ),
                 )
               : layerDurableObjectEngine({ jurisdiction });

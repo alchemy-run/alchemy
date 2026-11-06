@@ -23,10 +23,12 @@ import { backfillRuntime } from "./Runtime.ts";
 import { MIGRATION_WORKFLOW } from "./Version.ts";
 
 /**
- * Domain version 1 hosts every object of every model on a Worker in one
- * Durable Object class. An object's name is its route and key,
- * `Billing.AccountAggregate/a-1`: the route names the model and the
- * definition, as each class did in version 0, so models stay isolated.
+ * Domain version 1 hosts every object of a model in one Durable Object class,
+ * named after the model: `Billing.Domain`. An object's name is its route and
+ * key, `Billing.AccountAggregate/a-1`: the route names the definition, as each
+ * class did in version 0. Each model has its own class, so removing a model
+ * from a Worker deletes its class, and a Worker declares one class per model
+ * however many definitions it has.
  *
  * A Worker upgraded from version 0 keeps each old class live, running the same
  * code, until its objects have moved (see `DurableObjectMove.ts`). Callers
@@ -37,7 +39,8 @@ import { MIGRATION_WORKFLOW } from "./Version.ts";
  * {@link MIGRATION_WORKFLOW} moves the rest. See `Version.ts` for when the old
  * classes are deleted.
  */
-export const SHARED_CLASS = "AlchemyDomain";
+export const domainClassName = (modelName: string) =>
+  `${modelName}.Domain`.replace(/[^A-Za-z0-9_.]/g, "_");
 
 /** The key an object listed itself under in the backfill directory. */
 export const ID_KEY = "bf:id";
@@ -122,7 +125,9 @@ const parseName = (name: string | undefined) => {
 };
 
 interface Classes {
-  /** Every route this Worker's code hosts, and its implementation. */
+  /** The model's class, `Billing.Domain`: its name and its binding. */
+  readonly className: string;
+  /** Every route the model hosts, and its implementation. */
   readonly routes: Map<string, ObjectImpl>;
   /** The binding of each route's old class, while the code still moves its objects. */
   readonly movers: Map<string, string>;
@@ -139,25 +144,35 @@ export interface Random {
   readonly uuidV4: () => Effect.Effect<string>;
 }
 
-/** One set of classes per Worker. */
-const workers = new WeakMap<object, Classes>();
+/** Each model's class, per Worker. */
+const workers = new WeakMap<object, Map<string, Classes>>();
+/** The migration Workflow of each Worker: one moves every model's objects. */
+const migrationWorkflows = new WeakMap<object, { readonly workflowName: unknown }>();
 
-/** The shared class of the host Worker, declared on first use. */
-export const sharedClasses = Effect.fn(function* (random: Random) {
+/** The class of `modelName` on the host Worker, declared on first use. */
+export const sharedClasses = Effect.fn(function* (random: Random, modelName: string) {
   const host = yield* CloudflareWorker;
-  let classes = workers.get(host);
+  let models = workers.get(host);
+  if (models === undefined) workers.set(host, (models = new Map()));
+  let classes = models.get(modelName);
   if (classes === undefined) {
+    const className = domainClassName(modelName);
     const routes = new Map<string, ObjectImpl>();
     const movers = new Map<string, string>();
     const namespace = yield* declare(
-      SHARED_CLASS,
+      className,
       router(routes, movers, () => classes!),
     );
-    const workflow = (yield* Workflow(
-      MIGRATION_WORKFLOW,
-      Effect.succeed(migration) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
-    )) as { readonly workflowName: unknown };
+    let workflow = migrationWorkflows.get(host);
+    if (workflow === undefined) {
+      workflow = (yield* Workflow(
+        MIGRATION_WORKFLOW,
+        Effect.succeed(migration) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
+      )) as { readonly workflowName: unknown };
+      migrationWorkflows.set(host, workflow);
+    }
     classes = {
+      className,
       routes,
       movers,
       namespace,
@@ -166,12 +181,14 @@ export const sharedClasses = Effect.fn(function* (random: Random) {
       env: Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment)),
       random,
     };
-    workers.set(host, classes);
+    models.set(modelName, classes);
     // The migration run's root and relays: see `migration`.
     routes.set(MIGRATION_ROUTE, migrationObject(classes));
   }
   const shared = classes;
   return {
+    /** The model's class, `Billing.Domain`. */
+    className: shared.className,
     /** The migration Workflow's name, as deployed: for the deploy's migration run. */
     workflowName: shared.workflowName,
     /** Each hosted route's version 0 class. */
@@ -602,7 +619,7 @@ const MIGRATION_PASS_MS = 5 * 60_000;
 const migrationStub = (classes: Classes, key: string) =>
   makeRpcStub<Stub>(
     (
-      classes.env?.[SHARED_CLASS] as { getByName: (name: string) => unknown } | undefined
+      classes.env?.[classes.className] as { getByName: (name: string) => unknown } | undefined
     )?.getByName(`${MIGRATION_ROUTE}/${key}`) ??
       classes.namespace.getByName(`${MIGRATION_ROUTE}/${key}`),
   );
@@ -618,7 +635,7 @@ const orDie = <A>(effect: Effect.Effect<unknown, unknown>) =>
 const moveOne = (classes: Classes, item: MoveItem, waitMillis: number) =>
   Effect.gen(function* () {
     const legacy = classes.env?.[item.c];
-    const shared = classes.env?.[SHARED_CLASS];
+    const shared = classes.env?.[classes.className];
     if (legacy === undefined || shared === undefined) return "skipped" as const;
     const id = legacy.idFromString(item.id);
     const name = yield* orDie<string | null>(makeRpcStub<Stub>(legacy.get(id)).domainName!());
@@ -750,11 +767,13 @@ type MigrationParams =
   /** Keep pages of ids in the run's root. */
   | {
       readonly op: "add";
+      /** The model's class, which holds the run. */
+      readonly cls: string;
       readonly target: string;
       readonly pages: ReadonlyArray<StoredPage & { readonly n: number }>;
     }
   /** Start the run, and wait until it is complete: each check's output is its progress. */
-  | { readonly op: "run"; readonly target: string; readonly plan: MovePlan }
+  | { readonly op: "run"; readonly cls: string; readonly target: string; readonly plan: MovePlan }
   /** A record of a complete pass over a class (see `Version.passMarker`): nothing to do. */
   | { readonly op: "mark" };
 
@@ -767,7 +786,7 @@ const migration = (params: MigrationParams) =>
     if (params.op === "mark") return {};
     const env = (yield* WorkerEnvironment) as Record<string, any>;
     const root = makeRpcStub<Stub>(
-      env[SHARED_CLASS].getByName(`${MIGRATION_ROUTE}/run:${params.target}`),
+      env[params.cls].getByName(`${MIGRATION_ROUTE}/run:${params.target}`),
     );
     const call = <A>(what: string, effect: Effect.Effect<unknown, unknown>) =>
       effect.pipe(Effect.mapError(failed(what))) as Effect.Effect<A, DomainMoveFailed>;

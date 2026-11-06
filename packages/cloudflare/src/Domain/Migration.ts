@@ -20,10 +20,12 @@ export interface MigrationProps {
   scriptName: string;
   /** The Workflow that moves a batch of old objects. */
   workflowName: string;
+  /** The model's class, `Billing.Domain`, which its objects move to and which holds the run. */
+  domainClass: string;
   /**
    * Each old class the Worker's code can move (a route's Domain version 0
    * class, and its class from before versions), the binding the code reaches
-   * it by, and the route its objects move to in the shared class.
+   * it by, and the route its objects move to in the model's class.
    */
   classes: { className: string; binding: string; route: string }[];
   /** The Worker's Durable Object namespaces by class: the old classes still live among them. */
@@ -209,7 +211,7 @@ const MigrationLive = () =>
           .pipe(Effect.retry(retryInternal));
       const ended = (instanceId: string, status: string, error: string | undefined) =>
         new MigrationFailed({
-          message: `Moving Domain objects to the shared class ended ${status}: ${error ?? "no error reported"}. Deploy again to move the rest; nothing that moved is lost.`,
+          message: `Moving Domain objects to ${news.domainClass} ended ${status}: ${error ?? "no error reported"}. Deploy again to move the rest; nothing that moved is lost.`,
           instanceId,
         });
       /**
@@ -255,7 +257,7 @@ const MigrationLive = () =>
         return { ...attrs, instances: 0, moved: 0 };
       }
       yield* session.note(
-        `Moving ${total} Domain objects of ${live.length} classes to the shared class ...`,
+        `Moving ${total} Domain objects of ${live.length} classes to ${news.domainClass} ...`,
         { kind: "status" },
       );
 
@@ -264,6 +266,7 @@ const MigrationLive = () =>
         id: `mg-add-${target}-${i}`,
         params: {
           op: "add",
+          cls: news.domainClass,
           target,
           pages: pages.slice(i * PAGES_PER_ADD, (i + 1) * PAGES_PER_ADD),
         },
@@ -295,6 +298,7 @@ const MigrationLive = () =>
       // Start the run and wait for it: each check step's output is its progress.
       const runParams = {
         op: "run",
+        cls: news.domainClass,
         target,
         plan: {
           pages: pages.map(({ n, className, ids }) => ({ n, className, size: ids.length })),
@@ -330,10 +334,10 @@ const MigrationLive = () =>
             : `${progress.instances}/${total} moved (${progress.done}/${progress.subtrees} pages${progress.refused > 0 ? `, ${progress.refused} calls refused` : ""})`;
         if (elapsed > timeout)
           return yield* new MigrationStillRunning({
-            message: `Moving Domain objects to the shared class is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,
+            message: `Moving Domain objects to ${news.domainClass} is still running after ${Math.round(elapsed / 1000)}s: ${where}. It keeps running on Cloudflare; the next deploy waits on it again.`,
           });
         yield* session.note(
-          `Moving Domain objects to the shared class: ${where} (${Math.round(elapsed / 1000)}s) ...`,
+          `Moving Domain objects to ${news.domainClass}: ${where} (${Math.round(elapsed / 1000)}s) ...`,
           { kind: "status" },
         );
         yield* Effect.sleep(POLL);
@@ -342,11 +346,13 @@ const MigrationLive = () =>
       const skipped = progress?.skipped ?? {};
       for (const [className, count] of Object.entries(skipped))
         yield* session.note(
-          `${count} objects of ${className} know neither their name nor their key, so they can't move to the shared class: the class is kept.`,
+          `${count} objects of ${className} know neither their name nor their key, so they can't move to ${news.domainClass}: the class is kept.`,
           { kind: "status" },
         );
       yield* mark(skipped);
-      yield* session.note(`Moved ${total} Domain objects to the shared class`, { kind: "status" });
+      yield* session.note(`Moved ${total} Domain objects to ${news.domainClass}`, {
+        kind: "status",
+      });
       return { ...attrs, instances: adds.length + 1, moved: total };
     }),
     // The instances end by themselves; the old classes go with the Worker's next upload.

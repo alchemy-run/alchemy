@@ -88,7 +88,7 @@ export const benchWorker = (version: string, added?: BenchView) =>
         // `GET /move/<key>`: where the move of account `<key>` has got to (Domain version 1).
         if (path[1] === "move") {
           const env = (yield* WorkerEnvironment) as Record<string, any>;
-          const shared = env.AlchemyDomain;
+          const shared = env["Ledger.Domain"];
           if (shared === undefined) return yield* HttpServerResponse.json(null);
           const stub = shared.getByName(`Ledger.AccountAggregate/${path[2]!}`);
           return yield* HttpServerResponse.json(

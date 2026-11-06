@@ -368,8 +368,8 @@ test.provider(
         new Set([JSON.stringify({ owner: "sam" })]),
       );
       const moving = yield* namespacesOf(scriptName);
-      // the old classes stay, next to the shared one
-      expect(Object.keys(moving).sort()).toEqual([...Object.keys(legacy), "AlchemyDomain"].sort());
+      // the old classes stay, next to the model's class
+      expect(Object.keys(moving).sort()).toEqual([...Object.keys(legacy), "Billing.Domain"].sort());
       for (const [cls, id] of Object.entries(legacy)) expect(moving[cls]).toBe(id);
       expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
 
@@ -407,7 +407,9 @@ test.provider(
           return { worker: yield* UpgradeSharedWorker };
         }),
       );
-      expect(yield* namespacesOf(scriptName)).toEqual({ AlchemyDomain: moving.AlchemyDomain });
+      expect(yield* namespacesOf(scriptName)).toEqual({
+        "Billing.Domain": moving["Billing.Domain"],
+      });
       expect(
         (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
       ).toEqual(["alchemy:domain:v1"]);
@@ -466,8 +468,8 @@ test.provider(
       yield* waitForVersion(url, 1);
       // kept under their own names, next to the shared class
       const upgraded = yield* namespacesOf(scriptName);
-      expect(upgraded).toEqual({ ...legacy, AlchemyDomain: upgraded.AlchemyDomain });
-      expect(upgraded.AlchemyDomain).toBeDefined();
+      expect(upgraded).toEqual({ ...legacy, "Billing.Domain": upgraded["Billing.Domain"] });
+      expect(upgraded["Billing.Domain"]).toBeDefined();
       // each reached through the model's binding to it
       const bindings = yield* doBindings(scriptName);
       for (const cls of Object.keys(legacy))
@@ -490,7 +492,7 @@ test.provider(
           return { worker: yield* UpgradeSharedNextWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
@@ -543,7 +545,11 @@ test.provider(
       );
       yield* waitForVersion(url, 1);
       const upgraded = yield* namespacesOf(scriptName);
-      expect(upgraded).toEqual({ ...legacy, AlchemyDomain: upgraded.AlchemyDomain });
+      expect(upgraded).toEqual({
+        ...legacy,
+        "Billing.Domain": upgraded["Billing.Domain"],
+        "Audit.Domain": upgraded["Audit.Domain"],
+      });
       // Billing's binding stays; Audit's is left out
       const bindings = yield* doBindings(scriptName);
       expect(bindings["Billing.AccountAggregate.BeforeVersions"]).toBe("AccountAggregate");
@@ -562,7 +568,10 @@ test.provider(
           return { worker: yield* SharedV1BillingWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({ AlchemyDomain: "AlchemyDomain" });
+      expect(yield* doBindings(scriptName)).toEqual({
+        "Audit.Domain": "Audit.Domain",
+        "Billing.Domain": "Billing.Domain",
+      });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: "ann" });
 

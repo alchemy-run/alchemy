@@ -153,8 +153,8 @@ for (const dev of [true, false]) {
 
             if (!dev) {
               const after = yield* classes(worker.workerName);
-              // Rebuilt views, in place or in a new generation, stay in the one class.
-              expect(Object.keys(after)).toEqual(["AlchemyDomain"]);
+              // Rebuilt views, in place or in a new generation, stay in the model's class.
+              expect(Object.keys(after)).toEqual(["Bank.Domain"]);
               expect(after).toEqual(before);
             }
 
