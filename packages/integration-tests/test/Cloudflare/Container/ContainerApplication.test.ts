@@ -1,3 +1,4 @@
+import * as NodeZlib from "node:zlib";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
@@ -40,6 +41,7 @@ import { LinkedContainer } from "./fixtures/linked/container.ts";
 import LinkedFirst from "./fixtures/linked/first.ts";
 import {
   publicationApplications,
+  maxRegistryCacheApplication,
   sharedApplication,
   recoveryApplications,
   historyApplications,
@@ -838,6 +840,109 @@ describe.concurrent(
           );
           expect(gone).toBeUndefined();
         }).pipe(withBuilder("alchemy-default-cache", { attestations: false }), logLevel),
+      { timeout: 120_000 },
+    );
+
+    registryCacheTest.provider(
+      "a mode=max registry cache resumes an earlier build stage in a fresh builder",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-max-cache-" });
+          // `payload` changes between deploys and reaches the final stage only
+          // through the builder stage, after the step that must stay cached.
+          yield* fs.writeFileString(
+            path.join(context, "Dockerfile"),
+            [
+              "FROM alpine:3.19 AS builder",
+              "RUN cat /proc/sys/kernel/random/uuid > /expensive",
+              "COPY payload /payload",
+              "RUN cat /expensive /payload > /artifact",
+              "FROM alpine:3.19",
+              "COPY --from=builder /artifact /artifact",
+              'CMD ["sleep", "3600"]',
+              "",
+            ].join("\n"),
+          );
+          yield* fs.writeFileString(path.join(context, "payload"), "first");
+          const program = maxRegistryCacheApplication(context);
+          const first = yield* stack.deploy(program);
+
+          const credentials = yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
+          const username = credentials.username ?? credentials.user;
+          assert(username);
+          const client = yield* HttpClient.HttpClient;
+          const registryGet = (pathname: string, accept = "*/*") =>
+            client.execute(
+              HttpClientRequest.get(
+                `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/${pathname}`,
+              ).pipe(
+                HttpClientRequest.basicAuth(username, credentials.password),
+                HttpClientRequest.setHeader("Accept", accept),
+              ),
+            );
+          const cacheManifest = yield* registryGet(
+            "manifests/buildcache",
+            "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+          ).pipe(
+            Effect.tap((response) => Effect.sync(() => expect(response.status).toBe(200))),
+            Effect.flatMap((response) => response.text),
+          );
+          // A cache export (index or image-manifest form), not the published image.
+          expect(cacheManifest).toContain("application/vnd.buildkit.cacheconfig.v0");
+          // `/artifact` is the image's last layer: the builder's UUID, then `payload`.
+          const artifactOf = Effect.fn(function* (digest: string) {
+            const manifest = yield* registryGet(
+              `manifests/${digest}`,
+              "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+            ).pipe(
+              Effect.flatMap((response) => response.json),
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({ layers: Schema.Array(Schema.Struct({ digest: Schema.String })) }),
+                ),
+              ),
+            );
+            const blob = yield* registryGet(`blobs/${manifest.layers.at(-1)!.digest}`).pipe(
+              Effect.flatMap((response) => response.arrayBuffer),
+            );
+            const tar = NodeZlib.gunzipSync(new Uint8Array(blob));
+            for (let offset = 0; offset + 512 <= tar.length;) {
+              const name = tar.toString("utf8", offset, offset + 100).replace(/\0.*$/s, "");
+              const size =
+                Number.parseInt(tar.toString("utf8", offset + 124, offset + 136), 8) || 0;
+              if (name === "artifact") {
+                return tar.toString("utf8", offset + 512, offset + 512 + size).split("\n");
+              }
+              offset += 512 + Math.ceil(size / 512) * 512;
+            }
+            return assert.fail(`no /artifact in layer of ${digest}`);
+          });
+          const [firstUuid, firstPayload] = yield* artifactOf(first.app.hash!.digest!);
+          expect(firstPayload).toBe("first");
+
+          yield* fs.writeFileString(path.join(context, "payload"), "changed");
+          const changed = yield* Effect.gen(function* () {
+            // A new BuildKit instance cannot reuse the first builder's local layers.
+            expect(yield* buildHistory).toHaveLength(0);
+            return yield* stack.deploy(program);
+          }).pipe(withBuilder("alchemy-max-cache-changed", { attestations: false }));
+          expect(changed.app.applicationId).toBe(first.app.applicationId);
+          expect(changed.app.configuration.image).not.toBe(first.app.configuration.image);
+          const [changedUuid, changedPayload] = yield* artifactOf(changed.app.hash!.digest!);
+          // The builder step after the change ran again; the one before it did not:
+          // re-running it would have written a new UUID.
+          expect(changedPayload).toBe("changed");
+          expect(changedUuid).toBe(firstUuid);
+          yield* stack.destroy();
+        }).pipe(withBuilder("alchemy-max-cache", { attestations: false }), logLevel),
       { timeout: 120_000 },
     );
 

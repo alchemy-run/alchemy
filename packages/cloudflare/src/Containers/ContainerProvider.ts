@@ -125,6 +125,22 @@ const normalizePrepushedRef = (image: string, registryId: string, accountId: str
     : `${registryId}/${accountId}/${rest}`;
 };
 
+const defaultCacheFrom: ContainerApplication.CacheBackend[] = [{ type: "registry" }];
+const defaultCacheTo: ContainerApplication.CacheBackend[] = [{ type: "inline" }];
+
+/** Quotes one CSV field (RFC 4180), the way Buildx parses `--cache-from` / `--cache-to`. */
+const csvField = (field: string) =>
+  /[",\r\n]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field;
+
+/** `type=<type>,<key>=<value>,...`; attributes set to `undefined` are left out. */
+const formatCacheBackend = ({ type, ...attributes }: ContainerApplication.CacheBackend) => {
+  const fields = [csvField(`type=${type}`)];
+  for (const [key, value] of Object.entries(attributes)) {
+    if (value !== undefined) fields.push(csvField(`${key}=${value}`));
+  }
+  return fields.join(",");
+};
+
 const RegistryDigest = Schema.String.pipe(
   Schema.check(Schema.isPattern(/^[a-z0-9]+:[a-f0-9]{64}$/i)),
 );
@@ -609,10 +625,24 @@ export const LiveContainerProvider = () =>
           }
         }
         const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
+        const withCacheRef = (backend: ContainerApplication.CacheBackend) =>
+          backend.type === "registry" && backend.ref === undefined
+            ? { ...backend, ref: cacheRef }
+            : backend;
+        const cacheFrom = (props.publish?.cache?.from ?? defaultCacheFrom).map(withCacheRef);
+        const cacheTo = (props.publish?.cache?.to ?? defaultCacheTo).map(withCacheRef);
+        // An inline cache is the image itself, so the image holds `:buildcache`
+        // unless another destination exports there.
+        const imageHoldsCache =
+          cacheTo.some((backend) => backend.type === "inline") &&
+          cacheTo.every((backend) => backend.ref !== cacheRef);
         const cacheOptions = {
-          "cache-from": [`type=registry,ref=${cacheRef}`],
-          "cache-to": ["type=inline"],
+          "cache-from": cacheFrom.map(formatCacheBackend),
+          "cache-to": cacheTo.map(formatCacheBackend),
         };
+        const buildTags: [string, ...string[]] = imageHoldsCache
+          ? [imageRef, cacheRef]
+          : [imageRef];
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -683,7 +713,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: buildTags,
                 context: build.context,
                 platform,
                 file: build.dockerfile,
@@ -725,7 +755,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: buildTags,
                 context: contextDir,
                 platform,
               },

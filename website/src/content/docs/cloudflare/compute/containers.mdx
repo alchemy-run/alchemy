@@ -302,13 +302,13 @@ Deployed image:  registry.cloudflare.com/<account-id>/web@sha256:<manifest-diges
 The build hash identifies the inputs; the manifest digest identifies the
 published artifact. Stages using the same repository and matching build
 inputs reuse the published image without invoking Docker. Changed inputs
-produce a new hash tag in that repository and can reuse its shared inline
+produce a new hash tag in that repository and can reuse its shared
 build-layer cache. Each stage still has its own Container application,
 runtime settings, and running instances; only images and build layers are shared.
 
 All builds targeting a repository import reusable layers from its
 `:buildcache` tag, even when their complete input hashes differ. That tag
-points to the latest exported inline cache, not an aggregate of every image
+points to the latest exported cache, not an aggregate of every image
 ever published to the repository. A finished-image cache hit leaves the
 layer-cache tag unchanged. The Container deploys the immutable digest, not
 the mutable `buildcache` tag.
@@ -321,6 +321,58 @@ For a pre-built external `image`, `publish.repository` chooses where it is
 re-published, but does not enable finished-image cache reuse. Images already
 in the target registry keep their existing repository instead of being
 copied into the requested one.
+
+## Configure the build cache
+
+`publish.cache` lists where builds import layer caches from (`from`) and
+export them to (`to`), as [BuildKit cache backends](https://docs.docker.com/build/cache/backends/).
+Each entry is a `type` plus that backend's attributes, written as
+`--cache-from` / `--cache-to` `type=<type>,<attribute>=<value>,...`, so every
+backend and option BuildKit supports works: `inline`, `registry`, `local`,
+`gha`, `s3`, `azblob`, and attributes such as `mode`, `scope` or
+`compression`. A `registry` backend without a `ref` uses the repository's
+`:buildcache` tag and Alchemy's registry credentials.
+
+The default is `from: [{ type: "registry" }]` and `to: [{ type: "inline" }]`:
+the published image carries cache metadata for its own layers and is also
+tagged `:buildcache`. That covers the final stage only. In a multi-stage
+Dockerfile where an expensive step (a dependency or toolchain build) is
+followed by a `COPY` of code that changes often, every change reaches the
+final stage through `COPY --from` and reruns the whole earlier stage,
+expensive step included. Export a `mode: "max"` registry cache to keep every
+stage's layers instead:
+
+```typescript
+export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+  context: `${import.meta.dirname}/context`,
+  publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+}) {}
+```
+
+Or keep the cache in GitHub Actions, falling back to the registry cache:
+
+```typescript
+export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+  context: `${import.meta.dirname}/context`,
+  publish: {
+    cache: {
+      from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
+      to: [{ type: "gha", scope: "agent", mode: "max" }],
+    },
+  },
+}) {}
+```
+
+`from` and `to` default separately, and `[]` turns either off. The image
+takes the `:buildcache` tag only while `to` has an `inline` destination and
+no other destination writes to `:buildcache`. Backends other than `inline`
+need a builder that can export them: Buildx 0.26 or newer with a
+`docker-container` builder (what `docker/setup-buildx-action` creates in
+CI), or the `docker` driver with the containerd image store for `registry`.
+Credentials for `gha`, `s3` and `azblob` come from the environment, as
+BuildKit documents; attributes reach `docker`'s arguments, so never put
+secrets in them. `repository` stays optional, and the first build after a
+change overwrites the cache in the new format.
 
 ## Configure the container with `env`
 

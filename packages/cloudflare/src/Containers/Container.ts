@@ -539,8 +539,24 @@ type ContainerShape<Shape> = {
  * inputs produce another hash tag in the same repository. Builds targeting
  * that repository import reusable layers from its shared `:buildcache` tag,
  * including when full input hashes differ. This mutable tag points to the
- * latest exported inline cache, not a combined cache of every historical
- * image. Reusing a finished image does not move the layer-cache tag.
+ * latest exported cache, not a combined cache of every historical image.
+ * Reusing a finished image does not move the layer-cache tag.
+ *
+ * `publish.cache` chooses where builds import and export layer caches, as
+ * BuildKit cache backends (`inline`, `registry`, `local`, `gha`, `s3`, ...).
+ * The default imports `:buildcache` and exports an inline cache, which only
+ * keeps final-stage layers. When an expensive step in an earlier stage is
+ * followed by a `COPY` of code that changes often, export a `mode: "max"`
+ * registry cache so the earlier stage resumes from its last unchanged step.
+ * A `registry` backend without `ref` uses the repository's `:buildcache`.
+ *
+ * **Example:** Keep every stage's layers in the build cache
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+ * }) {}
+ * ```
  *
  * Pin base images and downloaded dependencies: changes outside the build
  * context cannot invalidate the input hash. Each stage still has its own

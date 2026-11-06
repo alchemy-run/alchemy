@@ -39,6 +39,16 @@ export const sharedApplication = (context: string, repository?: string) =>
     return { app };
   });
 
+export const maxRegistryCacheApplication = (context: string) =>
+  Effect.gen(function* () {
+    const app = yield* Cloudflare.Container("MaxRegistryCachePublication", {
+      context,
+      publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+      maxInstances: 2,
+    }).Application;
+    return { app };
+  });
+
 export const historyApplications = (converge = false) =>
   Effect.gen(function* () {
     const target = converge
