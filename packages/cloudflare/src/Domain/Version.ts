@@ -181,6 +181,39 @@ export const passesOf = (
 };
 
 /**
+ * The id of a complete pass over `className` that left only `count` objects it
+ * can't move (they know neither their name nor their key). Nothing writes to an
+ * old class after the upgrade, so once two such passes far enough apart saw the
+ * same count, a later pass would find nothing new: deploys skip it.
+ */
+export const unmovableMarker = (
+  className: string,
+  namespaceId: string,
+  count: number,
+  listedAt: number,
+) => `unmovable-${fnv(`${className}|${namespaceId}`)}-${count}-${listedAt}`;
+
+/**
+ * Whether every pass over `className` would find only the `count` objects it
+ * can't move: two passes {@link LISTING_LAG_SECONDS} apart left that many.
+ */
+export const onlyUnmovableLeft = (
+  className: string,
+  namespaceId: string,
+  count: number,
+  instanceIds: Iterable<string>,
+) => {
+  const prefix = `unmovable-${fnv(`${className}|${namespaceId}`)}-${count}-`;
+  const times: Array<number> = [];
+  for (const id of instanceIds) {
+    if (!id.startsWith(prefix)) continue;
+    const at = Number(id.slice(prefix.length));
+    if (Number.isInteger(at)) times.push(at);
+  }
+  return times.length > 1 && Math.max(...times) - Math.min(...times) >= LISTING_LAG_SECONDS;
+};
+
+/**
  * The version 0 classes an upload keeps live, to move their objects to the
  * shared class. A class is kept while the Worker has it, until it has two
  * complete passes at least {@link LISTING_LAG_SECONDS} apart. The first pass

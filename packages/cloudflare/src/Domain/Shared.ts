@@ -639,7 +639,14 @@ const source = (classes: Classes, route: string, impl: ObjectImpl): ObjectImpl =
             ),
       );
       const moves: Record<string, unknown> = {
-        domainName: () => Effect.map(key, (name) => name ?? null),
+        // A sealed object that doesn't know its key has moved, and emptied its storage (the
+        // key with it): it answers as moved, so the migration doesn't count it as stuck.
+        domainName: () =>
+          Effect.flatMap(key, (name) =>
+            name === undefined && Move.isSealing(raw)
+              ? Effect.die(new Error(`This Durable Object's ${MOVED}`))
+              : Effect.succeed(name ?? null),
+          ),
         domainMoveBegin: () => Move.beginSource(raw),
         domainMoveSnapshot: (after: Move.SnapshotCursor) => Move.snapshotPage(raw, after),
         domainMoveChanges: (after: number) => Move.changesPage(raw, after),

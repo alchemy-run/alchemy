@@ -29,6 +29,8 @@ import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 import {
   backdatePasses,
+  backdateUnmovable,
+  migrationRuns,
   doBindings,
   movedBy,
   namespacesOf,
@@ -506,6 +508,21 @@ test.provider(
         "Billing.Domain": "Billing.Domain",
         "Billing.ApproveWorkflow.BeforeVersions": "ApproveWorkflow",
       });
+      // Once two passes far enough apart left only those objects, deploys stop moving it.
+      yield* backdateUnmovable(scriptName, "ApproveWorkflow");
+      const runs = yield* migrationRuns(scriptName);
+      // A different upload, so the Worker reconciles.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return { worker: yield* UpgradeSharedWorker };
+        }),
+      );
+      yield* waitForVersion(url, 1);
+      expect(yield* migrationRuns(scriptName)).toBe(runs);
+      expect(Object.keys(yield* doBindings(scriptName)).sort()).toEqual([
+        "Billing.ApproveWorkflow.BeforeVersions",
+        "Billing.Domain",
+      ]);
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });

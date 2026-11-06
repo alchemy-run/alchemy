@@ -14,7 +14,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { progressOf, worthRestarting } from "./Backfill.ts";
-import { fnv, passMarker } from "./Version.ts";
+import { fnv, onlyUnmovableLeft, passMarker, unmovableMarker } from "./Version.ts";
 
 export interface MigrationProps {
   /** The Domain's Worker, which hosts the old classes and the migration Workflow. */
@@ -193,7 +193,30 @@ export const migrateModel = Effect.fn(function* ({
         ),
     { concurrency: 8 },
   );
+  // Classes where two passes far enough apart left only objects that can't move:
+  // nothing writes to them since the upgrade, so another pass would find nothing.
+  const complete = yield* workflows.listInstances
+    .items({ accountId, workflowName, status: "complete" })
+    .pipe(
+      Stream.map((instance) => instance.id),
+      Stream.runCollect,
+      Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
+    );
+  const counts = new Map(live.map(({ className }, index) => [className, listings[index]!.length]));
+  const unmovable = new Set(
+    live
+      .filter(({ className }) =>
+        onlyUnmovableLeft(className, news.namespaces[className]!, counts.get(className)!, complete),
+      )
+      .map(({ className }) => className),
+  );
+  for (const className of unmovable)
+    yield* session.note(
+      `Not moving ${className} again: its ${counts.get(className)} objects know neither their name nor their key, and nothing has written to it since.`,
+      { kind: "status" },
+    );
   for (const [index, { className, binding, route }] of live.entries()) {
+    if (unmovable.has(className)) continue;
     const ids = Array.from(listings[index]!, (object) => object.id).filter(
       (id): id is string => typeof id === "string",
     );
@@ -269,10 +292,10 @@ export const migrateModel = Effect.fn(function* ({
    * doesn't have the uploaded Worker yet fails: it is started again, a
    * second earlier each time, which claims no more than this pass saw.
    */
-  const markOne = (className: string) =>
+  const markOne = (className: string, marker = passMarker) =>
     Effect.gen(function* () {
       for (let attempt = 0; ; attempt++) {
-        const id = passMarker(className, news.namespaces[className]!, listedAt - attempt);
+        const id = marker(className, news.namespaces[className]!, listedAt - attempt);
         yield* create([{ id, params: { op: "mark" } }]);
         const done = yield* instance(id).pipe(
           Effect.repeat({
@@ -292,13 +315,19 @@ export const migrateModel = Effect.fn(function* ({
     });
   const mark = (skipped: Readonly<Record<string, number>>) =>
     Effect.forEach(
-      live.filter(({ className }) => (skipped[className] ?? 0) === 0),
-      ({ className }) => markOne(className),
+      live.filter(({ className }) => !unmovable.has(className)),
+      ({ className }) =>
+        (skipped[className] ?? 0) === 0
+          ? markOne(className)
+          : // Only objects that can't move left: a pass that saw how many (see `onlyUnmovableLeft`).
+            markOne(className, (cls, namespace, at) =>
+              unmovableMarker(cls, namespace, counts.get(cls)!, at),
+            ),
       { concurrency: 10, discard: true },
     );
 
-  // Nothing listed and no directory to walk: nothing to move.
-  if (total === 0 && !news.walk) {
+  // Nothing listed and no directory to walk, or only objects that can't move: nothing to move.
+  if ((total === 0 && !news.walk) || (live.length > 0 && unmovable.size === live.length)) {
     yield* mark({});
     return { ...attrs, instances: 0, moved: 0, skipped: {} as Record<string, number> };
   }

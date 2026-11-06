@@ -12,20 +12,13 @@ import MoveV1Broken from "./fixtures/move/v1-broken.ts";
 import MoveV1Timeout from "./fixtures/move/v1-timeout.ts";
 import MoveV1 from "./fixtures/move/v1.ts";
 import MoveV1b from "./fixtures/move/v1b.ts";
-import {
-  backdatePasses,
-  boundClasses,
-  depositsOf,
-  namespacesOf,
-  untilListed,
-  writer,
-} from "./move.ts";
+import { boundClasses, depositsOf, namespacesOf, untilListed, writer } from "./move.ts";
 
 /**
  * Moving a Domain from version 0 to the one class of version 1 when the
  * upgrade deploy doesn't finish: it is killed partway, it gives up waiting,
  * or it ships a bug. The next deploy finishes the move; nothing is lost or
- * applied twice, and the old classes stay until the move has settled.
+ * applied twice, and the deploy that finishes the move deletes the old classes.
  */
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -57,9 +50,7 @@ const atVersion0 = (stack: Test.ScratchStack) =>
       LISTED.map((name) => namespaces[name]!),
       (count) => count >= ACCOUNTS,
     );
-    // Every class of version 0: each moves to the shared class.
-    const legacy = Object.keys(yield* boundClasses(scriptName));
-    return { url, scriptName, legacy };
+    return { url, scriptName };
   });
 
 /** Every account reads its deposits, in the aggregate and in its view. */
@@ -95,20 +86,19 @@ const everyAccountMoved = (url: string) =>
     { concurrency: 10, discard: true },
   );
 
-/** Once the move has settled, the next upload deletes the old classes; the data stays. */
+/**
+ * The deploy that finished the move deleted the old classes; the data stays,
+ * and the next deploy is a plain upload.
+ */
 const oldClassesDeleted = (
   stack: Test.ScratchStack,
   url: string,
   scriptName: string,
-  legacy: ReadonlyArray<string>,
   balances: Record<string, number> = {},
 ) =>
   Effect.gen(function* () {
-    // Until then the old classes stay.
-    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(
-      expect.arrayContaining([...legacy]),
-    );
-    yield* backdatePasses(scriptName, legacy);
+    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["Ledger.Domain"]);
+    yield* everyAccountReads(url, balances);
     yield* stack.deploy(
       Effect.gen(function* () {
         return { worker: yield* MoveV1b };
@@ -131,7 +121,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
     "an upgrade deploy killed partway is finished by the next one, while an account is written",
     (stack) =>
       Effect.gen(function* () {
-        const { url, scriptName, legacy } = yield* atVersion0(stack);
+        const { url, scriptName } = yield* atVersion0(stack);
         const log = { written: [] as Array<number>, failures: [] as Array<string>, stop: false };
         const writing = yield* Effect.forkChild(writer(url, "b0", 1_000, log));
 
@@ -163,7 +153,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
         expect(view.missing).toEqual([]);
         expect(view.count).toBe(DEPOSITS + log.written.length);
 
-        yield* oldClassesDeleted(stack, url, scriptName, legacy, balances);
+        yield* oldClassesDeleted(stack, url, scriptName, balances);
         yield* stack.destroy();
       }),
     { timeout: 1_800_000 },
@@ -173,7 +163,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
     "an upgrade deploy that stops waiting for the move fails, and the next one finishes it",
     (stack) =>
       Effect.gen(function* () {
-        const { url, scriptName, legacy } = yield* atVersion0(stack);
+        const { url, scriptName } = yield* atVersion0(stack);
 
         const gaveUp = yield* stack
           .deploy(
@@ -190,7 +180,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
         yield* deployV1(stack);
         yield* everyAccountMoved(url);
         yield* everyAccountReads(url);
-        yield* oldClassesDeleted(stack, url, scriptName, legacy);
+        yield* oldClassesDeleted(stack, url, scriptName);
         yield* stack.destroy();
       }),
     { timeout: 1_800_000 },
@@ -200,7 +190,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
     "an upgrade deploy with a bug fails, and the fixed code finishes the move",
     (stack) =>
       Effect.gen(function* () {
-        const { url, scriptName, legacy } = yield* atVersion0(stack);
+        const { url, scriptName } = yield* atVersion0(stack);
 
         const broken = yield* stack
           .deploy(
@@ -221,7 +211,7 @@ describe("resuming a Domain's move to one class", { tags: ["provider:cloudflare"
         // And it takes new writes.
         yield* call(url, "POST", `/deposit/b1/${1_000}/1`);
         expect(yield* json(url, "/account/b1")).toEqual({ balance: sum(1, DEPOSITS) + 1_000 });
-        yield* oldClassesDeleted(stack, url, scriptName, legacy, { b1: sum(1, DEPOSITS) + 1_000 });
+        yield* oldClassesDeleted(stack, url, scriptName, { b1: sum(1, DEPOSITS) + 1_000 });
         yield* stack.destroy();
       }),
     { timeout: 1_800_000 },
