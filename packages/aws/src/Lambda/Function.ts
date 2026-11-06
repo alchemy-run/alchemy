@@ -989,6 +989,18 @@ export const normalizeFunctionUrl = (
  * CMD ["com.example.Handler::handleRequest"]
  * ```
  *
+ * #### Cache build layers
+ * Image builds reuse the local BuildKit cache of the machine they run on. Set
+ * `cache: true` to keep every stage's layers at the function repository's
+ * `:buildcache` tag, so a fresh builder (a new CI runner) skips unchanged
+ * steps:
+ *
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: { context: "./lambda", dockerfile: "Dockerfile", cache: true },
+ * });
+ * ```
+ *
  * ### Effect Functions
  * Pass the Effect implementation as the third argument. Bindings
  * attach IAM permissions and environment variables at deploy time,
