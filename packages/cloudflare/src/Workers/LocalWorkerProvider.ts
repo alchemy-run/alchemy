@@ -39,6 +39,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import type * as FileSystem from "effect/FileSystem";
 import * as PlatformFileSystem from "effect/FileSystem";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -159,7 +160,7 @@ export const LocalWorkerProvider = () =>
           instance: WorkerProxy.WorkerProxyInstance;
           scope: Scope.Closeable;
           route?: {
-            readonly ingress: Ingress.IngressConfig;
+            readonly ingress: Ingress.Ingress;
             readonly listener: string;
             readonly origin: string;
             readonly scope: Scope.Closeable;
@@ -262,7 +263,7 @@ export const LocalWorkerProvider = () =>
        */
       const syncRoute = Effect.fn(function* (
         identity: { readonly id: string; readonly fqn: string },
-        ingress: Ingress.IngressConfig | undefined,
+        ingress: Ingress.Ingress | undefined,
       ) {
         const entry = proxyInstances.get(identity.fqn);
         if (entry === undefined) return;
@@ -281,14 +282,12 @@ export const LocalWorkerProvider = () =>
           yield* Scope.close(current.scope, Exit.void);
         }
         if (ingress === undefined) return;
-        const target = Ingress.createTarget({
-          stack,
-          ...identity,
-          type: Worker.Type,
-          config: ingress,
-        });
         const scope = yield* Scope.fork(entry.scope);
-        const origin = yield* Ingress.route(ingress, target, listener).pipe(
+        const origin = yield* Ingress.attach(
+          ingress,
+          { stack: stack.name, stage: stack.stage, ...identity, type: Worker.Type },
+          listener,
+        ).pipe(
           Scope.provide(scope),
           Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
         );
@@ -1741,12 +1740,12 @@ export const LocalWorkerProvider = () =>
         // The Python-bundle watcher spawns `uv` (ChildProcessSpawner) and
         // reads vendored modules (FileSystem) from inside `start`;
         // `readAssetsConfigFiles` (assets `_headers`/`_redirects`) needs
-        // FileSystem + Path. A dev ingress adapter runs under the services
-        // the sidecar gives every local provider.
+        // FileSystem + Path. A dev ingress router is built under the
+        // services the sidecar gives every local provider.
         | ChildProcessSpawner.ChildProcessSpawner
         | FileSystem.FileSystem
         | Path.Path
-        | Ingress.IngressServices
+        | HttpClient.HttpClient
       >;
     }),
   );
