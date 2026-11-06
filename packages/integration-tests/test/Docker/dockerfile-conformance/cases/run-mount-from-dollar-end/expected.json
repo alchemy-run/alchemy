@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "mount",
+              "value": "type=bind,from=stage$,target=/x"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

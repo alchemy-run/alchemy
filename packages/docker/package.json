@@ -44,7 +44,6 @@
         "bun": "./src/Bootstrap.ts",
         "default": "./src/Bootstrap.ts"
       },
-      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

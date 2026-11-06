@@ -33,5 +33,6 @@ export default defineConfig({
     // Written by the BuildKit oracle; regenerated, never edited.
     "packages/integration-tests/test/Docker/dockerfile-conformance/cases/**",
     "packages/integration-tests/test/Docker/dockerfile-conformance/cases.json",
+    "packages/integration-tests/test/Docker/dockerfile-conformance/words/**",
   ],
 } satisfies OxfmtConfig);
