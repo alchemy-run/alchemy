@@ -26,6 +26,7 @@ import type { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import { UserFacingError } from "../UserFacingError.ts";
+import { resolveFromProject } from "../Util/internal/PackageResolve.ts";
 
 /**
  * A resource's `dev.ingress`: which module routes its dev URL. A router
@@ -37,6 +38,8 @@ export interface Ingress {
   /**
    * Package specifier of the module whose default export is a
    * {@link Router} Layer, for example `"@alchemy.run/portless/IngressLive"`.
+   * Resolved from the project `alchemy dev` runs in, so the router's package
+   * is a dependency of the project, not of alchemy.
    */
   readonly module: string;
   /**
@@ -116,10 +119,17 @@ const routerFor = Effect.fnUntraced(function* (module: string) {
   routers.set(module, deferred);
   const fail = (message: string) => (cause?: unknown) =>
     new IngressError({ message: `Ingress module ${module} ${message}`, cause });
-  const exit = yield* Effect.tryPromise({
-    try: (): Promise<{ readonly default?: unknown }> => import(module),
-    catch: fail("could not be imported"),
-  }).pipe(
+  const project = yield* Effect.sync(() => process.cwd());
+  const exit = yield* resolveFromProject(module, project).pipe(
+    Effect.mapError(fail("could not be resolved")),
+    Effect.flatMap((url) =>
+      url === undefined
+        ? Effect.fail(fail(`is not installed in ${project}`)())
+        : Effect.tryPromise({
+            try: (): Promise<{ readonly default?: unknown }> => import(url),
+            catch: fail("could not be imported"),
+          }),
+    ),
     Effect.flatMap((loaded) =>
       Layer.isLayer(loaded.default)
         ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- dynamically imported ingress module; Router is checked after the build
