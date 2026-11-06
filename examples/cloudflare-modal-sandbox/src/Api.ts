@@ -33,16 +33,17 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
         if (url.pathname === "/run") {
           const home = yield* volumes.getOrCreate(`home-${user}`);
-          // The command is the sandbox's program: a Worker waits for it and
-          // reads its output through Modal's API. (`exec` needs the sandbox's
-          // HTTP/2 command router, which a Worker can't reach yet.)
+          // The command runs as the sandbox's program and leaves its output on
+          // the user's volume, which the Worker reads back. (A Worker can't
+          // reach the sandbox's HTTP/2 command router yet, which `exec` and
+          // `logs` need.)
           const sandbox = yield* sandboxes.create({
-            command: ["sh", "-c", "ls /work && cat /home/user/notes.txt"],
+            command: ["sh", "-c", "{ ls /work && cat /home/user/notes.txt; } > /home/user/run.txt"],
             mounts: [{ volume: home, path: "/home/user" }],
             timeout: "5 minutes",
           });
           const { exitCode } = yield* sandbox.wait("50 seconds");
-          const stdout = yield* sandbox.logs();
+          const stdout = yield* home.readFileString("/run.txt");
           return yield* HttpServerResponse.json({ exitCode, stdout });
         }
 

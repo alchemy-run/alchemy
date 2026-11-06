@@ -94,6 +94,16 @@ export const bindingRoutes = Effect.gen(function* () {
             .pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
           return yield* HttpServerResponse.json(result);
         }
+        case "/sandbox-logs": {
+          const sandbox = yield* sandboxes.create({
+            command: ["sh", "-c", "echo from-the-program"],
+            timeout: "5 minutes",
+            tags: { test: key },
+          });
+          const exit = yield* sandbox.wait("50 seconds");
+          const logs = yield* sandbox.logs();
+          return yield* HttpServerResponse.json({ exitCode: exit.exitCode, logs });
+        }
         case "/sandbox-files": {
           const sandbox = yield* appSandboxes.create({
             image: "debian:bookworm-slim",

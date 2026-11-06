@@ -145,6 +145,19 @@ for (const host of hosts) {
       );
 
       routerTest(
+        "read the output of a sandbox's program",
+        Effect.gen(function* () {
+          const body = yield* get<{ exitCode: number; logs: string }>(
+            host,
+            `/sandbox-logs?key=l-${host.key}`,
+          );
+          expect(body.exitCode).toBe(0);
+          expect(body.logs).toBe("from-the-program\n");
+        }),
+        { tags: tags(host, "sandbox"), timeout: 300_000 },
+      );
+
+      routerTest(
         "write and read sandbox files and snapshot the filesystem",
         Effect.gen(function* () {
           const body = yield* get<{ read: string; snapshot: string }>(host, "/sandbox-files");

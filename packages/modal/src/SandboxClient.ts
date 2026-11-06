@@ -375,10 +375,14 @@ export interface SandboxHandleOf<R> {
     SandboxOpError<"getResourceUsage">,
     R
   >;
-  /** The main process's output so far. */
+  /**
+   * The main process's stdout so far: what the sandbox's command router sends
+   * within `timeout` (default 5 seconds), or all of it once the program has
+   * exited.
+   */
   logs(options?: {
     readonly timeout?: DurationInput;
-  }): Effect.Effect<string, SandboxOpError<"getLogs">, R>;
+  }): Effect.Effect<string, SandboxRouterError<"mainStdio">, R>;
   /** Wait for the sandbox to finish; `undefined` exit code while still running. */
   wait(
     timeout?: DurationInput,
@@ -603,7 +607,6 @@ export const SandboxOps = operations({
   getTags: sandbox.sandboxTagsGetV2,
   setName: sandbox.sandboxSetName,
   getResourceUsage: sandbox.sandboxGetResourceUsage,
-  getLogs: sandbox.sandboxGetLogs,
   wait: sandbox.sandboxWaitV2,
   terminate: sandbox.sandboxTerminateV2,
   usage: sandbox.sandboxGetTimeRangeStats,
@@ -631,6 +634,9 @@ const routerOps = {
   snapshotDirectory: withRouter(router.taskSnapshotDirectory),
   mountDirectory: withRouter(router.taskMountDirectory),
   setNetworkAccess: withRouter(router.taskSetNetworkAccess),
+  // The sandbox's own program's output (V2 sandboxes serve it here, not
+  // through the control plane's sandboxGetLogs).
+  mainStdio: streamRouter(router.sandboxStdioReadV2),
 };
 
 /**
@@ -1100,15 +1106,18 @@ export const sandboxHandle = (
       };
     }),
     logs: Effect.fn(function* (options = {}) {
-      const { items } = yield* ops.getLogs({
-        sandboxId,
-        fileDescriptor: "FILE_DESCRIPTOR_STDOUT",
-        timeout: seconds(options.timeout) ?? 5,
-      });
-      return items
-        .flatMap((batch) => batch.items ?? [])
-        .map((log) => log.data ?? "")
-        .join("");
+      const { taskId: id, at } = yield* routerAccess;
+      const read = yield* routerOps.mainStdio(at);
+      const chunks = yield* read({
+        taskId: id,
+        offset: "0",
+        fileDescriptor: "SANDBOX_STDIO_FILE_DESCRIPTOR_STDOUT",
+      }).pipe(
+        Stream.map((item) => Buffer.from(item.data, "base64")),
+        Stream.interruptWhen(Effect.sleep(`${seconds(options.timeout) ?? 5} seconds`)),
+        Stream.runCollect,
+      );
+      return Buffer.concat(chunks).toString("utf8");
     }),
     wait: Effect.fn(function* (timeout) {
       const { result } = yield* ops.wait({
