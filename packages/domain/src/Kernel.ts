@@ -1007,6 +1007,34 @@ const build = (
       }
       return { next, events, deliveries };
     });
+    /** Route one stored event to its subscribers: those in `only`, or every one (policies too). */
+    const routerOf = (rawId: string) => {
+      const id = decodeId(rawId) as string;
+      const stream = `${aggregate.aggregateName}/${id}`;
+      const sourceRef = Aggregate.makeRef(aggregate, id);
+      return (row: StoredEvent, only?: ReadonlySet<string>) =>
+        Effect.map(decodeEvent(row.event), (event) =>
+          fanOut(
+            {
+              event,
+              source: sourceRef,
+              envelope: decodeEnvelope(row.envelope),
+              state: undefined,
+              stream,
+            },
+            {
+              source: stream,
+              seq: row.envelope.seq,
+              origin: aggregate.aggregateName,
+              tag: (row.event as { readonly _tag: string })._tag,
+              event: row.event,
+              envelope: row.envelope,
+              history: true,
+            },
+            only,
+          ),
+        );
+    };
     return {
       name: aggregate.aggregateName,
       deliver,
@@ -1015,39 +1043,18 @@ const build = (
       get targets() {
         return targetsOf(aggregate.aggregateName);
       },
-      replay: (input) => {
-        const targets = targetsOf(aggregate.aggregateName);
-        const id = decodeId(input.id) as string;
-        const stream = `${aggregate.aggregateName}/${id}`;
-        const sourceRef = Aggregate.makeRef(aggregate, id);
-        return replay(
-          targets,
+      replay: (input) =>
+        replay(
+          targetsOf(aggregate.aggregateName),
           input,
           (row) => row.envelope.seq,
-          (row, only) =>
-            Effect.map(decodeEvent(row.event), (event) =>
-              fanOut(
-                {
-                  event,
-                  source: sourceRef,
-                  envelope: decodeEnvelope(row.envelope),
-                  state: undefined,
-                  stream,
-                },
-                {
-                  source: stream,
-                  seq: row.envelope.seq,
-                  origin: aggregate.aggregateName,
-                  tag: (row.event as { readonly _tag: string })._tag,
-                  event: row.event,
-                  envelope: row.envelope,
-                  history: true,
-                },
-                only,
-              ),
-            ),
-        );
-      },
+          routerOf(input.id),
+        ),
+      consumersOf: (id, rows) =>
+        Effect.map(
+          Effect.forEach(rows, (row) => routerOf(id)(row)),
+          (deliveries) => deliveries.flat(),
+        ),
       seed: Effect.fnUntraced(function* (input) {
         const id = decodeId(input.id) as string;
         const state = codecs.state.decode(input.state ?? codecs.initial);
@@ -1230,6 +1237,34 @@ const build = (
     const emit = handlers(def.emit);
     const encodeState = (state: unknown) =>
       codec && state !== null && state !== undefined ? codec.encode(state) : null;
+    /** Route one emitted entry to its subscribers: those in `only`, or every one (policies too). */
+    const viewRouterOf = (id: string) => {
+      const keyRef = Key.refOf(def.key, id);
+      const stream = `${view.viewName}/${id}`;
+      return (row: ViewEntry, only?: ReadonlySet<string>) =>
+        Effect.map(decodeEvent(row.event), (event) =>
+          fanOut(
+            {
+              event,
+              source: keyRef,
+              envelope: decodeEnvelope(row.envelope),
+              state: codec && row.state !== null ? codec.decode(row.state) : null,
+              stream,
+            },
+            {
+              source: stream,
+              seq: row.seq,
+              origin: view.viewName,
+              tag: (row.event as { readonly _tag: string })._tag,
+              event: row.event,
+              envelope: row.envelope,
+              state: row.state,
+              history: true,
+            },
+            only,
+          ),
+        );
+    };
     return {
       name: view.viewName,
       deliver,
@@ -1250,39 +1285,13 @@ const build = (
         return singleSource(`view:${view.viewName}`);
       },
       history: (target, source, id, rows) => history(target, source, id, rows),
-      replay: (input) => {
-        const targets = targetsOf(view.viewName);
-        const keyRef = Key.refOf(def.key, input.id);
-        const stream = `${view.viewName}/${input.id}`;
-        return replay(
-          targets,
-          input,
-          (row) => row.seq,
-          (row, only) =>
-            Effect.map(decodeEvent(row.event), (event) =>
-              fanOut(
-                {
-                  event,
-                  source: keyRef,
-                  envelope: decodeEnvelope(row.envelope),
-                  state: codec && row.state !== null ? codec.decode(row.state) : null,
-                  stream,
-                },
-                {
-                  source: stream,
-                  seq: row.seq,
-                  origin: view.viewName,
-                  tag: (row.event as { readonly _tag: string })._tag,
-                  event: row.event,
-                  envelope: row.envelope,
-                  state: row.state,
-                  history: true,
-                },
-                only,
-              ),
-            ),
-        );
-      },
+      replay: (input) =>
+        replay(targetsOf(view.viewName), input, (row) => row.seq, viewRouterOf(input.id)),
+      consumersOf: (id, rows) =>
+        Effect.map(
+          Effect.forEach(rows, (row) => viewRouterOf(id)(row)),
+          (deliveries) => deliveries.flat(),
+        ),
       observe: (key, batch) => (effect) => {
         if (!telemetry.views || batch.every((d) => d.history)) return effect;
         const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
