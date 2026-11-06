@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { kebabCase } from "effect/String";
 import { formatUrl, parseHostname } from "portless";
 import { HostnameInvalid } from "../Errors.ts";
@@ -21,29 +22,19 @@ export const routedName = (id: string, stage: string, domain: string) =>
   `${stageLabel(stage)}.${kebabCase(id)}.${domain}`;
 
 /**
- * Validates a name with Portless's own grammar and appends `.localhost`. Throws
- * {@link HostnameInvalid}: for the places that can only throw, such as the
- * function an Output maps with.
+ * Validates a name with Portless's own grammar and appends `.localhost`.
+ * Fails with {@link HostnameInvalid} when Portless can't serve it.
  */
-export const hostnameOrThrow = (name: string) => {
-  try {
-    return parseHostname(name);
-  } catch (cause) {
-    throw new HostnameInvalid({
-      hostname: name,
-      reason: cause instanceof Error ? cause.message : "it is not a valid DNS name",
-    });
-  }
-};
-
-/** {@link hostnameOrThrow} as an Effect that fails with {@link HostnameInvalid}. */
 export const hostnameOf = (name: string) =>
   Effect.try({
-    try: () => hostnameOrThrow(name),
-    catch: (error) =>
-      error instanceof HostnameInvalid
-        ? error
-        : new HostnameInvalid({ hostname: name, reason: String(error) }),
+    try: () => parseHostname(name),
+    catch: (cause) =>
+      new HostnameInvalid({
+        hostname: name,
+        reason: Predicate.hasProperty(cause, "message")
+          ? String(cause.message)
+          : "it is not a valid DNS name",
+      }),
   });
 
 /** The HTTPS origin the proxy serves a hostname on. */

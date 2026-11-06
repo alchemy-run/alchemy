@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/portless",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Stable HTTPS .localhost URLs for dev servers and local ports, through a shared Portless proxy.",
   "keywords": [
     "alchemy",
