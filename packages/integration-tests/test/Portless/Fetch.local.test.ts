@@ -53,7 +53,7 @@ const getReady = (url: string) =>
             ),
       ),
       Effect.retry({
-        while: (error): error is NotReady => error instanceof NotReady,
+        while: (error) => error._tag === "NotReady",
         schedule: Schedule.max([
           Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(15),

@@ -3,6 +3,7 @@ import * as Claims from "@alchemy.run/portless/internal/Claims";
 import { FLOCI_CONTAINER, containerPublishing } from "@alchemy.run/portless/internal/Holder";
 import { processStartTime } from "@alchemy.run/portless/internal/Identity";
 import { portOf } from "@alchemy.run/portless/internal/LoopbackUrl";
+import { resolveAgainst } from "@alchemy.run/portless/internal/Resolve";
 import { mismatches, readState, type ProxyState } from "@alchemy.run/portless/internal/State";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -10,6 +11,7 @@ import * as Contributions from "alchemy/Contributions";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
@@ -225,3 +227,33 @@ test(
     expect(yield* processStartTime(2 ** 22 + 12345)).toBeUndefined();
   }),
 );
+
+describe("a relative URL", () => {
+  const urlOf = (url: string, origin = "https://dev-alice.api.myapp.localhost") =>
+    resolveAgainst(HttpClientRequest.get(url), origin).url;
+
+  it("resolves against the service's origin", () => {
+    expect(urlOf("/health")).toBe("https://dev-alice.api.myapp.localhost/health");
+    expect(urlOf("health")).toBe("https://dev-alice.api.myapp.localhost/health");
+    expect(urlOf("/a/b?c=d")).toBe("https://dev-alice.api.myapp.localhost/a/b?c=d");
+    expect(urlOf("/health", "https://dev-alice.api.myapp.localhost:8443")).toBe(
+      "https://dev-alice.api.myapp.localhost:8443/health",
+    );
+    // With PORTLESS=0 the origin is plain http on localhost.
+    expect(urlOf("/health", "http://localhost:5173")).toBe("http://localhost:5173/health");
+  });
+
+  it("leaves an absolute URL alone", () => {
+    expect(urlOf("https://example.com/x")).toBe("https://example.com/x");
+  });
+
+  it("keeps the request's method and query parameters", () => {
+    const request = HttpClientRequest.post("/items").pipe(
+      HttpClientRequest.setUrlParam("page", "2"),
+    );
+    const resolved = resolveAgainst(request, "https://dev-alice.api.myapp.localhost");
+    expect(resolved.method).toBe("POST");
+    expect(resolved.url).toBe("https://dev-alice.api.myapp.localhost/items");
+    expect(resolved.urlParams).toEqual(request.urlParams);
+  });
+});
