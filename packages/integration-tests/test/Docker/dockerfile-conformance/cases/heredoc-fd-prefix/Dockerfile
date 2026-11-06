@@ -1,0 +1,3 @@
+FROM alpine
+RUN 3<<EMPTY2
+EMPTY2

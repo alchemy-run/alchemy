@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "A",
+              "1"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
