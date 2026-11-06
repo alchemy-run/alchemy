@@ -24,6 +24,9 @@ export interface DocsTab {
   slot: "start" | "hub" | "end";
   /** Dropdown category (required for slot: "hub"). */
   category?: DocsCategory;
+  /** Further dropdowns that also list the hub. Its own `category` stays
+   * the one underlined while you're in it. */
+  alsoIn?: DocsCategory[];
   /** One-line scope hint shown in the dropdown. */
   hint?: string;
 }
@@ -31,6 +34,7 @@ export interface DocsTab {
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
   "Clouds",
+  "Actors",
   "Containers",
   "Sandboxes",
   "Databases",
@@ -48,12 +52,14 @@ const hub = (
   category: DocsCategory,
   hint: string,
   extraPrefixes: string[] = [],
+  alsoIn?: DocsCategory[],
 ): DocsTab => ({
   label,
   href: `/${slug}`,
   prefixes: [`/${slug}`, ...extraPrefixes],
   slot: "hub",
   category,
+  alsoIn,
   hint,
 });
 
@@ -67,9 +73,14 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "start",
   },
 
-  hub("Cloudflare", "cloudflare", "Clouds", "workers · durable objects · R2 · D1", [
-    "/providers/cloudflare",
-  ]),
+  hub(
+    "Cloudflare",
+    "cloudflare",
+    "Clouds",
+    "workers · durable objects · R2 · D1",
+    ["/providers/cloudflare"],
+    ["Actors"],
+  ),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
@@ -104,6 +115,10 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
 
   hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
+  hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
+  hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
+    "/providers/cluster",
+  ]),
   hub("Git", "git", "Source & CI", "self-hosted git · clone · push · pull requests", [
     "/providers/git",
   ]),
@@ -147,9 +162,9 @@ const alphabetically = (a: string, b: string) => a.localeCompare(b, "en", { sens
 export const DOCS_TAB_GROUPS: DocsTabGroup[] = (() => {
   const sections = DOCS_CATEGORIES.map((category) => ({
     heading: category,
-    tabs: DOCS_TABS.filter((tab) => tab.category === category).sort((a, b) =>
-      alphabetically(a.label, b.label),
-    ),
+    tabs: DOCS_TABS.filter(
+      (tab) => tab.category === category || tab.alsoIn?.includes(category),
+    ).sort((a, b) => alphabetically(a.label, b.label)),
   })).filter((section) => section.tabs.length > 0);
   const own = sections.filter((section) => section.tabs.length > 1);
   const more = sections

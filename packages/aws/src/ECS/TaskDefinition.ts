@@ -95,8 +95,8 @@ export interface TaskDefinitionProps {
          */
         group?: string;
         /**
-         * awslogs stream prefix.
-         * @default the task family
+         * awslogs stream prefix, at most 200 characters.
+         * @default the task family's first 200 characters
          */
         streamPrefix?: string;
       };
@@ -425,8 +425,10 @@ export const TaskDefinitionProvider = () =>
         const fargate = requiresCompatibilities.includes("FARGATE");
         const networkMode = props.networkMode ?? (fargate ? "awsvpc" : undefined);
         const logGroupName = logGroupNameOf(family, props);
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
         const streamPrefix =
-          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ?? family;
+          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ??
+          family.slice(0, 200);
         const containerDefinitions = props.containerDefinitions.map((cd) =>
           logGroupName !== undefined && cd.logConfiguration === undefined
             ? {
