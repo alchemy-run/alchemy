@@ -10,8 +10,9 @@ import { listener } from "./fixtures/Listener.ts";
 import { routeOf } from "./fixtures/Processes.ts";
 import * as TestProxy from "./fixtures/TestProxy.ts";
 
-// The adapter, through the call a resource's local provider makes: `Ingress.route` resolves it
-// from the package's contributions. The consumers (a Worker, a `Website.Server`) call exactly this.
+// The router, through the call a resource's local provider makes: `Ingress.attach` imports the
+// module the value names and builds its Router. The consumers (a Worker, a `Website.Server`) call
+// exactly this.
 const proxy = TestProxy.make();
 const { test, afterAll } = Test.make({
   providers: proxy.providers(),
@@ -25,24 +26,23 @@ const program = Effect.gen(function* () {
   return yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
 });
 
-/** The target a resource's provider derives for a resource of this id. */
-const targetOf = (config: Ingress.IngressConfig, id: string) =>
-  Ingress.createTarget({
-    stack: { name: "ingress-test", stage: "dev_alice" },
-    id,
-    fqn: id,
-    type: "Test.Web",
-    config,
-  });
+/** The target a resource's provider builds for a resource of this id. */
+const targetOf = (id: string): Ingress.Target => ({
+  stack: "ingress-test",
+  stage: "dev_alice",
+  fqn: id,
+  id,
+  type: "Test.Web",
+});
 
 /** Routes a target to a listener in a scope the test closes itself. */
-const attach = (config: Ingress.IngressConfig, id: string, url: string) =>
+const attach = (config: Ingress.Ingress, id: string, url: string) =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
     const close = Scope.close(scope, Exit.void);
     // A failed assertion must not leave a claim behind for the next test.
     yield* Effect.addFinalizer(() => close);
-    const origin = yield* Ingress.route(config, targetOf(config, id), new URL(url)).pipe(
+    const origin = yield* Ingress.attach(config, targetOf(id), new URL(url)).pipe(
       Scope.provide(scope),
     );
     return { origin, close };
@@ -54,20 +54,20 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       // The config is made from the Proxy resource, and its Outputs resolve to the proxy's settings.
-      const { proxy: deployed, ingress: config } = yield* stack.deploy(
+      const { proxy: deployed, ingress } = yield* stack.deploy(
         Effect.gen(function* () {
           const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
           return { proxy, ingress: Portless.Ingress(proxy) };
         }),
       );
+      const config = Portless.Ingress(deployed);
+      expect(ingress).toEqual(config);
       expect(config).toEqual({
-        type: "portless",
-        options: {
-          domain: "ingress-adapter",
-          tld: "localhost",
-          port: deployed.port,
-          stateDirectory: deployed.stateDirectory,
-        },
+        module: "@alchemy.run/portless/IngressLive",
+        domain: "ingress-adapter",
+        tld: "localhost",
+        port: deployed.port,
+        stateDirectory: deployed.stateDirectory,
       });
 
       // The name is known before the listener exists, and is the one Origin gives the same id.
@@ -144,7 +144,7 @@ test.provider(
 );
 
 test.provider(
-  "Ingress takes its name from IngressConfig.name",
+  "Ingress takes its name from the name it was given",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -176,18 +176,27 @@ test.provider(
       );
       const config = Portless.Ingress(deployed.proxy);
       const failure = (id: string, url: string) =>
-        Effect.flip(Ingress.route(config, targetOf(config, id), new URL(url)).pipe(Effect.scoped));
+        Effect.flip(Ingress.attach(config, targetOf(id), new URL(url)).pipe(Effect.scoped));
 
       const claimed = yield* failure("Web", "http://localhost:4000");
-      expect(claimed).toBeInstanceOf(Ingress.IngressError);
+      expect(claimed._tag).toBe("IngressError");
       expect(claimed.message).toContain("already routed");
 
       // Portless forwards plain HTTP to a port on this machine.
       const secure = yield* failure("Secure", "https://localhost:4000");
-      expect(secure).toBeInstanceOf(Ingress.IngressError);
+      expect(secure._tag).toBe("IngressError");
       expect(secure.message).toContain("plain HTTP");
       const remote = yield* failure("Remote", "http://example.com:4000");
       expect(remote.message).toContain("loopback");
+      // A value naming the module but not the proxy it routes through.
+      const unproxied = yield* Effect.flip(
+        Ingress.attach(
+          { module: "@alchemy.run/portless/IngressLive" },
+          targetOf("Unproxied"),
+          new URL("http://localhost:4000"),
+        ).pipe(Effect.scoped),
+      );
+      expect(unproxied.message).toContain("Portless.Ingress(proxy)");
 
       expect(
         yield* routeOf(deployed.proxy.stateDirectory, "dev-alice.secure.ingress-adapter.localhost"),
@@ -213,7 +222,7 @@ test.provider(
         stateDirectory: yield* off.stateDirectory,
       });
       const web = yield* listener("web");
-      const origin = yield* Ingress.route(config, targetOf(config, "Web"), new URL(web.url)).pipe(
+      const origin = yield* Ingress.attach(config, targetOf("Web"), new URL(web.url)).pipe(
         Effect.scoped,
         Effect.provide(off.config),
       );
@@ -240,14 +249,16 @@ lanFile.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { proxy: deployed, ingress: config } = yield* stack.deploy(
+      const { proxy: deployed, ingress } = yield* stack.deploy(
         Effect.gen(function* () {
           const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
           return { proxy, ingress: Portless.Ingress(proxy) };
         }),
       );
       expect(deployed.tld).toBe("local");
-      expect(config.options).toMatchObject({ tld: "local" });
+      const config = Portless.Ingress(deployed);
+      expect(ingress).toEqual(config);
+      expect(config).toMatchObject({ tld: "local" });
 
       const expected = yield* Portless.Origin("Web", { proxy: deployed }).pipe(
         Effect.provideService(Stage, "dev_alice"),

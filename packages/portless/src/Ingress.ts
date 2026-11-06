@@ -86,4 +86,7 @@ export function Ingress(
 }
 
 /** The proxy settings an ingress routes through: a `Portless.Proxy`, or its deployed attributes. */
-type ProxySettings<P> = Pick<P, "domain" | "tld" | "port" | "stateDirectory">;
+type ProxySettings<P extends Record<"domain" | "tld" | "port" | "stateDirectory", unknown>> = Pick<
+  P,
+  "domain" | "tld" | "port" | "stateDirectory"
+>;
