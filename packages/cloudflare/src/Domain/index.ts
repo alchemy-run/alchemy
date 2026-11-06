@@ -515,6 +515,16 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
     yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
   });
 
+/**
+ * The directory subtree an object that isn't a source lists itself under:
+ * policies, streams, projections and saga runs. Named like their classes
+ * (`NotifyPolicy`), so they never share a subtree with the sources a backfill
+ * reads. With every object of a model listed, a later layout change finds each
+ * one exactly, with no wait on Cloudflare's listing.
+ */
+export const registryName = (kind: "Policy" | "Stream" | "Projection" | "Workflow", name: string) =>
+  `${name.replace(/[^A-Za-z0-9_]/g, "_")}${kind}`;
+
 const aggregateObject = (
   kit: AggregateKit,
   net: Backfill.Network,
@@ -986,7 +996,7 @@ const viewObject = (
     });
   });
 
-const policyObject = (kit: PolicyKit) =>
+const policyObject = (kit: PolicyKit, net: Backfill.Network) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -995,6 +1005,11 @@ const policyObject = (kit: PolicyKit) =>
         receive: (delivery: Delivery) =>
           reportDefects(
             Effect.gen(function* () {
+              // Listed before its first write.
+              yield* ensureRegistered(net, {
+                source: registryName("Policy", kit.name),
+                id: delivery.key,
+              });
               const id = `${delivery.source}:${delivery.seq}`;
               const accepted = yield* exclusively(
                 state.storage.transaction(
@@ -1222,7 +1237,9 @@ const projectionObject = (
             ),
           after: runtime.provide(state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)))),
         }));
-      const keep = (key: string) => state.storage.put(ID_KEY, key);
+      // Listed before its first write.
+      const keep = (key: string) =>
+        ensureRegistered(net, { source: registryName("Projection", kit.name), id: key });
       return {
         receive: (key: string, delivery: Delivery) =>
           reportDefects(
@@ -1250,7 +1267,7 @@ const projectionObject = (
     });
   });
 
-const streamObject = (kit: StreamKit) =>
+const streamObject = (kit: StreamKit, net: Backfill.Network) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1268,6 +1285,8 @@ const streamObject = (kit: StreamKit) =>
       return {
         append: (key: string, write: StreamWrite) =>
           Effect.gen(function* () {
+            // Listed before its first write.
+            yield* ensureRegistered(net, { source: registryName("Stream", kit.name), id: key });
             const meta = yield* readMeta;
             if (!isAfter(write.origin, meta.origin)) return;
             const added: Array<StreamEntry> = write.events.map((event, index) => {
@@ -1425,6 +1444,40 @@ const legacyClassesOf = (current: string, legacyName: string): ReadonlyArray<Leg
 const sagaLegacyNames = new Map<string, string>();
 /** Each saga workflow's version 0 class, and the model that runs it. */
 const sagaModels = new Map<string, string>();
+/** Each hosted model's directory, by model name: where its saga runs list themselves. */
+const directories = new Map<string, Backfill.Network>();
+
+/**
+ * A saga's run objects, listed in their model's directory as they start, like
+ * every other object of the model: a later layout change finds each run
+ * exactly. The workflow engine stays as it is; only `start` is wrapped.
+ */
+const listedRuns = (modelName: string, route: string, impl: ObjectImpl): ObjectImpl =>
+  Effect.map(impl, (make) =>
+    Effect.map(make, (instance) => {
+      const start = instance.start as
+        | ((executionId: string, ...rest: ReadonlyArray<unknown>) => Effect.Effect<unknown>)
+        | undefined;
+      if (typeof start !== "function") return instance;
+      const source = registryName(
+        "Workflow",
+        route.slice(route.indexOf(".") + 1, -"Workflow".length),
+      );
+      return {
+        ...instance,
+        start: (executionId: string, ...rest: ReadonlyArray<unknown>) =>
+          Effect.andThen(
+            Effect.suspend(() => {
+              const net = directories.get(modelName);
+              return net === undefined
+                ? Effect.void
+                : ensureRegistered(net, { source, id: executionId });
+            }),
+            start(executionId, ...rest),
+          ),
+      };
+    }),
+  );
 
 /** The models each Worker hosts, by name. */
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
@@ -1673,6 +1726,8 @@ const durableObjectPlatform = (
                 ),
             },
           };
+          // Saga runs list themselves in this directory too (see `listedRuns`).
+          directories.set(modelName, net);
           directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
           // A deploy's backfill: start each new consumer's run, then wait until every one is
@@ -2001,7 +2056,10 @@ const durableObjectPlatform = (
             stream: (stream, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${stream.streamName}Stream`, streamObject(kit));
+                  const namespace = yield* object(
+                    `${stream.streamName}Stream`,
+                    streamObject(kit, net),
+                  );
                   const read = (key: string) =>
                     unwrapDefects<StreamMeta>(namespace.getByName(key).read());
                   const after = (key: string, cursor: number) =>
@@ -2106,7 +2164,10 @@ const durableObjectPlatform = (
             policy: (policy, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                  const namespace = yield* object(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit, net),
+                  );
                   return {
                     receive: (delivery) =>
                       unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -2279,26 +2340,22 @@ export function layerDurableObjects({
           const engine =
             version !== undefined && version >= 1
               ? // Saga runs in the shared class too, each workflow's on its own route.
-                makeEngine(jurisdiction, (name, impl) =>
-                  Effect.flatMap(
-                    sharedClasses(
-                      random,
-                      // Recorded when the model is hosted, before its sagas register.
-                      sagaModels.get(name) ?? name.slice(0, name.indexOf(".")),
-                    ),
-                    (shared) =>
-                      shared.object(
+                makeEngine(jurisdiction, (name, impl) => {
+                  // Recorded when the model is hosted, before its sagas register.
+                  const modelName = sagaModels.get(name) ?? name.slice(0, name.indexOf("."));
+                  return Effect.flatMap(sharedClasses(random, modelName), (shared) =>
+                    shared.object(
+                      name,
+                      listedRuns(modelName, name, impl),
+                      legacyClassesOf(
                         name,
-                        impl,
-                        legacyClassesOf(
-                          name,
-                          // Recorded when the model is hosted, before its sagas register.
-                          sagaLegacyNames.get(name) ??
-                            name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
-                        ),
+                        // Recorded when the model is hosted, before its sagas register.
+                        sagaLegacyNames.get(name) ??
+                          name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
                       ),
-                  ),
-                )
+                    ),
+                  );
+                })
               : layerDurableObjectEngine({ jurisdiction });
           const legacySagas = new Map<string, string>();
           return Layer.merge(
