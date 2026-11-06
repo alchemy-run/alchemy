@@ -141,11 +141,11 @@ export interface ImageProps {
   /**
    * Keep build layers in a remote cache so a fresh builder (a new CI runner)
    * skips unchanged steps. `true` keeps every stage's layers at the
-   * repository's `:buildcache` tag; pass `{ from, to }` with
-   * [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-   * for another backend; an explicit ECR registry backend needs
-   * `"image-manifest": true` and `"oci-mediatypes": true`, which `true`
-   * sets. The cache is not part of the content hash.
+   * repository's `:buildcache` tag; pass BuildKit's `--cache-from` /
+   * `--cache-to` values as `{ from, to }` for another
+   * [backend](https://docs.docker.com/build/cache/backends/). An explicit
+   * ECR registry cache needs `image-manifest=true,oci-mediatypes=true`,
+   * which `true` sets. The cache is not part of the content hash.
    * @default false
    */
   cache?: BuildCacheOptions["cache"];
@@ -258,8 +258,8 @@ export interface ImageLookup {
  * nothing but the image is pushed. A builder that has never built the image,
  * such as a fresh CI runner, reruns every step. Set `cache: true` to keep
  * every stage's layers at the image repository's `:buildcache` tag, so fresh
- * builders skip unchanged steps. For another backend, pass BuildKit cache
- * backends as `{ from, to }`.
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
  *
  * **Example:** Cache layers in the ECR repository
  * ```typescript
@@ -274,8 +274,8 @@ export interface ImageLookup {
  * const image = yield* AWS.ECR.Image("AppImage", {
  *   context: "./app",
  *   cache: {
- *     from: [{ type: "gha", scope: "app" }],
- *     to: [{ type: "gha", scope: "app", mode: "max" }],
+ *     from: ["type=gha,scope=app"],
+ *     to: ["type=gha,scope=app,mode=max"],
  *   },
  * });
  * ```

@@ -335,24 +335,23 @@ a builder that supports it: the `docker` driver with the containerd image
 store, or a `docker-container` builder (what `docker/setup-buildx-action`
 creates in CI).
 
-For another cache backend, list [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-to import (`from`) and export (`to`):
+For another [cache backend](https://docs.docker.com/build/cache/backends/),
+pass BuildKit's own `--cache-from` / `--cache-to` values as `from` and `to`:
 
 ```typescript
 export class Agent extends Cloudflare.Container<Agent>()("Agent", {
   context: `${import.meta.dirname}/context`,
   build: {
     cache: {
-      from: [{ type: "gha", scope: "agent" }],
-      to: [{ type: "gha", scope: "agent", mode: "max" }],
+      from: ["type=gha,scope=agent"],
+      to: ["type=gha,scope=agent,mode=max"],
     },
   },
 }) {}
 ```
 
-Each entry is BuildKit's `type=<type>,<attribute>=<value>` written as an
-object. Credentials for `gha` and `s3` come from the environment, as BuildKit
-documents; attributes reach `docker`'s arguments, so never put secrets in
+Credentials for `gha` and `s3` come from the environment, as BuildKit
+documents; the values reach `docker`'s arguments, so never put secrets in
 them. The cache isn't part of the image's content hash, so changing it never
 rebuilds an image. Every resource that builds an image takes the same
 `cache`: `Docker.Image`, `AWS.ECS`, `GCP.Run` and `Kubernetes` workloads under

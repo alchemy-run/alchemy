@@ -560,8 +560,8 @@ type ContainerShape<Shape> = {
  *   context: `${import.meta.dirname}/context`,
  *   build: {
  *     cache: {
- *       from: [{ type: "gha", scope: "agent" }],
- *       to: [{ type: "gha", scope: "agent", mode: "max" }],
+ *       from: ["type=gha,scope=agent"],
+ *       to: ["type=gha,scope=agent,mode=max"],
  *     },
  *   },
  * }) {}

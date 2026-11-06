@@ -611,8 +611,8 @@ export type ServiceShape = Main<ServiceServices>;
  * nothing but the image is pushed. A builder that has never built the image,
  * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
  * every stage's layers at the image repository's `:buildcache` tag, so fresh
- * builders skip unchanged steps. For another backend, pass BuildKit cache
- * backends as `{ from, to }`.
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
  *
  * **Example:** Cache layers in Artifact Registry
  * ```typescript
@@ -628,8 +628,8 @@ export type ServiceShape = Main<ServiceServices>;
  *   main: import.meta.url,
  *   build: {
  *     cache: {
- *       from: [{ type: "gha", scope: "api" }],
- *       to: [{ type: "gha", scope: "api", mode: "max" }],
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
  *     },
  *   },
  * });

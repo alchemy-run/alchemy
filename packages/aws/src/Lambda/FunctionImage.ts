@@ -53,9 +53,10 @@ export interface FunctionDockerImageSource extends FunctionImageConfig {
   /**
    * Keep build layers in a remote cache so a fresh builder (a new CI runner)
    * skips unchanged steps. `true` keeps every stage's layers at the function
-   * repository's `:buildcache` tag; pass `{ from, to }` with
-   * [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-   * for another backend. The cache is not part of the image hash.
+   * repository's `:buildcache` tag; pass BuildKit's `--cache-from` /
+   * `--cache-to` values as `{ from, to }` for another
+   * [backend](https://docs.docker.com/build/cache/backends/). The cache is
+   * not part of the image hash.
    * @default false
    */
   cache?: BuildCacheOptions["cache"];

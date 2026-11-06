@@ -119,15 +119,16 @@ CI runner, has no local cache and reruns the whole Dockerfile.
 repository's `:buildcache` tag, and the build authenticates with
 `registry`. Fresh machines then skip the unchanged steps.
 
-For another backend, pass [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
-as JSON, here GitHub Actions' cache:
+For another [cache backend](https://docs.docker.com/build/cache/backends/),
+pass BuildKit's own `--cache-from` / `--cache-to` values, here GitHub
+Actions' cache:
 
 ```typescript
 build: {
   context: "./app",
   cache: {
-    from: [{ type: "gha", scope: "app" }],
-    to: [{ type: "gha", scope: "app", mode: "max" }],
+    from: ["type=gha,scope=app"],
+    to: ["type=gha,scope=app,mode=max"],
   },
 }
 ```
