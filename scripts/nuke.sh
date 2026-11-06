@@ -43,7 +43,7 @@ fi
 # Cloudflare.Email.Address alchemy-list-test@: standing test address — Cloudflare
 # refuses to delete an address for ~15 min after creation (code 2032), so the
 # EmailAddress test retains and re-adopts it instead of create/destroy churn.
-# Daytona API keys "alchemy": the team's own key (DAYTONA_API_KEY), not a
+# Daytona API keys "alchemy": the team's own key, not a
 # test leak. Keys carry no ownership marker, so it is spared by name.
 pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --exclude 'AWS.BackupSearch.SearchJob' \
