@@ -125,7 +125,10 @@ const lastWait = (workerName: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     const all = yield* workflows.listWorkflows.items({ accountId }).pipe(Stream.runCollect);
-    const workflow = [...all].find((w) => w.scriptName === workerName);
+    // The Worker's backfill Workflow, not its migration one.
+    const workflow = [...all].find(
+      (w) => w.scriptName === workerName && w.className.endsWith("DomainBackfill"),
+    );
     expect(workflow).toBeDefined();
     const instances = yield* workflows.listInstances
       .items({ accountId, workflowName: workflow!.name, status: "complete" })

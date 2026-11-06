@@ -3,9 +3,20 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { call, roundTrip, waitForPlatform } from "./fixtures/counter-client.ts";
 import EuWorker from "./fixtures/eu-worker.ts";
 import UnrestrictedWorker from "./fixtures/unrestricted-worker.ts";
+
+/** `c-1`'s state, read until it holds `total` (bounded). */
+const stateOf = (url: string, total: number) =>
+  call(`${url}/state/c-1`).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (state) => (state as { total?: number }).total === total,
+      times: 15,
+    }),
+  );
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -37,11 +48,12 @@ test.provider(
 
       yield* deploy(UnrestrictedWorker);
       yield* waitForPlatform(url, "unrestricted");
-      expect(yield* call(`${url}/state/c-1`)).toEqual({ total: 0 });
+      // Until every isolate runs the new code, a read can still reach the other jurisdiction.
+      expect(yield* stateOf(url, 0)).toEqual({ total: 0 });
 
       yield* deploy(EuWorker);
       yield* waitForPlatform(url, "eu");
-      expect(yield* call(`${url}/state/c-1`)).toEqual({ total: 4 });
+      expect(yield* stateOf(url, 4)).toEqual({ total: 4 });
 
       yield* stack.destroy();
     }).pipe(logLevel),
