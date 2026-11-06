@@ -21,7 +21,6 @@ export {
 export * from "./Credentials.ts";
 export {
   ProjectIdentity,
-  ProjectIdentityError,
   ProjectIdentityProvider,
   type OidcAuth,
   type ProjectIdentityAttributes,
