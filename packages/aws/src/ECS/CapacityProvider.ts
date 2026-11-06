@@ -77,8 +77,18 @@ export interface CapacityProvider extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CapacityProviderLookup
 > {}
+
+/**
+ * Props for {@link CapacityProvider.lookup}: find a capacity provider this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CapacityProviderLookup {
+  /** The name of the existing capacity provider. */
+  name: string;
+}
 
 /**
  * An Amazon ECS capacity provider backed by an EC2 Auto Scaling Group.
@@ -125,6 +135,16 @@ export interface CapacityProvider extends Resource<
  *   name: "existing-provider",
  *   autoScalingGroupArn: asg.autoScalingGroupArn,
  * }).pipe(adopt());
+ * ```
+ *
+ * ### Looking up an existing capacity provider
+ * `CapacityProvider.lookup` references a capacity provider Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing capacity provider
+ * ```typescript
+ * const spot = AWS.ECS.CapacityProvider.lookup({ name: "spot" });
  * ```
  *
  * @resource
@@ -189,6 +209,22 @@ export const CapacityProviderProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* describe(name);
+          if (!found?.name || !found.capacityProviderArn) return undefined;
+          return {
+            capacityProviderArn: found.capacityProviderArn as CapacityProviderArn,
+            name: found.name,
+            status: (found.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
+            updateStatus: found.updateStatus,
+            autoScalingGroupArn: found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
+            managedScaling: found.autoScalingGroupProvider?.managedScaling,
+            managedTerminationProtection:
+              found.autoScalingGroupProvider?.managedTerminationProtection,
+            managedDraining: found.autoScalingGroupProvider?.managedDraining,
+            tags: fromEcsTags(found.tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* toName(id, olds ?? {}));
           const found = yield* describe(name);

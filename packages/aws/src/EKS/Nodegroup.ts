@@ -139,8 +139,20 @@ export interface Nodegroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  NodegroupLookup
 > {}
+
+/**
+ * Props for {@link Nodegroup.lookup}: find a node group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface NodegroupLookup {
+  /** The cluster the node group belongs to. */
+  clusterName: string;
+  /** The name of the existing node group. */
+  nodegroupName: string;
+}
 
 /**
  * An Amazon EKS managed node group — an EC2 Auto Scaling group of worker nodes
@@ -176,6 +188,17 @@ export interface Nodegroup extends Resource<
  *   labels: { workload: "batch" },
  *   taints: [{ key: "spot", value: "true", effect: "NO_SCHEDULE" }],
  * });
+ * ```
+ *
+ * ### Looking up an existing node group
+ * `Nodegroup.lookup` references a node group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName` and `nodegroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing node group
+ * ```typescript
+ * const workers = AWS.EKS.Nodegroup.lookup({ clusterName: "platform", nodegroupName: "workers" });
+ * const nodeRole = workers.nodeRole;
  * ```
  *
  * @resource
@@ -461,6 +484,7 @@ export const NodegroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName, nodegroupName }) => readNodegroup({ clusterName, nodegroupName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
             | string

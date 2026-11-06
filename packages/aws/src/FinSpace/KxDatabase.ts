@@ -67,8 +67,20 @@ export interface KxDatabase extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  KxDatabaseLookup
 > {}
+
+/**
+ * Props for {@link KxDatabase.lookup}: find a kdb database this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KxDatabaseLookup {
+  /** The environment the database belongs to. */
+  environmentId: string;
+  /** The name of the existing database. */
+  databaseName: string;
+}
 
 /**
  * A kdb database inside an Amazon FinSpace Managed kdb environment — the
@@ -84,6 +96,16 @@ export interface KxDatabase extends Resource<
  *   environmentId: env.environmentId,
  *   description: "tick data",
  * });
+ * ```
+ *
+ * ### Looking up an existing kdb database
+ * `KxDatabase.lookup` references a kdb database Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId` and `databaseName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing kdb database
+ * ```typescript
+ * const ticks = AWS.FinSpace.KxDatabase.lookup({ environmentId, databaseName: "ticks" });
  * ```
  *
  * @resource
@@ -136,6 +158,7 @@ export const KxDatabaseProvider = () =>
         // Databases are keyed by their parent kdb environment — there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
+        lookup: ({ environmentId, databaseName }) => readDatabase(environmentId, databaseName),
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;

@@ -6,7 +6,7 @@ import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
-import { expectDeployFails, missingName } from "../Utils/Lookup.ts";
+import { expectDeployFails, missingName } from "../../lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

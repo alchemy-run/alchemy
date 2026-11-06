@@ -100,8 +100,27 @@ export interface Index extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  IndexLookup
 > {}
+
+/**
+ * Props for {@link Index.lookup}: find an index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IndexLookup =
+  | {
+      /** The application the index belongs to. */
+      applicationId: string;
+      /** The id of the existing index. */
+      indexId: string;
+    }
+  | {
+      /** The application the index belongs to. */
+      applicationId: string;
+      /** The display name of the existing index. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business index — the document store that data sources sync
@@ -128,6 +147,16 @@ export interface Index extends Resource<
  *   type: "ENTERPRISE",
  *   capacityConfiguration: { units: 2 },
  * });
+ * ```
+ *
+ * ### Looking up an existing index
+ * `Index.lookup` references an index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` with `indexId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing index
+ * ```typescript
+ * const existing = AWS.QBusiness.Index.lookup({ applicationId, displayName: "main" });
  * ```
  *
  * @resource
@@ -249,6 +278,13 @@ export const IndexProvider = () =>
         // without iterating every application — treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "indexId" in props
+              ? yield* readIndexById(props.applicationId, props.indexId)
+              : yield* findIndexByName(props.applicationId, props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           if (applicationId === undefined) return undefined;
