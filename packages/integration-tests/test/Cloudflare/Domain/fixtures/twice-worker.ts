@@ -28,7 +28,7 @@ export default class DomainTwiceWorker extends Cloudflare.Worker<DomainTwiceWork
           yield* writer.send(id!, new Open({ owner: owner! }));
           return yield* HttpServerResponse.json({ ok: true });
         }
-        return yield* HttpServerResponse.json(yield* reader.state(id!));
+        return yield* HttpServerResponse.json(yield* reader.get(id!));
       }).pipe(Effect.orDie),
     };
   }),

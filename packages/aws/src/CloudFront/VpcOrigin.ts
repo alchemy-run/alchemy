@@ -101,8 +101,18 @@ export interface VpcOrigin extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VpcOriginLookup
 > {}
+
+/**
+ * Props for {@link VpcOrigin.lookup}: find a VPC origin this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VpcOriginLookup {
+  /** The id of the existing VPC origin. */
+  vpcOriginId: string;
+}
 
 /**
  * A CloudFront VPC origin.
@@ -137,6 +147,16 @@ export interface VpcOrigin extends Resource<
  *     viewerProtocolPolicy: "redirect-to-https",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing VPC origin
+ * `VpcOrigin.lookup` references a VPC origin Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcOriginId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing VPC origin
+ * ```typescript
+ * const existing = AWS.CloudFront.VpcOrigin.lookup({ vpcOriginId: "..." });
  * ```
  *
  * @resource
@@ -292,6 +312,14 @@ export const VpcOriginProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ vpcOriginId }) {
+          const existing = yield* getById(vpcOriginId);
+          if (!existing?.vpcOrigin.Id) {
+            return undefined;
+          }
+          const tags = yield* fetchTags(existing.vpcOrigin.Arn);
+          return toAttrs(existing.vpcOrigin, existing.etag, tags);
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const existing = output?.vpcOriginId

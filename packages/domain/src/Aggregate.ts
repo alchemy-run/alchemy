@@ -13,9 +13,6 @@ import type * as Command from "./Command.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import { judge, settle, targetId as internalTargetId } from "./internal.ts";
-import type * as Middleware from "./Middleware.ts";
-import type * as Read from "./Read.ts";
-import type * as Rejection from "./Rejection.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
@@ -125,8 +122,6 @@ export interface Definition<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  Ms extends Middleware.List = readonly [],
-  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
   E extends Event.Any = EventsOf<C>,
 > {
   /** Schema of the aggregate id (a string or branded string). */
@@ -138,11 +133,13 @@ export interface Definition<
   /** Every command this aggregate handles, each declaring the events it records. */
   readonly commands: C;
   /**
-   * One handler per command: returns the events to commit (from the command's
-   * declared events), an empty array for an accepted no-op, or one of the
-   * command's declared rejections. A handler may be an Effect that reads the
-   * context its command's middleware provides (e.g. `yield* CurrentActor`)
-   * and fails with a rejection; it may require nothing else.
+   * One handler per command, given the instance's current state, the command
+   * and the decision's context: returns the events to commit (from the
+   * command's declared events), an empty array for an accepted no-op, or one
+   * of the command's declared rejections. A handler may be an `Effect.fn`
+   * that reads the context its command's middleware provides (e.g.
+   * `yield* CurrentActor`) and fails with a rejection; it may require
+   * nothing else.
    */
   readonly decide: {
     readonly [T in C[number]["tag"]]: (
@@ -175,12 +172,6 @@ export interface Definition<
       events: ReadonlyArray<InstanceOf<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
-  /**
-   * Let an Api expose this aggregate's state and committed events to clients
-   * (`get`, `watch`, `events`): its middleware, rejections, and `validate`,
-   * which judges each read against the instance's current state.
-   */
-  readonly read?: Read.Contract<{ readonly id: Id["Type"] }, S["Type"], Ms, Rejects>;
 }
 
 /**
@@ -274,7 +265,6 @@ export interface AnyDefinition {
   readonly decide: AnyHandlers;
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
-  readonly read?: Read.AnyContract;
 }
 
 /** An aggregate instance to address: its id, or a ref carrying it. */
@@ -346,8 +336,11 @@ export interface Client<Def extends AnyDefinition> {
     target: Target<Def>,
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
-  /** Read the current state of an instance. */
-  readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
+  /**
+   * Read the current state of an instance, as of its latest commit: `initial`
+   * for one that has never committed.
+   */
+  readonly get: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
 
 /** The commands of a definition that never reject, so can be scheduled. */
@@ -376,7 +369,7 @@ export interface ClientImpl {
     target: unknown,
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
-  readonly state: (target: unknown) => Effect.Effect<unknown>;
+  readonly get: (target: unknown) => Effect.Effect<unknown>;
 }
 
 /**
@@ -452,6 +445,28 @@ export type Prediction<State, Ev, Rej, Id = string> =
  * rejection fails with itself, and a `decide` that suspends or dies gives
  * `Unpredictable`. `predict` never throws.
  */
+/**
+ * One decision for one command, as the kernel and `predict` run it: the
+ * command's handler, given the instance's state. `undefined` when `decide`
+ * has no handler for the command.
+ *
+ * @internal
+ */
+export const decisionOf = (
+  aggregate: Any,
+  state: unknown,
+  command: { readonly _tag: string },
+  ctx: DecideContext<unknown>,
+): unknown => {
+  const handler = (
+    aggregate.definition.decide as unknown as Record<
+      string,
+      ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown) | undefined
+    >
+  )[command._tag];
+  return handler ? handler(state, command, ctx) : undefined;
+};
+
 export const predict = (
   aggregate: Any,
   state: unknown,
@@ -460,10 +475,19 @@ export const predict = (
 ): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
   const def = aggregate.definition;
   const cls = def.commands.find((c) => c.tag === command._tag);
-  const decide = def.decide[command._tag] as
-    | ((state: unknown, command: unknown, ctx: DecideContext<unknown>) => unknown)
-    | undefined;
-  if (!cls || !decide) {
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
+  let decision = cls
+    ? decisionOf(aggregate, state, command, {
+        id: options.id,
+        now: options.now,
+        commandId,
+        stream,
+        version,
+      })
+    : undefined;
+  if (!cls || decision === undefined) {
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
@@ -476,16 +500,6 @@ export const predict = (
       ),
     };
   }
-  const version = options.version ?? 0;
-  const commandId = options.commandId ?? "";
-  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
-  let decision = decide(state, command, {
-    id: options.id,
-    now: options.now,
-    commandId,
-    stream,
-    version,
-  });
   if (Effect.isEffect(decision)) {
     const settled = decision.pipe(
       Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
@@ -572,10 +586,10 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *   initial: { balance: 0 },
  *   commands: [WithdrawMoney],
  *   decide: {
- *     WithdrawMoney: (s, cmd) =>
- *       cmd.amount > s.balance
- *         ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
- *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+ *     WithdrawMoney: (account, cmd) =>
+ *       cmd.amount > account.balance
+ *         ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+ *         : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
  *   },
  *   evolve: {
  *     MoneyWithdrawn: (_, e) => ({ balance: e.balanceAfter }),
@@ -587,32 +601,16 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * ```
  *
  * ### Authorizing in decide
- * A handler can be an `Effect.fn` that reads what the command's middleware
+ * A handler can be an `Effect.fn` that reads what its command's middleware
  * provides.
  *
  * **Example:** Only the owner may withdraw
  * ```typescript
  * decide: {
- *   WithdrawMoney: Effect.fn(function* (s, cmd) {
+ *   WithdrawMoney: Effect.fn(function* (account, cmd) {
  *     const actor = yield* CurrentActor;
- *     if (actor.customerId !== s.owner) return yield* new NotOwner();
- *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })];
- *   }),
- * },
- * ```
- *
- * ### Exposing reads
- * `read` lets an Api expose the aggregate itself, so a client can get it,
- * watch it, and follow its events. `validate` judges every read.
- *
- * **Example:** A read contract
- * ```typescript
- * read: {
- *   middleware: [Session],
- *   rejects: [NotOwner],
- *   validate: Effect.fn(function* (_request, s) {
- *     const actor = yield* CurrentActor;
- *     if (actor.customerId !== s.owner) return yield* new NotOwner();
+ *     if (actor.customerId !== account.owner) return yield* new NotOwner();
+ *     return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })];
  *   }),
  * },
  * ```
@@ -631,9 +629,6 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  * model, read back as `X.annotations`. Add your own keys by augmenting
  * `Domain.Annotations`.
  *
- * An Api's read tools, CLI help and OpenAPI document show its `description`
- * after the sentence for each call.
- *
  * **Example:** A description
  * ```typescript
  * export class Account extends Domain.Aggregate(
@@ -643,7 +638,7 @@ export const refClass = <A extends Any>(ref: Ref<A>): A => ref[RefClass];
  *     state: Schema.Struct({ balance: Schema.Int }),
  *     initial: { balance: 0 },
  *     commands: [DepositMoney],
- *     decide: { DepositMoney: (s, cmd) => [new MoneyDeposited({ balanceAfter: s.balance + cmd.amount })] },
+ *     decide: { DepositMoney: (account, cmd) => [new MoneyDeposited({ balanceAfter: account.balance + cmd.amount })] },
  *     evolve: { MoneyDeposited: (_, e) => ({ balance: e.balanceAfter }) },
  *   },
  *   { description: "A bank account, which keeps its own balance." },
@@ -712,11 +707,11 @@ export const commandIdFor = (
  *   initial: { _tag: "New" },
  *   commands: [Register], // declares events: [CustomerRegistered]
  *   decide: {
- *     Register: (s, cmd) =>
- *       s._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+ *     Register: (account, customer, cmd) =>
+ *       customer._tag === "Registered" ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
  *   },
  *   evolve: {
- *     CustomerRegistered: (_, e) => ({ _tag: "Registered", name: e.name }),
+ *     CustomerRegistered: (account, _, e) => ({ _tag: "Registered", name: e.name }),
  *   },
  * }) {}
  *
@@ -729,17 +724,12 @@ export const make = <
   Id extends IdSchema,
   S extends Schema.Top,
   const C extends ReadonlyArray<Command.Any>,
-  const Ms extends Middleware.List = readonly [],
-  const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-  // The declared `read`, inferred apart from `Definition` so the type records it.
-  // Its constraint carries no members, so it never narrows how `read` is typed.
-  const R extends object | undefined = object | undefined,
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+  definition: Definition<Id, S, C> & TargetsMatch<Id, C>,
   annotations: Annotations = {},
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
+): AggregateClass<Name, Resolved<Id, S, C>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
   // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
@@ -750,10 +740,10 @@ export const make = <
     static readonly kind = "Aggregate" as const;
     static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
+    static readonly definition: Resolved<Id, S, C> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>;
+    } as unknown as Resolved<Id, S, C>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -767,7 +757,7 @@ export const make = <
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C>>;
 };
 
 /**
@@ -791,29 +781,13 @@ export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.An
   readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
-/**
- * The `read` an aggregate declared, or `undefined`. With none declared, `R`
- * is left at its default, which includes `undefined`; a declared contract
- * never does.
- */
-type ReadOf<R> = undefined extends R ? undefined : R;
-
-/**
- * A definition with its events collected from its commands. `R` is the
- * `read` it declared, or `undefined`: an aggregate that declares one has a
- * required `read` in its type, so an Api can tell which aggregates it may
- * serve.
- */
+/** A definition with its events collected from its commands. */
 export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
-  Ms extends Middleware.List = readonly [],
-  Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-  R extends Read.AnyContract | undefined = Read.AnyContract | undefined,
-> = Definition<Id, S, C, Ms, Rejects> & {
+> = Definition<Id, S, C> & {
   readonly events: ReadonlyArray<EventsOf<C>>;
-  readonly read: R;
 };
 
 /**

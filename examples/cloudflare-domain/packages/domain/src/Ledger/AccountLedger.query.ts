@@ -21,18 +21,19 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   waitsFor: [Ledger],
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* ({ account }) {
-    const summaries = yield* AccountSummary;
-    const summary = yield* summaries.query(Account.ref(account)).pipe(Effect.orDie);
-    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
-  }),
 }) {}
 
-/** Reads the page from the ledger store, keyed by the account `validate` allowed. */
+/** Checks the caller may read the account, then reads its page from the ledger store. */
 export const AccountLedgerLive = AccountLedger.toLayer(
   Effect.gen(function* () {
     const store = yield* LedgerStore;
-    return ({ account }, page) => store.forAccount(account, page);
+    const summaries = yield* AccountSummary;
+    return Effect.fn(function* ({ account }, page) {
+      yield* Effect.annotateCurrentSpan("bank.account", account);
+      const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
+      yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
+      return yield* store.forAccount(account, page);
+    });
   }),
-  { take: { default: 50, max: 200 }, attributes: ({ account }) => ({ "bank.account": account }) },
+  { take: { default: 50, max: 200 } },
 );

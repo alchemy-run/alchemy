@@ -179,20 +179,6 @@ test(
     );
     expect(resumed).toEqual({ _tag: "CaughtUp", cursor: watched!.cursor });
 
-    // an aggregate's Durable Object reads the same way: its watched cursor ends its history
-    const [account] = yield* sam.Account.watch(samMain).pipe(
-      Stream.take(1),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    const history = yield* sam.Account.events(samMain).pipe(
-      Stream.takeUntil((frame) => Domain.Read.isCaughtUp(frame)),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
-    expect(history.length - 1).toBe(account!.cursor);
-
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(
       Stream.map(({ state }) => state),

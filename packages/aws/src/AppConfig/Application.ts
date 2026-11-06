@@ -38,8 +38,23 @@ export interface Application extends Resource<
     applicationArn: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The name of the existing application. */
+      applicationName: string;
+    };
 
 /**
  * An AWS AppConfig application — the top-level container that groups the
@@ -58,6 +73,20 @@ export interface Application extends Resource<
  * const app = yield* AppConfig.Application("MyApp", {
  *   applicationName: "my-service",
  *   tags: { team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add an environment to an existing application
+ * ```typescript
+ * const app = AWS.AppConfig.Application.lookup({ applicationName: "checkout" });
+ *
+ * yield* AWS.AppConfig.Environment("Prod", {
+ *   applicationId: app.applicationId,
  * });
  * ```
  *
@@ -97,6 +126,20 @@ export const ApplicationProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const app =
+            "applicationId" in props
+              ? yield* readApplication(props.applicationId)
+              : yield* findByName(props.applicationName);
+          if (app?.Id === undefined) return undefined;
+          return {
+            applicationId: app.Id,
+            applicationName: app.Name!,
+            applicationArn: applicationArn(region, accountId, app.Id),
+          };
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

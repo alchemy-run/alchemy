@@ -5,7 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import { expectDeployFails, missingName } from "../Utils/Lookup.ts";
+import { expectDeployFails, missingName } from "../../lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

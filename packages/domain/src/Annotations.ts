@@ -31,4 +31,24 @@ export interface Annotations {
    * An Api's MCP tools, CLI help and OpenAPI document show it.
    */
   readonly description?: string;
+  /**
+   * The `cache-control` header `toHttpApi` sends with a successful answer
+   * from a query or a view's, stream's or aggregate's `get`, `peek`,
+   * `snapshot` and `list`. Without it, and on every failure, live read
+   * (`watch`, `events`) and command, the header is `private, no-store`.
+   *
+   * `private, max-age=…` lets the caller's browser keep its own answer. Use
+   * `public` only for an answer that is the same for every caller: a shared
+   * cache does not know the Api's middleware read a session, so it hands one
+   * caller's answer to the next.
+   *
+   * **Example:** Exchange rates any CDN may keep for a minute
+   * ```typescript
+   * export class Rates extends Domain.Query("Rates", {
+   *   input: { base: Schema.String },
+   *   success: Rate,
+   * }, { httpApiCacheControl: "public, max-age=60" }) {}
+   * ```
+   */
+  readonly httpApiCacheControl?: string;
 }

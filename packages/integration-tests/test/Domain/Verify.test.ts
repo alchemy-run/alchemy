@@ -193,7 +193,10 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
           // @ts-expect-error OpenForCustomer's target must be this aggregate's id schema
           OpenForCustomer,
         ],
-        decide: { OpenAccount: () => [new Opened()], OpenForCustomer: () => [new Opened()] },
+        decide: {
+          OpenAccount: () => [new Opened()],
+          OpenForCustomer: () => [new Opened()],
+        },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.aggregateName).toBe("Account");

@@ -81,22 +81,31 @@ class Wallet extends Domain.Aggregate("Wallet", {
     Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount, at: e.at }),
   },
   reply: { Deposit: (s) => ({ balance: s.balance, at: s.at }) },
-  read: { middleware: [Session] },
 }) {}
 
 /** Only the wallet's owner reads its balance. */
-class Balance extends Domain.View("Balance", {
-  from: [Wallet],
-  key: Wallet,
-  middleware: [Session],
-  rejects: [NotOwner],
-  state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
-  initial: { owner: "", balance: 0 },
-  evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
-  validate: Effect.fn(function* (_request, s) {
-    if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
-  }),
-}) {}
+class Balance extends Domain.View(
+  "Balance",
+  {
+    from: [Wallet],
+    key: Wallet,
+    middleware: [Session],
+    rejects: [NotOwner],
+    state: Schema.Struct({ owner: Schema.String, balance: Schema.Int }),
+    initial: { owner: "", balance: 0 },
+    evolve: { Deposited: (s, e) => ({ owner: e.owner, balance: s.balance + e.amount }) },
+  },
+  { httpApiCacheControl: "private, max-age=5" },
+) {}
+
+/** Who may read each key of Balance. */
+const BalanceLive = Balance.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, s) {
+      if (s !== null && s.owner !== (yield* Owner)) return yield* new NotOwner();
+    }),
+  ),
+);
 
 // ---------------------------------------------------------------- the HTTP surface
 
@@ -138,14 +147,45 @@ class Ledger extends Domain.Aggregate("Ledger", {
   evolve: { Signed: (_, e) => ({ owner: e.owner }) },
   reply: { Sign: (s) => ({ owner: s.owner }) },
 }) {}
+class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
+
+/** Exchange rates: a paged query over rows outside the model. */
+class Rates extends Domain.Query(
+  "Rates",
+  {
+    input: { base: Schema.String },
+    success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
+    paged: true,
+    middleware: [Session],
+    rejects: [UnknownBase],
+  },
+  { httpApiCacheControl: "public, max-age=60" },
+) {}
+const rates = [
+  { currency: "EUR", rate: 0.9 },
+  { currency: "GBP", rate: 0.8 },
+  { currency: "JPY", rate: 150 },
+];
+const RatesLive = Rates.toLayer(
+  Effect.succeed(({ base }, { after, take }) => {
+    if (base !== "USD") return Effect.fail(new UnknownBase({ base }));
+    const rest = rates.filter((row) => after === undefined || row.currency > after);
+    const entries = rest.slice(0, take);
+    return Effect.succeed({
+      entries,
+      cursor: rest.length > take ? entries.at(-1)!.currency : null,
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("HttpWallets", {
   aggregates: [Wallet, Ledger],
   views: [Balance],
+  queries: [Rates],
 }) {}
 class WalletApi extends Domain.Api("WalletApi", {
   model: Wallets,
   commands: ["Deposit"],
-  aggregates: ["Wallet"],
 }) {}
 class LedgerApi extends Domain.Api("LedgerApi", {
   model: Wallets,
@@ -156,14 +196,12 @@ class LedgerApi extends Domain.Api("LedgerApi", {
 /** Every call the Api serves, listed in a different order than the Api serves them. */
 const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
   expose: [
-    "Wallet.events",
-    "Wallet.watch",
-    "Wallet.get",
     "Balance.snapshot",
     "Balance.list",
     "Balance.events",
     "Balance.watch",
     "Balance.get",
+    "Rates",
     "Deposit",
   ],
 });
@@ -173,7 +211,7 @@ const Hosted = Layer.mergeAll(
   SessionLive,
   SignedSessionLive,
   ServerCredential,
-  Wallets.layer(Layer.empty),
+  Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
 ).pipe(Layer.provide(InMemory), Layer.provideMerge(BunHttpServer.layerTest));
 
 const serve = <Id extends string, Groups extends HttpApiGroup.Constraint>(
@@ -197,7 +235,7 @@ interface SendOptions {
   readonly headers?: Record<string, string>;
 }
 
-const execute = (method: "GET" | "POST", path: string, options: SendOptions) =>
+const execute = (method: "GET" | "POST" | "QUERY", path: string, options: SendOptions) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     let request = HttpClientRequest.make(method)(path).pipe(
@@ -209,7 +247,7 @@ const execute = (method: "GET" | "POST", path: string, options: SendOptions) =>
     return yield* client.execute(request);
   });
 
-const send = (method: "GET" | "POST", path: string, options: SendOptions = {}) =>
+const send = (method: "GET" | "POST" | "QUERY", path: string, options: SendOptions = {}) =>
   Effect.gen(function* () {
     const response = yield* execute(method, path, options);
     const text = yield* response.text;
@@ -276,6 +314,74 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       });
       expect(malformed.status).toBe(400);
     }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a query endpoint takes its input and page in the body, and answers with a page", () =>
+    Effect.gen(function* () {
+      const first = yield* send("QUERY", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "USD" }, take: 2 },
+      });
+      expect(first).toEqual({
+        status: 200,
+        body: {
+          entries: [
+            { currency: "EUR", rate: 0.9 },
+            { currency: "GBP", rate: 0.8 },
+          ],
+          cursor: "GBP",
+        },
+      });
+      const next = yield* send("QUERY", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "USD" }, after: "GBP" },
+      });
+      expect(next.body).toEqual({ entries: [{ currency: "JPY", rate: 150 }], cursor: null });
+      // Its rejection and its middleware's error answer with their statuses.
+      const unknown = yield* send("QUERY", "/Rates", {
+        owner: "sam",
+        body: { input: { base: "XYZ" } },
+      });
+      expect(unknown).toEqual({ status: 422, body: { _tag: "UnknownBase", base: "XYZ" } });
+      const anonymous = yield* send("QUERY", "/Rates", { body: { input: { base: "USD" } } });
+      expect(anonymous.status).toBe(401);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live(
+    "a successful answer carries its declaration's httpApiCacheControl; everything else is private, no-store",
+    () =>
+      Effect.gen(function* () {
+        const responses = [
+          yield* execute("POST", "/Deposit", {
+            owner: "sam",
+            body: { target: "w-cache", input: { amount: 1, at } },
+          }),
+          yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "USD" } } }),
+          yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "XYZ" } } }),
+          yield* execute("QUERY", "/Rates", { body: { input: { base: "USD" } } }),
+          yield* execute("GET", "/Balance/w-cache", { owner: "sam" }),
+          yield* execute("GET", "/Balance/w-cache/watch", { owner: "sam" }),
+          yield* execute("GET", "/Balance/w-cache", { owner: "kim" }),
+        ];
+        // Read the watch's first event, so its stream closes before the server stops.
+        yield* responses[5]!.stream.pipe(Stream.take(1), Stream.runDrain);
+        expect(responses.map((response) => response.status)).toEqual([
+          200, 200, 422, 401, 200, 200, 403,
+        ]);
+        expect(responses.map((response) => response.headers["cache-control"])).toEqual([
+          // A command's receipt.
+          "private, no-store",
+          // The query's answer, then its rejection and its middleware's error.
+          "public, max-age=60",
+          "private, no-store",
+          "private, no-store",
+          // The view's read, its live read, and its rejection.
+          "private, max-age=5",
+          "private, no-store",
+          "private, no-store",
+        ]);
+      }).pipe(Effect.provide(Served)),
   );
 
   it.live("a read endpoint answers with the key's state, read after a write", () =>
@@ -367,8 +473,8 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         status: 403,
         body: { _tag: "NotOwner" },
       });
-      // An aggregate's `read` middleware guards its events too.
-      expect((yield* send("GET", "/Wallet/w-6/events")).status).toBe(401);
+      // The view's middleware guards its events too.
+      expect((yield* send("GET", "/Balance/w-6/events")).status).toBe(401);
     }).pipe(Effect.provide(Served)),
   );
 
@@ -405,7 +511,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         owner: "kim",
         body: { target: "w-8", input: { amount: 3, at } },
       });
-      const all = yield* listen("/Wallet/w-8/events", { owner: "kim" });
+      const all = yield* listen("/Balance/w-8/events", { owner: "kim" });
       const history = yield* Effect.forkChild(all.take(4));
       yield* send("POST", "/Deposit", {
         owner: "kim",
@@ -418,7 +524,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
 
       // `after` resumes from a cursor: only what came after it, then the frame.
       const [, second] = (yield* Fiber.join(history)).map(({ data }) => data);
-      const resumed = yield* listen(`/Wallet/w-8/events?after=${second.envelope.seq}`, {
+      const resumed = yield* listen(`/Balance/w-8/events?after=${second.envelope.seq}`, {
         owner: "kim",
       });
       const tail = (yield* resumed.take(2)).map(({ data }) =>
@@ -470,7 +576,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         body: { target: "w-10", input: { amount: 2, at } },
       });
       expect(deposit.status).toBe(200);
-      expect((yield* send("GET", "/Wallet/w-10", { owner: "sam" })).status).toBe(404);
+      expect((yield* send("GET", "/Balance/w-10", { owner: "sam" })).status).toBe(404);
       expect((yield* send("GET", "/Balance/w-10/watch", { owner: "sam" })).status).toBe(404);
     }).pipe(
       Effect.provide(
@@ -492,20 +598,26 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       },
       { description: "Add a cent to a purse." },
     ) {}
-    class Purse extends Domain.Aggregate(
-      "Purse",
+    class Purse extends Domain.Aggregate("Purse", {
+      id: Schema.String,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Credit],
+      decide: { Credit: () => [] },
+      evolve: { Credited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class PurseBalance extends Domain.View(
+      "PurseBalance",
       {
-        id: Schema.String,
+        from: [Purse],
+        key: Purse,
         state: Schema.Struct({ balance: Schema.Int }),
         initial: { balance: 0 },
-        commands: [Credit],
-        decide: { Credit: () => [] },
         evolve: { Credited: (_, e) => ({ balance: e.balance }) },
-        read: {},
       },
-      { description: "A purse, which keeps its own balance." },
+      { description: "A purse's balance." },
     ) {}
-    class Purses extends Domain.Model("Purses", { aggregates: [Purse] }) {}
+    class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [PurseBalance] }) {}
     class PurseApi extends Domain.Api(
       "PurseApi",
       {
@@ -514,13 +626,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       { description: "What a purse app reaches." },
     ) {}
     const spec = OpenApi.fromApi(
-      DomainHttp.toHttpApi(PurseApi, { expose: ["Credit", "Purse.get"] }).api,
+      DomainHttp.toHttpApi(PurseApi, { expose: ["Credit", "PurseBalance.get"] }).api,
     );
     expect(spec.info.description).toBe("What a purse app reaches.");
     expect(spec.paths["/Credit"]!.post!.description).toBe("Add a cent to a purse.");
-    expect(spec.paths["/Purse/{key}"]!.get!.description).toBe(
-      "A purse, which keeps its own balance.",
-    );
+    expect(spec.paths["/PurseBalance/{key}"]!.get!.description).toBe("A purse's balance.");
   });
 
   it("the OpenAPI document lists each endpoint with its schemas", () => {
@@ -532,9 +642,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       "/Balance/{key}/snapshot",
       "/Balance/{key}/watch",
       "/Deposit",
-      "/Wallet/{key}",
-      "/Wallet/{key}/events",
-      "/Wallet/{key}/watch",
+      "/Rates",
     ]);
 
     const deposit = spec.paths["/Deposit"]!.post!;
@@ -543,6 +651,15 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     for (const field of ["target", "amount", "at", "commandId"]) expect(body).toContain(field);
     expect(Object.keys(deposit.responses).sort()).toEqual(["200", "401", "422"]);
     expect(JSON.stringify(deposit.responses["422"])).toContain("OverLimit");
+
+    // OpenAPI 3.1 has no `query` slot, so the QUERY operation sits under the 3.2 extension.
+    const ratesOp = spec.paths["/Rates"]!["x-oai-additionalOperations"]!.QUERY!;
+    expect(ratesOp.operationId).toBe("WalletApi.Rates");
+    for (const field of ["input", "base", "after", "take", "atLeast"]) {
+      expect(JSON.stringify(ratesOp.requestBody)).toContain(field);
+    }
+    expect(Object.keys(ratesOp.responses).sort()).toEqual(["200", "401", "422"]);
+    expect(JSON.stringify(ratesOp.responses["422"])).toContain("UnknownBase");
 
     const balance = spec.paths["/Balance/{key}"]!.get!;
     expect(balance.parameters.map((p) => [p.name, p.in]).sort()).toEqual([
@@ -557,7 +674,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     const watch = spec.paths["/Balance/{key}/watch"]!.get!;
     expect(Object.keys(watch.responses["200"]!.content ?? {})).toEqual(["text/event-stream"]);
     expect(Object.keys(watch.responses).sort()).toEqual(["200", "401", "403"]);
-    const events = spec.paths["/Wallet/{key}/events"]!.get!;
+    const events = spec.paths["/Balance/{key}/events"]!.get!;
     expect(events.parameters.map((p) => [p.name, p.in]).sort()).toEqual([
       ["after", "query"],
       ["key", "path"],
@@ -575,11 +692,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     DomainHttp.toHttpApi(WalletApi, { expose: ["Withdraw"] });
     // @ts-expect-error an operation the view does not have
     DomainHttp.toHttpApi(WalletApi, { expose: ["Balance.nope"] });
-    // @ts-expect-error an aggregate has no `list`
-    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.list"] });
-    // every read of a view and an aggregate, live ones included
+    // @ts-expect-error an aggregate's state is not served
+    DomainHttp.toHttpApi(WalletApi, { expose: ["Wallet.get"] });
+    // every read of a view, live ones included
     DomainHttp.toHttpApi(WalletApi, {
-      expose: ["Balance.get", "Balance.watch", "Balance.events", "Wallet.get", "Wallet.watch"],
+      expose: ["Balance.get", "Balance.watch", "Balance.events"],
     });
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi).group.endpoints)).toEqual([]);
     expect(Object.keys(DomainHttp.toHttpApi(WalletApi, { expose: [] }).group.endpoints)).toEqual(
@@ -587,7 +704,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     );
   });
 
-  it("publishes exposed calls in the order the Api serves them: commands, views, streams, then aggregates", () => {
+  it("publishes exposed calls in the order the Api serves them: commands, views, streams, then queries", () => {
     expect(
       Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
     ).toEqual([
@@ -597,9 +714,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       ["Balance.events", "GET", "/Balance/:key/events"],
       ["Balance.list", "GET", "/Balance/:key/list"],
       ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
-      ["Wallet.get", "GET", "/Wallet/:key"],
-      ["Wallet.watch", "GET", "/Wallet/:key/watch"],
-      ["Wallet.events", "GET", "/Wallet/:key/events"],
+      ["Rates", "QUERY", "/Rates"],
     ]);
   });
 

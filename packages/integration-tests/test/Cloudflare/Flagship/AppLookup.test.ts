@@ -6,8 +6,8 @@ import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectDeployFails, missingName } from "../../lookup.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import { expectDeployFails, missingName } from "../Utils/Lookup.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),

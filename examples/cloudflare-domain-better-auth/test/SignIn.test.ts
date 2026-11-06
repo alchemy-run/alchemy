@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import { OAuth2Server } from "oauth2-mock-server";
 import { Auth } from "../src/Auth.ts";
 import { NotesModel } from "../src/Notes.model.ts";
+import { NotesLive } from "../src/Notes.view.ts";
 import { NotesApi } from "../src/NotesApi.api.ts";
 import { SessionLive } from "../src/Session.ts";
 import { UserId } from "../src/User.id.ts";
@@ -84,7 +85,7 @@ const Served = Layer.unwrap(
   Layer.provideMerge(
     SessionLive.pipe(
       Layer.provideMerge(AuthTest),
-      Layer.provideMerge(NotesModel.layer(Layer.empty).pipe(Layer.provide(Domain.InMemory))),
+      Layer.provideMerge(NotesModel.layer(NotesLive).pipe(Layer.provide(Domain.InMemory))),
     ),
   ),
   Layer.provideMerge(NodeHttpServer.layerTest),

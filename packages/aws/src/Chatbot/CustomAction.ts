@@ -100,8 +100,23 @@ export interface CustomAction extends Resource<
     customActionArn: string;
   },
   never,
-  Providers
+  Providers,
+  CustomActionLookup
 > {}
+
+/**
+ * Props for {@link CustomAction.lookup}: find a custom action this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type CustomActionLookup =
+  | {
+      /** The name of the existing custom action. */
+      actionName: string;
+    }
+  | {
+      /** The ARN of the existing custom action. */
+      customActionArn: string;
+    };
 
 /**
  * An AWS Chatbot (Amazon Q Developer in chat applications) custom action —
@@ -137,6 +152,16 @@ export interface CustomAction extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing custom action
+ * `CustomAction.lookup` references a custom action Alchemy doesn't manage (created in the
+ * console or by another stack), found by `actionName` or `customActionArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing custom action
+ * ```typescript
+ * const existing = AWS.Chatbot.CustomAction.lookup({ actionName: "..." });
  * ```
  *
  * @resource
@@ -200,6 +225,16 @@ export const CustomActionProvider = () =>
               customActionArn: arn,
             }));
           }),
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "customActionArn" in props ? props.customActionArn : yield* actionArn(props.actionName);
+          const found = yield* observeAction(arn);
+          if (found === undefined) return undefined;
+          return {
+            actionName: found.ActionName ?? arn.split("/").at(-1)!,
+            customActionArn: found.CustomActionArn,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const actionName = output?.actionName ?? (yield* createActionName(id, olds ?? {}));
           const arn = output?.customActionArn ?? (yield* actionArn(actionName));
