@@ -59,7 +59,7 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
   { tags: ["live", "provider:infisical", "provider:infisical:secret"] },
   () => {
     test.provider(
-      "converges a shared row, repairs drift, and preserves a personal override",
+      "converges a shared row without changing overrides, then deletes the key and its overrides",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -142,12 +142,17 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
                 const clearedRow = yield* get(props);
                 expect(clearedRow.secretComment).toBe("");
                 expect(clearedRow.secretValue).toBe("rotated");
+                expect(yield* get(props, "personal")).toEqual(personal);
 
                 yield* stack.destroy();
                 expect(
                   yield* get(props).pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
                 ).toBeUndefined();
-                expect(yield* get(props, "personal")).toEqual(personal);
+                expect(
+                  yield* get(props, "personal").pipe(
+                    Effect.catchTag("NotFound", () => Effect.undefined),
+                  ),
+                ).toBeUndefined();
               }),
             () => remove(props, "personal"),
           );
