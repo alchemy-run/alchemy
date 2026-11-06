@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 
 // Pure helpers: no providers, no proxy, no network.
 
-describe("what a LAN proxy needs from the host", () => {
+describe("what a LAN proxy needs from the host", { tags: ["unit"] }, () => {
   const ready = { platform: "linux", address: "192.168.0.20", mdnsInstalled: true };
 
   it("is nothing when there is an address and the platform's mDNS tool", () => {
@@ -43,7 +43,7 @@ describe("what a LAN proxy needs from the host", () => {
   });
 });
 
-describe("a running proxy and LAN mode", () => {
+describe("a running proxy and LAN mode", { tags: ["unit"] }, () => {
   const loopback: ProxyState = {
     pid: 4242,
     port: 443,
@@ -73,7 +73,7 @@ describe("a running proxy and LAN mode", () => {
   });
 });
 
-describe("names in LAN mode", () => {
+describe("names in LAN mode", { tags: ["unit"] }, () => {
   it("end in .local", () => {
     expect(Effect.runSync(hostnameOf(routedName("Api", "dev_alice", "myapp"), "local"))).toBe(
       "dev-alice.api.myapp.local",

@@ -28,6 +28,10 @@ export const containerExample = Effect.gen(function* () {
   });
 });
 
-test("the Docker example in the docs type-checks", () => {
-  expect(containerExample).toBeDefined();
-});
+test(
+  "the Docker example in the docs type-checks",
+  () => {
+    expect(containerExample).toBeDefined();
+  },
+  { tags: ["unit"] },
+);
