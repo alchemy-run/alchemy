@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -337,13 +338,6 @@ export const NodegroupProvider = () =>
           ? Effect.succeed(props.nodegroupName)
           : createPhysicalName({ id, maxLength: 63 });
 
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       const readNodegroup = Effect.fn(function* ({
         clusterName,
         nodegroupName,
@@ -385,7 +379,7 @@ export const NodegroupProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupNotReady,
+            while: (error) => error._tag === "EKS.NodegroupNotReady",
             schedule: waitSchedule,
           }),
         );
@@ -396,7 +390,7 @@ export const NodegroupProvider = () =>
             state ? Effect.fail(new NodegroupStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupStillExists,
+            while: (error) => error._tag === "EKS.NodegroupStillExists",
             schedule: waitSchedule,
           }),
         );
@@ -417,7 +411,7 @@ export const NodegroupProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof NodegroupUpdateNotComplete,
+            while: (error) => error._tag === "EKS.NodegroupUpdateNotComplete",
             schedule: waitSchedule,
           }),
         );
@@ -502,6 +496,7 @@ export const NodegroupProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const nodegroupName = yield* toNodegroupName(id, news);
           const desiredTags = {
@@ -511,6 +506,10 @@ export const NodegroupProvider = () =>
 
           // Observe — cloud state is authoritative.
           let state = yield* readNodegroup({ clusterName, nodegroupName });
+          // Let a create or update a crashed deploy left in flight finish before diffing against it.
+          if (state?.status === "CREATING" || state?.status === "UPDATING") {
+            state = yield* waitForNodegroupActive(clusterName, nodegroupName);
+          }
 
           // Ensure — create if missing; tolerate a create race, then wait for
           // the node group to reach ACTIVE before syncing.
@@ -533,7 +532,7 @@ export const NodegroupProvider = () =>
                 version: news.version,
                 releaseVersion: news.releaseVersion,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -556,7 +555,7 @@ export const NodegroupProvider = () =>
               updateConfig: updateCfgChanged ? news.updateConfig : undefined,
               labels: labelsDelta,
               taints: taintsDelta,
-              clientRequestToken: yield* toClientRequestToken(id, "config"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             if (configUpdate.update?.id) {
               yield* session.note(`Updating EKS node group config ${nodegroupName}...`);
@@ -575,7 +574,7 @@ export const NodegroupProvider = () =>
               nodegroupName,
               version: news.version,
               releaseVersion: news.releaseVersion,
-              clientRequestToken: yield* toClientRequestToken(id, "version"),
+              clientRequestToken: yield* random.uuidV4(),
             });
             if (versionUpdate.update?.id) {
               yield* session.note(`Updating EKS node group version ${nodegroupName}...`);
