@@ -11,6 +11,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { CredentialsStoreService } from "alchemy/Auth/Credentials";
 import { profileStateStoresDirPath } from "alchemy/Auth/Paths";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -106,7 +107,7 @@ describe(
           stores: { "alchemy-state-store": credentials("https://a.workers.dev") },
         });
         expect(files.get(LEGACY)).toEqual(credentials("https://a.workers.dev"));
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     it.effect("ignores the legacy file once the new file exists", () =>
@@ -117,7 +118,7 @@ describe(
         expect(
           yield* readStoreCredentials(store, "default", "alchemy-state-store"),
         ).toBeUndefined();
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     it.effect("keeps every store beside the others in one file", () =>
@@ -137,7 +138,7 @@ describe(
           credentials("https://b.workers.dev"),
         );
         expect([...files.keys()].sort()).toEqual([LEGACY, CURRENT].sort());
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     it.effect("deleting one store keeps the others", () =>
@@ -160,7 +161,7 @@ describe(
         expect(yield* readStoreCredentials(store, "default", "team-b")).toEqual(
           credentials("https://b.workers.dev"),
         );
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     it.effect("clearing, as profile edit and logout do, drops every store for good", () =>
@@ -179,7 +180,7 @@ describe(
         ).toBeUndefined();
         expect(yield* readStoreCredentials(store, "default", "team-a")).toBeUndefined();
         expect(files.get(LEGACY)).toEqual(credentials("https://a.workers.dev"));
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
 
     it.effect("concurrent writes for different stores keep both", () =>
@@ -201,7 +202,7 @@ describe(
             credentials(`https://${name}.workers.dev`),
           );
         }
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     );
   },
 );

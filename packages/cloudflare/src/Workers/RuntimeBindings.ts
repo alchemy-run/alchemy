@@ -239,12 +239,16 @@ export const toRuntimeBinding = Effect.fn(function* (
       // the production `service: <own name>` lowering.
       return Service.self(b.name, { entrypoint: b.entrypoint, props: b.props });
     case "service":
-      return Service.local({
-        binding: b.name,
-        scriptName: b.service,
-        entrypoint: b.entrypoint,
-        props: b.props,
-      });
+      // A Worker this stack doesn't run locally (a `Worker.lookup`) is
+      // reached through the remote-binding bridge.
+      return devRemote?.[b.name]
+        ? Service.remote(b.name, b.service, { entrypoint: b.entrypoint, props: b.props })
+        : Service.local({
+            binding: b.name,
+            scriptName: b.service,
+            entrypoint: b.entrypoint,
+            props: b.props,
+          });
     case "stream":
       // Local emulation stores videos in a local simulator (no transcoding,
       // no signed URLs) and serves each video's `preview` URL at

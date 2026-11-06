@@ -79,6 +79,5 @@ pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --filter 'resource.Type === "Cloudflare.Email.Address" && resource.email === "alchemy-list-test@alchemy-test-2.us"' \
   --filter 'String(resource.logGroupName).startsWith("/aws/vendedlogs/b2bi/")' \
   --filter 'resource.Type === "AWS.Logs.LogGroup" && String(resource.logGroupName).startsWith("/aws-glue/")' \
-  --filter 'resource.Type === "Fly.Bucket" && resource.name === "fly-buovnrccm7qpb3be3utsdvlj6x"' \
   --filter 'resource.Type === "GCP.Storage.Bucket" && String(resource.bucketName).startsWith("alchemy-state-")' \
   "$@"

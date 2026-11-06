@@ -10,6 +10,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -110,6 +111,15 @@ const reportParking = (pass: AlarmPass) =>
   });
 const registries = new WeakMap<cf.DurableObjectState, CallbackRegistry>();
 
+/**
+ * @internal Run background work handed to `waitUntil` apart from the callback
+ * invocation that started it. The invocation ends first, so its schedules
+ * would be rejected; here they start a fresh budget, as external schedules
+ * do. Only for work whose schedules report their own progress.
+ */
+export const outsideAlarmPass = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.provideService(effect, CurrentAlarmPass, undefined);
+
 /** @internal */
 export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
   const registry: CallbackRegistry = { callbacks: new Map(), open: true };
@@ -120,13 +130,17 @@ export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
 };
 
 /** @internal */
-export const makeDurableObjectCallbackFactory = (raw: cf.DurableObjectState): CallbackFactory => {
+export const makeDurableObjectCallbackFactory = (
+  raw: cf.DurableObjectState,
+  random: SecureRandom.SecureRandom["Service"],
+): CallbackFactory => {
   const state = fromDurableObjectState(raw);
-  return (name, handler, options) => makeAlarmCallback(state, name, handler, options);
+  return (name, handler, options) => makeAlarmCallback(state, random, name, handler, options);
 };
 
 const makeAlarmCallback = <Payload, E, R>(
   state: DurableObjectState["Service"],
+  random: SecureRandom.SecureRandom["Service"],
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
   options?: CallbackOptions,
@@ -264,14 +278,21 @@ const makeAlarmCallback = <Payload, E, R>(
             yield* ensureAlarmTables(raw);
             const existing = yield* readAlarm(raw, name, id);
             const source = pass?.row;
-            const progress = Math.max(existing?.progress ?? -1, source?.progress ?? -1);
+            // Another callback's cursor counts in its own units: it never hides
+            // this schedule, but a cursor that isn't past it isn't progress.
+            const progress = Math.max(
+              existing?.progress ?? -1,
+              source?.callback === name ? source.progress : -1,
+            );
             if (
               schedule.progress !== undefined &&
               (schedule.progress < progress ||
                 (source === undefined && schedule.progress === progress))
             )
               return;
-            const progressed = schedule.progress !== undefined && schedule.progress > progress;
+            const progressed =
+              schedule.progress !== undefined &&
+              schedule.progress > Math.max(progress, source?.progress ?? -1);
             const sourceProgressed =
               source?.callback === name &&
               source.id === id &&
@@ -287,7 +308,7 @@ const makeAlarmCallback = <Payload, E, R>(
               attempts === 0
                 ? null
                 : (yield* Clock.currentTimeMillis) + recoveryDelay(retry, attempts, parked);
-            const version = yield* Effect.sync(() => crypto.randomUUID());
+            const version = yield* random.uuidV4();
             yield* Effect.sync(() =>
               raw.sql.exec(
                 `INSERT INTO alchemy_alarm_callbacks

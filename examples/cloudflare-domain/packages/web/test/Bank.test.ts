@@ -38,6 +38,9 @@ const account: Model = {
   balance: Option.some(5_000),
   lines: [earlier],
   error: Option.none(),
+  history: [],
+  historyCursor: Option.none(),
+  historyRequest: Option.none(),
 };
 
 const saved = Command.resolve(SaveIntents, Message.CompletedSaveIntents());
@@ -341,4 +344,89 @@ test("a caught-up marker records the cursor and live status", () => {
   const caughtUp = update(account, Message.CaughtUpStatement({ cursor: 5 }));
   expect(caughtUp.model.statementCursor).toEqual(Option.some(5));
   expect(caughtUp.model.feedState).toBe("Live");
+});
+
+// The ledger, read through the AccountLedger query a page at a time.
+
+const row = (id: string, amount: number) => ({
+  id,
+  accountId: "c-1-main",
+  kind: "MoneyDeposited",
+  amount,
+  balanceAfter: amount,
+  at: 1,
+});
+
+test("history reads the ledger a page at a time and appends the next page", () =>
+  story(
+    update,
+    given(account),
+    message(Message.ClickedShowHistory()),
+    Command.resolve(
+      BankClient.AccountLedger,
+      BankClient.Message.SucceededAccountLedger({
+        requestId: "s:0",
+        result: { entries: [row("a", 100), row("b", 200)], cursor: "1:b" },
+      }),
+    ),
+    model((model) => {
+      expect(model.history.map((r) => r.id)).toEqual(["a", "b"]);
+      expect(model.historyCursor).toEqual(Option.some("1:b"));
+      expect(model.historyRequest).toEqual(Option.none());
+    }),
+    message(Message.ClickedMoreHistory()),
+    Command.resolve(
+      BankClient.AccountLedger,
+      BankClient.Message.SucceededAccountLedger({
+        requestId: "s:1",
+        result: { entries: [row("c", 300)], cursor: null },
+      }),
+    ),
+    model((model) => {
+      expect(model.history.map((r) => r.id)).toEqual(["a", "b", "c"]);
+      expect(model.historyCursor).toEqual(Option.none());
+    }),
+  ));
+
+test("history asks for the next page after the cursor, with a fresh request id", () => {
+  const paged = modifyFields(account, {
+    commandIds: () => ({ session: "s", sent: 4 }),
+    history: () => [row("a", 100)],
+    historyCursor: () => Option.some("1:a"),
+  });
+  const more = update(paged, Message.ClickedMoreHistory());
+  expect(more.model.historyRequest).toEqual(Option.some("s:4"));
+  expect(more.commands?.find((command) => command.name === "AccountLedger")?.args).toEqual({
+    input: { account: "c-1-main" },
+    requestId: "s:4",
+    take: 5,
+    after: "1:a",
+  });
+  // One page in flight at a time.
+  expect(update(more.model, Message.ClickedMoreHistory()).commands).toBeUndefined();
+});
+
+test("a stale history reply is dropped; a failure clears the request and says why", () => {
+  const asked = update(account, Message.ClickedShowHistory()).model;
+  const stale = update(
+    asked,
+    Message.ReceivedBankResult({
+      result: BankClient.Message.SucceededAccountLedger({
+        requestId: "old",
+        result: { entries: [row("x", 1)], cursor: null },
+      }),
+    }),
+  );
+  expect(stale.model).toEqual(asked);
+  const failed = update(
+    asked,
+    Message.ReceivedBankResult({
+      result: BankClient.Message.FailedAccountLedger({
+        requestId: "s:0",
+        failure: { _tag: "TimedOut" },
+      }),
+    }),
+  );
+  expect(failed.model.historyRequest).toEqual(Option.none());
+  expect(failed.model.error).toEqual(Option.some("History unavailable, try again"));
 });

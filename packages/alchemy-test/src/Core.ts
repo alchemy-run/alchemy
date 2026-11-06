@@ -44,6 +44,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import type { Limit } from "./Model.ts";
 
 /**
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.
@@ -55,6 +56,13 @@ export interface MakeOptions<ROut = any> {
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
+  /**
+   * A counted lock every test and `beforeAll`/`afterAll` hook of this file
+   * holds, on top of its own `exclusive`. Files that pass the same label
+   * share its permits, so a suite caps its load on a rate-limited cloud API
+   * in one place while every test stays independently schedulable.
+   */
+  limit?: Limit;
   /**
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
@@ -166,8 +174,9 @@ const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
 
 /**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
- * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
- * concurrent worktrees that share a cloud account.
+ * `test_$USERNAME` / `test_unknown`). The runner sets ALCHEMY_TEST_STAGE to
+ * `test_$USER_<worktree>` in a linked git worktree, so concurrent worktrees
+ * sharing a cloud account stay isolated.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
 export const defaultStage = (): string =>

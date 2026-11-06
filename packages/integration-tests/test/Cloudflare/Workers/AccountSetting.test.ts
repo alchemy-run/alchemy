@@ -168,3 +168,16 @@ describe.sequential(
     );
   },
 );
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Workers.AccountSetting("NoProps"));
+      expect(deployed.accountId).toBeTruthy();
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+);

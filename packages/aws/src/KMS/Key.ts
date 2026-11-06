@@ -101,8 +101,21 @@ export interface Key extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  KeyLookup
 > {}
+
+/**
+ * Props for {@link Key.lookup}: find a KMS key this stack doesn't manage, in
+ * the ambient account and region.
+ */
+export interface KeyLookup {
+  /**
+   * The key's id or ARN, or an alias pointing to it (`alias/app` or the
+   * alias ARN). An AWS managed key's alias (`alias/aws/s3`) finds it too.
+   */
+  keyId: string;
+}
 
 /**
  * A customer managed AWS KMS key.
@@ -164,6 +177,20 @@ export interface Key extends Resource<
  *   KeySpec: "AES_256",
  * });
  * ```
+ *
+ * ### Looking up an existing key
+ * `Key.lookup` references a key Alchemy doesn't manage (created in the
+ * console or by another stack, or an AWS managed key), found by `keyId`: its
+ * id, ARN or an alias. It is read during plan/deploy and never created,
+ * updated or deleted, and binds like a declared key.
+ *
+ * **Example:** Encrypt with an existing key
+ * ```typescript
+ * const key = AWS.KMS.Key.lookup({ keyId: "alias/app" });
+ *
+ * // init
+ * const encrypt = yield* AWS.KMS.Encrypt(key);
+ * ```
  */
 export const Key = Resource<Key>("AWS.KMS.Key");
 
@@ -201,6 +228,12 @@ export const KeyProvider = () =>
           (key): key is Key["Attributes"] =>
             key !== undefined && key.keyState !== "PendingDeletion",
         );
+      }),
+    lookup: ({ keyId }) =>
+      readKey({
+        keyId,
+        deletionWindowInDays: defaultDeletionWindowInDays,
+        includeAwsManaged: true,
       }),
     read: Effect.fn(function* ({ olds = {}, output }) {
       // KMS keys have no stable user-assignable identity — only a
@@ -433,9 +466,12 @@ export const KeyProvider = () =>
 const readKey = Effect.fn(function* ({
   keyId,
   deletionWindowInDays,
+  includeAwsManaged = false,
 }: {
   keyId: string;
   deletionWindowInDays: number;
+  /** Find AWS managed keys too; only a lookup can refer to one. */
+  includeAwsManaged?: boolean;
 }) {
   const described = yield* kms
     .describeKey({ KeyId: keyId })
@@ -443,7 +479,11 @@ const readKey = Effect.fn(function* ({
 
   const metadata = described?.KeyMetadata;
   if (!metadata?.Arn) return undefined;
-  if (metadata.KeyManager !== undefined && metadata.KeyManager !== "CUSTOMER") {
+  if (
+    !includeAwsManaged &&
+    metadata.KeyManager !== undefined &&
+    metadata.KeyManager !== "CUSTOMER"
+  ) {
     return undefined;
   }
 

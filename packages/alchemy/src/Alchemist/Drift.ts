@@ -18,7 +18,7 @@ export interface DriftedResource {
   readonly resourceType: string;
   /** `skipped`: not checked (no `read`, or an interrupted deploy); see `reason`. */
   readonly status: "in-sync" | "drifted" | "missing" | "skipped";
-  readonly reason?: string;
+  readonly reason?: string | undefined;
   readonly actual?: unknown;
 }
 

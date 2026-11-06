@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import type { Annotations } from "./Annotations.ts";
 import { DefinitionError, ReservedOperation } from "./DefinitionError.ts";
 import type { Fields } from "./Event.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -251,6 +252,7 @@ export interface Op<Args = unknown, Success = unknown, Error = unknown> {
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "ExternalSystem";
+  readonly annotations: Annotations;
   readonly systemName: string;
   readonly ops: Record<string, OpSpec>;
 }
@@ -274,6 +276,7 @@ const RESERVED = [
   "ops",
   "toLayer",
   "key",
+  "annotations",
 ] as const;
 type Reserved = (typeof RESERVED)[number];
 const reserved = new Set<string>(RESERVED);
@@ -303,18 +306,38 @@ const reserved = new Set<string>(RESERVED);
  * );
  * ```
  *
+ * ### Annotating external systems
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`. `annotations` is the class's own
+ * static, so no operation may take that name.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Payments extends Domain.ExternalSystem(
+ *   "Payments",
+ *   { refund: { args: { settlementId: Schema.String, amount: Cents }, success: { refundId: Schema.String } } },
+ *   { description: "The payment provider that refunds settlements." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <const Name extends string, const Ops extends Record<string, OpSpec>>(
   name: Name,
   // An operation named after a static of the class would replace it.
   ops: Ops & { readonly [K in Extract<keyof Ops, Reserved>]: never },
+  annotations: Annotations = {},
 ): ExternalSystemClass<Name, Ops> => {
   const Tag = Context.Service<ExternalSystemKey<Name>, Shape<Ops>>()(
     `alchemy/Domain/ExternalSystem/${name}`,
   );
   const cls = class extends Tag {
     static readonly kind = "ExternalSystem" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly systemName: Name = name;
     static readonly ops: Ops = ops;
     /** Implement the external system with an Effect that builds its service. */
@@ -361,6 +384,7 @@ export type ExternalSystemClass<
   Ops extends Record<string, OpSpec>,
 > = Context.ServiceClass<ExternalSystemKey<Name>, string, Shape<Ops>> & {
   readonly kind: "ExternalSystem";
+  readonly annotations: Annotations;
   readonly systemName: Name;
   readonly ops: Ops;
   /**

@@ -72,8 +72,18 @@ export interface MatchingWorkflow extends Resource<
     workflowArn: string;
   },
   never,
-  Providers
+  Providers,
+  MatchingWorkflowLookup
 > {}
+
+/**
+ * Props for {@link MatchingWorkflow.lookup}: find a matching workflow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MatchingWorkflowLookup {
+  /** The workflow name of the existing matching workflow. */
+  workflowName: string;
+}
 
 /**
  * An AWS Entity Resolution matching workflow — a data-processing job
@@ -127,6 +137,16 @@ export interface MatchingWorkflow extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing matching workflow
+ * `MatchingWorkflow.lookup` references a matching workflow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workflowName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing matching workflow
+ * ```typescript
+ * const existing = AWS.EntityResolution.MatchingWorkflow.lookup({ workflowName: "my-matching-workflow" });
+ * ```
+ *
  * @resource
  */
 export const MatchingWorkflow = Resource<MatchingWorkflow>("AWS.EntityResolution.MatchingWorkflow");
@@ -151,6 +171,16 @@ export const MatchingWorkflowProvider = () =>
 
       return {
         stables: ["workflowName", "workflowArn"],
+
+        lookup: Effect.fn(function* ({ workflowName: name }) {
+          const workflow = yield* getByName(name);
+          if (workflow === undefined) return undefined;
+          const attrs = {
+            workflowName: workflow.workflowName,
+            workflowArn: workflow.workflowArn,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.workflowName ?? (yield* createName(id, olds ?? {}));

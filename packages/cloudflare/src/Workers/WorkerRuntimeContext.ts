@@ -2,18 +2,25 @@ import type * as cf from "@cloudflare/workers-types";
 import type { HttpEffect } from "alchemy/Http";
 import * as Output from "alchemy/Output";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import type { SqlMigrationsExport } from "./SqlMigrationsRuntime.ts";
 import { WebhookHostLive } from "./WebhookHost.ts";
 import {
+  EventLifetime,
   ExportedHandlerMethods,
   WorkerEnvironment,
+  WorkerExecutionContext,
   WorkerTypeId,
   type WorkerEvent,
 } from "./WorkerRuntime.ts";
@@ -65,11 +72,38 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       return ctx.listen(makeRequestHandler(handler));
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
-      Effect.sync(() =>
-        Effect.isEffect(handler)
-          ? listeners.push(handler)
-          : listeners.push(Effect.succeed(handler)),
-      )) as any as FunctionContext["listen"],
+      Effect.gen(function* () {
+        // Listeners (`cron`, `email`, queue consumers, webhook routes) are
+        // registered inside the Worker's init effect, so their requirements
+        // are met by whatever init provided to itself. Capture that context and run each of the handler's
+        // events in it, minus what the bridge supplies per event. Init's
+        // `ConfigProvider` is Platform's config interceptor; handlers read
+        // config through the bridge's runtime provider.
+        const services = (yield* Effect.context<never>()).pipe(
+          Context.omit(
+            ConfigProvider.ConfigProvider,
+            EventLifetime,
+            Layer.CurrentMemoMap,
+            Logger.CurrentLoggers,
+            RuntimeContext,
+            Scope.Scope,
+            Tracer.ParentSpan,
+            Tracer.Tracer,
+            WorkerExecutionContext,
+          ),
+        );
+        const withServices =
+          (listener: FunctionListener): FunctionListener =>
+          (event) => {
+            const eff = listener(event);
+            return Effect.isEffect(eff) ? Effect.provide(eff, services) : eff;
+          };
+        listeners.push(
+          Effect.isEffect(handler)
+            ? Effect.map(Effect.provide(handler, services), withServices)
+            : Effect.succeed(withServices(handler)),
+        );
+      })) as any as FunctionContext["listen"],
     export: (name: string, value: any) =>
       Effect.sync(() => {
         exports[name] = value;
