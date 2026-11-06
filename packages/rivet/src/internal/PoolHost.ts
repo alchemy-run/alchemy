@@ -30,6 +30,7 @@ import {
 import { Pool, type PoolDurableObject } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
 import { PoolHost } from "./PoolHostService.ts";
+import { isRustManifest, stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
 export const RIVETKIT_VERSION = "3.0.0";
@@ -108,21 +109,59 @@ export interface PoolSettings {
   name?: string;
 }
 
+/** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */
+export interface BundleProgram {
+  readonly main: string;
+  readonly build: {
+    readonly input: {
+      readonly external: ReadonlyArray<string | RegExp>;
+      readonly plugins: Output.Output<ReturnType<typeof durableObjectsPlugin>>;
+    };
+  };
+}
+
+/**
+ * A node program that is a whole image: a build context and the Dockerfile
+ * in it, whose `CMD` runs the node (a Rust crate's binary).
+ */
+export interface ImageProgram {
+  readonly context: string;
+  readonly dockerfile: string;
+}
+
+export type NodeProgram = BundleProgram | ImageProgram;
+
+export const isImageProgram = (program: NodeProgram): program is ImageProgram =>
+  !("main" in program);
+
+/** The pool's nodes run a Rust program, which this host can't build into nodes. */
+export class PoolCannotRunImage extends Data.TaggedError("Rivet.PoolCannotRunImage")<{
+  readonly message: string;
+}> {}
+
+/**
+ * The JavaScript program a host that only runs bundles is given, or a
+ * deploy-time defect naming the pools that run Rust nodes.
+ */
+export const bundleProgramOf = (label: string, program: NodeProgram) =>
+  isImageProgram(program)
+    ? Effect.die(
+        new PoolCannotRunImage({
+          message:
+            `${label} runs JavaScript nodes only, and was given a Rust Durable Object. ` +
+            `Run it on RivetDocker.SwarmPool, RivetAWS.EcsPool, RivetKubernetes.DeploymentPool, ` +
+            `RivetRailway.ServicePool or RivetCloud.Pool.`,
+        }),
+      )
+    : Effect.succeed(program);
+
 /** What a host needs to declare the service that runs a pool's nodes. */
 export interface PoolNodes<Network> {
   readonly cluster: ClusterShape;
   readonly network: Network;
   readonly pool: Pool;
-  /** The node program: its entry and bundler settings. */
-  readonly program: {
-    readonly main: string;
-    readonly build: {
-      readonly input: {
-        readonly external: ReadonlyArray<string | RegExp>;
-        readonly plugins: Output.Output<ReturnType<typeof durableObjectsPlugin>>;
-      };
-    };
-  };
+  /** The node program: a JavaScript bundle, or an image of its own. */
+  readonly program: NodeProgram;
   /** Environment every node needs: the control plane, the pool, and the classes' env. */
   readonly environment: {
     readonly RIVET_ENDPOINT: ClusterShape["endpoint"];
@@ -181,7 +220,7 @@ export const makePoolLayer = <Network, Req>(options: {
         object: PoolDurableObject,
         env: Record<string, unknown>,
         bindCaller: Effect.Effect<void, never, any>,
-        program: (pool: Pool) => PoolNodes<Network>["program"],
+        program: (pool: Pool) => NodeProgram,
       ) {
         const pool = yield* Pool(options.id, {
           endpoint: cluster.endpoint,
@@ -244,23 +283,30 @@ export const makePoolLayer = <Network, Req>(options: {
 
       return {
         deployExternal: ({ id, main, resource }) =>
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
-          deploy(
-            { name: id, module: main, handler: "", external: true },
-            {},
-            resource.bind`Pool`(caller),
-            () => ({
-              main,
-              build: {
-                input: {
-                  external: EXTERNAL_PROGRAM,
-                  plugins: Output.literal([]) as unknown as Output.Output<
-                    ReturnType<typeof durableObjectsPlugin>
-                  >,
+          Effect.gen(function* () {
+            // A crate's manifest: its binary is the node, built into an image.
+            const image = isRustManifest(main)
+              ? yield* stageRustProgram(yield* stackDnsLabel(id), main)
+              : undefined;
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+            yield* deploy(
+              { name: id, module: main, handler: "", external: true },
+              {},
+              resource.bind`Pool`(caller),
+              () =>
+                image ?? {
+                  main,
+                  build: {
+                    input: {
+                      external: EXTERNAL_PROGRAM,
+                      plugins: Output.literal([]) as unknown as Output.Output<
+                        ReturnType<typeof durableObjectsPlugin>
+                      >,
+                    },
+                  },
                 },
-              },
-            }),
-          ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+            ) as Effect.Effect<void, never, Stack | Providers | Req>;
+          }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
       } satisfies PoolHost["Service"];
     }),
   );
@@ -316,14 +362,15 @@ export const bundleNodes = Effect.fn(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", host, yield* stackDnsLabel(id));
-  const { external, plugins } = nodes.program.build.input;
+  const program = yield* bundleProgramOf(`A ${host} pool`, nodes.program);
+  const { external, plugins } = program.build.input;
   return Output.mapEffect((resolved: Parameters<typeof Bundle.build>[0]["plugins"]) =>
     Effect.gen(function* () {
       yield* fs.remove(dir, { recursive: true, force: true });
       yield* fs.makeDirectory(dir, { recursive: true });
       yield* Bundle.build(
         {
-          input: nodes.program.main,
+          input: program.main,
           platform: "node",
           external: [...external],
           resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },

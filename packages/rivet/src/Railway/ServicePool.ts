@@ -2,6 +2,7 @@ import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
 import {
   bundleNodes,
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
@@ -51,12 +52,16 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
-      const main = yield* bundleNodes("railway", id, nodes);
       const project = options.project ?? (yield* Railway.Project(`${id}Project`, {}));
       yield* Railway.Service(`${id}Nodes`, {
         project,
-        main: main as unknown as string,
-        build: { install: { rivetkit: RIVETKIT_VERSION } },
+        // A Rust program is its own image: Railway builds its staged crate.
+        ...(isImageProgram(nodes.program)
+          ? { context: nodes.program.context }
+          : {
+              main: (yield* bundleNodes("railway", id, nodes)) as unknown as string,
+              build: { install: { rivetkit: RIVETKIT_VERSION } },
+            }),
         publicDomain: false,
         region: options.region,
         env: nodeEnvironment(nodes),

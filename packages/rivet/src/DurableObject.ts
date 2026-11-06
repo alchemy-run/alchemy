@@ -128,10 +128,12 @@ type ClassRequirements<Req> = Providers | Exclude<Req, DurableObjectServices | P
 /** Props of an external Durable Object: a RivetKit program, run as it is. */
 export interface ExternalDurableObjectProps {
   /**
-   * The program's entry file, relative to where the deploy runs: a RivetKit
-   * registry that calls `registry.start()`, or a `@rivetkit/effect` program
-   * that launches `Registry.serve`. It is bundled and run on the pool's
-   * nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * The program, relative to where the deploy runs. Either a TypeScript
+   * entry file — a RivetKit registry that calls `registry.start()`, or a
+   * `@rivetkit/effect` program that launches `Registry.serve` — which is
+   * bundled; or a Rust crate's `Cargo.toml`, whose package's binary calls
+   * `registry().start()` and is compiled into the node image. Either runs
+   * on the pool's nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
    * `RIVET_NAMESPACE` and `RIVET_POOL` set.
    */
   main: string;
@@ -141,7 +143,8 @@ export interface ExternalDurableObjectProps {
 export interface DurableObjectClass {
   /**
    * An external Durable Object: Actors written with RivetKit, in its async
-   * or Effect form, deployed as they are. Provide a pool Layer to it.
+   * or Effect form or in Rust, deployed as they are. Provide a pool Layer
+   * to it.
    */
   <const Id extends string>(
     id: Id,
@@ -287,9 +290,9 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * instance in its pool on first use, so callers need no RivetKit and no
  * route to the nodes.
  *
- * Given only `main`, it is external: a RivetKit program, async or
- * `@rivetkit/effect`, that its pool bundles and runs as it is. It needs a
- * pool of its own, and has no bindings or `yield*` calls.
+ * Given only `main`, it is external: a RivetKit program, async,
+ * `@rivetkit/effect` or a Rust crate, that its pool builds and runs as it
+ * is. It needs a pool of its own, and has no bindings or `yield*` calls.
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
@@ -367,6 +370,15 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
  *
  * export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+ *   Effect.provide(Counters),
+ * );
+ * ```
+ *
+ * **Example:** Actors written in Rust, compiled into the pool's node image
+ * ```typescript
+ * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+ *
+ * export const Counter = Rivet.DurableObject("Counter", { main: "./counter/Cargo.toml" }).pipe(
  *   Effect.provide(Counters),
  * );
  * ```

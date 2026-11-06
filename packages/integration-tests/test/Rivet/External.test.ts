@@ -22,6 +22,7 @@ const sharedStack = Core.scratchStack(testOptions, "RivetExternal", import.meta.
 const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: CONTROL_PLANE_PORT });
 const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster));
 const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
+const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
 
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));
@@ -41,6 +42,7 @@ let deployed: {
   namespace: string;
   asyncPool: string;
   effectPool: string;
+  rustPool: string;
 };
 
 const clientFor = (poolName: string) =>
@@ -51,8 +53,9 @@ const clientFor = (poolName: string) =>
     poolName,
   });
 
-// RivetKit's own Actors, in its async and Effect forms, deployed as external
-// Durable Objects: Alchemy bundles each program and runs it on a pool.
+// RivetKit's own Actors, in its async, Effect and Rust forms, deployed as
+// external Durable Objects: Alchemy bundles each TypeScript program, compiles
+// the Rust crate into its node image, and runs each on a pool.
 describe.skipIf(!!process.env.FAST)(
   "Rivet external Durable Objects",
   { tags: ["provider:rivet", "provider:docker", "live"] },
@@ -68,11 +71,15 @@ describe.skipIf(!!process.env.FAST)(
             const effectActors = yield* Rivet.DurableObject("EffectActors", {
               main: fixture("effect/main.ts"),
             }).pipe(Effect.provide(EffectPool));
+            const rustActors = yield* Rivet.DurableObject("RustActors", {
+              main: fixture("rust/Cargo.toml"),
+            }).pipe(Effect.provide(RustPool));
             return {
               token: asyncActors.token,
               namespace: asyncActors.namespace,
               asyncPool: asyncActors.pool,
               effectPool: effectActors.pool,
+              rustPool: rustActors.pool,
             };
           }),
         );
@@ -106,6 +113,19 @@ describe.skipIf(!!process.env.FAST)(
         const before = yield* call((): Promise<number> => counter.Read());
         const after = yield* call((): Promise<number> => counter.Add({ amount: 5 }));
         expect(after - before).toBe(5);
+      }),
+      { timeout: 300_000 },
+    );
+
+    test(
+      "a Rust Actor runs as it is",
+      Effect.gen(function* () {
+        expect(deployed.rustPool).toBeTruthy();
+        // RivetKit's client calls a Rust Actor by name, untyped.
+        const counter = clientFor(deployed.rustPool).counter.getOrCreate(["external-rust"]);
+        const first = yield* call(() => counter.increment(3));
+        const second = yield* call(() => counter.increment(4));
+        expect(second - first).toBe(4);
       }),
       { timeout: 300_000 },
     );

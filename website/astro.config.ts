@@ -2015,13 +2015,14 @@ export default defineConfig({
             {
               label: "Building Actors",
               items: [
-                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Four ways to build Actors", link: "/rivet/actors" },
                 { label: "Durable Objects", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
                 { label: "Concurrency", link: "/rivet/concurrency" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
                 { label: "RivetKit Actors", link: "/rivet/rivetkit" },
                 { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+                { label: "Rust Actors", link: "/rivet/rust" },
               ],
             },
             {

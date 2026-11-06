@@ -157,7 +157,7 @@ See [Rivet Cloud](/rivet/rivet-cloud).
 
 ## How @alchemy.run/rivet models these concepts
 
-A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects). Its methods, `fetch` and `alarm` become a Rivet Actor, its storage is `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway. Actors already written with RivetKit, async or Effect, deploy the same way; see [Three ways to build Actors](/rivet/actors).
+A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects). Its methods, `fetch` and `alarm` become a Rivet Actor, its storage is `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway. Actors already written with RivetKit, in TypeScript, Effect or Rust, deploy the same way; see [Four ways to build Actors](/rivet/actors).
 
 A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, HTTPS endpoint and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins, and so is a Services pool:
 

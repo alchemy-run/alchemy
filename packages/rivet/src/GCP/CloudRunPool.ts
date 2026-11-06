@@ -1,6 +1,7 @@
 import * as Run from "@alchemy.run/gcp/Run";
 import * as Effect from "effect/Effect";
 import {
+  bundleProgramOf,
   makePoolLayer,
   nodeEnvironment,
   NODE_DOCKERFILE,
@@ -65,9 +66,10 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
       Effect.gen(function* () {
         const location =
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
+        const program = yield* bundleProgramOf("RivetGCP.CloudRunPool", nodes.program);
         // Every class the pool hosts is bundled into its node image.
         yield* Run.WorkerPool(`${id}Nodes`, {
-          ...nodes.program,
+          ...program,
           dockerfile: { content: NODE_DOCKERFILE },
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
