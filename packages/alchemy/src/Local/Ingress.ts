@@ -3,149 +3,72 @@
  *
  * A local resource listens on `http://localhost:<port>`. A dev router
  * (Portless, a tunnel, a corporate proxy, …) can give it a stable name
- * instead. `dev.ingress` on a resource names the router, and the resource's
- * `url` becomes the router's public origin while its raw listener stays the
- * address everything inside the dev session dials.
+ * instead. `dev.ingress` on a resource names the module that routes it, and
+ * the resource's `url` becomes the router's public origin while its raw
+ * listener stays the address everything inside the dev session dials.
  *
- * The prop value is an {@link IngressConfig}: plain data
- * (`{ type: "portless", options? }`), because it crosses the `alchemy dev`
- * sidecar's RPC boundary (a function there becomes `null`) and persists in
- * state. The router's package contributes the {@link IngressAdapter} behind
- * the `type` through {@link Contributions.Contributions.ingress}, and the
- * resource's local provider resolves it inside the sidecar with
- * {@link route}. Core and the resources never import a router package.
- *
- * {@link route} builds the adapter from its {@link IngressFactory} on every
- * call, so a factory's `make` stays cheap and anything shared between calls
- * (a routes file, a proxy handle) lives outside the adapter value.
+ * The prop value is an {@link Ingress}: plain data naming a module whose
+ * default export is a {@link Router} Layer. It is data because it crosses the
+ * `alchemy dev` sidecar's RPC boundary (a function there becomes `null`) and
+ * persists in state, and so nothing of the router is bundled into the
+ * resource. The resource's local provider calls {@link attach} inside the
+ * sidecar, which imports the module and builds its Layer once per process.
+ * Core and the resources never import a router package.
  */
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import type { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import type * as Scope from "effect/Scope";
-import * as Contributions from "../Contributions.ts";
+import * as Scope from "effect/Scope";
 import { UserFacingError } from "../UserFacingError.ts";
 
 /**
- * Which ingress adapter routes a resource's dev URL. The value of
- * `dev.ingress`, returned by a router package's constructor (for example
- * `Portless.Ingress()`).
+ * A resource's `dev.ingress`: which module routes its dev URL. A router
+ * package's constructor returns one (for example `Portless.Ingress(proxy)`),
+ * adding whatever settings its {@link Router} reads. Every field is plain
+ * data.
  */
-export interface IngressConfig<Type extends string = string> {
+export interface Ingress {
   /**
-   * The adapter to resolve, by the name its package contributes with
-   * `Contributions.ingress` (for example `"portless"`).
+   * Package specifier of the module whose default export is a
+   * {@link Router} Layer, for example `"@alchemy.run/portless/IngressLive"`.
    */
-  readonly type: Type;
+  readonly module: string;
   /**
-   * What the route is called, for hostnames and logs (it becomes
-   * {@link IngressTarget.label}). Names within one stack and stage must be
-   * distinct, because an adapter derives the origin from it.
-   * @default the resource's logical id
+   * What the route is called, for hostnames and logs. The router decides
+   * what to do without one; routers in alchemy use the resource's logical id.
    */
   readonly name?: string | undefined;
-  /**
-   * Adapter-specific options, for example `{ domain: "myapp" }`. Plain JSON
-   * data: values that are Outputs are resolved before the local provider
-   * sees them.
-   */
-  readonly options?: IngressOptions | undefined;
 }
 
-/** The options of an {@link IngressConfig}, handed to {@link IngressFactory.make}. */
-export type IngressOptions = { readonly [key: string]: unknown };
-
-/**
- * The resource an adapter names a route for. The resource's local provider
- * derives it (see {@link createTarget}); users never supply one.
- */
-export interface IngressTarget {
+/** The resource being routed. Its local provider builds it; users never do. */
+export interface Target {
   /** The stack's name. */
   readonly stack: string;
   /**
    * The stage as the CLI names it, for example `dev_alice`. Not host-safe
-   * (`_` is not a host label): an adapter that builds hostnames slugifies it.
+   * (`_` is not a host label): a router that builds hostnames slugifies it.
    */
   readonly stage: string;
   /**
    * The resource's fully-qualified name, unique within the stack. Key
-   * anything an adapter keeps across restarts by this, never by `id`, which
+   * anything a router keeps across restarts by this, never by `id`, which
    * two resources in different namespaces can share.
    */
   readonly fqn: string;
   /** The resource's logical id within its namespace. */
   readonly id: string;
-  /**
-   * What the route is called, for hostnames and logs: the {@link IngressConfig.name}
-   * the user gave, else the resource's logical id.
-   */
-  readonly label: string;
   /** The resource's type, for example `Cloudflare.Worker`. */
   readonly type: string;
 }
 
-/**
- * A router, as `alchemy dev` uses it. It fails with {@link IngressError}.
- */
-export interface IngressAdapter {
-  /**
-   * Route `target` to `listener` and return the origin it answers at. The
-   * route lasts until the `Scope` closes. Fail when the route can't be made,
-   * so the resource never advertises an origin that isn't routed.
-   *
-   * - Attaching the same `fqn` and `listener` again changes nothing.
-   * - Attaching an `fqn` to a new listener replaces its route.
-   * - Closing the `Scope` removes the route this call added, unless a later
-   *   attach for the same `fqn` took it over. It removes nothing else.
-   */
-  readonly attach: (
-    target: IngressTarget,
-    listener: URL,
-  ) => Effect.Effect<string, IngressError, Scope.Scope>;
-}
-
-/**
- * Builds an {@link IngressAdapter} from an {@link IngressConfig}'s options.
- * A router package contributes one per `type` with
- * {@link Contributions.Contributions.ingress}.
- */
-export interface IngressFactory {
-  readonly make: (
-    options: IngressOptions | undefined,
-  ) => Effect.Effect<IngressAdapter, IngressError, IngressServices>;
-}
-
-/**
- * The services an adapter runs under: the files, paths, processes and HTTP an
- * adapter needs to keep a route table or drive a router. The dev sidecar
- * provides them to every local provider. A smaller set than the sidecar has,
- * because a local provider that calls {@link route} adds these to its layer's
- * requirements, and `providers()` must keep asking only for what a stack
- * already provides.
- */
-export type IngressServices = ChildProcessSpawner | FileSystem | Path | HttpClient;
-
-/**
- * Adapter factories by {@link IngressConfig.type}, resolved before the
- * packages that contribute them. For tests and in-process runs, which have
- * no sidecar to load a contributed adapter into.
- *
- * ```ts
- * Layer.succeed(Ingress.Adapters, { test: myFactory })
- * ```
- */
-export class Adapters extends Context.Service<Adapters, Readonly<Record<string, IngressFactory>>>()(
-  "alchemy/Local/Ingress/Adapters",
-) {}
-
-/** An adapter could not make or remove a route. */
+/** A router could not be loaded, or could not make or remove a route. */
 export class IngressError extends Data.TaggedError("IngressError")<{
-  /** The adapter's {@link IngressConfig.type}. */
-  readonly type: string;
   readonly message: string;
   readonly cause?: unknown;
 }> {
@@ -153,76 +76,92 @@ export class IngressError extends Data.TaggedError("IngressError")<{
 }
 
 /**
- * A resource selected an ingress adapter that can't be resolved: no installed
- * package contributes it, or the package that does failed to load. Raised
- * instead of advertising a URL nothing routes.
+ * What an ingress module's default-export Layer provides.
+ *
+ * `attach` routes `target` to `listener` and returns the origin it answers
+ * at. The route lasts until the `Scope` closes. It fails when the route
+ * can't be made, so the resource never advertises an origin that isn't
+ * routed.
+ *
+ * - Attaching the same `fqn` and `listener` again changes nothing.
+ * - Attaching an `fqn` to a new listener replaces its route.
+ * - Closing the `Scope` removes the route this call added, unless a later
+ *   attach for the same `fqn` took it over. It removes nothing else.
  */
-export class IngressAdapterNotFound extends Data.TaggedError("IngressAdapterNotFound")<{
-  /** The {@link IngressConfig.type} that didn't resolve. */
-  readonly type: string;
-  /** Why it didn't, from {@link Contributions.ingress}. */
-  readonly reason: string;
-}> {
-  readonly [UserFacingError] = true;
-  override get message(): string {
-    return (
-      `Ingress adapter "${this.type}" could not be resolved: ${this.reason}. ` +
-      `Install the package that provides it (@alchemy.run/${this.type} for first-party adapters) ` +
-      `in the project that runs alchemy dev.`
-    );
+export class Router extends Context.Service<
+  Router,
+  {
+    readonly attach: (
+      ingress: Ingress,
+      target: Target,
+      listener: URL,
+    ) => Effect.Effect<string, IngressError, Scope.Scope>;
   }
-}
+>()("alchemy/Local/Ingress/Router") {}
 
 /**
- * The {@link IngressTarget} of a resource, from the identity its provider
- * already holds: the `Stack` service read when the provider layer was built,
- * and the `id` and `fqn` its lifecycle operation was called with. `label` is
- * the config's {@link IngressConfig.name}, else the logical id.
+ * The services a router's Layer is built with: the ones the dev sidecar
+ * provides to every local provider, so a provider that calls {@link attach}
+ * asks `providers()` for nothing new.
  */
-export const createTarget = (resource: {
-  readonly stack: { readonly name: string; readonly stage: string };
-  readonly id: string;
-  readonly fqn: string;
-  /** The resource type, for example `Cloudflare.Worker`. */
-  readonly type: string;
-  /** The `dev.ingress` the resource was given. */
-  readonly config: IngressConfig;
-}): IngressTarget => ({
-  stack: resource.stack.name,
-  stage: resource.stack.stage,
-  fqn: resource.fqn,
-  id: resource.id,
-  label: resource.config.name ?? resource.id,
-  type: resource.type,
-});
+type Services = ChildProcessSpawner | FileSystem | Path | HttpClient;
 
-/** The factory for `type`: an {@link Adapters} entry first, then a contributed one. */
-const factoryFor = Effect.fn("Ingress.factoryFor")(function* (type: string) {
-  const override = yield* Effect.serviceOption(Adapters);
-  if (override._tag === "Some" && Object.hasOwn(override.value, type)) {
-    return override.value[type]!;
-  }
-  return yield* Contributions.ingress(type).pipe(
-    Effect.mapError((error) => new IngressAdapterNotFound({ type, reason: error.message })),
+/** Each module's Router, built once and kept for the life of the process. */
+const routers = new Map<string, Deferred.Deferred<Router["Service"], IngressError>>();
+
+const routerFor = Effect.fnUntraced(function* (module: string) {
+  const known = routers.get(module);
+  if (known !== undefined) return yield* Deferred.await(known);
+  const deferred = Deferred.makeUnsafe<Router["Service"], IngressError>();
+  routers.set(module, deferred);
+  const fail = (message: string) => (cause?: unknown) =>
+    new IngressError({ message: `Ingress module ${module} ${message}`, cause });
+  const exit = yield* Effect.tryPromise({
+    try: (): Promise<{ readonly default?: unknown }> => import(module),
+    catch: fail("could not be imported"),
+  }).pipe(
+    Effect.flatMap((loaded) =>
+      Layer.isLayer(loaded.default)
+        ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- dynamically imported ingress module; Router is checked after the build
+          Effect.succeed(loaded.default as Layer.Layer<Router, unknown, Services>)
+        : Effect.fail(fail("has no default-export Layer")()),
+    ),
+    Effect.flatMap((layer) =>
+      Layer.buildWithScope(layer, Scope.makeUnsafe()).pipe(
+        Effect.mapError(fail("failed to build")),
+      ),
+    ),
+    Effect.flatMap((context) => {
+      const router = Context.getOption(context, Router);
+      return router._tag === "Some"
+        ? Effect.succeed(router.value)
+        : Effect.fail(fail("provides no Router")());
+    }),
+    Effect.exit,
   );
-});
-
-const adapterFor = Effect.fn("Ingress.adapterFor")(function* (config: IngressConfig) {
-  const factory = yield* factoryFor(config.type);
-  return yield* factory.make(config.options);
+  // A failure is not kept: the next attach tries again.
+  if (exit._tag === "Failure") routers.delete(module);
+  yield* Deferred.done(deferred, exit);
+  return yield* exit;
 });
 
 /**
- * Route `target` to `listener` until the `Scope` closes, and return the
- * origin it answers at. Fails with {@link IngressAdapterNotFound} when the
- * adapter can't be resolved and with {@link IngressError} when it can't
- * route, so the caller never advertises an unrouted URL.
+ * Route `target` to `listener` through the router `ingress.module` provides,
+ * until the `Scope` closes, and return the origin it answers at. Fails with
+ * {@link IngressError} when the module can't be loaded or can't route, so
+ * the caller never advertises an unrouted URL.
+ *
+ * ```ts
+ * const url = ingress
+ *   ? yield* Ingress.attach(ingress, { stack: stack.name, stage: stack.stage, fqn, id, type }, listener)
+ *   : listener.href;
+ * ```
  */
-export const route = Effect.fn("Ingress.route")(function* (
-  config: IngressConfig,
-  target: IngressTarget,
+export const attach = Effect.fn("Ingress.attach")(function* (
+  ingress: Ingress,
+  target: Target,
   listener: URL,
 ) {
-  const adapter = yield* adapterFor(config);
-  return yield* adapter.attach(target, listener);
+  const router = yield* routerFor(ingress.module);
+  return yield* router.attach(ingress, target, listener);
 });
