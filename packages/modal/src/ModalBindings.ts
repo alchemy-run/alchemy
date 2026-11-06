@@ -64,7 +64,9 @@ import { ServiceUser } from "./ServiceUser.ts";
 export const TOKEN_ENV = {
   id: "MODAL_TOKEN_ID",
   secret: "MODAL_TOKEN_SECRET",
-  serverUrl: "MODAL_SERVER_URL",
+  // Not MODAL_SERVER_URL: inside a Modal container, Modal sets that to the
+  // container's own socket (`unix:/run/modal.sock`), shadowing ours.
+  serverUrl: "ALCHEMY_MODAL_SERVER_URL",
 } as const;
 
 /**

@@ -10,7 +10,14 @@ import { Warm } from "./src/Sandbox.ts";
 export default Alchemy.Stack(
   "CloudflareModalSandboxExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()),
+    // Binding hosts act with your Modal token, which works on every plan. On
+    // a Team or Enterprise workspace, drop Modal.DeployerHostIdentity to give
+    // each host its own scoped service user instead.
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      Modal.providers(),
+      Modal.DeployerHostIdentity,
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
