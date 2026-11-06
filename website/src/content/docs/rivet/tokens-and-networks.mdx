@@ -21,15 +21,15 @@ The token can do anything on the control plane, in every namespace. Keep a runti
 
 ## An HTTPS address without a domain
 
-Every control plane you run serves its gateway over HTTPS, at an address its cloud provides. You don't need a domain of your own:
+Every control plane you run serves its gateway over HTTPS, at an address its cloud provides. You don't need a domain of your own.
 
-| Control plane | Address | In front of the engines |
-|---|---|---|
-| `RivetAWS.Ec2ControlPlane`, `EcsControlPlane` | `https://….cloudfront.net` | CloudFront, through a VPC origin to an internal load balancer |
-| `RivetGCP.ComputeEngineControlPlane` | `https://….run.app` | a Cloud Run proxy, through a Serverless VPC Access connector |
-| `RivetHetzner.ServerControlPlane` | `https://203-0-113-7.sslip.io` | a Caddy server with a Let's Encrypt certificate, in front of a private load balancer |
-| `RivetFly.MachineControlPlane` | `https://….fly.dev` | Fly's proxy |
-| `RivetDocker.SwarmControlPlane` | `http://localhost:6420` | nothing: it runs on your machine |
+On AWS, `RivetAWS.Ec2ControlPlane` and `EcsControlPlane` answer at `https://….cloudfront.net`: CloudFront reaches an internal load balancer through a VPC origin.
+
+On GCP, `RivetGCP.ComputeEngineControlPlane` answers at `https://….run.app`: a proxy on Cloud Run reaches the engines through a Serverless VPC Access connector.
+
+On Hetzner, `RivetHetzner.ServerControlPlane` answers at an address like `https://203-0-113-7.sslip.io`: a Caddy server with a Let's Encrypt certificate sits in front of a private load balancer.
+
+On Fly, `RivetFly.MachineControlPlane` answers at `https://….fly.dev`, through Fly's proxy. `RivetDocker.SwarmControlPlane` runs on your machine, at `http://localhost:6420`.
 
 The engines themselves have no public address. Only the HTTPS front reaches them, over the control plane's private network.
 
