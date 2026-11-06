@@ -4,9 +4,7 @@ import { HostedZone } from "@alchemy.run/aws/Route53";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
-import { adopt, type OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -307,58 +305,89 @@ test.provider(
 );
 
 test.provider(
-  "an untagged zone with the same name is not silently adopted",
+  "a same-named zone is adopted only through an explicit hostedZoneId",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const name = stageZoneName(stack.stage, "alchemy-hz-unowned");
+      const name = stageZoneName(stack.stage, "alchemy-hz-adopt");
 
-      // A zone created outside Alchemy: no ownership tags.
+      // A zone created outside Alchemy with the same name.
       const existing = yield* route53.createHostedZone({
         Name: name,
-        CallerReference: `alchemy-test-unowned-${Date.now().toString(36)}`,
+        CallerReference: `alchemy-test-adopt-${Date.now().toString(36)}`,
       });
       const existingId = normalizeId(existing.HostedZone.Id);
       yield* Effect.addFinalizer(() =>
         route53.deleteHostedZone({ Id: existingId }).pipe(Effect.ignore),
       );
 
-      const program = Effect.gen(function* () {
-        return yield* HostedZone("UnownedZone", { name });
-      });
-
-      const error = yield* stack.deploy(program).pipe(
-        Effect.as(undefined),
-        Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+      // Without hostedZoneId: a new zone, and the existing one is untouched.
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name });
+        }),
       );
-      expect(error?._tag).toBe("OwnedBySomeoneElse");
+      expect(normalizeId(created.id)).not.toBe(existingId);
+      const untouched = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: existingId,
+      });
+      expect(
+        (untouched.ResourceTagSet.Tags ?? []).some((tag) => tag.Key?.startsWith("alchemy::")),
+      ).toBe(false);
 
-      // With adopt(true) the engine takes the existing zone over.
-      const adopted = yield* stack.deploy(program).pipe(adopt(true));
+      // With hostedZoneId: the existing zone replaces the created one.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name, hostedZoneId: existingId });
+        }),
+      );
       expect(normalizeId(adopted.id)).toBe(existingId);
+      yield* assertZoneGone(created.id);
+      const adoptedTags = yield* route53.listTagsForResource({
+        ResourceType: "hostedzone",
+        ResourceId: existingId,
+      });
+      const adoptedTagMap = Object.fromEntries(
+        (adoptedTags.ResourceTagSet.Tags ?? []).map((t) => [t.Key, t.Value]),
+      );
+      expect(adoptedTagMap["alchemy::id"]).toBe("Zone");
 
       yield* stack.destroy();
       yield* assertZoneGone(existingId);
-    }),
-  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 180_000 },
-);
 
-const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
-  cause.reasons
-    .map((reason) =>
-      Cause.isFailReason(reason)
-        ? reason.error
-        : Cause.isDieReason(reason)
-          ? reason.defect
-          : undefined,
-    )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        typeof value === "object" &&
-        value !== null &&
-        "_tag" in value &&
-        value._tag === "OwnedBySomeoneElse",
-    );
+      // A hostedZoneId that no longer exists fails instead of creating a zone.
+      const error = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* HostedZone("Zone", { name, hostedZoneId: existingId });
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("AdoptedHostedZoneNotFound");
+      yield* stack.destroy();
+
+      // A first deploy with hostedZoneId adopts through read, with no prior state.
+      const another = yield* route53.createHostedZone({
+        Name: name,
+        CallerReference: `alchemy-test-adopt-fresh-${Date.now().toString(36)}`,
+      });
+      const anotherId = normalizeId(another.HostedZone.Id);
+      yield* Effect.addFinalizer(() =>
+        route53.deleteHostedZone({ Id: anotherId }).pipe(Effect.ignore),
+      );
+      const fresh = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* HostedZone("Zone", { name, hostedZoneId: anotherId });
+        }),
+      );
+      expect(normalizeId(fresh.id)).toBe(anotherId);
+
+      yield* stack.destroy();
+      yield* assertZoneGone(anotherId);
+    }),
+  { tags: ["provider:aws", "provider:aws:route53", "live"], timeout: 240_000 },
+);
 
 test.provider(
   "idempotent delete tolerates an already-gone zone",
