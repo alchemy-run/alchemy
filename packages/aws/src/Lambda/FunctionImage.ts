@@ -1,3 +1,4 @@
+import { type BuildCache, BuildCacheSchema } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -49,6 +50,14 @@ export interface FunctionDockerImageSource extends FunctionImageConfig {
    * image layers. Do not use them for secrets.
    */
   buildArgs?: Record<string, string>;
+  /**
+   * BuildKit layer caches to import and export, as
+   * [cache backends](https://docs.docker.com/build/cache/backends/). A
+   * `registry` backend without `ref` uses the function's ECR repository's
+   * `:buildcache` tag. The cache is not part of the image hash.
+   * @default no cache
+   */
+  cache?: BuildCache;
 }
 
 /** An existing private ECR image, addressed by tag or immutable digest. */
@@ -64,6 +73,7 @@ export interface FunctionEcrImageSource extends FunctionImageConfig {
   context?: never;
   dockerfile?: never;
   buildArgs?: never;
+  cache?: never;
 }
 
 /**
@@ -86,6 +96,7 @@ const FunctionDockerImageSourceSchema = Schema.Struct({
   context: Schema.String,
   dockerfile: Schema.String,
   buildArgs: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  cache: Schema.optionalKey(BuildCacheSchema),
   ...FunctionImageConfigFields,
 }) satisfies Schema.Schema<FunctionDockerImageSource>;
 
@@ -274,9 +285,9 @@ export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionIma
       record.context !== undefined ||
       record.dockerfile !== undefined ||
       record.buildArgs !== undefined;
-    if (hasUri && hasBuildSource) {
+    if (hasUri && (hasBuildSource || record.cache !== undefined)) {
       return yield* new FunctionImageInvalidProps({
-        message: `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, or image.buildArgs; declare exactly one image source`,
+        message: `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, image.buildArgs, or image.cache; declare exactly one image source`,
       });
     }
     if (!hasUri && !hasBuildSource) {
@@ -535,6 +546,7 @@ export const makeFunctionImage = Effect.gen(function* () {
         dockerfile: build.dockerfile,
         platform: functionImagePlatform(options.architecture),
         buildArgs: source.buildArgs,
+        cache: source.cache,
         args: ["--provenance=false"],
       }).pipe(
         Effect.as(true),

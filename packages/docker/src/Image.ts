@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
+import { type BuildCacheOptions, buildCacheRef, resolveBuildCache } from "./BuildCache.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -16,7 +17,7 @@ import {
   withRegistryHost,
 } from "./Registry.ts";
 
-export interface DockerBuildOptions {
+export interface DockerBuildOptions extends BuildCacheOptions {
   /**
    * Build context directory.
    *
@@ -45,10 +46,6 @@ export interface DockerBuildOptions {
   secrets?: Record<string, Redacted.Redacted<string>>;
   /** Multi-stage build target. */
   target?: string;
-  /** Cache sources passed as `--cache-from`. */
-  cacheFrom?: string[];
-  /** Cache destinations passed as `--cache-to`. */
-  cacheTo?: string[];
   /** Additional Docker build options. */
   options?: string[];
 }
@@ -167,8 +164,11 @@ export interface Image extends Resource<
  *   name: "registry.example.com/app",
  *   build: {
  *     context: "./app",
- *     cacheFrom: ["type=registry,ref=registry.example.com/app:buildcache"],
- *     cacheTo: ["type=registry,ref=registry.example.com/app:buildcache,mode=max"],
+ *     // `registry` without `ref` uses registry.example.com/app:buildcache.
+ *     cache: {
+ *       from: [{ type: "registry" }],
+ *       to: [{ type: "registry", mode: "max" }],
+ *     },
  *   },
  *   // Authenticates the base-image pull and cache import/export, then the push.
  *   registry: {
@@ -221,8 +221,10 @@ export const ImageProvider = () =>
           target: props.build.target,
           "build-arg": props.build.args,
           secrets: props.build.secrets,
-          "cache-from": props.build.cacheFrom,
-          "cache-to": props.build.cacheTo,
+          ...resolveBuildCache(props.build.cache, {
+            // A `registry` backend without `ref` caches next to the image.
+            ref: buildCacheRef(props.registry ? withRegistryHost(ref, props.registry) : ref),
+          }).flags,
           args: props.build.options,
           engineContext,
           // Base images and registry caches may live in the same registry;

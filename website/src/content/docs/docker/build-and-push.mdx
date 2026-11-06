@@ -59,7 +59,7 @@ export default Alchemy.Stack(
 The `build` block maps onto `docker build`: `context` (default: the
 current working directory), `dockerfile` (default `"Dockerfile"`),
 `args`, a multi-stage `target`, and a `platform` such as
-`"linux/amd64"`, plus `cacheFrom`/`cacheTo` for build caching. Omit
+`"linux/amd64"`, plus `cache` for BuildKit layer caches. Omit
 `name` and alchemy generates one from the stack, stage, and logical
 ID.
 
@@ -94,6 +94,37 @@ declared. The push never runs `docker login` and never touches your
 global Docker config; credentials stay out of `argv` and your
 keychain. On success the resource's `imageRef` includes the registry
 host and `repoDigest` carries the immutable content digest.
+
+## Cache layers in a registry
+
+```typescript
+const image = yield* Docker.Image("app", {
+  name: "my-app",
+  build: {
+    context: "./app",
+    cache: {
+      from: [{ type: "registry" }],
+      to: [{ type: "registry", mode: "max" }],
+    },
+  },
+  registry: {
+    server: "ghcr.io",
+    username: "octocat",
+    password: Config.Redacted("GITHUB_TOKEN"),
+  },
+});
+```
+
+`build.cache` lists [BuildKit cache backends](https://docs.docker.com/build/cache/backends/)
+to import (`from`) and export (`to`). A `registry` backend without a
+`ref` uses the image's own repository with a `:buildcache` tag, and the
+build authenticates with `registry`. `mode: "max"` keeps every stage's
+layers, so a change late in a multi-stage Dockerfile doesn't rerun the
+earlier stages on a fresh machine. Other backends (`gha`, `s3`, `local`)
+take their attributes the same way. Every resource that builds an image
+takes the same `cache` shape: Cloudflare Containers, ECS, Cloud Run and
+Kubernetes workloads under `build.cache`, `AWS.ECR.Image` and Lambda
+container images as `cache` next to `buildArgs`.
 
 ## Mirror and pin remote images
 

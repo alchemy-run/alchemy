@@ -1,3 +1,4 @@
+import { type BuildCache, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -75,6 +76,8 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform?: string;
     /** Docker build arguments. */
     buildArgs?: Record<string, string>;
+    /** BuildKit layer caches; a `registry` backend without `ref` uses `<repositoryUri>:buildcache`. */
+    cache?: BuildCache;
     /** Additional arguments appended to `docker image build`. */
     args?: string[];
   },
@@ -87,6 +90,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.buildArgs,
     args: options.args,
+    ...imageBuildCacheOptions(options, options.imageUri, credentials),
   });
   // Pushes are idempotent; transient registry-transport failures (Docker
   // Desktop's embedded proxy timing out under load, ECR 503s, credential
@@ -134,6 +138,15 @@ export interface ImageProps {
    * Docker build arguments (`--build-arg`).
    */
   buildArgs?: Record<string, string>;
+  /**
+   * BuildKit layer caches to import and export, as
+   * [cache backends](https://docs.docker.com/build/cache/backends/). A
+   * `registry` backend without `ref` uses the repository's `:buildcache`
+   * tag. The cache is not part of the content hash, so changing it does not
+   * rebuild the image.
+   * @default no cache
+   */
+  cache?: BuildCache;
 }
 
 export interface Image extends Resource<
@@ -428,6 +441,7 @@ export const ImageProvider = () =>
             dockerfile,
             platform: news.platform ?? "linux/amd64",
             buildArgs: news.buildArgs,
+            cache: news.cache,
             // Engines using the containerd image store attach provenance
             // attestations by default, turning the pushed tag into an OCI
             // image index — which Lambda (a valid consumer of these images)

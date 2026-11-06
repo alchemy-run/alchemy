@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -349,9 +350,10 @@ export type ServiceProps = PlatformProps & {
   /**
    * Bundler configuration for `main`. `install` lists packages
    * `npm install`ed into an unbundled Node program image (see
-   * {@link extraFiles}); Next.js needs `next`.
+   * {@link extraFiles}); Next.js needs `next`. `cache` configures the image
+   * build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & { install?: PackageInstall };
+  build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
   /**
    * Host files or directories baked into the image next to `main`
    * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on

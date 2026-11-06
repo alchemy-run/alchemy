@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -156,8 +157,8 @@ export interface BundledJobProps extends JobPropsBase {
   image?: string;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
-  /** Bundler configuration for the entrypoint. */
-  build?: Bundle.BundleConfig;
+  /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */

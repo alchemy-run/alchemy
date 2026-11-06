@@ -1,3 +1,4 @@
+import { buildCacheRef, resolveBuildCache } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
@@ -123,43 +124,6 @@ const normalizePrepushedRef = (image: string, registryId: string, accountId: str
   return first !== undefined && /^[a-f0-9]{32}$/.test(first)
     ? image
     : `${registryId}/${accountId}/${rest}`;
-};
-
-/**
- * Turn `publish.cache` into `--cache-from` / `--cache-to` values. Backends
- * pass through as `type=<type>,<key>=<value>` (CSV-quoted, as Buildx parses
- * them); only a `registry` backend without `ref` is pointed at `cacheRef`.
- * The image itself is tagged `cacheRef` only when an inline cache is exported
- * and no other destination writes to that tag.
- */
-const resolveBuildCache = (
-  cache: ContainerApplication.BuildCache | undefined,
-  cacheRef: string,
-) => {
-  const resolve = (backends: ContainerApplication.CacheBackend[]) =>
-    backends.map((backend) =>
-      backend.type === "registry" && backend.ref === undefined
-        ? { ...backend, ref: cacheRef }
-        : backend,
-    );
-  const format = ({ type, ...attributes }: ContainerApplication.CacheBackend) =>
-    [
-      `type=${type}`,
-      ...Object.entries(attributes).flatMap(([key, value]) =>
-        value === undefined ? [] : [`${key}=${String(value)}`],
-      ),
-    ]
-      .map((field) => (/[",\r\n]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field))
-      .join(",");
-  const from = resolve(cache?.from ?? [{ type: "registry" }]);
-  const to = resolve(cache?.to ?? [{ type: "inline" }]);
-  return {
-    "cache-from": from.map(format),
-    "cache-to": to.map(format),
-    tagCacheRef:
-      to.some((backend) => backend.type === "inline") &&
-      !to.some((backend) => backend.ref === cacheRef),
-  };
 };
 
 const RegistryDigest = Schema.String.pipe(
@@ -645,9 +609,20 @@ export const LiveContainerProvider = () =>
             return { imageRef: published, digest };
           }
         }
-        const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
-        const { tagCacheRef, ...cacheOptions } = resolveBuildCache(props.publish?.cache, cacheRef);
-        const buildTags: [string, ...string[]] = tagCacheRef ? [imageRef, cacheRef] : [imageRef];
+        const cacheRef = buildCacheRef(imageRef);
+        const cache = resolveBuildCache(props.build?.cache, {
+          ref: cacheRef,
+          from: [{ type: "registry" }],
+          to: [{ type: "inline" }],
+        });
+        const cacheOptions = cache.flags;
+        // An inline cache lives in the image itself, so the image takes the
+        // `:buildcache` tag, unless another destination writes that tag.
+        const tag: [string, ...string[]] =
+          cache.to.some((backend) => backend.type === "inline") &&
+          !cache.to.some((backend) => backend.ref === cacheRef)
+            ? [imageRef, cacheRef]
+            : [imageRef];
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -718,7 +693,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: buildTags,
+                tag,
                 context: build.context,
                 platform,
                 file: build.dockerfile,
@@ -760,7 +735,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: buildTags,
+                tag,
                 context: contextDir,
                 platform,
               },

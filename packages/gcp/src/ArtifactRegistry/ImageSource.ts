@@ -1,3 +1,4 @@
+import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile, type InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import {
@@ -50,7 +51,7 @@ export interface BundledImageSource {
   dockerfile?: string | InlineDockerfile;
   context?: string;
   handler?: string;
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Host files baked into the image next to `main`. With an external
    * (`isExternal`) `main`, this selects the unbundled Node program mode:
@@ -275,6 +276,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.build?.args,
     secrets: options.build?.secrets,
+    ...imageBuildCacheOptions(options.build, options.imageUri, credentials),
   });
   yield* docker.image.push(options.imageUri, credentials, options.platform).pipe(
     Effect.retry({
@@ -642,6 +644,7 @@ export const makeImageSource = Effect.gen(function* () {
         context: contextDir,
         platform,
         location,
+        build: { cache: source.build?.cache },
       }).pipe(Effect.ensuring(fs.remove(contextDir, { recursive: true }).pipe(Effect.ignore)));
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };
@@ -677,11 +680,20 @@ export const makeImageSource = Effect.gen(function* () {
         });
         envFrom = `alchemy-env-${id.toLowerCase()}:${codeHash}`;
         yield* session.note(`Building environment image for ${id}...`);
+        // The user's Dockerfile holds the expensive steps, so the layer
+        // cache applies to this stage rather than the bundle layered on top.
         yield* docker.image.build({
           context: envPaths.context,
           file: envPaths.dockerfile,
           tag: envFrom,
           platform,
+          ...imageBuildCacheOptions(
+            source.build,
+            imageUri,
+            source.build?.cache === undefined
+              ? undefined
+              : yield* getArtifactRegistryCredentials(location),
+          ),
         });
       }
       const finalDockerfile =
@@ -705,6 +717,7 @@ export const makeImageSource = Effect.gen(function* () {
         context: contextDir,
         platform,
         location,
+        build: envFrom === undefined ? { cache: source.build?.cache } : undefined,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };

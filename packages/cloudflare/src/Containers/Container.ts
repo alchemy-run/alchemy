@@ -542,7 +542,7 @@ type ContainerShape<Shape> = {
  * latest exported cache, not a combined cache of every historical image.
  * Reusing a finished image does not move the layer-cache tag.
  *
- * `publish.cache` chooses where builds import and export layer caches, as
+ * `build.cache` chooses where builds import and export layer caches, as
  * BuildKit cache backends (`inline`, `registry`, `local`, `gha`, `s3`, ...).
  * The default imports `:buildcache` and exports an inline cache, which only
  * keeps final-stage layers. When an expensive step in an earlier stage is
@@ -554,7 +554,20 @@ type ContainerShape<Shape> = {
  * ```typescript
  * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
  *   context: `${import.meta.dirname}/context`,
- *   publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+ *   build: { cache: { to: [{ type: "registry", mode: "max" }] } },
+ * }) {}
+ * ```
+ *
+ * **Example:** GitHub Actions cache, falling back to the registry cache
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: {
+ *     cache: {
+ *       from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
+ *       to: [{ type: "gha", scope: "agent", mode: "max" }],
+ *     },
+ *   },
  * }) {}
  * ```
  *

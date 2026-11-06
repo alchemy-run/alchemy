@@ -324,7 +324,7 @@ copied into the requested one.
 
 ## Configure the build cache
 
-`publish.cache` lists where builds import layer caches from (`from`) and
+`build.cache` lists where builds import layer caches from (`from`) and
 export them to (`to`), as [BuildKit cache backends](https://docs.docker.com/build/cache/backends/).
 Each entry is a `type` plus that backend's attributes, written as
 `--cache-from` / `--cache-to` `type=<type>,<attribute>=<value>,...`, so every
@@ -345,7 +345,7 @@ stage's layers instead:
 ```typescript
 export class Agent extends Cloudflare.Container<Agent>()("Agent", {
   context: `${import.meta.dirname}/context`,
-  publish: { cache: { to: [{ type: "registry", mode: "max" }] } },
+  build: { cache: { to: [{ type: "registry", mode: "max" }] } },
 }) {}
 ```
 
@@ -354,7 +354,7 @@ Or keep the cache in GitHub Actions, falling back to the registry cache:
 ```typescript
 export class Agent extends Cloudflare.Container<Agent>()("Agent", {
   context: `${import.meta.dirname}/context`,
-  publish: {
+  build: {
     cache: {
       from: [{ type: "gha", scope: "agent" }, { type: "registry" }],
       to: [{ type: "gha", scope: "agent", mode: "max" }],
@@ -371,8 +371,12 @@ need a builder that can export them: Buildx 0.26 or newer with a
 CI), or the `docker` driver with the containerd image store for `registry`.
 Credentials for `gha`, `s3` and `azblob` come from the environment, as
 BuildKit documents; attributes reach `docker`'s arguments, so never put
-secrets in them. `repository` stays optional, and the first build after a
-change overwrites the cache in the new format.
+secrets in them. The cache is not part of the image's content hash, so the
+first build after a change overwrites the cache in the new format.
+
+Every resource that builds an image takes the same `cache` shape:
+`Docker.Image`, `AWS.ECS`, `GCP.Run` and `Kubernetes` workloads under
+`build.cache`, `AWS.ECR.Image` and Lambda container images as `cache`.
 
 ## Configure the container with `env`
 

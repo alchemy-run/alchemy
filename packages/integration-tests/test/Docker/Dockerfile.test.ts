@@ -100,6 +100,12 @@ describe(
         expect(yield* dies({ image: "busybox", build: { secrets } })).toBe(true);
         // A `main` program's bundler config is not a Docker build.
         expect(yield* dies({ main: "./i.ts", build: { pure: false } })).toBe(false);
+
+        // A layer cache needs an image Alchemy builds, from a program or a Dockerfile.
+        const cache = { to: [{ type: "registry", mode: "max" }] };
+        expect(yield* dies({ context: "./app", build: { cache } })).toBe(false);
+        expect(yield* dies({ main: "./i.ts", build: { cache } })).toBe(false);
+        expect(yield* dies({ image: "busybox", build: { cache } })).toBe(true);
       }),
     );
 

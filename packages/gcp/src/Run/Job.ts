@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -185,9 +186,9 @@ export type JobProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"

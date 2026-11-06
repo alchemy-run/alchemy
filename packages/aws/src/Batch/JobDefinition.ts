@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
@@ -167,9 +168,10 @@ export interface JobDefinitionProps extends PlatformProps {
    * Bundler configuration for the Effect-native entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
    * marked pure so unused parts prune more aggressively. List extra
-   * packages with `pure.packages`, or disable with `pure: false`.
+   * packages with `pure.packages`, or disable with `pure: false`. `cache`
+   * configures the image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
@@ -956,6 +958,7 @@ await bootstrap(entrypoint);
           imageUri,
           context: contextDir,
           platform: "linux/amd64",
+          cache: props.build?.cache,
         });
       });
 
