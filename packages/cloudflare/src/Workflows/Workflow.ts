@@ -8,7 +8,7 @@ import type * as Output from "alchemy/Output";
 import { ALCHEMY_PHASE } from "alchemy/Phase";
 import type { PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { isResourceOfType, Resource } from "alchemy/Resource";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { effectClass, taggedFunction } from "alchemy/Util/effect";
 import type { ConfigError } from "effect/Config";
@@ -20,6 +20,7 @@ import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
+import type { Providers } from "../Providers.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "../Workers/Worker.ts";
 import { generateWorkflowName } from "./WorkflowName.ts";
 import { type WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
@@ -539,6 +540,13 @@ export interface WorkflowInstanceStatus<Result = unknown> {
 export interface WorkflowClass extends Effect.Effect<WorkflowHandle, never, WorkflowHandle> {
   /** Reference a deployed Workflow by logical ID, optionally in another stack or stage. */
   ref: typeof WorkflowResource.ref;
+  /**
+   * Find a Workflow this stack doesn't manage by its account-global
+   * `workflowName`. Its class and host script are read from Cloudflare, so
+   * binding it in a Worker's `env` needs nothing else. `Params` types the
+   * instance payload, as on the props-only form.
+   */
+  lookup<Params = unknown>(props: WorkflowResourceLookup): WorkflowLookup<Params>;
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never, E = never>(
       name: string,
@@ -977,6 +985,26 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  * });
  * ```
  *
+ * ### Looking up an existing Workflow
+ * `Workflow.lookup` binds a Workflow this stack doesn't manage (hosted by
+ * another stack's Worker, or created outside Alchemy), found by its
+ * account-global `workflowName`. Its class and host script are read from
+ * Cloudflare, and `Params` types the instance payload as on the form above.
+ * It is read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Consumer Worker binds a looked-up Workflow
+ * ```typescript
+ * const consumer = yield* Cloudflare.Worker("Consumer", {
+ *   main: "./src/consumer.ts",
+ *   env: {
+ *     MY_WORKFLOW: Cloudflare.Workflow.lookup<{ value: string }>({
+ *       workflowName: "my-existing-workflow",
+ *     }),
+ *   },
+ * });
+ * type Env = Cloudflare.InferEnv<typeof consumer>; // MY_WORKFLOW: Workflow<{ value: string }>
+ * ```
+ *
  * ### Testing Workflows
  * Workflows run asynchronously, so tests start an instance and poll until it
  * reaches a terminal status. Keep polling bounded with `Effect.repeat`.
@@ -1142,6 +1170,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
 }) as any);
 
 Workflow.ref = (id, options) => WorkflowResource.ref(id, options);
+Workflow.lookup = (props) => WorkflowResource.lookup(props);
 
 // ---------------------------------------------------------------------------
 // WorkflowResource -- manages the Cloudflare Workflows API lifecycle
@@ -1194,10 +1223,39 @@ export interface WorkflowResource extends Resource<
   typeof WorkflowResourceTypeId,
   WorkflowResourceProps,
   WorkflowResourceAttrs,
-  { scriptName: string }
+  { scriptName: string },
+  Providers,
+  WorkflowResourceLookup
 > {}
 
 export const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
+
+/**
+ * Props for {@link Workflow.lookup}: find a Workflow this stack doesn't
+ * manage, by its account-global name.
+ */
+export interface WorkflowResourceLookup {
+  /**
+   * The account-global name of the existing Workflow.
+   */
+  workflowName: string;
+}
+
+/**
+ * A Workflow found by {@link Workflow.lookup}. Bound in a Worker's `env`,
+ * `InferEnv` types it as the runtime `Workflow<Params>`.
+ */
+export type WorkflowLookup<Params = unknown> = WorkflowResource & {
+  /** @internal phantom */
+  readonly WorkflowParams?: Params;
+};
+
+/**
+ * A Workflow resource or {@link Workflow.lookup} result, classified by its
+ * resource type.
+ */
+export const isWorkflowResource = (value: unknown): value is WorkflowResource =>
+  isResourceOfType(value, WorkflowResourceTypeId);
 
 const getWorkflowOrUndefined = (accountId: string, workflowName: string) =>
   workflows
@@ -1214,6 +1272,20 @@ export const ProviderLive = () =>
     // persisted `providerMode` stamp differs), so the live provider never
     // sees a `dev:` id.
     stables: ["workflowId", "accountId", "workflowName"],
+    lookup: Effect.fn(function* ({ workflowName }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const wf = yield* getWorkflowOrUndefined(accountId, workflowName);
+      if (!wf) return undefined;
+      return {
+        workflowId: wf.id,
+        workflowName: wf.name,
+        className: wf.className ?? "",
+        scriptName: wf.scriptName ?? "",
+        accountId,
+        schedules: fromObservedSchedules(wf.schedules),
+        jurisdiction: wf.jurisdiction ?? undefined,
+      };
+    }),
     // Workflows are account-scoped. Enumerate every workflow in the account
     // via the paginated list API and hydrate each into the same Attributes
     // shape `reconcile` returns (id/name/className/scriptName are all on the
@@ -1281,7 +1353,7 @@ export const ProviderLive = () =>
         return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ output, olds }) {
+    read: Effect.fn(function* ({ output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName =
         output?.workflowName ??
@@ -1303,8 +1375,13 @@ export const ProviderLive = () =>
         schedules: fromObservedSchedules(workflow.schedules),
         jurisdiction: workflow.jurisdiction ?? undefined,
       };
-      // Explicit names carry no ownership marker; cold reads require adoption.
-      return output === undefined && olds?.workflowName !== undefined ? Unowned(attrs) : attrs;
+      // Explicit names carry no ownership marker; cold reads require adoption,
+      // except of the generation a replacement is replacing.
+      return output === undefined &&
+        olds?.workflowName !== undefined &&
+        previous?.workflowId !== workflow.id
+        ? Unowned(attrs)
+        : attrs;
     }),
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -22,6 +22,7 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -406,12 +407,17 @@ export const ImageProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output }) {
+    read: Effect.fn(function* ({ id, output, previous }) {
       const found = yield* observe({
         id,
         outputId: output?.id,
       });
       if (found === undefined) return undefined;
+      // Images have no name: a label match during a replacement is always
+      // the generation being replaced.
+      if (isReplacedGeneration({ previousId: previous?.id, foundId: found.id })) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);

@@ -24,6 +24,8 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -872,14 +874,14 @@ export const ServerProvider = () =>
         // Cloud-init runs once, on first boot — a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameRef(news.serverType, output.serverType, output.serverTypeId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const imageId = output.imageId;
         const imageMatches =
@@ -887,15 +889,25 @@ export const ServerProvider = () =>
             ? true
             : imageId !== undefined && news.image === String(imageId);
         if (!imageMatches) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id ?? previous?.serverId,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = {
         ...toAttrs(found),
         privateKey: output?.privateKey,

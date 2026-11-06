@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -9,8 +10,10 @@ import { connectionRoutes } from "./routes.ts";
  * An existing Hyperdrive configuration looked up by name — never managed by
  * the stack.
  */
-export const LookupHyperdrive = Cloudflare.Hyperdrive.lookup("HyperdriveLookup", {
-  name: lookupConfigName("live"),
+export const LookupHyperdrive = Effect.gen(function* () {
+  return Cloudflare.Hyperdrive.Connection.lookup({
+    name: lookupConfigName("live", yield* Stage),
+  });
 });
 
 /**
@@ -22,7 +25,7 @@ export default class HyperdriveLookupEffectWorker extends Cloudflare.Worker<Hype
   "HyperdriveLookupEffectWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const hd = yield* Cloudflare.Hyperdrive.Connect(LookupHyperdrive);
+    const hd = yield* Cloudflare.Hyperdrive.Connect(yield* LookupHyperdrive);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

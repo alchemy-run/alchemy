@@ -133,7 +133,7 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
         const error = yield* Effect.flip(
           Ingress.route(config, target, new URL("https://localhost:1337")),
         );
-        assert(error instanceof Ingress.IngressError);
+        assert(error._tag === "IngressError");
         expect(error.message).toContain("only routes http listeners");
         expect(forwarder.routes().size).toBe(0);
       }),
@@ -160,7 +160,7 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
       const error = yield* Effect.flip(
         Ingress.route({ type: "nope" }, target, new URL("http://localhost:1")),
       );
-      assert(error instanceof Ingress.IngressAdapterNotFound);
+      assert(error._tag === "IngressAdapterNotFound");
       expect(error.type).toBe("nope");
       expect(error.message).toContain('"nope"');
       expect(error.message).toContain("@alchemy.run/nope");
@@ -174,7 +174,7 @@ describe("Ingress", { tags: ["unit", "local"] }, () => {
         const error = yield* Effect.flip(
           Ingress.route({ type: "toString" }, target, new URL("http://localhost:1")),
         );
-        assert(error instanceof Ingress.IngressAdapterNotFound);
+        assert(error._tag === "IngressAdapterNotFound");
         expect(error.type).toBe("toString");
       }),
     ),

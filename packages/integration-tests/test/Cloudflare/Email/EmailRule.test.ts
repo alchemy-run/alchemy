@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -129,7 +130,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
               const routing = yield* Cloudflare.Email.Routing("Routing", { zone: zoneName });
               return yield* Cloudflare.Email.Rule("ListRule", {
                 zone: { zoneId: routing.zoneId },
-                name: "alchemy list test",
+                name: testName("alchemy list test"),
                 matchers: [{ type: "literal", field: "to", value: "list@alchemy-test-2.us" }],
                 actions: [{ type: "drop" }],
               });
@@ -155,7 +156,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const row = all.find((r) => r.ruleId === rule.ruleId);
           expect(row).toBeDefined();
           expect(row!.zoneId).toEqual(zoneId);
-          expect(row!.name).toEqual("alchemy list test");
+          expect(row!.name).toEqual(testName("alchemy list test"));
           expect(Array.isArray(row!.matchers)).toBe(true);
           expect(row!.actions).toEqual([{ type: "drop" }]);
 
@@ -222,7 +223,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const pre = yield* rideOutAuth(
             emailRouting.createRule({
               zoneId,
-              name: "alchemy adopt 413",
+              name: testName("alchemy adopt 413"),
               matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
               actions: [{ type: "drop" }],
               enabled: true,
@@ -235,7 +236,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
             .deploy(
               Cloudflare.Email.Rule("AdoptRule", {
                 zone: zoneName,
-                name: "alchemy adopt 413",
+                name: testName("alchemy adopt 413"),
                 matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
                 actions: [{ type: "drop" }],
               }),
@@ -249,13 +250,13 @@ describe.sequential.skipIf(!emailRoutingScoped)(
           const adopted = yield* stack.deploy(
             Cloudflare.Email.Rule("AdoptRule", {
               zone: zoneName,
-              name: "alchemy adopt 413 v2",
+              name: testName("alchemy adopt 413 v2"),
               matchers: [{ type: "literal", field: "to", value: ADOPT_TO }],
               actions: [{ type: "drop" }],
             }).pipe(adopt(true)),
           );
           expect(adopted.ruleId).toEqual(pre.id);
-          expect(adopted.name).toEqual("alchemy adopt 413 v2");
+          expect(adopted.name).toEqual(testName("alchemy adopt 413 v2"));
           expect(adopted.matchers).toEqual([{ type: "literal", field: "to", value: ADOPT_TO }]);
 
           const live = yield* rideOutAuth(
@@ -265,7 +266,7 @@ describe.sequential.skipIf(!emailRoutingScoped)(
             }),
           );
           expect(live.id).toEqual(pre.id);
-          expect(live.name).toEqual("alchemy adopt 413 v2");
+          expect(live.name).toEqual(testName("alchemy adopt 413 v2"));
 
           yield* stack.destroy();
 

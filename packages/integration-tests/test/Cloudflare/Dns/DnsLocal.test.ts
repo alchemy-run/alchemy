@@ -9,6 +9,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -19,7 +20,7 @@ const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us
 // Deterministic record name — reused on every run (never derive from
 // Date.now()/random), owns its own subdomain so it never collides with the
 // managed-Record tests.
-const RECORD_NAME = `alchemy-dnslocal.${zoneName}`;
+const RECORD_NAME = `${testName("alchemy-dnslocal")}.${zoneName}`;
 const RECORD_TYPE = "TXT";
 const RECORD_CONTENT = '"alchemy-dnslocal-seed"';
 

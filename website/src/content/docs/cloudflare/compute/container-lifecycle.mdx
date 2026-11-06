@@ -2,6 +2,7 @@
 title: Container lifecycle
 description: Start, stop, wait for, and restore a Cloudflare Container from its Durable Object — and save its filesystem as a snapshot to restore later.
 ---
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 A [Container](/cloudflare/compute/containers) runs only when you start
 it. You start it, stop it, and restore it from the Durable Object that
@@ -16,6 +17,21 @@ export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
   image: "node:24-slim",
 }) {}
 ```
+
+<StateMachine
+  states={[
+    { id: "stopped", label: "stopped", col: 0, row: 1, start: true },
+    { id: "running", label: "running", type: "serving the DO", col: 1, row: 0, tone: "accent" },
+    { id: "exited", label: "exited", type: "crashed or killed", col: 2, row: 1, tone: "warn" },
+  ]}
+  transitions={[
+    { from: "stopped", to: "running", label: "start()", bend: 0.3 },
+    { from: "running", to: "stopped", label: "idle or destroy()", bend: 0.3 },
+    { from: "running", to: "exited", label: "process exits", bend: 0.3 },
+    { from: "exited", to: "running", label: "next start()", bend: 0.3 },
+  ]}
+  caption="Only the Durable Object moves its container between states. start() is safe to call before every operation: it does nothing when the container is already running, and starts it again after it stopped or exited."
+/>
 
 ## Bind the container
 

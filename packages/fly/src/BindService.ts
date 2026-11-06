@@ -1,6 +1,6 @@
 import * as Binding from "alchemy/Binding";
 import type { Resource } from "alchemy/Resource";
-import { makeFetchRpcStub, RPC_PATH_PREFIX, type Rpc } from "alchemy/Rpc";
+import { makeFetchRpcStub, type Rpc } from "alchemy/Rpc";
 import { CurrentRuntimeContext, type RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import { isYieldableEffectLike } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
@@ -9,9 +9,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
-import * as Redacted from "effect/Redacted";
 import type { BoundTarget, ServiceBinding } from "./MountVolume.ts";
-import { RPC_TOKEN_HEADER } from "./rpc.ts";
 import type { Service } from "./Service.ts";
 
 /** The deployed caller has no address for the bound Service. */
@@ -75,12 +73,13 @@ const logicalIdOf = (target: unknown): string => {
 export const boundTargetEnvKeys = (id: string) => ({
   appName: sanitizeKey(`FLY_BIND_${id}_APP`),
   url: sanitizeKey(`FLY_BIND_${id}_URL`),
-  token: sanitizeKey(`FLY_BIND_${id}_TOKEN`),
 });
 
 /**
  * Record the binding on the caller and transport the target's private
- * address and caller token as Outputs. Returns runtime accessors for them.
+ * address as Outputs. For {@link bindService}, also record the caller's
+ * App on the target, which serves its methods only to the Apps recorded
+ * there. Returns runtime accessors for the address.
  */
 const bindTarget = Effect.fn(function* <Shape, Req>(
   target: Target<Shape> | Effect.Effect<Target<Shape>, never, Req>,
@@ -105,11 +104,22 @@ const bindTarget = Effect.fn(function* <Shape, Req>(
           appName: service.appName,
           network: service.network,
           privateUrl: service.privateUrl,
-          rpcToken: service.rpcToken,
           port,
           endpoints: service.endpoints,
         } as unknown as BoundTarget,
       });
+      if (port === undefined) {
+        // Fly signs each request's calling App (`Fly-Src`), so the target
+        // authorizes callers by App: no key to hand out.
+        yield* (
+          service as unknown as {
+            bind: (
+              label: TemplateStringsArray,
+              ...args: unknown[]
+            ) => (data: ServiceBinding) => Effect.Effect<void>;
+          }
+        ).bind`Caller(${host})`({ caller: { appName: host.appName as unknown as string } });
+      }
     }
   }
   // Captured at bind time: the host's runtime context reads the values
@@ -126,15 +136,6 @@ const bindTarget = Effect.fn(function* <Shape, Req>(
   return {
     appName: required(keys.appName),
     url: required(keys.url),
-    token: read(keys.token).pipe(
-      Effect.map((value) =>
-        Redacted.isRedacted(value)
-          ? String(Redacted.value(value))
-          : typeof value === "string"
-            ? value
-            : "",
-      ),
-    ),
   };
 });
 
@@ -150,12 +151,13 @@ const withBase = (base: string, url: string) => {
  * `fetch` and `run`) and forwards `fetch` requests, over Fly's private
  * network.
  *
- * Binding makes the caller deploy after the Service and hands it the
- * Service's private address and caller token. Only callers that bind a
- * Service receive its token, so other Services on the same network cannot
- * call its methods. Every call must also carry Fly's signed `Fly-Src`
- * header from the same organization, so the public internet cannot call
- * them. Calls are plain HTTP inside Fly's WireGuard-encrypted network.
+ * Binding makes the caller deploy after the Service, hands it the
+ * Service's private address, and records the caller's App on the Service.
+ * Fly's proxy signs every call with the calling App (`Fly-Src`), and the
+ * Service answers methods only for the Apps recorded on it, so neither
+ * other Services on the network nor the public internet can call them,
+ * and no key is involved. Calls are plain HTTP inside Fly's
+ * WireGuard-encrypted network.
  *
  * ### Call a private Service
  * **Example:** Methods on the target
@@ -250,24 +252,15 @@ export const bindService = <Shape, Req = never>(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindTarget(target, undefined);
-    const send = (request: HttpClientRequest.HttpClientRequest, isRpc: boolean) =>
+    const send = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
         const base = yield* bound.url;
-        let next = HttpClientRequest.setUrl(request, withBase(base, request.url));
-        if (isRpc) {
-          next = HttpClientRequest.setHeader(next, RPC_TOKEN_HEADER, yield* bound.token);
-        }
-        return yield* http.execute(next);
+        return yield* http.execute(HttpClientRequest.setUrl(request, withBase(base, request.url)));
       });
     return makeFetchRpcStub<ServiceClient<Shape>>({
       fetch: (request) =>
-        send(request, request.url.includes(RPC_PATH_PREFIX)) as Effect.Effect<
-          HttpClientResponse.HttpClientResponse,
-          unknown
-        >,
-      base: {
-        fetch: (request: HttpClientRequest.HttpClientRequest) => send(request, false),
-      },
+        send(request) as Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
+      base: { fetch: send },
     });
   });
 

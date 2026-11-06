@@ -2,9 +2,10 @@ import * as Effect from "effect/Effect";
 import * as RpcServer from "./RpcServer.ts";
 import { SESSION_ENV_PARAM } from "./RpcServerEnvironment.ts";
 import type { ServerRpcSession } from "./RpcServerSession.ts";
+import { matchRpcToken } from "./RpcToken.ts";
 
 export const RpcServerBun = RpcServer.layerServer(
-  Effect.fn(function* ({ parentConnected, parentDisconnected, createRpcSession }) {
+  Effect.fn(function* ({ parentConnected, parentDisconnected, createRpcSession, token }) {
     const server = yield* Effect.sync(() =>
       Bun.serve<
         | { type: "session"; session: ServerRpcSession<any> }
@@ -17,10 +18,15 @@ export const RpcServerBun = RpcServer.layerServer(
         hostname: "127.0.0.1",
         fetch: (request, server) => {
           const url = new URL(request.url);
+          // Every connection carries the token as its first path segment.
+          const rest = matchRpcToken(url.pathname, token);
+          if (rest !== "" && rest !== "/parent") {
+            return new Response("Unauthorized", { status: 401 });
+          }
           if (
             server.upgrade(request, {
               data:
-                url.pathname === "/parent"
+                rest === "/parent"
                   ? { type: "parent" }
                   : {
                       type: "pending",

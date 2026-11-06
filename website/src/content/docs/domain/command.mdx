@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A command asks one aggregate instance for a change. It's a request, so it can be refused, and it's named as an instruction: `OpenAccount`, `DepositMoney`, `WithdrawMoney`.
 
-A command is also a contract. Before you send one, its declaration tells you which instance it goes to, what data it carries, which events it may record, which refusals it may return, and what you get back. This chapter starts with how to find the commands in a business, then goes through the declaration one part at a time, and follows a command as it's sent.
+A command is also a contract. Before you send one, its declaration tells you which instance it goes to, what data it carries, which events it may record, which refusals it may return, and what you get back.
 
 ## Find the commands in your business
 
@@ -61,6 +61,24 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 The first argument is the command's name. It's how the command is identified on the wire and in the aggregate's handlers, so it must be unique within a model.
 
+## Describe it
+
+A command's last argument is its [annotations](/domain/annotations). Its `description` is what a person or an agent reads before sending it: the [MCP](/domain/mcp) tool's description, the [CLI](/domain/cli) subcommand's help, and the operation's description in the [OpenAPI document](/domain/http-api).
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class WithdrawMoney extends Domain.Command(
+  "WithdrawMoney",
+  {
+    target: AccountId,
+    input: { amount: Schema.Int },
+    events: [MoneyWithdrawn],
+    rejects: [NotOpen, InsufficientFunds],
+    reply: { balance: Schema.Int },
+  },
+  { description: "Take money out of an account. The amount is in cents." },
+) {}
+```
+
 ## Keep it with its events and rejections
 
 A command, the events it records and the rejections it returns are one unit: you read them together, and change them together. Put them in one file named after the command, with a `.command.ts` suffix, like `WithdrawMoney.command.ts`. See [Project layout](/domain/project-layout).
@@ -104,12 +122,14 @@ The target isn't part of the command's data. You pass it alongside the command w
 `input` lists the fields the caller provides, each as a schema. You create the command with them, and the aggregate reads them in `decide`.
 
 ```typescript title="src/Account.aggregate.ts"
-WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : cmd.amount > s.balance
-      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+decide: {
+  WithdrawMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+},
 ```
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
@@ -144,6 +164,8 @@ export class NotOwner extends Domain.Rejection(
   { httpApiStatus: 403, description: "Only the account's owner may do this." },
 ) {}
 ```
+
+These are the rejection's [annotations](/domain/annotations) too, so `NotOwner.annotations.description` reads the description back.
 
 `rejects` takes any tagged error class, so a `Schema.TaggedError` of your own, or one of Effect's `HttpApiError` classes, works as a rejection too:
 
@@ -197,12 +219,10 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },
-  // Recorded on every span the withdrawal passes through; nothing else from it is.
-  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
 }) {}
 ```
 
-`attributes` chooses what its spans record; see [Observability](/domain/observability).
+Nothing from its input reaches a trace unless its `decide` annotates it; see [Observability](/domain/observability).
 
 Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
 
@@ -243,11 +263,9 @@ Commands sent by a [policy](/domain/policy) get ids derived from the event that 
 A command can also be scheduled to arrive at a later time, which is how deadlines work: "expire this transfer if nobody approves it within a day". Only commands that can't be refused can be scheduled, because there's no caller waiting to handle a rejection. See [Deadlines](/domain/deadlines).
 
 ```typescript title="packages/domain/src/Transfer/TransferApprovalDeadline.policy.ts"
-yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW }).pipe(
-  Effect.catchTag("AlreadyExecuted", () => Effect.void),
-);
+yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
 ```
 
-Scheduling fails with `AlreadyExecuted` when the transfer already handled a command with that id.
+Scheduling again under the same command id replaces the earlier command, even one that already ran.
 
 Next, [Event](/domain/event): what a command records when it succeeds.

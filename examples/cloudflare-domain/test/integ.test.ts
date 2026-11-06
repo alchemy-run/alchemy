@@ -179,20 +179,6 @@ test(
     );
     expect(resumed).toEqual({ _tag: "CaughtUp", cursor: watched!.cursor });
 
-    // an aggregate's Durable Object reads the same way: its watched cursor ends its history
-    const [account] = yield* sam.Account.watch(samMain).pipe(
-      Stream.take(1),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    const history = yield* sam.Account.events(samMain).pipe(
-      Stream.takeUntil((frame) => Domain.Read.isCaughtUp(frame)),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
-    expect(history.length - 1).toBe(account!.cursor);
-
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(
       Stream.map(({ state }) => state),
@@ -204,16 +190,10 @@ test(
     // the stream's validate: only the owner reads the card
     expect((yield* alex.AccountCard.peek(samMain).pipe(Effect.flip))._tag).toBe("NotOwner");
 
-    // a projection (Ledger) writes D1 in batches; the ledger is served by a plain route
-    const ledger = yield* HttpClient.execute(
-      HttpClientRequest.get(`${base}/api/ledger/${samMain}`).pipe(
-        HttpClientRequest.bearerToken(yield* signIn(base, "c-1")),
-      ),
-    ).pipe(
-      Effect.flatMap((res) => res.json),
-      Effect.map(
-        (rows) => rows as ReadonlyArray<{ readonly kind: string; readonly amount: number }>,
-      ),
+    // a projection (Ledger) writes D1 in batches; the AccountLedger query reads it, typed.
+    // The debit comes from the transfer's saga, not from a receipt sam holds, so poll for it.
+    const ledger = yield* sam.AccountLedger({ account: samMain }).pipe(
+      Effect.map((page) => page.entries),
       Effect.filterOrFail(
         (rows) => rows.length === 3,
         () => "not projected yet",

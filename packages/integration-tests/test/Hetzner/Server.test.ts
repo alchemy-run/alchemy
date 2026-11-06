@@ -7,12 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   servers.getServer({ id }).pipe(
@@ -57,7 +56,7 @@ test(
   { tags: ["provider:hetzner", "provider:hetzner:server", "live"] },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a server",
   (stack) =>
     Effect.gen(function* () {
@@ -130,11 +129,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when image changes",
   (stack) =>
     Effect.gen(function* () {
@@ -183,11 +181,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed server",
   (stack) =>
     Effect.gen(function* () {
@@ -221,11 +218,10 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 180_000,
-    exclusive: "hetzner",
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "runs a custom init script alongside the alchemy bootstrap",
   (stack) =>
     Effect.gen(function* () {
@@ -286,6 +282,5 @@ test.provider.skipIf(!hasHetznerCreds)(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 300_000,
-    exclusive: "hetzner",
   },
 );
