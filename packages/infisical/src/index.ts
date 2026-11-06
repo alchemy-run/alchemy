@@ -28,3 +28,10 @@ export {
   type ProjectIdentityProps,
 } from "./ProjectIdentity.ts";
 export { Providers, providers, type ProviderRequirements } from "./Providers.ts";
+export {
+  Secret,
+  SecretError,
+  SecretProvider,
+  type SecretAttributes,
+  type SecretProps,
+} from "./Secret.ts";
