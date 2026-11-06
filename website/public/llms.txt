@@ -744,7 +744,7 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 - [Fly](https://alchemy.run/rivet/fly) — Run a Rivet control plane on Fly Machines and pools of nodes on a Fly Service.
 - [Hetzner](https://alchemy.run/rivet/hetzner) — Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
 - [Railway](https://alchemy.run/rivet/railway) — Run pools of Rivet nodes on Railway, on a control plane on another cloud.
-- [Rivet Cloud](https://alchemy.run/rivet/rivet-cloud) — Use Rivet Cloud as the control plane, and run your pools of nodes on any cloud.
+- [Rivet Cloud](https://alchemy.run/rivet/rivet-cloud) — Use Rivet Cloud as the control plane, sign in to it from the alchemy CLI or CI, and run your nodes on Rivet Cloud or on any cloud.
 
 ## Better Auth
 
@@ -963,7 +963,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [View](https://alchemy.run/domain/view) — How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
 - [Projection](https://alchemy.run/domain/projection) — How a projection consumes events into a store you own, in order per key, batched and replayable, and why it never sends commands.
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
-- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized per request and per row, paged by cursor, and consistent with the caller's own writes.
+- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized by its handler, paged by cursor, and consistent with the caller's own writes.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
@@ -986,7 +986,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
-- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
 
 ## API reference
 
