@@ -6,6 +6,7 @@ export * from "./CreateSnapshot.ts";
 export * from "./CreateSubscription.ts";
 export * from "./CreateTopic.ts";
 export * from "./DeleteSchema.ts";
+export * from "./DeleteSchemaRevision.ts";
 export * from "./DeleteSnapshot.ts";
 export * from "./DeleteSubscription.ts";
 export * from "./DeleteTopic.ts";

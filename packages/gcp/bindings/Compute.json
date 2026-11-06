@@ -647,8 +647,5 @@
       "GetGlobalFrontendSetting": "global frontend settings answer 503 'Internal error' on every call to the testing project (checked repeatedly on 2026-10-29): the feature isn't available to it yet"
     },
     "networks": 1
-  },
-  "permissions": {
-    "compute.interconnectGroups.createMembers": "compute.interconnectGroups.patch"
   }
 }

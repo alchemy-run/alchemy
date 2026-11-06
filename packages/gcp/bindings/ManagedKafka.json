@@ -31,10 +31,6 @@
     "managedkafka.projects.locations.schemaRegistries.contexts.schemas.getSchema": "the registry-level GetSchema reads the same schemas; contexts add a prefix only",
     "managedkafka.projects.locations.schemaRegistries.contexts.subjects.lookupVersion": "the registry-level LookupSubjectVersion reads the same subjects; contexts add a prefix only"
   },
-  "permissions": {
-    "managedkafka.projects.locations.schemaRegistries.compatibility.checkCompatibility": "managedkafka.schemaRegistries.get",
-    "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility": "managedkafka.schemaRegistries.get"
-  },
   "probes": {
     "resources": {
       "Cluster": "Brokers",

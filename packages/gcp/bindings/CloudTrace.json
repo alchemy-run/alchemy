@@ -2,10 +2,6 @@
   "discovery": "cloudtrace-v2",
   "module": "cloudtrace_v2",
   "resources": {},
-  "permissions": {
-    "cloudtrace.projects.traces.batchWrite": "cloudtrace.traces.patch",
-    "cloudtrace.projects.traces.spans.createSpan": "cloudtrace.traces.patch"
-  },
   "probes": {
     "resources": {},
     "enable": ["cloudtrace.googleapis.com"]

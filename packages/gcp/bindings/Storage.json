@@ -40,38 +40,6 @@
       "lifecycleOnly": true
     }
   },
-  "permissions": {
-    "storage.anywhereCaches.insert": "storage.anywhereCaches.create",
-    "storage.bucketAccessControls.get": "storage.buckets.getIamPolicy",
-    "storage.bucketAccessControls.list": "storage.buckets.getIamPolicy",
-    "storage.defaultObjectAccessControls.get": "storage.buckets.getIamPolicy",
-    "storage.defaultObjectAccessControls.list": "storage.buckets.getIamPolicy",
-    "storage.objectAccessControls.get": "storage.objects.getIamPolicy",
-    "storage.objectAccessControls.list": "storage.objects.getIamPolicy",
-    "storage.buckets.getStorageLayout": "storage.objects.list",
-    "storage.buckets.lockRetentionPolicy": "storage.buckets.update",
-    "storage.folders.deleteRecursive": "storage.folders.delete",
-    "storage.objects.compose": "storage.objects.create",
-    "storage.objects.insert": "storage.objects.create",
-    "storage.objects.copy": "storage.objects.create",
-    "storage.objects.rewrite": "storage.objects.create",
-    "storage.objects.patch": "storage.objects.update",
-    "storage.objects.bulkRestore": "storage.objects.restore",
-    "storage.notifications.get": "storage.buckets.get",
-    "storage.notifications.list": "storage.buckets.get",
-    "storage.objects.viewFullContext": "storage.objects.get"
-  },
-  "roles": {
-    "storage.objects.update": "roles/storage.objectUser",
-    "storage.objects.restore": "roles/storage.objectUser",
-    "storage.objects.move": "roles/storage.objectUser",
-    "storage.objects.get": "roles/storage.objectViewer",
-    "storage.objects.list": "roles/storage.objectViewer",
-    "storage.objects.copy": "roles/storage.objectUser",
-    "storage.objects.rewrite": "roles/storage.objectUser",
-    "storage.objects.compose": "roles/storage.objectUser",
-    "storage.buckets.restore": "roles/storage.admin"
-  },
   "skip": {
     "storage.buckets.relocate": "moves the bucket to another location: infrastructure, set by GCP.Storage.Bucket's location",
     "storage.anywhereCaches.insert": "creates a cache: infrastructure",

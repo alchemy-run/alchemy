@@ -50,11 +50,5 @@
     "cloudresourcemanager.folders.capabilities.get": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
     "cloudresourcemanager.folders.capabilities.patch": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
     "cloudresourcemanager.organizations.search": "organizations sit above the project: reading one needs organizationViewer on the organization, which IAM rejects on a project"
-  },
-  "roles": {
-    "cloudresourcemanager.projects.get": "roles/browser",
-    "cloudresourcemanager.projects.list": "roles/browser",
-    "cloudresourcemanager.projects.search": "roles/browser",
-    "cloudresourcemanager.projects.move": "roles/resourcemanager.projectMover"
   }
 }

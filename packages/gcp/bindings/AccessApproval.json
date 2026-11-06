@@ -2,17 +2,6 @@
   "discovery": "accessapproval-v1",
   "module": "accessapproval_v1",
   "resources": {},
-  "permissions": {
-    "accessapproval.projects.getServiceAccount": "accessapproval.serviceAccounts.get",
-    "accessapproval.projects.deleteAccessApprovalSettings": "accessapproval.settings.delete",
-    "accessapproval.projects.updateAccessApprovalSettings": "accessapproval.settings.update",
-    "accessapproval.projects.getAccessApprovalSettings": "accessapproval.settings.get",
-    "accessapproval.projects.approvalRequests.approve": "accessapproval.requests.approve",
-    "accessapproval.projects.approvalRequests.invalidate": "accessapproval.requests.invalidate",
-    "accessapproval.projects.approvalRequests.get": "accessapproval.requests.get",
-    "accessapproval.projects.approvalRequests.dismiss": "accessapproval.requests.dismiss",
-    "accessapproval.projects.approvalRequests.list": "accessapproval.requests.list"
-  },
   "probes": {
     "resources": {},
     "enable": ["accessapproval.googleapis.com"]

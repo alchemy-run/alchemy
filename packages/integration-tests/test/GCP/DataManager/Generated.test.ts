@@ -163,7 +163,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "datamanager.requestStatus.retrieve: no predefined role grants its permission",
+        "datamanager.requestStatus.retrieve: no distilled operation retrieveRequestStatus",
         () => Effect.void,
       );
       test.provider.skip(

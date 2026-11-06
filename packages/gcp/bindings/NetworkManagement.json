@@ -29,11 +29,6 @@
       "ListConnectivityTests": "global"
     }
   },
-  "permissions": {
-    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig": "networkmanagement.monitoringpoints.downloadConfig",
-    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript": "networkmanagement.monitoringpoints.downloadConfig",
-    "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript": "networkmanagement.monitoringpoints.downloadConfig"
-  },
   "names": {
     "ListGlobalConnectivityTests": "ListConnectivityTests"
   }

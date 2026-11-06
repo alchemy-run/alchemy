@@ -309,15 +309,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.projects.locations.templates.create: name collision on CreateTemplate",
+        "dataflow.projects.locations.templates.create: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.projects.locations.templates.launch: name collision on LaunchTemplate",
+        "dataflow.projects.locations.templates.launch: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "dataflow.projects.locations.templates.get: name collision on GetTemplate",
+        "dataflow.projects.locations.templates.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

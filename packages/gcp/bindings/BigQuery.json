@@ -28,15 +28,6 @@
       "lifecycleOnly": true
     }
   },
-  "permissions": {
-    "bigquery.models.get": "bigquery.models.getMetadata",
-    "bigquery.models.patch": "bigquery.models.updateMetadata",
-    "bigquery.rowAccessPolicies.batchDelete": "bigquery.rowAccessPolicies.delete",
-    "bigquery.datasets.undelete": "bigquery.datasets.create",
-    "bigquery.jobs.cancel": "bigquery.jobs.update",
-    "bigquery.datasets.list": "bigquery.datasets.get",
-    "bigquery.jobs.insert": "bigquery.jobs.create"
-  },
   "names": {
     "BatchRowAccessPolicyDelete": "BatchDeleteRowAccessPolicies"
   },

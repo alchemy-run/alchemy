@@ -2,17 +2,6 @@
   "discovery": "testing-v1",
   "module": "testing_v1",
   "resources": {},
-  "permissions": {
-    "testing.projects.testMatrices.cancel": "cloudtestservice.matrices.update",
-    "testing.projects.testMatrices.get": "cloudtestservice.matrices.get",
-    "testing.projects.testMatrices.create": "cloudtestservice.matrices.create",
-    "testing.projects.deviceSessions.create": "cloudtestservice.devicesession.create",
-    "testing.projects.deviceSessions.get": "cloudtestservice.devicesession.get",
-    "testing.projects.deviceSessions.patch": "cloudtestservice.devicesession.update",
-    "testing.projects.deviceSessions.list": "cloudtestservice.devicesession.list",
-    "testing.projects.deviceSessions.cancel": "cloudtestservice.devicesession.cancel",
-    "testing.applicationDetailService.getApkDetails": "cloudtestservice.environmentcatalog.get"
-  },
   "probes": {
     "resources": {},
     "enable": ["testing.googleapis.com"]

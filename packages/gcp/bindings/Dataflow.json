@@ -2,17 +2,6 @@
   "discovery": "dataflow-v1b3",
   "module": "dataflow_v1b3",
   "resources": {},
-  "permissions": {
-    "dataflow.projects.deleteSnapshots": "dataflow.snapshots.delete",
-    "dataflow.projects.templates.launch": "dataflow.jobs.create",
-    "dataflow.projects.templates.create": "dataflow.jobs.create",
-    "dataflow.projects.templates.get": "dataflow.jobs.get",
-    "dataflow.projects.jobs.aggregated": "dataflow.jobs.list",
-    "dataflow.projects.locations.templates.create": "dataflow.jobs.create",
-    "dataflow.projects.locations.templates.launch": "dataflow.jobs.create",
-    "dataflow.projects.locations.templates.get": "dataflow.jobs.get",
-    "dataflow.projects.locations.flexTemplates.launch": "dataflow.jobs.create"
-  },
   "skip": {
     "dataflow.projects.workerMessages": "called by Dataflow workers, not user code",
     "dataflow.projects.jobs.debug.sendCapture": "called by Dataflow workers, not user code",

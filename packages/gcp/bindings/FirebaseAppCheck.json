@@ -27,9 +27,6 @@
     "firebaseappcheck.oauthClients.exchangeDebugToken": "a public endpoint client apps call; it takes no project credentials",
     "firebaseappcheck.oauthClients.exchangeAppAttestAttestation": "a public endpoint client apps call; it takes no project credentials"
   },
-  "permissions": {
-    "firebaseappcheck.projects.apps.mintAppCheckToken": "firebaseappcheck.tokens.mint"
-  },
   "probes": {
     "resources": {},
     "untestable": {

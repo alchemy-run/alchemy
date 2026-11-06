@@ -2,11 +2,6 @@
   "discovery": "cloudbilling-v1",
   "module": "cloudbilling_v1",
   "resources": {},
-  "permissions": {
-    "cloudbilling.projects.getBillingInfo": "resourcemanager.projects.get",
-    "cloudbilling.projects.updateBillingInfo": "resourcemanager.projects.createBillingAssignment",
-    "cloudbilling.services.list": "serviceusage.services.use"
-  },
   "skip": {
     "cloudbilling.getCard": "the Gemini billing assistant's UI card, not an API for user code",
     "cloudbilling.message.send": "the Gemini billing assistant's chat, not an API for user code",
@@ -18,9 +13,5 @@
     "skip": {
       "UpdateProjectBillingInfo": "links or unlinks the testing project's billing account; a probe with a placeholder body unlinked it on 2026-11-03"
     }
-  },
-  "roles": {
-    "cloudbilling.projects.updateBillingInfo": "roles/billing.projectManager",
-    "cloudbilling.projects.getBillingInfo": "roles/browser"
   }
 }

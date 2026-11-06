@@ -2,18 +2,6 @@
   "discovery": "clouderrorreporting-v1beta1",
   "module": "clouderrorreporting_v1beta1",
   "resources": {},
-  "permissions": {
-    "clouderrorreporting.projects.deleteEvents": "errorreporting.errorEvents.delete",
-    "clouderrorreporting.projects.events.report": "errorreporting.errorEvents.create",
-    "clouderrorreporting.projects.events.list": "errorreporting.errorEvents.list",
-    "clouderrorreporting.projects.groups.get": "errorreporting.groupMetadata.get",
-    "clouderrorreporting.projects.groups.update": "errorreporting.groupMetadata.update",
-    "clouderrorreporting.projects.locations.groups.get": "errorreporting.groupMetadata.get",
-    "clouderrorreporting.projects.locations.groups.update": "errorreporting.groupMetadata.update",
-    "clouderrorreporting.projects.locations.events.list": "errorreporting.errorEvents.list",
-    "clouderrorreporting.projects.locations.groupStats.list": "errorreporting.groups.list",
-    "clouderrorreporting.projects.groupStats.list": "errorreporting.groups.list"
-  },
   "probes": {
     "resources": {},
     "enable": ["clouderrorreporting.googleapis.com"],

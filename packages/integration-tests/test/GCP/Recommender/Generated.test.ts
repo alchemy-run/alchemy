@@ -285,23 +285,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.projects.locations.insightTypes.updateConfig: no predefined role grants recommender.computeInstanceGroupManagerMachineTypeInsightTypeConfig.update",
+        "recommender.projects.locations.insightTypes.updateConfig: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.projects.locations.insightTypes.getConfig: no predefined role grants recommender.computeInstanceGroupManagerMachineTypeInsightTypeConfig.get",
+        "recommender.projects.locations.insightTypes.getConfig: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.markAccepted: no predefined role grants recommender.computeInstanceMachineTypeInsights.update",
+        "recommender.projects.locations.insightTypes.insights.markAccepted: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.get: no predefined role grants recommender.computeInstanceMachineTypeInsights.get",
+        "recommender.projects.locations.insightTypes.insights.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "recommender.projects.locations.insightTypes.insights.list: no predefined role grants recommender.computeInstanceMachineTypeInsights.list",
+        "recommender.projects.locations.insightTypes.insights.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

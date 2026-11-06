@@ -19,16 +19,6 @@
       "iamKind": "pubsub.snapshot"
     }
   },
-  "permissions": {
-    "pubsub.projects.subscriptions.pull": "pubsub.subscriptions.consume",
-    "pubsub.projects.subscriptions.acknowledge": "pubsub.subscriptions.consume",
-    "pubsub.projects.subscriptions.modifyAckDeadline": "pubsub.subscriptions.consume",
-    "pubsub.projects.subscriptions.seek": "pubsub.subscriptions.consume",
-    "pubsub.projects.subscriptions.modifyPushConfig": "pubsub.subscriptions.update",
-    "pubsub.projects.subscriptions.detach": "pubsub.topics.detachSubscription",
-    "pubsub.projects.schemas.validateMessage": "pubsub.schemas.validate",
-    "pubsub.projects.schemas.deleteRevision": "pubsub.schemas.commit"
-  },
   "names": {},
   "skip": {},
   "suffix": {

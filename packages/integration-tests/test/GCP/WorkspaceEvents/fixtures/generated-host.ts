@@ -22,32 +22,33 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
     const p4 = yield* GCP.WorkspaceEvents.CreateSubscription();
     const p5 = yield* GCP.WorkspaceEvents.CreateTopic();
     const p6 = yield* GCP.WorkspaceEvents.DeleteSchema();
-    const p7 = yield* GCP.WorkspaceEvents.DeleteSnapshot();
-    const p8 = yield* GCP.WorkspaceEvents.DeleteSubscription();
-    const p9 = yield* GCP.WorkspaceEvents.DeleteTopic();
-    const p10 = yield* GCP.WorkspaceEvents.DetachSubscription();
-    const p11 = yield* GCP.WorkspaceEvents.GetSchema();
-    const p12 = yield* GCP.WorkspaceEvents.GetSnapshot();
-    const p13 = yield* GCP.WorkspaceEvents.GetSubscription();
-    const p14 = yield* GCP.WorkspaceEvents.GetTopic();
-    const p15 = yield* GCP.WorkspaceEvents.ListSchemaRevisions();
-    const p16 = yield* GCP.WorkspaceEvents.ListSchemas();
-    const p17 = yield* GCP.WorkspaceEvents.ListSnapshots();
-    const p18 = yield* GCP.WorkspaceEvents.ListSubscriptions();
-    const p19 = yield* GCP.WorkspaceEvents.ListTopics();
-    const p20 = yield* GCP.WorkspaceEvents.ListTopicSnapshots();
-    const p21 = yield* GCP.WorkspaceEvents.ListTopicSubscriptions();
-    const p22 = yield* GCP.WorkspaceEvents.ModifySubscriptionAckDeadline();
-    const p23 = yield* GCP.WorkspaceEvents.ModifySubscriptionPushConfig();
-    const p24 = yield* GCP.WorkspaceEvents.PatchSnapshot();
-    const p25 = yield* GCP.WorkspaceEvents.PatchSubscription();
-    const p26 = yield* GCP.WorkspaceEvents.PatchTopic();
-    const p27 = yield* GCP.WorkspaceEvents.PublishTopic();
-    const p28 = yield* GCP.WorkspaceEvents.PullSubscription();
-    const p29 = yield* GCP.WorkspaceEvents.RollbackSchema();
-    const p30 = yield* GCP.WorkspaceEvents.SeekSubscription();
-    const p31 = yield* GCP.WorkspaceEvents.ValidateSchema();
-    const p32 = yield* GCP.WorkspaceEvents.ValidateSchemaMessage();
+    const p7 = yield* GCP.WorkspaceEvents.DeleteSchemaRevision();
+    const p8 = yield* GCP.WorkspaceEvents.DeleteSnapshot();
+    const p9 = yield* GCP.WorkspaceEvents.DeleteSubscription();
+    const p10 = yield* GCP.WorkspaceEvents.DeleteTopic();
+    const p11 = yield* GCP.WorkspaceEvents.DetachSubscription();
+    const p12 = yield* GCP.WorkspaceEvents.GetSchema();
+    const p13 = yield* GCP.WorkspaceEvents.GetSnapshot();
+    const p14 = yield* GCP.WorkspaceEvents.GetSubscription();
+    const p15 = yield* GCP.WorkspaceEvents.GetTopic();
+    const p16 = yield* GCP.WorkspaceEvents.ListSchemaRevisions();
+    const p17 = yield* GCP.WorkspaceEvents.ListSchemas();
+    const p18 = yield* GCP.WorkspaceEvents.ListSnapshots();
+    const p19 = yield* GCP.WorkspaceEvents.ListSubscriptions();
+    const p20 = yield* GCP.WorkspaceEvents.ListTopics();
+    const p21 = yield* GCP.WorkspaceEvents.ListTopicSnapshots();
+    const p22 = yield* GCP.WorkspaceEvents.ListTopicSubscriptions();
+    const p23 = yield* GCP.WorkspaceEvents.ModifySubscriptionAckDeadline();
+    const p24 = yield* GCP.WorkspaceEvents.ModifySubscriptionPushConfig();
+    const p25 = yield* GCP.WorkspaceEvents.PatchSnapshot();
+    const p26 = yield* GCP.WorkspaceEvents.PatchSubscription();
+    const p27 = yield* GCP.WorkspaceEvents.PatchTopic();
+    const p28 = yield* GCP.WorkspaceEvents.PublishTopic();
+    const p29 = yield* GCP.WorkspaceEvents.PullSubscription();
+    const p30 = yield* GCP.WorkspaceEvents.RollbackSchema();
+    const p31 = yield* GCP.WorkspaceEvents.SeekSubscription();
+    const p32 = yield* GCP.WorkspaceEvents.ValidateSchema();
+    const p33 = yield* GCP.WorkspaceEvents.ValidateSchemaMessage();
     return {
       fetch: serveProbes({
         AcknowledgeSubscription: probeOutcome(
@@ -85,38 +86,31 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
           ),
         ),
         DeleteSchema: probeOutcome(Retry.none(p6({ schema: "alchemy-missing" } as never))),
-        DeleteSnapshot: probeOutcome(Retry.none(p7({ snapshot: "alchemy-missing" } as never))),
+        DeleteSchemaRevision: probeOutcome(Retry.none(p7({ schema: "alchemy-missing" } as never))),
+        DeleteSnapshot: probeOutcome(Retry.none(p8({ snapshot: "alchemy-missing" } as never))),
         DeleteSubscription: probeOutcome(
-          Retry.none(p8({ subscription: "alchemy-missing" } as never)),
+          Retry.none(p9({ subscription: "alchemy-missing" } as never)),
         ),
-        DeleteTopic: probeOutcome(Retry.none(p9({ topic: "alchemy-missing" } as never))),
+        DeleteTopic: probeOutcome(Retry.none(p10({ topic: "alchemy-missing" } as never))),
         DetachSubscription: probeOutcome(
-          Retry.none(p10({ subscription: "alchemy-missing" } as never)),
+          Retry.none(p11({ subscription: "alchemy-missing" } as never)),
         ),
-        GetSchema: probeOutcome(Retry.none(p11({ schema: "alchemy-missing" } as never))),
-        GetSnapshot: probeOutcome(Retry.none(p12({ snapshot: "alchemy-missing" } as never))),
+        GetSchema: probeOutcome(Retry.none(p12({ schema: "alchemy-missing" } as never))),
+        GetSnapshot: probeOutcome(Retry.none(p13({ snapshot: "alchemy-missing" } as never))),
         GetSubscription: probeOutcome(
-          Retry.none(p13({ subscription: "alchemy-missing" } as never)),
+          Retry.none(p14({ subscription: "alchemy-missing" } as never)),
         ),
-        GetTopic: probeOutcome(Retry.none(p14({ topic: "alchemy-missing" } as never))),
-        ListSchemaRevisions: probeOutcome(Retry.none(p15({ schema: "alchemy-missing" } as never))),
-        ListSchemas: probeOutcome(Retry.none(p16({} as never))),
-        ListSnapshots: probeOutcome(Retry.none(p17({} as never))),
-        ListSubscriptions: probeOutcome(Retry.none(p18({} as never))),
-        ListTopics: probeOutcome(Retry.none(p19({} as never))),
-        ListTopicSnapshots: probeOutcome(Retry.none(p20({ topic: "alchemy-missing" } as never))),
+        GetTopic: probeOutcome(Retry.none(p15({ topic: "alchemy-missing" } as never))),
+        ListSchemaRevisions: probeOutcome(Retry.none(p16({ schema: "alchemy-missing" } as never))),
+        ListSchemas: probeOutcome(Retry.none(p17({} as never))),
+        ListSnapshots: probeOutcome(Retry.none(p18({} as never))),
+        ListSubscriptions: probeOutcome(Retry.none(p19({} as never))),
+        ListTopics: probeOutcome(Retry.none(p20({} as never))),
+        ListTopicSnapshots: probeOutcome(Retry.none(p21({ topic: "alchemy-missing" } as never))),
         ListTopicSubscriptions: probeOutcome(
-          Retry.none(p21({ topic: "alchemy-missing" } as never)),
+          Retry.none(p22({ topic: "alchemy-missing" } as never)),
         ),
         ModifySubscriptionAckDeadline: probeOutcome(
-          Retry.none(
-            p22({
-              subscription: "alchemy-missing",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
-        ),
-        ModifySubscriptionPushConfig: probeOutcome(
           Retry.none(
             p23({
               subscription: "alchemy-missing",
@@ -124,9 +118,17 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
             } as never),
           ),
         ),
-        PatchSnapshot: probeOutcome(
+        ModifySubscriptionPushConfig: probeOutcome(
           Retry.none(
             p24({
+              subscription: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        PatchSnapshot: probeOutcome(
+          Retry.none(
+            p25({
               snapshot: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
@@ -134,7 +136,7 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
         ),
         PatchSubscription: probeOutcome(
           Retry.none(
-            p25({
+            p26({
               subscription: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
@@ -142,17 +144,17 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
         ),
         PatchTopic: probeOutcome(
           Retry.none(
-            p26({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p27({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         PublishTopic: probeOutcome(
           Retry.none(
-            p27({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p28({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         PullSubscription: probeOutcome(
           Retry.none(
-            p28({
+            p29({
               subscription: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
@@ -160,22 +162,22 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
         ),
         RollbackSchema: probeOutcome(
           Retry.none(
-            p29({ schema: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p30({ schema: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         SeekSubscription: probeOutcome(
           Retry.none(
-            p30({
+            p31({
               subscription: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         ValidateSchema: probeOutcome(
-          Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ValidateSchemaMessage: probeOutcome(
-          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
       }),
     };
@@ -190,6 +192,7 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
           GCP.WorkspaceEvents.CreateSubscriptionHttp,
           GCP.WorkspaceEvents.CreateTopicHttp,
           GCP.WorkspaceEvents.DeleteSchemaHttp,
+          GCP.WorkspaceEvents.DeleteSchemaRevisionHttp,
           GCP.WorkspaceEvents.DeleteSnapshotHttp,
           GCP.WorkspaceEvents.DeleteSubscriptionHttp,
           GCP.WorkspaceEvents.DeleteTopicHttp,

@@ -93,7 +93,7 @@ GCP; every provider's generator takes the same flags (see
 | `internal` | operation polling, IAM policy methods, location metadata | nothing |
 | `skip` | listed in `skip` | nothing; the reason is recorded |
 | `project` | runs on the project, not a configured resource | a binding on the project, or add the resource it really targets |
-| `needs-permission` | no IAM permission derivable | add a `permissions` override (or `defaultPermission`) |
+| `needs-permission` | distilled has no `iam` for it and none can be proposed | add an `iam` patch in distilled (`patches/<module>/iam.json`) |
 
 `--changes` and `--check` read git, so run them on a clean tree.
 
@@ -106,7 +106,7 @@ GCP; every provider's generator takes the same flags (see
    service has an Alchemy provider for (or should). Patterns come from
    the methods' `name` parameter patterns.
 2. `--report <Svc>`. Work the list until every method lands somewhere on
-   purpose: `needs-permission` gets a `permissions` entry, a
+   purpose: `needs-permission` gets an `iam` patch in distilled, a
    `project` method that really targets a resource gets that resource
    configured, infrastructure calls get a `skip` with a reason.
 3. Generate. Then loop B over each binding.
@@ -137,9 +137,12 @@ For each new or changed binding, read the generated `<Op>.ts` and check:
    `grantOn`.
 2. **The grant.** Read the role in the JSDoc and the `variants`. It must
    be the smallest predefined role covering the checked permission, on
-   the bound resource. Fix a wrong permission with `permissions`, a poor
-   role with `roles`; a grant that can only be honoured on the project
-   goes in `projectGrant` with the reason.
+   the bound resource. The grant comes from the distilled operation's
+   `iam`: fix a wrong permission or role in distilled's
+   `patches/<module>/iam.json` and regenerate distilled. A new method's
+   grant starts as a proposal (`--write-iam-patches`); review it there. A
+   grant that can only be honoured on the project goes in `projectGrant`
+   with the reason.
 3. **The request.** Fields the bound resource determines (a location, a
    parent) belong to the binding, not the caller: `fields`, `append`,
    `suffix`.

@@ -9,10 +9,6 @@
       "pattern": "projects/*/keys/*"
     }
   },
-  "permissions": {
-    "recaptchaenterprise.projects.relatedaccountgroups.memberships.list": "recaptchaenterprise.relatedaccountgroupmemberships.list",
-    "recaptchaenterprise.projects.relatedaccountgroupmemberships.search": "recaptchaenterprise.relatedaccountgroupmemberships.list"
-  },
   "probes": {
     "resources": {
       "Key": "Signup"

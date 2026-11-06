@@ -7,17 +7,6 @@
       "iamKind": "artifactregistry.repository"
     }
   },
-  "permissions": {
-    "artifactregistry.projects.locations.repositories.googetArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
-    "artifactregistry.projects.locations.repositories.yumArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
-    "artifactregistry.projects.locations.repositories.aptArtifacts.import": "artifactregistry.repositories.uploadArtifacts",
-    "artifactregistry.projects.locations.repositories.packages.versions.batchDelete": "artifactregistry.versions.delete",
-    "artifactregistry.projects.locations.repositories.exportArtifact": "artifactregistry.repositories.exportArtifacts"
-  },
-  "roles": {
-    "artifactregistry.repositories.downloadArtifacts": "roles/artifactregistry.reader",
-    "artifactregistry.repositories.uploadArtifacts": "roles/artifactregistry.writer"
-  },
   "skip": {
     "artifactregistry.projects.locations.repositories.prewarmArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
     "artifactregistry.projects.locations.repositories.checkPrewarmedArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",

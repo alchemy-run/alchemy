@@ -24,9 +24,6 @@
     "delete": "update",
     "patch": "update"
   },
-  "permissions": {
-    "bigquerydatatransfer.projects.enrollDataSources": "bigquery.transfers.update"
-  },
   "skip": {
     "bigquerydatatransfer.projects.transferConfigs.scheduleRuns": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
     "bigquerydatatransfer.projects.transferConfigs.get": "the location-scoped method reaches the same transfer configs and is the one GCP documents",

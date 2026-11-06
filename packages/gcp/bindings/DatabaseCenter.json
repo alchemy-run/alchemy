@@ -2,14 +2,6 @@
   "discovery": "databasecenter-v1beta",
   "module": "databasecenter_v1beta",
   "resources": {},
-  "permissions": {
-    "databasecenter.projects.aggregateQueryStats": "databasecenter.queryStats.list",
-    "databasecenter.queryProducts": "databasecenter.products.list",
-    "databasecenter.aggregateIssueStats": "databasecenter.fleetHealthStats.list",
-    "databasecenter.aggregateFleet": "databasecenter.fleetStats.list",
-    "databasecenter.queryIssues": "databasecenter.fleetInsights.list",
-    "databasecenter.queryDatabaseResourceGroups": "databasecenter.databaseGroups.list"
-  },
   "probes": {
     "resources": {},
     "enable": ["databasecenter.googleapis.com"],

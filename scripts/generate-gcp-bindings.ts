@@ -140,17 +140,6 @@ interface ServiceConfig extends Partial<ApiConfig> {
    */
   auditServices?: string[];
   resources: Record<string, ResourceConfig>;
-  /** Method id → IAM permission. */
-  permissions?: Record<string, string>;
-  /**
-   * Permission (or method id) → role, where `roles.json`'s smallest role is
-   * a poor fit: `artifactregistry.repositories.get` is smallest in a
-   * migration role that also reads Cloud Storage, and copying an object
-   * needs `storage.objects.get` on the source besides `create`. A list
-   * grants its first role as usual and the rest on the project, for calls
-   * that also write somewhere else (a de-identify fills a new dataset).
-   */
-  roles?: Record<string, string | string[]>;
   /** Derived binding name → name to use. */
   names?: Record<string, string>;
   /** Method id → reason it is not a binding. */
@@ -193,6 +182,11 @@ interface ServiceConfig extends Partial<ApiConfig> {
   /** Don't generate bindings for calls on the project itself (`topics.list`). */
   noProjectBindings?: boolean;
   /**
+   * Proposal inputs (`permissionCollections`, `verbPermissions`,
+   * `defaultPermission`, `permissionService`): naming conventions the
+   * generator uses to propose a grant for a method distilled has no `iam`
+   * for yet. A bound method's grant always comes from distilled.
+   *
    * Discovery collection → the collection its IAM permissions are named
    * after: Compute checks `regionDisks.resize` as `compute.disks.resize`.
    */
@@ -385,6 +379,36 @@ const parseOperation = (source: string, fn: string): OperationTypes | undefined 
   return match ? { request: match[1]!, response: match[2]!, error: match[3]! } : undefined;
 };
 
+/**
+ * The operation's `iam` (core `OperationIam`) as distilled emits it: the
+ * permission the method checks and the predefined roles that grant it, set
+ * by `patches/<module>/iam.json` in distilled.
+ */
+const parseIam = (
+  source: string,
+  fn: string,
+): { actions: string[]; roles: string[] } | undefined => {
+  const start = source.indexOf(`export const ${fn}: API.`);
+  if (start === -1) return undefined;
+  const end = source.indexOf("\nexport ", start + 1);
+  const block = source.slice(start, end === -1 ? undefined : end);
+  const iam = /\biam: \{([\s\S]*?)\},?\n/.exec(block)?.[1];
+  if (iam === undefined) return undefined;
+  const list = (key: string) =>
+    [...(new RegExp(`${key}: \\[([^\\]]*)\\]`).exec(iam)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map(
+      (m) => m[1]!,
+    );
+  const actions = list("actions");
+  const roles = list("roles");
+  return actions.length > 0 && roles.length > 0 ? { actions, roles } : undefined;
+};
+
+/**
+ * Methods bound without an `iam` in distilled: the derived permission and
+ * role, proposed as distilled patches (`--write-iam-patches`).
+ */
+const PROPOSALS: Record<string, Record<string, { actions: string[]; roles: string[] }>> = {};
+
 /** Required member names of an interface in the distilled module. */
 const requiredMembers = (source: string, name: string): string[] => {
   const start = source.indexOf(`export interface ${name} {`);
@@ -495,7 +519,7 @@ const classify = (options: {
   bindings: Map<string, Binding>;
 }) => {
   const { config, api, covered, bindings } = options;
-  const roles = { ...options.roles, ...config.roles };
+  const roles = options.roles;
   // IAM spells a collection its own way (`goldenGateDeployments` for
   // `goldengateDeployments`, `notificationconfig` for `notificationConfigs`):
   // match permissions ignoring case and a plural `s`.
@@ -748,8 +772,18 @@ const classify = (options: {
     // The method's own collection stays even when it shares a scope's name
     // (Cloud Storage `folders`).
     const scoped = cols.filter((c, i) => i === cols.length - 1 || !SCOPE_COLLECTIONS.has(c));
+    // The grant comes from distilled (`op.iam`); a method it has none for is
+    // derived from the naming convention and roles.json, and proposed as a
+    // distilled patch.
+    const types = parseOperation(moduleSource, fn);
+    if (types === undefined) {
+      // Patched out of distilled (a deprecated or broken method).
+      results.push({ id, kind: "skip", reason: `no distilled operation ${fn}` });
+      continue;
+    }
+    const iam = parseIam(moduleSource, fn);
     const permission =
-      config.permissions?.[id] ??
+      iam?.actions[0] ??
       [
         verb === "patch"
           ? "update"
@@ -793,14 +827,8 @@ const classify = (options: {
         .map(known)
         .find((p) => p !== undefined) ??
       config.defaultPermission;
-    if (permission === undefined || roles[permission] === undefined) {
+    if (permission === undefined || (iam === undefined && roles[permission] === undefined)) {
       results.push({ id, kind: "needs-permission", reason: permission });
-      continue;
-    }
-    const types = parseOperation(moduleSource, fn);
-    if (types === undefined) {
-      // Patched out of distilled (a deprecated or broken method).
-      results.push({ id, kind: "skip", reason: `no distilled operation ${fn}` });
       continue;
     }
     // `get` on [secrets, versions] → GetSecretVersion; `list` keeps the
@@ -863,12 +891,13 @@ const classify = (options: {
       grantOn: config.grantOn?.[id],
       projectGrant: config.projectGrant?.[id],
       permission,
-      ...(([role, ...also]) => ({ role: role!, also }))(
-        [config.roles?.[id] ?? roles[permission]!].flat(),
-      ),
+      ...(([role, ...also]) => ({ role: role!, also }))(iam?.roles ?? [roles[permission]!]),
       types,
     });
     bindings.set(name, binding);
+    if (iam === undefined) {
+      (PROPOSALS[api.module] ??= {})[fn] = { actions: [permission], roles: [roles[permission]!] };
+    }
     results.push({ id, kind: "binding" });
   }
   // The global variant first: it is the common case and the JSDoc example.
@@ -2034,8 +2063,16 @@ const command = Command.make(
     refreshRoles: Flag.Boolean("refresh-roles").pipe(Flag.withDefault(false)),
     check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
     changes: Flag.Boolean("changes").pipe(Flag.withDefault(false)),
+    writeIamPatches: Flag.Boolean("write-iam-patches").pipe(Flag.withDefault(false)),
   },
-  Effect.fn(function* ({ services, report, refreshRoles: refresh, check, changes }) {
+  Effect.fn(function* ({
+    services,
+    report,
+    refreshRoles: refresh,
+    check,
+    changes,
+    writeIamPatches,
+  }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "..");
@@ -2052,6 +2089,43 @@ const command = Command.make(
       unresolved.set(service, yield* generateService(root, service, report));
     }
     if (changes && !report) yield* reportChanges(root, unresolved);
+    const proposed = Object.entries(PROPOSALS);
+    if (proposed.length > 0 && !writeIamPatches) {
+      yield* Console.log(
+        `\n${proposed.reduce((n, [, ops]) => n + Object.keys(ops).length, 0)} bound methods have no iam in distilled; \`--write-iam-patches\` proposes them.`,
+      );
+    }
+    if (writeIamPatches) {
+      // Proposals go to distilled, where every grant lives: review each one
+      // there, then regenerate distilled.
+      for (const [module, ops] of proposed) {
+        const file = path.join(
+          root,
+          "submodules/distilled/packages/gcp/patches",
+          module,
+          "iam.json",
+        );
+        const existing = (yield* fs.exists(file))
+          ? (JSON.parse(yield* fs.readFileString(file)) as {
+              description: string;
+              patches: unknown[];
+            })
+          : {
+              description: `What each ${module} operation is authorized as (core OperationIam): the IAM permission the method checks and the smallest predefined role that holds it. Discovery documents carry no IAM, so this is the record; correct a method here when a live call disagrees.`,
+              patches: [],
+            };
+        for (const [fn, iam] of Object.entries(ops)) {
+          existing.patches.push({
+            op: "add",
+            path: `/shapes/com.gcp.${module}#${fn[0]!.toUpperCase()}${fn.slice(1)}/traits/com.distilled.iam#operation`,
+            value: iam,
+          });
+        }
+        yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+        yield* fs.writeFileString(file, `${JSON.stringify(existing, null, 2)}\n`);
+      }
+      yield* Console.log(`Proposed iam for ${proposed.length} modules in distilled's patches.`);
+    }
     if (check) {
       // Regenerated in place: anything git now sees as changed was stale.
       const spawner = yield* ChildProcessSpawner;
