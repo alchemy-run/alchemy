@@ -90,7 +90,10 @@ describe.concurrent("Bucket", () => {
             return yield* Fly.Bucket("Data");
           }),
         );
-        yield* expectFound(Fly.Bucket.lookup({ name: created.name }), created);
+        yield* expectFound(Fly.Bucket.lookup({ name: created.name }), created, {
+          // Tigris returns a bucket's keys only from the create call.
+          ignore: ["accessKeyId", "secretAccessKey", "endpoint", "region"],
+        });
 
         expect(created.addOnId).toEqual(expect.any(String));
         expect(created.addOnId.length).toBeGreaterThan(0);
