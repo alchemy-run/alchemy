@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import * as NodeHttps from "node:https";
 import * as Portless from "@alchemy.run/portless";
 import * as Cli from "@alchemy.run/portless/internal/Cli";
+import * as Lan from "@alchemy.run/portless/internal/Lan";
 import { run } from "@alchemy.run/portless/internal/Run";
 import * as Trust from "@alchemy.run/portless/internal/Trust";
 import * as DevTrust from "alchemy/Local/DevTrust";
@@ -12,6 +14,15 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { eventually } from "./Processes.ts";
+
+/** Portless publishes `.local` names with a tool of the platform; without it LAN mode never starts. */
+const mdnsTool = { darwin: ["dns-sd", "-h"], linux: ["avahi-publish-address", "--help"] }[
+  process.platform as "darwin" | "linux"
+];
+export const hasMdnsTool =
+  mdnsTool !== undefined &&
+  (spawnSync(mdnsTool[0]!, mdnsTool.slice(1)).error as NodeJS.ErrnoException | undefined)?.code !==
+    "ENOENT";
 
 /**
  * A proxy of the test's own: a temporary state directory and a free high port,
@@ -41,6 +52,10 @@ let trustProxies = 0;
 export interface TestProxyOptions {
   /** Publish the proxy's CA as `alchemy dev` does, for local runtimes and commands to trust. */
   readonly trust?: boolean;
+  /** Start the proxy in LAN mode (`Portless.providers({ lan: true })`). */
+  readonly lan?: boolean;
+  /** Replaces the check that this host can serve LAN mode, such as to find something missing. */
+  readonly lanCheck?: Lan.LanService;
 }
 
 export const make = (
@@ -104,7 +119,11 @@ export const make = (
     stateDirectory: Effect.map(entry, (value) => value.stateDirectory),
     port: Effect.map(entry, (value) => value.port),
     providers: () =>
-      Portless.providers().pipe(Layer.provide(config), Layer.provide(Trust.layer(Trust.TrustNone))),
+      Portless.providers({ lan: options.lan === true }).pipe(
+        Layer.provide(config),
+        Layer.provide(Trust.layer(Trust.TrustNone)),
+        Layer.provide(options.lanCheck === undefined ? Layer.empty : Lan.layer(options.lanCheck)),
+      ),
     stop: Effect.gen(function* () {
       if (created === undefined) return;
       const { stateDirectory, port } = yield* Effect.promise(() => created!);
@@ -126,7 +145,12 @@ export const make = (
  * given flags, in a state directory and on a port of the test's choosing. The
  * environment is pinned so it never trusts anything and never needs sudo.
  */
-export const startPortless = (stateDirectory: string, port: number, flags: ReadonlyArray<string>) =>
+export const startPortless = (
+  stateDirectory: string,
+  port: number,
+  flags: ReadonlyArray<string>,
+  env: Record<string, string> = {},
+) =>
   Effect.gen(function* () {
     const node = yield* Cli.node;
     const cli = yield* Cli.portless;
@@ -140,6 +164,7 @@ export const startPortless = (stateDirectory: string, port: number, flags: Reado
             PORTLESS_PORT: String(port),
             // A proxy that isn't unprivileged would otherwise try to edit the hosts file.
             PORTLESS_SYNC_HOSTS: "0",
+            ...env,
           },
           extendEnv: true,
           stdin: "ignore",
@@ -182,6 +207,8 @@ export const get = (
   origin: string,
   proxy: { readonly port: number; readonly certificateAuthority: string },
   path = "/",
+  /** The address to connect to, such as this machine's own network address. */
+  connectTo = "127.0.0.1",
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -190,7 +217,7 @@ export const get = (
     return yield* Effect.callback<Response, Error>((resume) => {
       const request = NodeHttps.request(
         {
-          host: "127.0.0.1",
+          host: connectTo,
           port: proxy.port,
           path,
           method: "GET",
