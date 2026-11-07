@@ -28,12 +28,14 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PrimaryKey from "effect/PrimaryKey";
 import * as Random from "effect/Random";
+import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -289,7 +291,7 @@ const encodedDeferred = (name: string) =>
  */
 const workflowsObject = (
   workflows: ReadonlyMap<string, Workflow.Any>,
-  engine: () => WorkflowEngine.WorkflowEngine["Service"],
+  engine: Effect.Effect<WorkflowEngine.WorkflowEngine["Service"]>,
 ): InstanceBuild =>
   Effect.succeed({
     wfExecute: (executionId: string, payload: string, _discard: boolean) =>
@@ -298,13 +300,13 @@ const workflowsObject = (
         const decoded = yield* Schema.decodeEffect(payloadCodec(workflow))(
           JSON.parse(payload),
         ).pipe(Effect.orDie);
-        yield* engine().execute(workflow as never, {
+        yield* (yield* engine).execute(workflow as never, {
           executionId,
           payload: decoded as never,
           discard: true,
         });
         // The run starts; callers that wait poll it.
-        const polled = yield* engine().poll(workflow as never, executionId);
+        const polled = yield* (yield* engine).poll(workflow as never, executionId);
         return Option.isSome(polled) && polled.value._tag === "Complete"
           ? yield* encodeResult(workflow, polled.value.exit as Exit.Exit<unknown, unknown>)
           : null;
@@ -312,7 +314,7 @@ const workflowsObject = (
     wfPoll: (executionId: string) =>
       Effect.gen(function* () {
         const workflow = workflows.get(yield* workflowName) as Workflow.AnyWithProps;
-        const polled = yield* engine().poll(workflow as never, executionId);
+        const polled = yield* (yield* engine).poll(workflow as never, executionId);
         if (Option.isNone(polled)) return { started: false, result: null };
         return {
           started: true,
@@ -323,20 +325,24 @@ const workflowsObject = (
         };
       }),
     wfInterrupt: (executionId: string) =>
-      Effect.flatMap(workflowName, (name) => engine().interrupt(workflows.get(name)!, executionId)),
+      Effect.flatMap(Effect.all([workflowName, engine]), ([name, engine]) =>
+        engine.interrupt(workflows.get(name)!, executionId),
+      ),
     wfInterruptUnsafe: (executionId: string) =>
-      Effect.flatMap(workflowName, (name) =>
-        engine().interruptUnsafe(workflows.get(name)!, executionId),
+      Effect.flatMap(Effect.all([workflowName, engine]), ([name, engine]) =>
+        engine.interruptUnsafe(workflows.get(name)!, executionId),
       ),
     wfResume: (executionId: string) =>
-      Effect.flatMap(workflowName, (name) => engine().resume(workflows.get(name)!, executionId)),
+      Effect.flatMap(Effect.all([workflowName, engine]), ([name, engine]) =>
+        engine.resume(workflows.get(name)!, executionId),
+      ),
     wfSignal: (executionId: string, deferredName: string, exit: string) =>
       Effect.gen(function* () {
         const deferred = encodedDeferred(deferredName);
         const decoded = yield* Schema.decodeEffect(
           deferred.exitSchema as unknown as Schema.Codec<unknown, unknown>,
         )(JSON.parse(exit)).pipe(Effect.orDie);
-        yield* engine().deferredDone(deferred, {
+        yield* (yield* engine).deferredDone(deferred, {
           workflowName: yield* workflowName,
           executionId,
           deferredName,
@@ -464,19 +470,11 @@ export const layer = <PoolReq>(
           return client;
         }),
       );
-      // Set once the runner has joined the cluster.
-      let engine: WorkflowEngine.WorkflowEngine["Service"] | undefined;
-      const started = () => {
-        if (engine === undefined)
-          throw new DomainEngineNotStarted({
-            message: "The cluster's workflow engine isn't running yet.",
-          });
-        return engine;
-      };
-      classes.set(
-        WORKFLOWS,
-        workflowsObject(workflows, () => started()),
-      );
+      // Completed once the runner has joined the cluster; a call made
+      // before then waits for it.
+      const engine = yield* Deferred.make<WorkflowEngine.WorkflowEngine["Service"]>();
+      const started = Deferred.await(engine);
+      classes.set(WORKFLOWS, workflowsObject(workflows, started));
 
       // Each instance builds the object its entity id says.
       const instance = Effect.gen(function* () {
@@ -571,18 +569,20 @@ export const layer = <PoolReq>(
             new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
           );
         }
-        const registrations: Array<
-          readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
-        > = [];
+        const registrations = yield* Ref.make<
+          ReadonlyArray<
+            readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
+          >
+        >([]);
         // Sagas register while the model's Layer builds, before the runner
         // joins the cluster: hold them until then, then run every call on its engine.
         yield* runner.value.host(
           hosted,
           Effect.gen(function* () {
             const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
-            for (const [workflow, execute] of registrations)
+            for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* clusterEngine.register(workflow as never, execute as never);
-            engine = clusterEngine;
+            yield* Deferred.succeed(engine, clusterEngine);
           }).pipe(Layer.effectDiscard),
         );
         const deferredEngine = WorkflowEngine.WorkflowEngine.of({
@@ -590,27 +590,30 @@ export const layer = <PoolReq>(
             workflow: Workflow.Any,
             execute: (payload: any, id: string) => Effect.Effect<any, any, any>,
           ) =>
-            Effect.sync(() => {
-              workflows.set(workflow._tag, placed(workflow));
-              registrations.push([placed(workflow), execute]);
-            })) as never,
+            Effect.andThen(
+              Effect.sync(() => workflows.set(workflow._tag, placed(workflow))),
+              Ref.update(registrations, (all) => [...all, [placed(workflow), execute] as const]),
+            )) as never,
           execute: ((workflow: any, opts: any) =>
-            Effect.suspend(() => started().execute(placed(workflow), opts))) as never,
+            Effect.flatMap(started, (engine) => engine.execute(placed(workflow), opts))) as never,
           poll: ((workflow: any, id: string) =>
-            Effect.suspend(() => started().poll(placed(workflow), id))) as never,
+            Effect.flatMap(started, (engine) => engine.poll(placed(workflow), id))) as never,
           interrupt: (workflow, id) =>
-            Effect.suspend(() => started().interrupt(placed(workflow), id)),
+            Effect.flatMap(started, (engine) => engine.interrupt(placed(workflow), id)),
           interruptUnsafe: (workflow, id) =>
-            Effect.suspend(() => started().interruptUnsafe(placed(workflow), id)),
-          resume: (workflow, id) => Effect.suspend(() => started().resume(placed(workflow), id)),
+            Effect.flatMap(started, (engine) => engine.interruptUnsafe(placed(workflow), id)),
+          resume: (workflow, id) =>
+            Effect.flatMap(started, (engine) => engine.resume(placed(workflow), id)),
           activityExecute: ((activity: any, attempt: number) =>
-            Effect.suspend(() => started().activityExecute(activity, attempt))) as never,
+            Effect.flatMap(started, (engine) =>
+              engine.activityExecute(activity, attempt),
+            )) as never,
           deferredResult: ((deferred: any) =>
-            Effect.suspend(() => started().deferredResult(deferred))) as never,
+            Effect.flatMap(started, (engine) => engine.deferredResult(deferred))) as never,
           deferredDone: ((deferred: any, opts: any) =>
-            Effect.suspend(() => started().deferredDone(deferred, opts))) as never,
+            Effect.flatMap(started, (engine) => engine.deferredDone(deferred, opts))) as never,
           scheduleClock: (workflow, opts) =>
-            Effect.suspend(() => started().scheduleClock(placed(workflow), opts)),
+            Effect.flatMap(started, (engine) => engine.scheduleClock(placed(workflow), opts)),
         });
         // Inside the cluster, calls route through Effect Cluster itself.
         const self = remote(
