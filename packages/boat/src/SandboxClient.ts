@@ -15,6 +15,7 @@ export type BoatError =
   | boat.NotFound
   | boat.Conflict
   | boat.SandboxNotRunning
+  | boat.SandboxStartLimitExceeded
   | boat.FileNotFound
   | boat.ForkNeedsSnapshot
   | ExecTimedOut

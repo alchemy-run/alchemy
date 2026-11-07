@@ -9641,7 +9641,13 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      rolldown:
+        specifier: 1.2.16
+        version: 1.2.16
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
