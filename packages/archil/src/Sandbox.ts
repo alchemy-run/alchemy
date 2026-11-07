@@ -905,7 +905,8 @@ export const SandboxProvider = () =>
                       ? Effect.succeed(found)
                       : Effect.fail(
                           new archil.SandboxAlreadyExists({
-                            error: `Sandbox ${name} exists but is not visible to this key`,
+                            code: "sandbox_name_conflict",
+                            message: `Sandbox ${name} exists but is not visible to this key`,
                           }),
                         ),
                   ),
