@@ -9,6 +9,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
@@ -208,6 +209,20 @@ describe
 
                 return { database, branch };
               }),
+            );
+            yield* expectFound(
+              Planetscale.MySQLBranch.lookup({ database: branch.database, name: branch.name }),
+              branch,
+              // Migrations and replica intent are this stack's record.
+              {
+                ignore: [
+                  "migrationsDir",
+                  "migrationsTable",
+                  "migrationsHashes",
+                  "importHashes",
+                  "desiredReplicas",
+                ],
+              },
             );
 
             expect(branch).toMatchObject({
