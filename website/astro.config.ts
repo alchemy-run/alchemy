@@ -42,6 +42,8 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Daytona", link: "/daytona" },
+      { label: "Archil", link: "/archil" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1400,6 +1402,107 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Turso"),
+          ],
+        },
+        {
+          label: "Daytona",
+          items: [
+            { label: "Overview", link: "/daytona" },
+            { label: "What is Daytona?", link: "/daytona/what-is-daytona" },
+            { label: "Setup", link: "/daytona/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "daytona/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations & API keys", link: "/daytona/organizations-and-keys" },
+                { label: "Members & roles", link: "/daytona/organization/organization" },
+                { label: "Secrets", link: "/daytona/security/secrets" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/daytona/sandboxes/sandboxes" },
+                { label: "Programs in a sandbox", link: "/daytona/sandboxes/programs" },
+                { label: "Snapshots", link: "/daytona/sandboxes/snapshots" },
+                { label: "Volumes", link: "/daytona/sandboxes/volumes" },
+                { label: "Toolbox", link: "/daytona/sandboxes/toolbox" },
+                { label: "Regions & runners", link: "/daytona/sandboxes/runners" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Network & previews", link: "/daytona/networking/network" }],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "Telemetry, webhooks & audit", link: "/daytona/observability/telemetry" },
+              ],
+            },
+            providerResourcesEntry("Daytona"),
+          ],
+        },
+        {
+          label: "Archil",
+          items: [
+            { label: "Overview", link: "/archil" },
+            { label: "What is Archil?", link: "/archil/what-is-archil" },
+            { label: "Setup", link: "/archil/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "archil/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organization and keys", link: "/archil/organization-and-keys" },
+                { label: "Credentials and bindings", link: "/archil/security/credentials" },
+                { label: "Network", link: "/archil/security/network" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/archil/compute/choosing-a-runtime" },
+                { label: "Programs", link: "/archil/compute/programs" },
+                { label: "Sandboxes", link: "/archil/compute/sandboxes" },
+                { label: "Images", link: "/archil/compute/images" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Disks", link: "/archil/storage/disks" },
+                { label: "Mounting", link: "/archil/storage/mounting" },
+                { label: "Branches and checkpoints", link: "/archil/storage/branches" },
+                { label: "Your own bucket", link: "/archil/storage/your-own-bucket" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/archil/frontend/websites" },
+                { label: "Astro", link: "/archil/frontend/astro" },
+                { label: "Foldkit", link: "/archil/frontend/foldkit" },
+                { label: "Next.js", link: "/archil/frontend/nextjs" },
+                { label: "Nuxt", link: "/archil/frontend/nuxt" },
+                { label: "Octane", link: "/archil/frontend/octane" },
+                { label: "React Router", link: "/archil/frontend/react-router" },
+                { label: "SolidStart", link: "/archil/frontend/solidstart" },
+                { label: "Static sites", link: "/archil/frontend/static-site" },
+                { label: "SvelteKit", link: "/archil/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/archil/frontend/tanstack-start" },
+                { label: "vinext", link: "/archil/frontend/vinext" },
+                { label: "Vite", link: "/archil/frontend/vite" },
+                { label: "Vocs", link: "/archil/frontend/vocs" },
+                { label: "Waku", link: "/archil/frontend/waku" },
+              ]),
+            },
+            providerResourcesEntry("Archil"),
           ],
         },
         {

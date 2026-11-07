@@ -564,6 +564,38 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Archil — start here",
+    intro:
+      "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
+    pages: { slugs: ["archil/index", "archil/what-is-archil", "archil/setup"] },
+  },
+  {
+    heading: "Archil — Tutorial",
+    pages: { directory: "archil/tutorial" },
+  },
+  {
+    heading: "Archil — Accounts & access",
+    pages: {
+      slugs: [
+        "archil/organization-and-keys",
+        "archil/security/credentials",
+        "archil/security/network",
+      ],
+    },
+  },
+  {
+    heading: "Archil — Compute",
+    pages: { directory: "archil/compute" },
+  },
+  {
+    heading: "Archil — Frontend",
+    pages: { directory: "archil/frontend" },
+  },
+  {
+    heading: "Archil — Storage",
+    pages: { directory: "archil/storage" },
+  },
+  {
     heading: "Rivet",
     intro:
       "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",
@@ -631,6 +663,40 @@ const SECTIONS: Section[] = [
         "cluster/cloudflare",
       ],
     },
+  },
+  {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
   },
   {
     heading: "Better Auth",

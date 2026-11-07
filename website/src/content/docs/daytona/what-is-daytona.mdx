@@ -1,0 +1,127 @@
+---
+title: What is Daytona?
+description: The concepts behind Daytona — organizations, API keys, regions and runners, snapshots, sandboxes and their lifecycle, the toolbox, previews, volumes, network limits and secrets — and how @alchemy.run/daytona models each of them.
+---
+
+import DAG from "../../../components/DAG.astro";
+import StateMachine from "../../../components/diagrams/StateMachine.astro";
+
+Everything in Daytona belongs to an organization, and you reach it only through Daytona's API, with a key whose permissions Daytona checks.
+
+Take one small app: a Worker gives each user a sandbox, booted from the `Base` snapshot, with that user's volume as their home.
+
+<DAG
+  nodes={[
+    { id: "worker", label: "Api", type: "Worker · API key", col: 0, row: 0 },
+    { id: "sam", label: "user-sam", type: "sandbox · from Base", tone: "accent", col: 1, row: 0 },
+    { id: "ana", label: "user-ana", type: "sandbox · from Base", col: 1, row: 1 },
+    { id: "home", label: "home-sam", type: "volume", col: 2, row: 0 },
+    { id: "base", label: "Base", type: "snapshot", col: 2, row: 1 },
+  ]}
+  groups={[
+    { id: "org", label: "Organization acme", nodes: ["base", "home"] },
+    { id: "region", label: "region us", parent: "org", nodes: ["sam", "ana"], dashed: true },
+  ]}
+  edges={[
+    { from: "worker", to: "region", label: "create · exec" },
+    { from: "sam", to: "home", label: "mounts" },
+  ]}
+  caption="The organization holds snapshots, volumes, and sandboxes in its regions. The Worker drives the sandboxes through Daytona's API with its own key."
+/>
+
+## Organizations
+
+An **organization** holds your sandboxes, snapshots, volumes, secrets and API keys, the people who may use them, and the bill. Nothing in one organization can see another's.
+
+You sign in to Daytona once, and pick the organization your profile deploys to. See [Organizations and API keys](/daytona/organizations-and-keys).
+
+## API keys
+
+Every call to Daytona carries an **API key**. A key belongs to one organization and holds permissions per kind of object: `write:sandboxes` lets it create any sandbox in the organization, `manage:secrets` any secret.
+
+Each binding creates a key of its own for its Worker or Lambda, with only the permissions its calls need:
+
+```typescript
+const sandboxes = yield* Daytona.CreateSandbox(Base);
+```
+
+See [Organizations and API keys](/daytona/organizations-and-keys).
+
+## Regions and runners
+
+A **region** is where sandboxes run, such as `us` or `eu`. Inside it, **runners** are the machines that host sandboxes. Daytona runs shared regions for everyone, and you can add a region of your own and run its runners on your machines.
+
+See [Regions and runners](/daytona/sandboxes/runners).
+
+## Snapshots
+
+A **snapshot** is the image a sandbox boots from, plus its size: CPU, memory, disk and GPUs. Daytona builds it from an image, a Dockerfile, or another snapshot with commands run in it.
+
+```typescript title="src/Images.ts"
+export const Base = Daytona.Snapshot("Base", { image: "node:22-bookworm-slim", cpu: 1, memory: 1, disk: 3 });
+```
+
+See [Snapshots](/daytona/sandboxes/snapshots).
+
+## Sandboxes
+
+A **sandbox** moves through four states, and its disk survives all but the last:
+
+<StateMachine
+  states={[
+    { id: "started", label: "started", type: "billed while it runs", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "stopped", label: "stopped", type: "disk kept", col: 1, row: 0 },
+    { id: "archived", label: "archived", type: "slower to start", col: 2, row: 0 },
+    { id: "deleted", label: "deleted", col: 2, row: 1, end: true, tone: "danger" },
+  ]}
+  transitions={[
+    { from: "started", to: "stopped", label: "idle 15 min" },
+    { from: "stopped", to: "started", label: "start", bend: -0.6 },
+    { from: "stopped", to: "archived", label: "stopped 7 days" },
+    { from: "archived", to: "started", label: "start", bend: 0.3 },
+    { from: "stopped", to: "deleted", label: "autoDeleteInterval" },
+  ]}
+  caption="A sandbox stops after 15 idle minutes and keeps its disk. After 7 days stopped it is archived, and it can be deleted after a stop if you set autoDeleteInterval. A stopped or archived sandbox starts again with its files."
+/>
+
+Create sandboxes per request or per user from a Worker, or declare a long-lived one in your Stack. See [Sandboxes](/daytona/sandboxes/sandboxes).
+
+## The toolbox
+
+The **toolbox** is the API inside every sandbox. Alchemy hands you a sandbox as a handle with all of it:
+
+```typescript
+const result = yield* sandbox.exec("npm test", { cwd: "/home/daytona/repo" });
+```
+
+See [Toolbox](/daytona/sandboxes/toolbox).
+
+## Previews
+
+A **preview URL** reaches a port inside a sandbox from outside, through Daytona's proxy. It needs the sandbox's preview token unless the sandbox is `public`. See [Network and previews](/daytona/networking/network).
+
+## Volumes
+
+A **volume** is a persistent disk, backed by object storage, that sandboxes mount at a path. Its files outlive every sandbox that mounts it, so a user's home can survive their sandbox.
+
+```typescript title="src/Storage.ts"
+export const Cache = Daytona.Volume("Cache", {});
+```
+
+See [Volumes](/daytona/sandboxes/volumes).
+
+## Network limits
+
+Daytona controls what a sandbox can reach, outside the sandbox. Your organization's tier sets the default: below Tier 3, sandboxes reach only an allowlist of essential services, such as package registries, GitHub and AI APIs. On top of that, a sandbox can allow only some domains or ranges, or no network at all. See [Network and previews](/daytona/networking/network).
+
+## Secrets
+
+A **secret** is a value a sandbox can use but not read. The sandbox sees a placeholder, and Daytona's egress proxy swaps in the real value only on requests to the hosts you name. See [Secrets](/daytona/security/secrets).
+
+## How @alchemy.run/daytona models these concepts
+
+Snapshots, volumes, secrets, registries, warm pools, regions, runners, roles and organization settings are resources you declare in a Stack. A sandbox is a resource too when it should live as long as the Stack, like a dev box, or a sandbox that runs a program you write. Sandboxes, volumes, secrets and snapshots that come and go per request or per user are created at runtime through bindings (`CreateSandbox`, `CreateVolume`, `CreateSecret`, `CreateSnapshot`), each with its own API key. Your [profile](/environments/profiles) signs you in to Daytona and picks the organization.
+
+## Next
+
+[Set up](/daytona/setup) your profile, then build the [tutorial](/daytona/tutorial/part-1).
