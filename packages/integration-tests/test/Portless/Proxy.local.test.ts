@@ -1,4 +1,5 @@
 import * as NodeNet from "node:net";
+import * as NodePath from "node:path";
 import * as Portless from "@alchemy.run/portless";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -246,4 +247,40 @@ occupied.test.provider(
       yield* stack.destroy();
     }),
   { tags: ["local"], timeout: 120_000 },
+);
+
+// A Docker daemon that never answers: `docker ps` hangs instead of failing.
+const hungDocker = Effect.acquireRelease(
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const bin = yield* fs.makeTempDirectoryScoped({ prefix: "portless-hung-docker-" });
+    const docker = path.join(bin, "docker");
+    yield* fs.writeFileString(docker, "#!/bin/sh\nexec sleep 600\n");
+    yield* fs.chmod(docker, 0o755);
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- puts the hung `docker` first on the PATH children resolve; the test holds the process lock
+    const previous = process.env.PATH;
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- see above
+    process.env.PATH = `${bin}${NodePath.delimiter}${previous ?? ""}`;
+    return previous;
+  }),
+  (previous) =>
+    Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- restores the PATH replaced above
+      process.env.PATH = previous;
+    }),
+);
+
+occupied.test.provider.skipIf(process.platform === "win32")(
+  "Proxy reports a held port even when Docker doesn't answer",
+  (stack) =>
+    Effect.gen(function* () {
+      const port = yield* held.port;
+      yield* hungDocker;
+      const error = yield* Effect.flip(stack.deploy(program("proxy-held")));
+      expect(tagOf(error)).toBe("ProxyPortInUse");
+      expect(error).toMatchObject({ port });
+      yield* stack.destroy();
+    }),
+  { tags: ["local"], timeout: 60_000, exclusive: true },
 );
