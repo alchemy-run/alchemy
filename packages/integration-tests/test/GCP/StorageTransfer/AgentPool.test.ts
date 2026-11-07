@@ -5,6 +5,7 @@ import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -33,6 +34,10 @@ test.provider(
             displayName: "warehouse scanners",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.StorageTransfer.AgentPool.lookup({ agentPoolId: created.agentPoolId }),
+        created,
       );
 
       expect(created.agentPoolId).toEqual(expect.any(String));

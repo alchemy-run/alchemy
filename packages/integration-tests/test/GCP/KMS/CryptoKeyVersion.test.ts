@@ -6,6 +6,7 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { KEY_RING_ID, kmsTestId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -74,6 +75,15 @@ test.provider(
             cryptoKey: key.name,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.CryptoKeyVersion.lookup({
+          cryptoKey: created.cryptoKey,
+          keyRing: created.keyRing,
+          location: created.location,
+          cryptoKeyVersionId: created.cryptoKeyVersionId,
+        }),
+        created,
       );
 
       expect(created.cryptoKeyVersionId).toEqual(expect.any(String));

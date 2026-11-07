@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, toResourceId } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
@@ -59,8 +60,36 @@ export type InstancesNatAddress = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesNatAddressLookup
 >;
+
+/**
+ * Props for {@link InstancesNatAddress.lookup}: find an instances nat
+ * address this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InstancesNatAddressLookup {
+  /**
+   * NAT address id (the `{nataddress}` segment of
+   * `organizations/{org}/instances/{instance}/natAddresses/{nataddress}`).
+   */
+  natAddressId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Parent instance id or full name
+   * (`organizations/{org}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A static NAT address on an Apigee runtime instance.
@@ -86,6 +115,20 @@ export type InstancesNatAddress = Resource<
  *   instance: runtime.name,
  *   natAddressId: "app-egress",
  *   activate: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing instances nat address
+ * `InstancesNatAddress.lookup` references an instances nat address Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared instances nat address.
+ *
+ * **Example:** Reference an existing instances nat address
+ * ```typescript
+ * const instancesNatAddress = GCP.Apigee.InstancesNatAddress.lookup({
+ *   natAddressId: "my-nat-address",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -198,6 +241,17 @@ export const InstancesNatAddressProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ natAddressId, organization: lookupOrganization, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = resourceName(organization, instanceId, natAddressId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, instanceId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

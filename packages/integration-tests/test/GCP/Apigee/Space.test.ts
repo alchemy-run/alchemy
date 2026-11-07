@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,10 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "alchemy test space",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.Space.lookup({ spaceId: created.spaceId, organization: created.organization }),
+        created,
       );
 
       expect(created.spaceId).toEqual(expect.any(String));

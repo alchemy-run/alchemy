@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import {
   connectorSource,
   location,
@@ -83,6 +84,22 @@ test.provider(
           });
           return { service, schema, connector };
         }),
+      );
+      yield* expectFound(
+        GCP.FirebaseDataConnect.ServicesConnector.lookup({
+          connectorId: created.connector.connectorId,
+          location: created.connector.location,
+          service: created.connector.service,
+        }),
+        created.connector,
+      );
+      yield* expectFound(
+        GCP.FirebaseDataConnect.ServicesSchema.lookup({
+          schemaId: created.schema.schemaId,
+          location: created.schema.location,
+          service: created.schema.service,
+        }),
+        created.schema,
       );
 
       expect(created.connector.name).toContain("/connectors/");

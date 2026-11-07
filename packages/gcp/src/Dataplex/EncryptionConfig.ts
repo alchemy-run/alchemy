@@ -81,8 +81,30 @@ export type EncryptionConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EncryptionConfigLookup
 >;
+
+/**
+ * Props for {@link EncryptionConfig.lookup}: find an encryption config this
+ * stack doesn't manage by its identifiers.
+ */
+export interface EncryptionConfigLookup {
+  /**
+   * Organization id (the `{organization}` segment of
+   * `organizations/{organiz
+   * ation}/locations/{location}/encryptionConfigs/{encryptionConfig}`).
+   */
+  organizationId: string;
+  /**
+   * Region (`us-central1`, …). Global is not supported.
+   */
+  location?: string;
+  /**
+   * EncryptionConfig id. Currently only `"default"` is supported.
+   */
+  encryptionConfigId?: string;
+}
 
 /**
  * A Dataplex EncryptionConfig that opts an organization location into
@@ -99,6 +121,19 @@ export type EncryptionConfig = Resource<
  * const config = yield* GCP.Dataplex.EncryptionConfig("Default", {
  *   organizationId: "1234567890",
  *   location: "us-central1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing encryption config
+ * `EncryptionConfig.lookup` references an encryption config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * encryption config.
+ *
+ * **Example:** Reference an existing encryption config
+ * ```typescript
+ * const encryptionConfig = GCP.Dataplex.EncryptionConfig.lookup({
+ *   organizationId: "my-organization",
  * });
  * ```
  *
@@ -166,6 +201,21 @@ export const EncryptionConfigProvider = () =>
         previousParent: olds?.organizationId ?? output?.organizationId,
         nextParent: news.organizationId,
       });
+    }),
+
+    lookup: Effect.fn(function* ({
+      organizationId,
+      location: lookupLocation,
+      encryptionConfigId: lookupEncryptionConfigId,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const encryptionConfigId = toId(lookupEncryptionConfigId, undefined);
+      if (organizationId === undefined) return undefined;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(organizationId, location, encryptionConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

@@ -7,6 +7,7 @@ import * as orgpolicy from "@distilled.cloud/gcp/orgpolicy_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -120,6 +121,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "blocks test-prefixed instances",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.OrgPolicy.CustomConstraint.lookup({
+          constraintId: created.constraintId,
+          organization: created.organization,
+        }),
+        created,
       );
 
       expect(created.constraintId.startsWith("custom.")).toEqual(true);

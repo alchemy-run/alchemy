@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_REGIONS_VERSION,
@@ -84,8 +85,31 @@ export type MonetizationSubscription = Resource<
     archived: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  MonetizationSubscriptionLookup
 >;
+
+/**
+ * Props for {@link MonetizationSubscription.lookup}: find a monetization
+ * subscription this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface MonetizationSubscriptionLookup {
+  /**
+   * Unique product id within the app. Lower-case letters, numbers,
+   * underscores, and dots; 1-40 characters.
+   */
+  productId: string;
+  /**
+   * Play package name of the parent app (for example `com.example.app`).
+   */
+  packageName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Play subscription product (`monetization.subscriptions`).
@@ -146,6 +170,20 @@ export type MonetizationSubscription = Resource<
  *     listings: [{ languageCode: "en-US", title: "Premium Plus" }],
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing monetization subscription
+ * `MonetizationSubscription.lookup` references a monetization subscription
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared monetization subscription.
+ *
+ * **Example:** Reference an existing monetization subscription
+ * ```typescript
+ * const monetizationSubscription = GCP.AndroidPublisher.MonetizationSubscription.lookup({
+ *   productId: "my-product",
+ *   packageName: "my-package",
+ * });
  * ```
  *
  * @resource
@@ -236,6 +274,14 @@ export const MonetizationSubscriptionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ productId, packageName: lookupPackageName }) {
+      const env = yield* GcpEnvironment.current;
+      const packageName = lookupPackageName ?? "";
+      const existing = yield* getSubscription(packageName, productId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

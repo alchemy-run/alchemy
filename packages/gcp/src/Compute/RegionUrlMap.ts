@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -105,8 +106,31 @@ export type RegionUrlMap = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionUrlMapLookup
 >;
+
+/**
+ * Props for {@link RegionUrlMap.lookup}: find a region url map this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionUrlMapLookup {
+  /**
+   * UrlMap name (RFC1035, 1-63 characters).
+   */
+  urlMapName: string;
+  /**
+   * Region the URL map lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine URL map.
@@ -161,6 +185,19 @@ export type RegionUrlMap = Resource<
  * ```typescript
  * const map = yield* GCP.Compute.RegionUrlMap("web", {
  *   defaultService: backend.selfLink,
+ * });
+ * ```
+ *
+ * ### Looking up an existing region url map
+ * `RegionUrlMap.lookup` references a region url map Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region url map.
+ *
+ * **Example:** Reference an existing region url map
+ * ```typescript
+ * const regionUrlMap = GCP.Compute.RegionUrlMap.lookup({
+ *   urlMapName: "my-url-map",
  * });
  * ```
  *
@@ -329,6 +366,14 @@ export const RegionUrlMapProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ urlMapName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, urlMapName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

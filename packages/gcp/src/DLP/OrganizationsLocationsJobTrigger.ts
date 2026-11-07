@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -114,8 +115,37 @@ export type OrganizationsLocationsJobTrigger = Resource<
     lastRunTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsLocationsJobTriggerLookup
 >;
+
+/**
+ * Props for {@link OrganizationsLocationsJobTrigger.lookup}: find an
+ * organizations locations job trigger this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface OrganizationsLocationsJobTriggerLookup {
+  /**
+   * Trigger id (the `{jobTrigger}` segment of
+   * `organizations/{organization}/
+   * locations/{location}/jobTriggers/{jobTrigger}`). Letters, digits,
+   * hyphens, and underscores; max 100 characters.
+   */
+  triggerId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Processing location (`us-central1`, `global`, `us`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Sensitive Data Protection job trigger that
@@ -147,6 +177,20 @@ export type OrganizationsLocationsJobTrigger = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations locations job trigger
+ * `OrganizationsLocationsJobTrigger.lookup` references an organizations
+ * locations job trigger Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared organizations locations job
+ * trigger.
+ *
+ * **Example:** Reference an existing organizations locations job trigger
+ * ```typescript
+ * const organizationsLocationsJobTrigger = GCP.DLP.OrganizationsLocationsJobTrigger.lookup({
+ *   triggerId: "my-trigger",
+ * });
  * ```
  *
  * @resource
@@ -230,6 +274,20 @@ export const OrganizationsLocationsJobTriggerProvider = () =>
         replaceOn(previousLocation, nextLocation)
       );
     }),
+
+    lookup: Effect.fn(function* ({
+      triggerId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(organization, location, triggerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

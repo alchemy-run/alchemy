@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -53,6 +54,10 @@ test.provider(
             clustering: { fields: ["id"] },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BigQuery.Table.lookup({ tableId: created.tableId, datasetId: created.datasetId }),
+        created,
       );
 
       expect(created.tableId).toEqual(expect.any(String));
