@@ -1,6 +1,7 @@
 import { withMySqlExecutor, withPgExecutor } from "@alchemy.run/sql/Migrations/Executors";
 import type { MigrationError, SqlExecutor } from "@alchemy.run/sql/Migrations/Format";
 import type * as Effect from "effect/Effect";
+import { RDS_CA_BUNDLE } from "./internal/RdsCaBundle.ts";
 
 /**
  * Where and as whom a migration connects. Plain JSON: the Lambda transport
@@ -23,8 +24,8 @@ const CONNECT_TIMEOUT_MILLIS = 15_000;
  * scope of `use`, closing it afterwards. Shared by the direct transport
  * (on the deploying machine) and the migration runner Lambda (in the VPC).
  *
- * TLS is always on. RDS certificates chain to a private AWS CA that Node's
- * trust store doesn't carry, so the certificate is not verified.
+ * TLS is always on and verified: RDS certificates chain to the private
+ * Amazon RDS CAs, so the connection trusts exactly the RDS CA bundle.
  */
 export const withMigrationConnection = <A, E, R>(
   target: MigrationConnectionTarget,
@@ -38,7 +39,7 @@ export const withMigrationConnection = <A, E, R>(
           database: target.database,
           user: target.username,
           password: target.password,
-          ssl: { rejectUnauthorized: false },
+          ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
           connectionTimeoutMillis: CONNECT_TIMEOUT_MILLIS,
         },
         use,
@@ -50,7 +51,7 @@ export const withMigrationConnection = <A, E, R>(
           database: target.database,
           user: target.username,
           password: target.password,
-          ssl: { rejectUnauthorized: false },
+          ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
           connectTimeout: CONNECT_TIMEOUT_MILLIS,
         },
         use,
