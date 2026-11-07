@@ -1,0 +1,67 @@
+---
+title: Concepts
+description: How Modal environments, apps and objects map to your Stack.
+---
+
+## Environments keep stages apart
+
+A Modal workspace holds environments. Volumes, dicts, queues, secrets and apps with the same name in two environments are different objects. Give each stage its own:
+
+```typescript
+// src/Sandbox.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Agents = Modal.Environment("Agents", {});
+```
+
+The name includes the stage, so `alchemy deploy --stage prod` creates a separate environment.
+
+## Apps own sandboxes and images
+
+Every sandbox runs in an app. Destroying the app stops every sandbox in it.
+
+```typescript
+// src/Sandbox.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Agents = Modal.Environment("Agents", {});
+
+export const Coder = Modal.App("Coder", { environment: Agents });
+```
+
+Yield the environment to pass it: a declaration has no attributes until it's yielded.
+
+## Declare what every deploy shares
+
+Images, a shared volume, and the secrets your code needs are resources:
+
+```typescript
+// src/Storage.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Redacted from "effect/Redacted";
+import { Agents } from "./Sandbox.ts";
+
+export const Models = Modal.Volume("Models", { environment: Agents });
+
+export const OpenAI = Modal.Secret("OpenAI", {
+  environment: Agents,
+  env: { OPENAI_API_KEY: Redacted.make("sk-...") },
+});
+```
+
+## Create the rest at runtime
+
+A volume per user or a secret per session doesn't belong in your Stack. Bind a client to the environment and create them by name:
+
+```typescript
+const volumes = yield* Modal.CreateVolume(Agents);
+const home = yield* volumes.getOrCreate(`home-${user}`);
+```
+
+`getOrCreate` is Modal's own get-or-create, so it's safe on every request. Objects you create this way aren't in your Stack's state: destroying the environment removes them.
+
+## Bind to a resource, or to a kind
+
+`Modal.ReadWriteVolume(Models)` acts on one volume. `Modal.CreateVolume(Agents)` acts on any volume in the environment, by name. Both give you the same file methods.
+
+A Modal Function or Server calls Modal as its own container, so no token is stored in it. Every other host gets its own scoped `Modal.ServiceUser`. A binding grants it the role it needs (`viewer` to read, `contributor` to write) on the bound resource's environment, and writes its token into the Worker. Use environments to keep workloads apart. Service users need Modal's Team plan; on Starter, [`Modal.DeployerHostIdentity`](/modal/security/access-control#bindings-on-the-starter-plan) binds your own token instead.

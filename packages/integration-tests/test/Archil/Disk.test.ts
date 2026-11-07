@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Archil.providers() });
 
@@ -20,6 +21,7 @@ test.provider(
       yield* stack.destroy();
 
       const disk = yield* stack.deploy(Archil.Disk("Data", {}));
+      yield* expectFound(Archil.Disk.lookup({ name: disk.name }), disk);
       expect(disk.diskId).toMatch(/^dsk-/);
       expect(disk.storageType).toBe("archil");
       expect(disk.allowedIps).toEqual([]);

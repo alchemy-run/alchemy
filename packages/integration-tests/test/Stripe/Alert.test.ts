@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -51,6 +52,7 @@ test.provider(
           return { meter, alert };
         }),
       );
+      yield* expectFound(Stripe.Alert.lookup({ id: created.alert.id }), created.alert);
 
       expect(created.alert.id).toMatch(/^alrt_/);
       expect(created.alert.title).toEqual("Alchemy Usage Alert");

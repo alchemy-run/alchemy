@@ -11,8 +11,18 @@ export type Notifier = Resource<
   NotifierProps,
   Axiom.CreateNotifierResponse & { id: string },
   never,
-  Providers
+  Providers,
+  NotifierLookup
 >;
+
+/**
+ * Props for {@link Notifier.lookup}: find a notifier this stack
+ * doesn't manage by its id.
+ */
+export interface NotifierLookup {
+  /** Axiom notifier id. */
+  id: string;
+}
 
 /**
  * An Axiom notifier — an alert destination (Slack, email, PagerDuty,
@@ -63,6 +73,16 @@ export type Notifier = Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing notifier
+ * `Notifier.lookup` references a notifier Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing notifier
+ * ```typescript
+ * const ref = Axiom.Notifier.lookup({ id: "n_abc123" });
  * ```
  *
  * @resource
@@ -121,6 +141,13 @@ export const NotifierProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ id }) {
+          return yield* get({ id }).pipe(
+            Effect.map((current) => ({ ...current, id: current.id ?? id })),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(

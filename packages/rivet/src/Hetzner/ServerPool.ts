@@ -2,6 +2,7 @@ import * as Hetzner from "@alchemy.run/hetzner";
 import * as Effect from "effect/Effect";
 import {
   bundleNodes,
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
@@ -60,7 +61,13 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
-      const main = yield* bundleNodes("hetzner", id, nodes);
+      // A Rust program is its own image, run in Docker on each Server.
+      const program = isImageProgram(nodes.program)
+        ? { context: nodes.program.context, dockerfile: nodes.program.dockerfile }
+        : {
+            main: (yield* bundleNodes("hetzner", id, nodes.program)) as unknown as string,
+            build: { install: { rivetkit: RIVETKIT_VERSION } },
+          };
       const location = options.location ?? "nbg1";
       const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {
         rules: [
@@ -80,11 +87,13 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
           image: "ubuntu-24.04",
           location,
           firewalls: [firewall],
+          // Nodes only dial out to the control plane's IPv4 address: an
+          // IPv6 address would only use up the project's primary IPs.
+          enableIpv6: false,
         });
         yield* Hetzner.Service(`${id}Node${i}Service`, {
           server,
-          main: main as unknown as string,
-          build: { install: { rivetkit: RIVETKIT_VERSION } },
+          ...program,
           env,
         });
       }

@@ -12,8 +12,18 @@ export type VirtualField = Resource<
   VirtualFieldProps,
   Axiom.CreateVirtualFieldResponse,
   never,
-  Providers
+  Providers,
+  VirtualFieldLookup
 >;
+
+/**
+ * Props for {@link VirtualField.lookup}: find a virtual field this stack
+ * doesn't manage by its id.
+ */
+export interface VirtualFieldLookup {
+  /** Axiom virtual field id. */
+  id: string;
+}
 
 /**
  * An Axiom virtual field — a saved APL expression that appears as a derived
@@ -45,6 +55,16 @@ export type VirtualField = Resource<
  *   type: "number",
  *   unit: "s",
  * });
+ * ```
+ *
+ * ### Looking up an existing virtual field
+ * `VirtualField.lookup` references a virtual field Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing virtual field
+ * ```typescript
+ * const ref = Axiom.VirtualField.lookup({ id: "vf_abc123" });
  * ```
  *
  * @resource
@@ -112,6 +132,10 @@ export const VirtualFieldProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ id }) {
+          return yield* get({ id }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(

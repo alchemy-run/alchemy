@@ -1,0 +1,34 @@
+---
+title: Autoscaling
+description: Keep containers warm and cap concurrency for a deployed function.
+---
+
+## Keep containers warm
+
+```typescript
+// src/Scaling.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Warm = Modal.FunctionAutoscaler("Warm", {
+  app: "inference",
+  function: "Model.*",
+  minContainers: 2,
+  bufferContainers: 1,
+  scaledownWindow: "5 minutes",
+});
+```
+
+## Cap concurrency
+
+```typescript
+// src/Scaling.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Capped = Modal.FunctionAutoscaler("Capped", {
+  app: "inference",
+  function: "embed",
+  maxContainers: 10,
+});
+```
+
+Destroying the resource restores the settings it found. `modal deploy` resets them, so deploy your Stack after redeploying the app.

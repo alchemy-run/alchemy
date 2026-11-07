@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { hetznerLoadBalancers, hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
@@ -76,6 +77,7 @@ test.provider(
           };
         }),
       );
+      yield* expectFound(Hetzner.LoadBalancer.lookup({ name: created.lb.name }), created.lb);
 
       expect(created.lb.id).toEqual(expect.any(Number));
       expect(created.lb.name).toEqual(expect.any(String));

@@ -643,6 +643,7 @@ const SECTIONS: Section[] = [
         "rivet/calling",
         "rivet/rivetkit",
         "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
         "rivet/durable-streams",
         "rivet/control-planes",
         "rivet/pools",
@@ -723,6 +724,19 @@ const SECTIONS: Section[] = [
     heading: "Daytona — Observability",
     pages: { directory: "daytona/observability" },
   },
+  {
+    heading: "Modal",
+    intro:
+      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+    pages: {
+      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+    },
+  },
+  { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
+  { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
+  { heading: "Modal — Security", pages: { directory: "modal/security" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
   {
     heading: "Better Auth",
     intro:

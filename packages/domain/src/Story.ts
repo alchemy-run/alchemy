@@ -49,6 +49,12 @@ export class StoryFailure extends Data.TaggedError("StoryFailure")<{
   readonly steps: ReadonlyArray<StepReport>;
   /** The tags of the events committed so far, per touched aggregate (`Aggregate/id`). */
   readonly events: Readonly<Record<string, ReadonlyArray<string>>>;
+  /**
+   * When the story failed only in another order of its concurrent work: what
+   * ran earlier than it was queued, e.g. `policy Settlement ← Settled
+   * (Subject/s#2) ran before saga Process/s → admit-next`. Empty otherwise.
+   */
+  readonly order: ReadonlyArray<string>;
 }> {}
 
 /** A failure inside the runner, before it is turned into a {@link StoryFailure}. */
@@ -87,7 +93,7 @@ export type Step =
   | {
       readonly _tag: "Then";
       readonly ref: Aggregate.Ref;
-      readonly events: ReadonlyArray<{ readonly _tag: string }>;
+      readonly events: ReadonlyArray<Expected<{ readonly _tag: string }>>;
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
@@ -273,15 +279,138 @@ const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
   commandId: options?.commandId,
 });
 
-/** The next events committed on a stream. With no events: nothing new was committed. */
+/**
+ * The next events committed on a stream. With no events: nothing new was
+ * committed. Events listed one after another must commit in that order; wrap
+ * events whose order the model does not define in {@link anyOrder}.
+ */
 const then = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  ...events: ReadonlyArray<Aggregate.EventOf<A>>
+  ...events: ReadonlyArray<Expected<Aggregate.EventOf<A>>>
 ): StepOf<"Then"> => ({
   _tag: "Then",
   ref,
-  events: events as ReadonlyArray<{ readonly _tag: string }>,
+  events: events as ReadonlyArray<Expected<{ readonly _tag: string }>>,
 });
+
+const OrderTypeId: unique symbol = Symbol.for("alchemy/Domain/Story.Order") as any;
+
+/**
+ * A group of expected events for {@link then}: built by {@link anyOrder} or
+ * {@link inOrder}, and nested to state any order a model defines.
+ */
+export interface Order<out E = { readonly _tag: string }> {
+  readonly [OrderTypeId]: "any" | "in";
+  readonly items: ReadonlyArray<Expected<E>>;
+}
+
+/** What `then` takes: an event, or a group of them. */
+export type Expected<E> = E | Order<E>;
+
+/** The events in a list of expected events and groups. */
+type EventsIn<Items> = Items extends Order<infer E> ? E : Items;
+
+const isOrder = (value: unknown): value is Order =>
+  value !== null && typeof value === "object" && OrderTypeId in value;
+
+/**
+ * These events commit in any order: the same events, with the same payloads
+ * and as many of each, consumed once each. A group inside it keeps its own
+ * order, and its events may interleave with the others.
+ */
+const anyOrder = <const Items extends ReadonlyArray<Expected<{ readonly _tag: string }>>>(
+  ...items: Items
+): Order<EventsIn<Items[number]>> => ({ [OrderTypeId]: "any", items }) as never;
+
+/**
+ * These events commit in this order. Inside {@link anyOrder}, the others may
+ * commit between them; `then` is already in order at the top.
+ */
+const inOrder = <const Items extends ReadonlyArray<Expected<{ readonly _tag: string }>>>(
+  ...items: Items
+): Order<EventsIn<Items[number]>> => ({ [OrderTypeId]: "in", items }) as never;
+
+/** One expected event, and the indexes of the events that must commit before it. */
+interface Leaf {
+  readonly event: { readonly _tag: string };
+  readonly after: ReadonlyArray<number>;
+}
+
+/**
+ * Flatten expected events and groups into leaves with their precedences: in
+ * order, every event of an item comes after every event of the items before it.
+ */
+const leavesOf = (items: ReadonlyArray<Expected<{ readonly _tag: string }>>): Array<Leaf> => {
+  const leaves: Array<Leaf> = [];
+  const walk = (
+    item: Expected<{ readonly _tag: string }>,
+    before: ReadonlyArray<number>,
+  ): ReadonlyArray<number> => {
+    if (!isOrder(item)) {
+      leaves.push({ event: item, after: before });
+      return [leaves.length - 1];
+    }
+    if (item[OrderTypeId] === "any") return item.items.flatMap((child) => walk(child, before));
+    let last = before;
+    for (const child of item.items) {
+      const own = walk(child, last);
+      // An empty group adds no constraint.
+      if (own.length > 0) last = own;
+    }
+    return last === before ? [] : last;
+  };
+  walk({ [OrderTypeId]: "in", items }, []);
+  return leaves;
+};
+
+/**
+ * Whether `actual` (encoded events) satisfies the leaves: each event matches one
+ * leaf whose predecessors already matched. Backtracks over equal leaves.
+ */
+const matchesOrder = (leaves: ReadonlyArray<Leaf>, actual: ReadonlyArray<unknown>): boolean => {
+  if (actual.length !== leaves.length) return false;
+  const expected = leaves.map((leaf) => show(encodeInstance(leaf.event)));
+  const got = actual.map(show);
+  const used = leaves.map(() => false);
+  const dead = new Set<string>();
+  const go = (position: number): boolean => {
+    if (position === got.length) return true;
+    const key = used.map((u) => (u ? "1" : "0")).join("");
+    if (dead.has(key)) return false;
+    for (let i = 0; i < leaves.length; i++) {
+      if (used[i] || expected[i] !== got[position]) continue;
+      if (!leaves[i]!.after.every((j) => used[j])) continue;
+      used[i] = true;
+      if (go(position + 1)) return true;
+      used[i] = false;
+    }
+    dead.add(key);
+    return false;
+  };
+  return go(0);
+};
+
+/** Expected events and groups in a short form: `Opened, any(Recorded, Admitted)`. */
+const briefExpected = (items: ReadonlyArray<Expected<unknown>>, depth = 0): string =>
+  items
+    .map((item) =>
+      isOrder(item)
+        ? `${item[OrderTypeId]}(${briefExpected(item.items, depth + 1)})`
+        : depth === 0
+          ? brief(item)
+          : brief(item, 1),
+    )
+    .join(", ");
+
+/** Expected events and groups as JSON for a failure message. */
+const showExpected = (items: ReadonlyArray<Expected<unknown>>): string =>
+  `[${items
+    .map((item) =>
+      isOrder(item)
+        ? `${item[OrderTypeId] === "any" ? "anyOrder" : "inOrder"}(${showExpected(item.items).slice(1, -1)})`
+        : show(item),
+    )
+    .join(",")}]`;
 
 /**
  * The last command was rejected with exactly this rejection. It must be one
@@ -581,8 +710,9 @@ const describeStep = (s: Step): string => {
     case "Provide":
       return `${s.service.key} = ${summarize(s.value)}`;
     case "Given":
-    case "Then":
       return `${refName(s.ref)}: ${summarizeAll(s.events)}`;
+    case "Then":
+      return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
       return `${refName(s.ref)}: ${summarize(s.command)}`;
     case "Rejected":
@@ -777,6 +907,123 @@ interface StoryOptions<Policies, LE, LR, Systems> {
  * );
  * ```
  */
+/** A story with more orders of concurrent work than this fails, rather than check only some. */
+const maxOrders = 256;
+
+/** A choice the platform asked for: the writers that were ready, and the one that ran. */
+interface Choice {
+  readonly ready: ReadonlyArray<string>;
+  chosen: string;
+  /** Writers already tried first here, and those still to try. */
+  readonly done: Set<string>;
+  readonly todo: Set<string>;
+}
+
+/**
+ * Run a story once per order of its concurrent work that can matter: when
+ * several writers (policy deliveries, saga runs and saga steps) are ready at
+ * once, a writer is also tried first when it committed to a stream that a
+ * writer let ahead of it also committed to. Writers on different streams
+ * commute, so one order covers them. Depth first, replaying the story from a
+ * fresh platform each time. Every run must pass.
+ */
+const explore = <E, R>(
+  steps: ReadonlyArray<Step>,
+  once: (scheduler: {
+    readonly choose: (ready: ReadonlyArray<string>) => number;
+    readonly ran: (label: string, wrote: ReadonlyArray<string>) => void;
+  }) => Effect.Effect<void, E, R>,
+): Effect.Effect<void, E | StoryFailure, R> =>
+  Effect.gen(function* () {
+    const path: Array<Choice> = [];
+    for (let order = 1; ; order++) {
+      let depth = 0;
+      const wrote = new Map<string, ReadonlyArray<string>>();
+      const exit = yield* Effect.exit(
+        once({
+          choose: (ready) => {
+            const known = path[depth];
+            let index = known ? ready.indexOf(known.chosen) : 0;
+            if (index < 0) index = 0;
+            if (!known || known.ready.join("\n") !== ready.join("\n")) {
+              // A different queue than the replayed prefix had: start a fresh choice here.
+              path.length = depth;
+              path.push({
+                ready,
+                chosen: ready[index]!,
+                done: new Set([ready[index]!]),
+                todo: new Set(),
+              });
+            }
+            depth++;
+            return index;
+          },
+          ran: (label, streams) => void wrote.set(label, streams),
+        }),
+      );
+      path.length = depth;
+      if (Exit.isFailure(exit)) {
+        const error = Cause.findErrorOption(exit.cause);
+        const swaps = path
+          .filter((c) => c.chosen !== c.ready[0])
+          .map((c) => `${c.chosen} ran before ${c.ready[0]}`);
+        if (swaps.length === 0 || Option.isNone(error) || !isStoryFailure(error.value)) {
+          return yield* exit;
+        }
+        const failure = error.value;
+        const head = `in another order of concurrent work: ${swaps.join("; ")}`;
+        return yield* new StoryFailure({
+          step: failure.step,
+          steps: failure.steps,
+          events: failure.events,
+          order: swaps,
+          reason: `${failure.reason}\n  ${head}`,
+          message: `${failure.reason}\n  ${head}${failure.message.slice(failure.reason.length)}`,
+        });
+      }
+      // A writer let wait behind one that committed to the same stream is tried first there.
+      const conflicts = (a: string, b: string) => {
+        const left = wrote.get(a) ?? [];
+        return (wrote.get(b) ?? []).some((stream) => left.includes(stream));
+      };
+      for (const choice of path) {
+        for (const other of choice.ready) {
+          if (!choice.done.has(other) && conflicts(choice.chosen, other)) choice.todo.add(other);
+        }
+      }
+      let last = path.length - 1;
+      while (last >= 0 && path[last]!.todo.size === 0) last--;
+      if (last < 0) return;
+      if (order >= maxOrders) {
+        const reason = `the story has more than ${maxOrders} orders of concurrent work that commit to the same streams; split it into smaller stories`;
+        return yield* new StoryFailure({
+          step: steps.length,
+          reason,
+          message: reason,
+          steps: steps.map((s, index): StepReport => ({
+            step: index + 1,
+            kind: s._tag,
+            status: "passed",
+            summary: describeStep(s),
+          })),
+          events: {},
+          order: [],
+        });
+      }
+      const choice = path[last]!;
+      const [next] = choice.todo;
+      choice.todo.delete(next!);
+      choice.done.add(next!);
+      choice.chosen = next!;
+      path.length = last + 1;
+    }
+  });
+
+const isStoryFailure = (error: unknown): error is StoryFailure =>
+  error !== null &&
+  typeof error === "object" &&
+  (error as { readonly _tag?: unknown })._tag === "StoryFailure";
+
 const make =
   <
     Name extends string,
@@ -798,734 +1045,763 @@ const make =
     StoryFailure | LE,
     Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
   > =>
-    Effect.gen(function* () {
-      const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
-      const platform = InMemory.make({ manual: true, now: () => clockState.now });
-      const calls: Array<PendingCall> = [];
-      const observed: Array<ObservedCall> = [];
-      const stubbed = new Set((options.stub ?? []).map((system) => system.systemName));
-      const recorder: ExternalSystem.CallRecorder = {
-        record: (system, op, args, call) =>
-          Effect.gen(function* () {
-            const entry: ObservedCall = {
-              system,
-              op,
-              args,
-              exit: undefined,
-              done: yield* Deferred.make<void>(),
-              tag: undefined,
-              expected: false,
-            };
-            observed.push(entry);
-            return yield* call.pipe(
-              Effect.onExit((exit) =>
-                Effect.suspend(() => {
-                  entry.exit = exit;
-                  return Deferred.succeed(entry.done, undefined);
-                }),
-              ),
-            );
-          }),
-      };
-      const systemLayers = (options.stub ?? []).map((system) =>
-        Layer.effect(
-          system as Context.Key<unknown, unknown>,
-          Effect.map(
-            ExternalSystem.compileChecks(system.systemName, system.ops),
-            (checks) =>
-              ExternalSystem.observeOps(
-                system.systemName,
-                // The story's answers are checked like an adapter's.
-                ExternalSystem.validateOps(
-                  checks,
-                  Object.fromEntries(
-                    Object.keys(system.ops).map((op) => [
-                      op,
-                      (args: unknown) =>
-                        platform.control.suspended(
-                          Effect.gen(function* () {
-                            const deferred = yield* Deferred.make<unknown, unknown>();
-                            calls.push({
-                              system: system.systemName,
-                              op,
-                              args,
-                              deferred,
-                              tag: undefined,
-                              expected: false,
-                            });
-                            return yield* Deferred.await(deferred);
-                          }),
-                        ),
-                    ]),
-                  ),
+    explore(steps, (scheduler) =>
+      Effect.gen(function* () {
+        const clockState = { now: Date.parse("2026-01-01T00:00:00.000Z") };
+        const platform = InMemory.make({ manual: true, now: () => clockState.now, ...scheduler });
+        const calls: Array<PendingCall> = [];
+        const observed: Array<ObservedCall> = [];
+        const stubbed = new Set((options.stub ?? []).map((system) => system.systemName));
+        const recorder: ExternalSystem.CallRecorder = {
+          record: (system, op, args, call) =>
+            Effect.gen(function* () {
+              const entry: ObservedCall = {
+                system,
+                op,
+                args,
+                exit: undefined,
+                done: yield* Deferred.make<void>(),
+                tag: undefined,
+                expected: false,
+              };
+              observed.push(entry);
+              return yield* call.pipe(
+                Effect.onExit((exit) =>
+                  Effect.suspend(() => {
+                    entry.exit = exit;
+                    return Deferred.succeed(entry.done, undefined);
+                  }),
                 ),
-              ) as never,
-          ),
-        ),
-      );
-      const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
-      const policies = (
-        options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
-      ).pipe(Layer.provide(systems));
-      const hosted = domain
-        .layer(policies)
-        .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
-
-      // The aggregates the story touched, for the report's "events so far".
-      const touched = new Map<string, Aggregate.Ref>();
-
-      const run = Effect.gen(function* () {
-        const internals = yield* Model.Internals;
-        const cursors = new Map<string, number>();
-        // The step that committed each event, by `Aggregate/id#index`.
-        const committedAt = new Map<string, number>();
-        const attribute = (step: number) => {
-          for (const { aggregate, id, index } of platform.control.commits.slice(committedAt.size))
-            committedAt.set(`${aggregate}/${id}#${index}`, step);
+              );
+            }),
         };
-        let last:
-          | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
-          | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
-          | { readonly _tag: "Answered"; readonly result: unknown }
-          | undefined;
-        let unassertedRejection:
-          | {
-              readonly step: number;
-              readonly rejection: { readonly _tag: string };
-              /** What was rejected: a command, or a query by name. */
-              readonly what?: string;
-            }
-          | undefined;
-        let provided = Context.empty() as Context.Context<unknown>;
-        const assertedDeaths = new Set<string>();
+        const systemLayers = (options.stub ?? []).map((system) =>
+          Layer.effect(
+            system as Context.Key<unknown, unknown>,
+            Effect.map(
+              ExternalSystem.compileChecks(system.systemName, system.ops),
+              (checks) =>
+                ExternalSystem.observeOps(
+                  system.systemName,
+                  // The story's answers are checked like an adapter's.
+                  ExternalSystem.validateOps(
+                    checks,
+                    Object.fromEntries(
+                      Object.keys(system.ops).map((op) => [
+                        op,
+                        (args: unknown) =>
+                          platform.control.suspended(
+                            Effect.gen(function* () {
+                              const deferred = yield* Deferred.make<unknown, unknown>();
+                              calls.push({
+                                system: system.systemName,
+                                op,
+                                args,
+                                deferred,
+                                tag: undefined,
+                                expected: false,
+                              });
+                              return yield* Deferred.await(deferred);
+                            }),
+                          ),
+                      ]),
+                    ),
+                  ),
+                ) as never,
+            ),
+          ),
+        );
+        const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
+        const policies = (
+          options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
+        ).pipe(Layer.provide(systems));
+        const hosted = domain
+          .layer(policies)
+          .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
 
-        const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
-        const committed = (ref: Aggregate.Ref) =>
-          storeOf(ref).events?.(ref.id as string) ?? Effect.succeed([]);
+        // The aggregates the story touched, for the report's "events so far".
+        const touched = new Map<string, Aggregate.Ref>();
 
-        const settle = (step: number) =>
-          Effect.gen(function* () {
-            for (let i = 0; i < 10_000; i++) {
-              // Real calls take real time: wait for them instead of spinning.
-              for (const call of observed) {
-                if (call.exit === undefined) yield* Deferred.await(call.done);
+        const run = Effect.gen(function* () {
+          const internals = yield* Model.Internals;
+          const cursors = new Map<string, number>();
+          // The step that committed each event, by `Aggregate/id#index`.
+          const committedAt = new Map<string, number>();
+          const attribute = (step: number) => {
+            for (const { aggregate, id, index } of platform.control.commits.slice(committedAt.size))
+              committedAt.set(`${aggregate}/${id}#${index}`, step);
+          };
+          let last:
+            | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
+            | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
+            | { readonly _tag: "Answered"; readonly result: unknown }
+            | undefined;
+          let unassertedRejection:
+            | {
+                readonly step: number;
+                readonly rejection: { readonly _tag: string };
+                /** What was rejected: a command, or a query by name. */
+                readonly what?: string;
               }
-              yield* platform.control.drain;
-              yield* Effect.yieldNow;
-              if (yield* platform.control.idle) {
-                yield* Effect.yieldNow;
+            | undefined;
+          let provided = Context.empty() as Context.Context<unknown>;
+          const assertedDeaths = new Set<string>();
+
+          const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
+          const committed = (ref: Aggregate.Ref) =>
+            storeOf(ref).events?.(ref.id as string) ?? Effect.succeed([]);
+
+          const settle = (step: number) =>
+            Effect.gen(function* () {
+              for (let i = 0; i < 10_000; i++) {
+                // Real calls take real time: wait for them instead of spinning.
+                for (const call of observed) {
+                  if (call.exit === undefined) yield* Deferred.await(call.done);
+                }
                 yield* platform.control.drain;
+                yield* Effect.yieldNow;
                 if (yield* platform.control.idle) {
-                  if (platform.control.failures.length > 0) {
-                    return yield* new StepFailed({
-                      step,
-                      message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
-                    });
+                  yield* Effect.yieldNow;
+                  yield* platform.control.drain;
+                  if (yield* platform.control.idle) {
+                    if (platform.control.failures.length > 0) {
+                      return yield* new StepFailed({
+                        step,
+                        message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
+                      });
+                    }
+                    return;
                   }
-                  return;
                 }
               }
-            }
-            return yield* new StepFailed({
-              step,
-              message: "the domain did not settle (a policy or projection is looping?)",
+              return yield* new StepFailed({
+                step,
+                message: "the domain did not settle (a policy or projection is looping?)",
+              });
             });
-          });
 
-        const rejectionNotAsserted = (rejected: NonNullable<typeof unassertedRejection>) =>
-          new StepFailed({
-            step: rejected.step,
-            message: `${rejected.what ?? "the command"} was rejected with ${rejected.rejection._tag}, which no step asserts`,
-            detail: `rejected ${summarize(rejected.rejection)}`,
-          });
+          const rejectionNotAsserted = (rejected: NonNullable<typeof unassertedRejection>) =>
+            new StepFailed({
+              step: rejected.step,
+              message: `${rejected.what ?? "the command"} was rejected with ${rejected.rejection._tag}, which no step asserts`,
+              detail: `rejected ${summarize(rejected.rejection)}`,
+            });
 
-        for (const [index, s] of steps.entries()) {
-          const step = index + 1;
-          attribute(index);
-          const fail = (
-            message: string,
-            compared?: {
-              readonly expected: string;
-              readonly actual: string;
-              readonly label?: string;
-            },
-          ) => new StepFailed({ step, message: `${s._tag}: ${message}`, ...compared });
-          if (unassertedRejection && s._tag !== "Rejected") {
-            return yield* rejectionNotAsserted(unassertedRejection);
-          }
-          if ("ref" in s) touched.set(refName(s.ref), s.ref);
-          switch (s._tag) {
-            case "Clock": {
-              const at = clockMillis(s.at);
-              if (Number.isNaN(at)) return yield* fail(`${String(s.at)} is not a time`);
-              // Once a step has run at the current time, the clock only moves forward.
-              const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
-              if (started && at < clockState.now) {
-                const now = DateTime.formatIso(DateTime.makeUnsafe(clockState.now));
-                return yield* fail(
-                  `the clock cannot move back, from ${now} to ${DateTime.formatIso(DateTime.makeUnsafe(at))}`,
-                  {
-                    expected: `${now} or later`,
-                    actual: DateTime.formatIso(DateTime.makeUnsafe(at)),
-                  },
-                );
-              }
-              clockState.now = at;
-              // Scheduled commands that are now due fire, and their policies run.
-              yield* settle(step);
-              break;
+          for (const [index, s] of steps.entries()) {
+            const step = index + 1;
+            attribute(index);
+            const fail = (
+              message: string,
+              compared?: {
+                readonly expected: string;
+                readonly actual: string;
+                readonly label?: string;
+              },
+            ) => new StepFailed({ step, message: `${s._tag}: ${message}`, ...compared });
+            if (unassertedRejection && s._tag !== "Rejected") {
+              return yield* rejectionNotAsserted(unassertedRejection);
             }
-            case "Advance": {
-              const by = advanceDuration(s.by);
-              if (by === undefined)
-                return yield* fail(`${showDurationInput(s.by)} is not a duration`);
-              if (Duration.isNegative(by)) {
-                return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
-              }
-              clockState.now += Duration.toMillis(by);
-              yield* settle(step);
-              break;
-            }
-            case "Provide": {
-              provided = Context.add(provided, s.service, s.value);
-              break;
-            }
-            case "Given": {
-              const store = storeOf(s.ref);
-              if (!store.seed) return yield* fail("the platform cannot seed events");
-              yield* store.seed(
-                s.ref.id as string,
-                yield* Effect.forEach(s.events, internals.kernel.encodeEvent),
-              );
-              cursors.set(`${s.ref.aggregate}/${s.ref.id}`, (yield* committed(s.ref)).length);
-              yield* settle(step);
-              break;
-            }
-            case "When": {
-              const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
-                never,
-                Aggregate.ClientImpl
-              >;
-              const result = yield* client
-                .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
-                .pipe(Effect.provide(provided), Effect.result);
-              if (result._tag === "Success") {
-                last = { _tag: "Accepted", receipt: result.success };
-              } else {
-                last = { _tag: "Rejected", rejection: result.failure as { readonly _tag: string } };
-                unassertedRejection = { step, rejection: last.rejection };
-              }
-              yield* settle(step);
-              break;
-            }
-            case "Then": {
-              const stream = `${s.ref.aggregate}/${s.ref.id}`;
-              const events = yield* committed(s.ref);
-              const from = cursors.get(stream) ?? 0;
-              const actual = events
-                .slice(from, from + Math.max(s.events.length, 1))
-                .map((e) => e.event);
-              const expected = s.events.map(encodeInstance);
-              // Decoded, so redacted fields stay redacted in the message.
-              const got = yield* Effect.forEach(events.slice(from), (e) =>
-                internals.kernel.decodeEvent(e.event),
-              );
-              const compared = {
-                label: stream,
-                expected: summarizeAll(s.events),
-                actual: summarizeAll(got),
-              };
-              if (s.events.length === 0) {
-                if (events.length > from) {
+            if ("ref" in s) touched.set(refName(s.ref), s.ref);
+            switch (s._tag) {
+              case "Clock": {
+                const at = clockMillis(s.at);
+                if (Number.isNaN(at)) return yield* fail(`${String(s.at)} is not a time`);
+                // Once a step has run at the current time, the clock only moves forward.
+                const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
+                if (started && at < clockState.now) {
+                  const now = DateTime.formatIso(DateTime.makeUnsafe(clockState.now));
                   return yield* fail(
-                    `expected no new events on ${stream}, got ${show(got)}`,
-                    compared,
+                    `the clock cannot move back, from ${now} to ${DateTime.formatIso(DateTime.makeUnsafe(at))}`,
+                    {
+                      expected: `${now} or later`,
+                      actual: DateTime.formatIso(DateTime.makeUnsafe(at)),
+                    },
+                  );
+                }
+                clockState.now = at;
+                // Scheduled commands that are now due fire, and their policies run.
+                yield* settle(step);
+                break;
+              }
+              case "Advance": {
+                const by = advanceDuration(s.by);
+                if (by === undefined)
+                  return yield* fail(`${showDurationInput(s.by)} is not a duration`);
+                if (Duration.isNegative(by)) {
+                  return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
+                }
+                clockState.now += Duration.toMillis(by);
+                yield* settle(step);
+                break;
+              }
+              case "Provide": {
+                provided = Context.add(provided, s.service, s.value);
+                break;
+              }
+              case "Given": {
+                const store = storeOf(s.ref);
+                if (!store.seed) return yield* fail("the platform cannot seed events");
+                yield* store.seed(
+                  s.ref.id as string,
+                  yield* Effect.forEach(s.events, internals.kernel.encodeEvent),
+                );
+                cursors.set(`${s.ref.aggregate}/${s.ref.id}`, (yield* committed(s.ref)).length);
+                yield* settle(step);
+                break;
+              }
+              case "When": {
+                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
+                  never,
+                  Aggregate.ClientImpl
+                >;
+                const result = yield* client
+                  .send(s.ref, s.command, { commandId: s.commandId ?? `story:${step}` })
+                  .pipe(Effect.provide(provided), Effect.result);
+                if (result._tag === "Success") {
+                  last = { _tag: "Accepted", receipt: result.success };
+                } else {
+                  last = {
+                    _tag: "Rejected",
+                    rejection: result.failure as { readonly _tag: string },
+                  };
+                  unassertedRejection = { step, rejection: last.rejection };
+                }
+                yield* settle(step);
+                break;
+              }
+              case "Then": {
+                const stream = `${s.ref.aggregate}/${s.ref.id}`;
+                const events = yield* committed(s.ref);
+                const from = cursors.get(stream) ?? 0;
+                const leaves = leavesOf(s.events);
+                const window = events.slice(from, from + leaves.length);
+                // Decoded, so redacted fields stay redacted in the message.
+                const got = yield* Effect.forEach(events.slice(from), (e) =>
+                  internals.kernel.decodeEvent(e.event),
+                );
+                const compared = {
+                  label: stream,
+                  expected:
+                    s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80),
+                  actual: summarizeAll(got),
+                };
+                if (s.events.length === 0) {
+                  if (events.length > from) {
+                    return yield* fail(
+                      `expected no new events on ${stream}, got ${show(got)}`,
+                      compared,
+                    );
+                  }
+                  break;
+                }
+                if (leaves.length === 0) {
+                  return yield* fail(
+                    "expected events, got only empty anyOrder/inOrder groups; assert nothing new with then(ref)",
+                  );
+                }
+                const actual = window.map((e) => e.event);
+                if (!matchesOrder(leaves, actual)) {
+                  // The right events in an order the step rules out: say so when
+                  // different commands wrote them in one step, as concurrent
+                  // reactions (policies, saga steps) do.
+                  const unordered = leaves.map((leaf) => ({ event: leaf.event, after: [] }));
+                  const writers = new Set(window.map((e) => e.envelope.commandId));
+                  const writtenIn = new Set(
+                    window.map((_, i) => committedAt.get(`${stream}#${from + i}`) ?? step),
+                  );
+                  const reordered =
+                    matchesOrder(unordered, actual) && writers.size > 1 && writtenIn.size === 1;
+                  return yield* new StepFailed({
+                    step,
+                    message: `Then: on ${stream}\n  expected ${showExpected(s.events)}\n  actual   ${show(got)}${
+                      reordered
+                        ? `\n  The same events, in another order. ${writers.size} different commands wrote them in step ${[...writtenIn][0]}; if the model does not order them, wrap them in Story.anyOrder(...)`
+                        : ""
+                    }`,
+                    ...compared,
+                  });
+                }
+                cursors.set(stream, from + leaves.length);
+                break;
+              }
+              case "Rejected": {
+                if (last?._tag !== "Rejected")
+                  return yield* fail(
+                    `expected a rejection, the ${
+                      last?._tag === "Answered"
+                        ? "query was answered"
+                        : `command was ${last ? "accepted" : "never sent"}`
+                    }`,
+                    {
+                      expected: summarize(s.rejection),
+                      actual:
+                        last?._tag === "Answered"
+                          ? `answered ${summarize(last.result)}`
+                          : last
+                            ? `accepted ${summarize(last.receipt.reply)}`
+                            : "never sent",
+                    },
+                  );
+                const expected = encodeInstance(s.rejection);
+                const actual = encodeInstance(last.rejection);
+                if (!equal(expected, actual))
+                  return yield* fail(`expected ${show(s.rejection)}, got ${show(last.rejection)}`, {
+                    expected: summarize(s.rejection),
+                    actual: summarize(last.rejection),
+                  });
+                unassertedRejection = undefined;
+                break;
+              }
+              case "Replied": {
+                if (last?._tag === "Answered")
+                  return yield* fail(
+                    "the last step asked a query; replied asserts a command's reply",
+                  );
+                if (last?._tag !== "Accepted")
+                  return yield* fail("the last command was not accepted");
+                if (!equal(last.receipt.reply, s.reply)) {
+                  return yield* fail(`expected ${show(s.reply)}, got ${show(last.receipt.reply)}`, {
+                    expected: summarize(s.reply),
+                    actual: summarize(last.receipt.reply),
+                  });
+                }
+                break;
+              }
+              case "State": {
+                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
+                  never,
+                  Aggregate.ClientImpl
+                >;
+                const current = yield* client.get(s.ref);
+                if (typeof s.expected === "function") {
+                  const assert = s.expected as (state: unknown) => void;
+                  yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+                } else if (!partial(s.expected, current)) {
+                  const label = refName(s.ref);
+                  return yield* fail(
+                    `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                    { label, expected: summarize(s.expected), actual: summarize(current) },
                   );
                 }
                 break;
               }
-              if (!equal(actual.slice(0, expected.length), expected)) {
-                return yield* fail(
-                  `on ${stream}\n  expected ${show(s.events)}\n  actual   ${show(got)}`,
-                  compared,
-                );
-              }
-              cursors.set(stream, from + expected.length);
-              break;
-            }
-            case "Rejected": {
-              if (last?._tag !== "Rejected")
-                return yield* fail(
-                  `expected a rejection, the ${
-                    last?._tag === "Answered"
-                      ? "query was answered"
-                      : `command was ${last ? "accepted" : "never sent"}`
-                  }`,
-                  {
-                    expected: summarize(s.rejection),
-                    actual:
-                      last?._tag === "Answered"
-                        ? `answered ${summarize(last.result)}`
-                        : last
-                          ? `accepted ${summarize(last.receipt.reply)}`
-                          : "never sent",
-                  },
-                );
-              const expected = encodeInstance(s.rejection);
-              const actual = encodeInstance(last.rejection);
-              if (!equal(expected, actual))
-                return yield* fail(`expected ${show(s.rejection)}, got ${show(last.rejection)}`, {
-                  expected: summarize(s.rejection),
-                  actual: summarize(last.rejection),
-                });
-              unassertedRejection = undefined;
-              break;
-            }
-            case "Replied": {
-              if (last?._tag === "Answered")
-                return yield* fail(
-                  "the last step asked a query; replied asserts a command's reply",
-                );
-              if (last?._tag !== "Accepted")
-                return yield* fail("the last command was not accepted");
-              if (!equal(last.receipt.reply, s.reply)) {
-                return yield* fail(`expected ${show(s.reply)}, got ${show(last.receipt.reply)}`, {
-                  expected: summarize(s.reply),
-                  actual: summarize(last.receipt.reply),
-                });
-              }
-              break;
-            }
-            case "State": {
-              const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
-                never,
-                Aggregate.ClientImpl
-              >;
-              const current = yield* client.get(s.ref);
-              if (typeof s.expected === "function") {
-                const assert = s.expected as (state: unknown) => void;
-                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
-              } else if (!partial(s.expected, current)) {
-                const label = refName(s.ref);
-                return yield* fail(
-                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
-                  { label, expected: summarize(s.expected), actual: summarize(current) },
-                );
-              }
-              break;
-            }
-            case "View": {
-              const host = yield* s.view as unknown as Context.Key<
-                never,
-                View.Host<unknown, Key.Any, unknown>
-              >;
-              const current = yield* host.get(s.key).pipe(Effect.orDie);
-              if (s.expected === none) {
-                if (Option.isSome(current))
+              case "View": {
+                const host = yield* s.view as unknown as Context.Key<
+                  never,
+                  View.Host<unknown, Key.Any, unknown>
+                >;
+                const current = yield* host.get(s.key).pipe(Effect.orDie);
+                if (s.expected === none) {
+                  if (Option.isSome(current))
+                    return yield* fail(
+                      `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
+                      {
+                        label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
+                        expected: "none",
+                        actual: summarize(current.value),
+                      },
+                    );
+                  break;
+                }
+                const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
+                if (Option.isNone(current))
+                  return yield* fail(`${viewLabel} does not exist`, {
+                    label: viewLabel,
+                    expected: typeof s.expected === "function" ? "a state" : summarize(s.expected),
+                    actual: "none",
+                  });
+                if (typeof s.expected === "function") {
+                  const assert = s.expected as (state: unknown) => void;
+                  yield* Effect.try({
+                    try: () => assert(current.value),
+                    catch: (e) => fail(String(e)),
+                  });
+                } else if (!partial(s.expected, current.value)) {
                   return yield* fail(
-                    `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
+                    `${viewLabel}\n  expected ${show(s.expected)}\n  actual   ${show(current.value)}`,
                     {
-                      label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
-                      expected: "none",
+                      label: viewLabel,
+                      expected: summarize(s.expected),
                       actual: summarize(current.value),
                     },
                   );
-                break;
-              }
-              const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
-              if (Option.isNone(current))
-                return yield* fail(`${viewLabel} does not exist`, {
-                  label: viewLabel,
-                  expected: typeof s.expected === "function" ? "a state" : summarize(s.expected),
-                  actual: "none",
-                });
-              if (typeof s.expected === "function") {
-                const assert = s.expected as (state: unknown) => void;
-                yield* Effect.try({
-                  try: () => assert(current.value),
-                  catch: (e) => fail(String(e)),
-                });
-              } else if (!partial(s.expected, current.value)) {
-                return yield* fail(
-                  `${viewLabel}\n  expected ${show(s.expected)}\n  actual   ${show(current.value)}`,
-                  {
-                    label: viewLabel,
-                    expected: summarize(s.expected),
-                    actual: summarize(current.value),
-                  },
-                );
-              }
-              break;
-            }
-            case "Emitted": {
-              const host = yield* s.view as unknown as Context.Key<
-                never,
-                View.Host<unknown, Key.Any, unknown>
-              >;
-              const { entries } = yield* host.list(s.key);
-              if (typeof s.expected === "function") {
-                const assert = s.expected as (entries: ReadonlyArray<unknown>) => void;
-                yield* Effect.try({ try: () => assert(entries), catch: (e) => fail(String(e)) });
-              } else {
-                const expected = s.expected as ReadonlyArray<unknown>;
-                const events = entries.map((entry) => entry.event);
-                const ok =
-                  expected.length === events.length &&
-                  expected.every((e, i) => partial(e, events[i]));
-                if (!ok)
-                  return yield* fail(
-                    `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
-                  );
-              }
-              break;
-            }
-            case "Streamed": {
-              const store = internals.streams.get(s.stream.streamName)!;
-              const key = Aggregate.targetId(s.key);
-              const id = `${s.stream.streamName}/${key}`;
-              const entries = yield* store.list(key);
-              const from = cursors.get(id) ?? 0;
-              const actual = entries.slice(from).map((e) => e.event);
-              const expected = s.events.map(encodeInstance);
-              if (s.events.length === 0) {
-                if (actual.length > 0)
-                  return yield* fail(`expected nothing new on ${id}, got ${show(actual)}`);
-                break;
-              }
-              if (!equal(actual.slice(0, expected.length), expected)) {
-                return yield* fail(
-                  `on ${id}\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
-                );
-              }
-              cursors.set(id, from + expected.length);
-              break;
-            }
-            case "Query": {
-              const name = s.query.queryName;
-              const host = internals.queries.get(name);
-              if (!host) return yield* fail(`${name} is not in the model's \`queries\``);
-              const exit = yield* host
-                .run(s.input, s.page ?? {})
-                .pipe(Effect.provide(provided), Effect.exit);
-              if (Exit.isFailure(exit)) {
-                const error = Cause.findErrorOption(exit.cause);
-                if (Option.isNone(error)) {
-                  return yield* fail(`${name} died: ${String(Cause.squash(exit.cause))}`);
                 }
-                const rejection = error.value as { readonly _tag: string };
-                if (s.expected !== undefined) {
-                  return yield* fail(`${name} was rejected with ${show(rejection)}`, {
-                    expected: "a result",
-                    actual: `rejected ${summarize(rejection)}`,
+                break;
+              }
+              case "Emitted": {
+                const host = yield* s.view as unknown as Context.Key<
+                  never,
+                  View.Host<unknown, Key.Any, unknown>
+                >;
+                const { entries } = yield* host.list(s.key);
+                if (typeof s.expected === "function") {
+                  const assert = s.expected as (entries: ReadonlyArray<unknown>) => void;
+                  yield* Effect.try({ try: () => assert(entries), catch: (e) => fail(String(e)) });
+                } else {
+                  const expected = s.expected as ReadonlyArray<unknown>;
+                  const events = entries.map((entry) => entry.event);
+                  const ok =
+                    expected.length === events.length &&
+                    expected.every((e, i) => partial(e, events[i]));
+                  if (!ok)
+                    return yield* fail(
+                      `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
+                    );
+                }
+                break;
+              }
+              case "Streamed": {
+                const store = internals.streams.get(s.stream.streamName)!;
+                const key = Aggregate.targetId(s.key);
+                const id = `${s.stream.streamName}/${key}`;
+                const entries = yield* store.list(key);
+                const from = cursors.get(id) ?? 0;
+                const actual = entries.slice(from).map((e) => e.event);
+                const expected = s.events.map(encodeInstance);
+                if (s.events.length === 0) {
+                  if (actual.length > 0)
+                    return yield* fail(`expected nothing new on ${id}, got ${show(actual)}`);
+                  break;
+                }
+                if (!equal(actual.slice(0, expected.length), expected)) {
+                  return yield* fail(
+                    `on ${id}\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
+                  );
+                }
+                cursors.set(id, from + expected.length);
+                break;
+              }
+              case "Query": {
+                const name = s.query.queryName;
+                const host = internals.queries.get(name);
+                if (!host) return yield* fail(`${name} is not in the model's \`queries\``);
+                const exit = yield* host
+                  .run(s.input, s.page ?? {})
+                  .pipe(Effect.provide(provided), Effect.exit);
+                if (Exit.isFailure(exit)) {
+                  const error = Cause.findErrorOption(exit.cause);
+                  if (Option.isNone(error)) {
+                    return yield* fail(`${name} died: ${String(Cause.squash(exit.cause))}`);
+                  }
+                  const rejection = error.value as { readonly _tag: string };
+                  if (s.expected !== undefined) {
+                    return yield* fail(`${name} was rejected with ${show(rejection)}`, {
+                      expected: "a result",
+                      actual: `rejected ${summarize(rejection)}`,
+                    });
+                  }
+                  last = { _tag: "Rejected", rejection };
+                  unassertedRejection = { step, rejection, what: `the query ${name}` };
+                  break;
+                }
+                // Through the wire schema and back: what a client of the query receives.
+                const codec = Schema.toCodecJson(
+                  (s.query.rpc as Rpc.AnyWithProps).successSchema as Schema.Codec<unknown, unknown>,
+                ) as Schema.Codec<unknown, unknown>;
+                const wire = yield* Schema.encodeUnknownEffect(codec)(exit.value).pipe(
+                  Effect.flatMap(Schema.decodeUnknownEffect(codec)),
+                  Effect.mapError((error) =>
+                    fail(
+                      `${name}'s handler returned a result its schema refuses: ${error.message}`,
+                    ),
+                  ),
+                );
+                last = { _tag: "Answered", result: wire };
+                if (s.expected === undefined) {
+                  return yield* fail(`expected ${name} to be rejected, it answered`, {
+                    expected: "a rejection",
+                    actual: summarize(wire),
                   });
                 }
-                last = { _tag: "Rejected", rejection };
-                unassertedRejection = { step, rejection, what: `the query ${name}` };
-                break;
-              }
-              // Through the wire schema and back: what a client of the query receives.
-              const codec = Schema.toCodecJson(
-                (s.query.rpc as Rpc.AnyWithProps).successSchema as Schema.Codec<unknown, unknown>,
-              ) as Schema.Codec<unknown, unknown>;
-              const wire = yield* Schema.encodeUnknownEffect(codec)(exit.value).pipe(
-                Effect.flatMap(Schema.decodeUnknownEffect(codec)),
-                Effect.mapError((error) =>
-                  fail(`${name}'s handler returned a result its schema refuses: ${error.message}`),
-                ),
-              );
-              last = { _tag: "Answered", result: wire };
-              if (s.expected === undefined) {
-                return yield* fail(`expected ${name} to be rejected, it answered`, {
-                  expected: "a rejection",
-                  actual: summarize(wire),
-                });
-              }
-              if (typeof s.expected === "function") {
-                const assert = s.expected as (result: unknown) => void;
-                yield* Effect.try({ try: () => assert(wire), catch: (e) => fail(String(e)) });
-                break;
-              }
-              const label = `${name}(${brief(s.input)})`;
-              if (s.query.definition.paged) {
-                const rows = (wire as Query.Page<unknown>).entries;
-                const expected = s.expected as ReadonlyArray<unknown>;
-                const ok =
-                  expected.length === rows.length && expected.every((e, i) => partial(e, rows[i]));
-                if (!ok) {
+                if (typeof s.expected === "function") {
+                  const assert = s.expected as (result: unknown) => void;
+                  yield* Effect.try({ try: () => assert(wire), catch: (e) => fail(String(e)) });
+                  break;
+                }
+                const label = `${name}(${brief(s.input)})`;
+                if (s.query.definition.paged) {
+                  const rows = (wire as Query.Page<unknown>).entries;
+                  const expected = s.expected as ReadonlyArray<unknown>;
+                  const ok =
+                    expected.length === rows.length &&
+                    expected.every((e, i) => partial(e, rows[i]));
+                  if (!ok) {
+                    return yield* fail(
+                      `${label}\n  expected ${show(expected)}\n  actual   ${show(rows)}`,
+                      {
+                        label,
+                        expected: summarizeAll(expected, "no rows"),
+                        actual: summarizeAll(rows, "no rows"),
+                      },
+                    );
+                  }
+                } else if (!partial(s.expected, wire)) {
                   return yield* fail(
-                    `${label}\n  expected ${show(expected)}\n  actual   ${show(rows)}`,
+                    `${label}\n  expected ${show(s.expected)}\n  actual   ${show(wire)}`,
                     {
                       label,
-                      expected: summarizeAll(expected, "no rows"),
-                      actual: summarizeAll(rows, "no rows"),
+                      expected: summarize(s.expected),
+                      actual: summarize(wire),
                     },
                   );
                 }
-              } else if (!partial(s.expected, wire)) {
-                return yield* fail(
-                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(wire)}`,
-                  {
-                    label,
-                    expected: summarize(s.expected),
-                    actual: summarize(wire),
-                  },
-                );
-              }
-              break;
-            }
-            case "Call": {
-              const name = `${s.op.system}.${s.op.op}`;
-              if (s.tag !== undefined && observed.some((c) => c.tag === s.tag)) {
-                return yield* fail(`"${s.tag}" already names a call`);
-              }
-              if (!stubbed.has(s.op.system)) {
-                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
-                // Each real call is matched once, in the order calls were made.
-                const match = made.find((c) => !c.expected && partial(s.args, c.args));
-                if (!match) {
-                  return yield* fail(
-                    `no unmatched call to ${name} matches ${show(s.args)}; made: ${show(made.map((c) => c.args))}`,
-                  );
-                }
-                match.expected = true;
-                match.tag = s.tag;
                 break;
               }
-              const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
-              // Calls are kept in the order they were made: each is matched once, earliest first.
-              const match = pending.find((c) => !c.expected && partial(s.args, c.args));
-              if (!match) {
-                return yield* fail(
-                  `no unmatched pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
-                );
-              }
-              if (s.tag !== undefined) {
-                if (calls.some((c) => c.tag === s.tag)) {
-                  return yield* fail(`"${s.tag}" already names a pending call`);
+              case "Call": {
+                const name = `${s.op.system}.${s.op.op}`;
+                if (s.tag !== undefined && observed.some((c) => c.tag === s.tag)) {
+                  return yield* fail(`"${s.tag}" already names a call`);
                 }
-                match.tag = s.tag;
-              }
-              match.expected = true;
-              break;
-            }
-            case "Signal": {
-              const client = yield* s.saga as unknown as Context.Key<
-                never,
-                Saga.Client<unknown, unknown, unknown, unknown>
-              >;
-              yield* client.get(s.key).signal(s.deferred as never, s.value);
-              yield* settle(step);
-              break;
-            }
-            case "Saga": {
-              const client = yield* s.saga as unknown as Context.Key<
-                never,
-                Saga.Client<unknown, unknown, unknown, unknown>
-              >;
-              const run = client.get(s.key);
-              const actual = yield* run.status;
-              // `{ _tag: "Died" }` matches any defect.
-              const compared =
-                actual._tag === "Died" && !("defect" in s.expected)
-                  ? { _tag: "Died" as const }
-                  : actual;
-              if (!equal(statusJson(compared), statusJson(s.expected))) {
-                return yield* fail(
-                  `${s.saga.sagaName}\n  expected ${show(statusJson(s.expected))}\n  actual   ${show(statusJson(actual))}`,
-                );
-              }
-              if (actual._tag === "Died")
-                // The engine names a model's sagas `<model>/<saga>`.
-                assertedDeaths.add(`${domain.modelName}/${s.saga.sagaName}/${run.executionId}`);
-              break;
-            }
-            case "Answer": {
-              const name = `${s.op.system}.${s.op.op}`;
-              if (!stubbed.has(s.op.system)) {
-                return yield* fail(
-                  `${s.op.system} is not stubbed, so its calls run for real; assert how one ended with returned, failed or died`,
-                );
-              }
-              let call: PendingCall | undefined;
-              if (s.tag !== undefined) {
-                call = calls.find((c) => c.tag === s.tag);
-                if (!call) {
-                  const tags = calls.flatMap((c) => (c.tag === undefined ? [] : [`"${c.tag}"`]));
-                  return yield* fail(
-                    `no pending call is named "${s.tag}"; named: ${tags.length > 0 ? tags.join(", ") : "none"}`,
-                  );
+                if (!stubbed.has(s.op.system)) {
+                  const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                  // Each real call is matched once, in the order calls were made.
+                  const match = made.find((c) => !c.expected && partial(s.args, c.args));
+                  if (!match) {
+                    return yield* fail(
+                      `no unmatched call to ${name} matches ${show(s.args)}; made: ${show(made.map((c) => c.args))}`,
+                    );
+                  }
+                  match.expected = true;
+                  match.tag = s.tag;
+                  break;
                 }
-                if (call.system !== s.op.system || call.op !== s.op.op) {
-                  return yield* fail(
-                    `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
-                  );
-                }
-              } else {
                 const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
-                if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
-                if (pending.length > 1) {
+                // Calls are kept in the order they were made: each is matched once, earliest first.
+                const match = pending.find((c) => !c.expected && partial(s.args, c.args));
+                if (!match) {
                   return yield* fail(
-                    `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and answer it by tag`,
+                    `no unmatched pending call to ${name} matches ${show(s.args)}; pending: ${show(pending.map((c) => c.args))}`,
                   );
                 }
-                call = pending[0];
+                if (s.tag !== undefined) {
+                  if (calls.some((c) => c.tag === s.tag)) {
+                    return yield* fail(`"${s.tag}" already names a pending call`);
+                  }
+                  match.tag = s.tag;
+                }
+                match.expected = true;
+                break;
               }
-              if (!call!.expected) {
-                return yield* fail(
-                  `${name}(${show(call!.args)}) is answered before a call step checks its arguments`,
-                );
+              case "Signal": {
+                const client = yield* s.saga as unknown as Context.Key<
+                  never,
+                  Saga.Client<unknown, unknown, unknown, unknown>
+                >;
+                yield* client.get(s.key).signal(s.deferred as never, s.value);
+                yield* settle(step);
+                break;
               }
-              calls.splice(calls.indexOf(call!), 1);
-              yield* Deferred.done(call!.deferred, s.exit);
-              yield* settle(step);
-              break;
-            }
-            case "Returned": {
-              const name = `${s.op.system}.${s.op.op}`;
-              if (stubbed.has(s.op.system)) {
-                return yield* fail(
-                  `${s.op.system} is stubbed; answer its calls with succeed, fail or die`,
-                );
-              }
-              let call: ObservedCall | undefined;
-              if (s.tag !== undefined) {
-                call = observed.find((c) => c.tag === s.tag);
-                if (!call) return yield* fail(`no call is named "${s.tag}"`);
-                if (call.system !== s.op.system || call.op !== s.op.op) {
+              case "Saga": {
+                const client = yield* s.saga as unknown as Context.Key<
+                  never,
+                  Saga.Client<unknown, unknown, unknown, unknown>
+                >;
+                const run = client.get(s.key);
+                const actual = yield* run.status;
+                // `{ _tag: "Died" }` matches any defect.
+                const compared =
+                  actual._tag === "Died" && !("defect" in s.expected)
+                    ? { _tag: "Died" as const }
+                    : actual;
+                if (!equal(statusJson(compared), statusJson(s.expected))) {
                   return yield* fail(
-                    `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                    `${s.saga.sagaName}\n  expected ${show(statusJson(s.expected))}\n  actual   ${show(statusJson(actual))}`,
                   );
                 }
-              } else {
-                const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
-                if (made.length === 0) return yield* fail(`no unasserted call to ${name}`);
-                if (made.length > 1) {
+                if (actual._tag === "Died")
+                  // The engine names a model's sagas `<model>/<saga>`.
+                  assertedDeaths.add(`${domain.modelName}/${s.saga.sagaName}/${run.executionId}`);
+                break;
+              }
+              case "Answer": {
+                const name = `${s.op.system}.${s.op.op}`;
+                if (!stubbed.has(s.op.system)) {
                   return yield* fail(
-                    `${made.length} unasserted calls to ${name}; name each with call("<tag>", ...) and assert it by tag`,
+                    `${s.op.system} is not stubbed, so its calls run for real; assert how one ended with returned, failed or died`,
                   );
                 }
-                call = made[0]!;
+                let call: PendingCall | undefined;
+                if (s.tag !== undefined) {
+                  call = calls.find((c) => c.tag === s.tag);
+                  if (!call) {
+                    const tags = calls.flatMap((c) => (c.tag === undefined ? [] : [`"${c.tag}"`]));
+                    return yield* fail(
+                      `no pending call is named "${s.tag}"; named: ${tags.length > 0 ? tags.join(", ") : "none"}`,
+                    );
+                  }
+                  if (call.system !== s.op.system || call.op !== s.op.op) {
+                    return yield* fail(
+                      `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                    );
+                  }
+                } else {
+                  const pending = calls.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                  if (pending.length === 0) return yield* fail(`no pending call to ${name}`);
+                  if (pending.length > 1) {
+                    return yield* fail(
+                      `${pending.length} pending calls to ${name}; name each with call("<tag>", ...) and answer it by tag`,
+                    );
+                  }
+                  call = pending[0];
+                }
+                if (!call!.expected) {
+                  return yield* fail(
+                    `${name}(${show(call!.args)}) is answered before a call step checks its arguments`,
+                  );
+                }
+                calls.splice(calls.indexOf(call!), 1);
+                yield* Deferred.done(call!.deferred, s.exit);
+                yield* settle(step);
+                break;
               }
-              if (!call.expected) {
-                return yield* fail(
-                  `${name}(${show(call.args)}) is asserted before a call step checks its arguments`,
-                );
+              case "Returned": {
+                const name = `${s.op.system}.${s.op.op}`;
+                if (stubbed.has(s.op.system)) {
+                  return yield* fail(
+                    `${s.op.system} is stubbed; answer its calls with succeed, fail or die`,
+                  );
+                }
+                let call: ObservedCall | undefined;
+                if (s.tag !== undefined) {
+                  call = observed.find((c) => c.tag === s.tag);
+                  if (!call) return yield* fail(`no call is named "${s.tag}"`);
+                  if (call.system !== s.op.system || call.op !== s.op.op) {
+                    return yield* fail(
+                      `"${s.tag}" names a call to ${call.system}.${call.op}, not ${name}`,
+                    );
+                  }
+                } else {
+                  const made = observed.filter((c) => c.system === s.op.system && c.op === s.op.op);
+                  if (made.length === 0) return yield* fail(`no unasserted call to ${name}`);
+                  if (made.length > 1) {
+                    return yield* fail(
+                      `${made.length} unasserted calls to ${name}; name each with call("<tag>", ...) and assert it by tag`,
+                    );
+                  }
+                  call = made[0]!;
+                }
+                if (!call.expected) {
+                  return yield* fail(
+                    `${name}(${show(call.args)}) is asserted before a call step checks its arguments`,
+                  );
+                }
+                const actual = exitJson(call.exit!);
+                const expected =
+                  s.expected._tag === "Success"
+                    ? { _tag: "Success", value: normalize(s.expected.value) }
+                    : s.expected._tag === "Failure"
+                      ? { _tag: "Failure", error: errorJson(s.expected.error) }
+                      : { _tag: "Died" };
+                const compared = actual._tag === "Died" ? { _tag: "Died" } : actual;
+                if (!equal(expected, compared)) {
+                  return yield* fail(
+                    `${name}(${show(call.args)})\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
+                  );
+                }
+                observed.splice(observed.indexOf(call), 1);
+                break;
               }
-              const actual = exitJson(call.exit!);
-              const expected =
-                s.expected._tag === "Success"
-                  ? { _tag: "Success", value: normalize(s.expected.value) }
-                  : s.expected._tag === "Failure"
-                    ? { _tag: "Failure", error: errorJson(s.expected.error) }
-                    : { _tag: "Died" };
-              const compared = actual._tag === "Died" ? { _tag: "Died" } : actual;
-              if (!equal(expected, compared)) {
-                return yield* fail(
-                  `${name}(${show(call.args)})\n  expected ${show(expected)}\n  actual   ${show(actual)}`,
-                );
-              }
-              observed.splice(observed.indexOf(call), 1);
-              break;
             }
           }
-        }
-        if (unassertedRejection) return yield* rejectionNotAsserted(unassertedRejection);
-        const death = platform.control.deaths.find(
-          ({ saga, executionId }) => !assertedDeaths.has(`${saga}/${executionId}`),
-        );
-        if (death) {
-          return yield* new StepFailed({
-            step: steps.length,
-            atEnd: true,
-            message: `saga ${death.saga.slice(`${domain.modelName}/`.length)} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
-          });
-        }
-        if (observed.length > 0) {
-          return yield* new StepFailed({
-            step: steps.length,
-            atEnd: true,
-            message: `real external system calls no step asserts (use returned, failed or died): ${show(observed.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
-          });
-        }
-        if (calls.length > 0) {
-          return yield* new StepFailed({
-            step: steps.length,
-            atEnd: true,
-            message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
-          });
-        }
-        attribute(steps.length);
-        // Every committed event past its stream's cursor is one no `then` asserts.
-        const unasserted: Array<string> = [];
-        const streams = new Map<string, Aggregate.Ref>();
-        for (const { aggregate, id } of platform.control.commits)
-          streams.set(`${aggregate}/${id}`, { aggregate, id } as Aggregate.Ref);
-        for (const [stream, ref] of streams) {
-          const events = yield* committed(ref);
-          const from = cursors.get(stream) ?? 0;
-          if (events.length <= from) continue;
-          touched.set(stream, ref);
-          // Decoded, so redacted fields stay redacted in the message.
-          const rest = yield* Effect.forEach(events.slice(from), (e) =>
-            internals.kernel.decodeEvent(e.event),
+          if (unassertedRejection) return yield* rejectionNotAsserted(unassertedRejection);
+          const death = platform.control.deaths.find(
+            ({ saga, executionId }) => !assertedDeaths.has(`${saga}/${executionId}`),
           );
-          const first = committedAt.get(`${stream}#${from}`);
-          unasserted.push(
-            `${stream}: ${summarizeAll(rest)}${first === undefined ? "" : ` (from step ${first})`}`,
-          );
-        }
-        if (unasserted.length > 0) {
-          return yield* new StepFailed({
-            step: steps.length,
-            atEnd: true,
-            message: `committed events no step asserts (assert them with then): ${unasserted.join("; ")}`,
-            detail: unasserted.join("\n"),
-          });
-        }
-      });
-
-      // Turn a failed step into a failure that shows the whole story.
-      const report = (failure: StepFailed) =>
-        Effect.gen(function* () {
-          const internals = yield* Model.Internals;
-          const events: Record<string, ReadonlyArray<string>> = {};
-          for (const [name, ref] of touched) {
-            const committed =
-              internals.aggregates.get(ref.aggregate)!.events?.(ref.id as string) ??
-              Effect.succeed([]);
-            events[name] = (yield* committed).map(
-              (e) => (e.event as { readonly _tag: string })._tag,
+          if (death) {
+            return yield* new StepFailed({
+              step: steps.length,
+              atEnd: true,
+              message: `saga ${death.saga.slice(`${domain.modelName}/`.length)} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
+            });
+          }
+          if (observed.length > 0) {
+            return yield* new StepFailed({
+              step: steps.length,
+              atEnd: true,
+              message: `real external system calls no step asserts (use returned, failed or died): ${show(observed.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+            });
+          }
+          if (calls.length > 0) {
+            return yield* new StepFailed({
+              step: steps.length,
+              atEnd: true,
+              message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
+            });
+          }
+          attribute(steps.length);
+          // Every committed event past its stream's cursor is one no `then` asserts.
+          const unasserted: Array<string> = [];
+          const streams = new Map<string, Aggregate.Ref>();
+          for (const { aggregate, id } of platform.control.commits)
+            streams.set(`${aggregate}/${id}`, { aggregate, id } as Aggregate.Ref);
+          for (const [stream, ref] of streams) {
+            const events = yield* committed(ref);
+            const from = cursors.get(stream) ?? 0;
+            if (events.length <= from) continue;
+            touched.set(stream, ref);
+            // Decoded, so redacted fields stay redacted in the message.
+            const rest = yield* Effect.forEach(events.slice(from), (e) =>
+              internals.kernel.decodeEvent(e.event),
+            );
+            const first = committedAt.get(`${stream}#${from}`);
+            unasserted.push(
+              `${stream}: ${summarizeAll(rest)}${first === undefined ? "" : ` (from step ${first})`}`,
             );
           }
-          const reports = steps.map((s, index): StepReport => ({
-            step: index + 1,
-            kind: s._tag,
-            status:
-              index + 1 < failure.step || (failure.atEnd && index + 1 === failure.step)
-                ? "passed"
-                : index + 1 === failure.step
-                  ? "failed"
-                  : "not-run",
-            summary: describeStep(s),
-          }));
-          return yield* new StoryFailure({
-            step: failure.step,
-            reason: failure.message,
-            message: `${failure.message}\n\n${renderReport(failure, reports, events)}`,
-            steps: reports,
-            events,
-          });
+          if (unasserted.length > 0) {
+            return yield* new StepFailed({
+              step: steps.length,
+              atEnd: true,
+              message: `committed events no step asserts (assert them with then): ${unasserted.join("; ")}`,
+              detail: unasserted.join("\n"),
+            });
+          }
         });
 
-      // `hosted` satisfies the Domain, the platform and the stubbed external systems; what
-      // remains is whatever the policy Layers need from outside (`LR`'s rest).
-      return yield* run.pipe(
-        Effect.catchTag("StepFailed", report),
-        Effect.provide(
-          Layer.mergeAll(hosted, Layer.succeed(ExternalSystem.CallRecorder, recorder)),
-        ),
-      );
-    }) as Effect.Effect<
+        // Turn a failed step into a failure that shows the whole story.
+        const report = (failure: StepFailed) =>
+          Effect.gen(function* () {
+            const internals = yield* Model.Internals;
+            const events: Record<string, ReadonlyArray<string>> = {};
+            for (const [name, ref] of touched) {
+              const committed =
+                internals.aggregates.get(ref.aggregate)!.events?.(ref.id as string) ??
+                Effect.succeed([]);
+              events[name] = (yield* committed).map(
+                (e) => (e.event as { readonly _tag: string })._tag,
+              );
+            }
+            const reports = steps.map((s, index): StepReport => ({
+              step: index + 1,
+              kind: s._tag,
+              status:
+                index + 1 < failure.step || (failure.atEnd && index + 1 === failure.step)
+                  ? "passed"
+                  : index + 1 === failure.step
+                    ? "failed"
+                    : "not-run",
+              summary: describeStep(s),
+            }));
+            return yield* new StoryFailure({
+              step: failure.step,
+              order: [],
+              reason: failure.message,
+              message: `${failure.message}\n\n${renderReport(failure, reports, events)}`,
+              steps: reports,
+              events,
+            });
+          });
+
+        // `hosted` satisfies the Domain, the platform and the stubbed external systems; what
+        // remains is whatever the policy Layers need from outside (`LR`'s rest).
+        return yield* run.pipe(
+          Effect.catchTag("StepFailed", report),
+          Effect.provide(
+            Layer.mergeAll(hosted, Layer.succeed(ExternalSystem.CallRecorder, recorder)),
+          ),
+        );
+      }),
+    ) as Effect.Effect<
       void,
       StoryFailure | LE,
       Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
@@ -1538,7 +1814,7 @@ const make =
  * run through their adapters while the story records them, and a clock you
  * control stamps commands and fires scheduled ones. A story fails on any
  * committed event, rejection, external system call or saga defect it doesn't
- * account for.
+ * account for, in any order its concurrent policies and saga steps can run.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -1561,6 +1837,31 @@ const make =
  *     Story.rejected(new InsufficientFunds({ balance: 70, requested: 100 })),
  *   ),
  * );
+ * ```
+ *
+ * ### Events with no defined order
+ * A story runs each policy and saga step until it finishes or waits. When
+ * several that write the same stream are ready at once, it replays the story
+ * once per order of them, and every run must pass.
+ *
+ * **Example:** A policy and a saga step write one aggregate concurrently
+ * ```typescript
+ * Story.when(subject, new Request()),
+ * Story.then(subject, new Requested(), new Settled()),
+ * Story.then(
+ *   registry,
+ *   Story.anyOrder(new Recorded(), new Admitted({ payloadHash })),
+ * ),
+ * ```
+ *
+ * **Example:** Some events in order, interleaved with another
+ * ```typescript
+ * Story.then(
+ *   account,
+ *   new AccountOpened(),
+ *   Story.anyOrder(Story.inOrder(new Debited(), new Refunded()), new Flagged()),
+ *   new AccountClosed(),
+ * ),
  * ```
  *
  * ### External systems and the clock
@@ -1627,6 +1928,8 @@ export const Story = {
   when,
   // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
+  anyOrder,
+  inOrder,
   rejected,
   replied,
   state,
