@@ -294,3 +294,61 @@ describe("checkHttpStateStoreAuth", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(stubHttpClient(stub)));
   });
 });
+
+describe("effectful state request authentication", { tags: ["unit", "local"] }, () => {
+  it.effect("runs the effectful transform after bearer authentication on every request", () => {
+    const headers: string[] = [];
+    let signatures = 0;
+    const http = stubHttpClient(async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.url).toBe("https://state-store.test/version");
+      headers.push(request.headers.get("authorization") ?? "");
+      return json({ version: 7 });
+    });
+    return Effect.gen(function* () {
+      const state = yield* makeHttpStateStore({
+        url: "https://state-store.test",
+        authToken: "fixture",
+        id: "test-http",
+        transformClientEffect: (request) =>
+          Effect.sync(() => {
+            expect(request.url).toBe("https://state-store.test/version");
+            expect(request.method).toBe("GET");
+            expect(request.headers.authorization).toBe("Bearer fixture");
+            signatures++;
+            return HttpClientRequest.setHeader(
+              request,
+              "authorization",
+              `DPoP proof-${signatures}`,
+            );
+          }),
+      });
+      yield* state.getVersion();
+      yield* state.getVersion();
+      expect(headers).toEqual(["DPoP proof-1", "DPoP proof-2"]);
+    }).pipe(Effect.provide(http));
+  });
+});
+
+it.effect(
+  "effectful authentication failure sends no bearer request",
+  () => {
+    let sent = 0;
+    const http = stubHttpClient(async () => {
+      sent++;
+      return json({ version: 7 });
+    });
+    return Effect.gen(function* () {
+      const store = yield* makeHttpStateStore({
+        url: "https://state-store.test",
+        authToken: "fixture",
+        id: "test-http",
+        transformClientEffect: () => Effect.die(new Error("signer unavailable")),
+      });
+      const exit = yield* Effect.exit(store.getVersion());
+      expect(exit._tag).toBe("Failure");
+      expect(sent).toBe(0);
+    }).pipe(Effect.provide(http));
+  },
+  { tags: ["unit"] },
+);
