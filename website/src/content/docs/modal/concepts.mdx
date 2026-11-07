@@ -64,4 +64,4 @@ const home = yield* volumes.getOrCreate(`home-${user}`);
 
 `Modal.ReadWriteVolume(Models)` acts on one volume. `Modal.CreateVolume(Agents)` acts on any volume in the environment, by name. Both give you the same file methods.
 
-Each host gets its own scoped `Modal.ServiceUser`. A binding grants it the role it needs (`viewer` to read, `contributor` to write) on the bound resource's environment, and writes its token into the Worker. Use environments to keep workloads apart. Service users need Modal's Team plan; on Starter, [`Modal.DeployerHostIdentity`](/modal/security/access-control#bindings-on-the-starter-plan) binds your own token instead.
+A Modal Function or Server calls Modal as its own container, so no token is stored in it. Every other host gets its own scoped `Modal.ServiceUser`. A binding grants it the role it needs (`viewer` to read, `contributor` to write) on the bound resource's environment, and writes its token into the Worker. Use environments to keep workloads apart. Service users need Modal's Team plan; on Starter, [`Modal.DeployerHostIdentity`](/modal/security/access-control#bindings-on-the-starter-plan) binds your own token instead.

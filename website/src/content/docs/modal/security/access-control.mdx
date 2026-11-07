@@ -69,6 +69,16 @@ const api = yield* Modal.FetchServer(Api);
 
 Each binding mints its own key for that caller and target. The caller keeps the key as a secret, the target keeps only its SHA-256, and every RPC call carries the key. A Function or Server answers RPC calls only from callers whose binding issued a key, so anything else in the workspace, including code with Modal access, gets `401`.
 
+The key applies inside Modal too. A Function calling another Function logs in to Modal as its container, but that login names no caller the target can check, so the key is what limits a target to the callers you bound.
+
+## Keep a program away from Modal's API
+
+```typescript
+{ main: import.meta.url, app: Sandboxed, restrictModalAccess: true }
+```
+
+A program with `restrictModalAccess` can't call Modal as its container. Its bindings get a scoped service user instead, so it can reach only what it binds.
+
 ## Share one port
 
 ```typescript

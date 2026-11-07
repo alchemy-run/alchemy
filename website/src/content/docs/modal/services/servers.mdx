@@ -75,6 +75,35 @@ const greeting = yield* api.greet("modal");
 
 The client is typed from `Api`'s methods and goes through Modal's proxy auth like `fetch`. The binding also gives the Worker its own key, which the Server checks on every method call: callers without a binding get `401`. A method that returns a `Stream` streams to the caller as values are produced. See [schemaless RPC](/apis/schemaless/) for what methods can take and return.
 
+## Call it from a Function
+
+```typescript
+// src/Relay.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import Api from "./Api.ts";
+import { Backend } from "./Backend.ts";
+
+export default class Relay extends Modal.Function<Relay>()(
+  "Relay",
+  { main: import.meta.url, app: Backend },
+  Effect.gen(function* () {
+    const api = yield* Modal.FetchServer(Api);
+    return {
+      relay: Effect.fn(function* (name: string) {
+        return yield* api.greet(name);
+      }),
+    };
+  }).pipe(Effect.provide(Modal.FetchServerHttp)),
+) {}
+```
+
+The binding is the same one a Worker uses. A Server sits behind proxy auth even for programs inside Modal, so `Relay` still gets its own `Modal.WebhookToken`, and its method calls carry the key its binding issued.
+
+## Callers without a binding
+
+Any caller with a proxy auth token Modal accepts for the Server can reach the Server's `fetch` routes. Only callers whose binding issued a key can call its methods: everyone else gets `401`.
+
 ## Serve the public
 
 ```typescript
