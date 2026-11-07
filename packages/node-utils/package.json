@@ -29,6 +29,7 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
+    "./glob": "./src/glob.ts",
     "./ignore": "./src/ignore.ts",
     "./register-oxc": "./src/loader/register.ts",
     "./watch-import": "./src/watch/import-watcher.ts",
@@ -36,6 +37,11 @@
   },
   "publishConfig": {
     "exports": {
+      "./glob": {
+        "types": "./lib/glob.d.ts",
+        "bun": "./src/glob.ts",
+        "default": "./lib/glob.js"
+      },
       "./ignore": {
         "types": "./lib/ignore.d.ts",
         "bun": "./src/ignore.ts",

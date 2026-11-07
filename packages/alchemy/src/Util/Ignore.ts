@@ -17,6 +17,7 @@
  * reported as links and never followed.
  */
 
+import { compileGlob, type Glob } from "@alchemy.run/node-utils/glob";
 import createGitIgnore from "@alchemy.run/node-utils/ignore";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -111,12 +112,10 @@ const parseGitIgnore = (lines: ReadonlyArray<string>, prefix: string): IgnoreRul
 
 interface DockerIgnoreRule {
   ignored: boolean;
-  expression: RegExp;
+  expression: Glob;
   /** The cleaned pattern is also needed when deciding whether a directory can be pruned. */
   pattern: string;
 }
-
-const escapeRegExp = (value: string) => value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 
 const cleanDockerIgnorePath = (value: string) => {
   const parts: string[] = [];
@@ -161,48 +160,17 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
     return undefined;
   }
 
-  let body = "";
-  for (let index = 0; index < pattern.length; index++) {
-    const char = pattern[index];
-    if (char === "\\" && pattern[index + 1] !== undefined) {
-      body += escapeRegExp(pattern[++index]);
-      continue;
-    }
-    if (char === "*") {
-      if (pattern[index + 1] === "*") {
-        while (pattern[index + 1] === "*") {
-          index++;
-        }
-        if (pattern[index + 1] === "/") {
-          index++;
-          body += "(?:.*/)?";
-        } else {
-          body += ".*";
-        }
-      } else {
-        body += "[^/]*";
-      }
-      continue;
-    }
-    if (char === "?") {
-      body += "[^/]";
-      continue;
-    }
-    if (char === "[") {
-      const end = pattern.indexOf("]", index + 1);
-      if (end !== -1) {
-        const content = pattern.slice(index + 1, end);
-        const negated = content.startsWith("!") || content.startsWith("^");
-        const members = negated ? content.slice(1) : content;
-        body += `[${negated ? "^" : ""}${members.replaceAll("\\", "\\\\")}]`;
-        index = end;
-        continue;
-      }
-    }
-    body += escapeRegExp(char);
+  // moby/patternmatcher: `**` crosses directories anywhere, and an
+  // unterminated `[` is a literal.
+  const expression = compileGlob(pattern, {
+    innerGlobstar: "globstar",
+    unclosedBracket: "literal",
+  });
+  if (expression === undefined) {
+    return undefined;
   }
 
-  return { ignored, expression: new RegExp(`^${body}$`), pattern };
+  return { ignored, expression, pattern };
 };
 
 /** A path matches a rule when it, or any of its parent directories, does. */
