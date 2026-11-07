@@ -64,16 +64,19 @@ layer(BunServices.layer)("Docker image source hash", (test) => {
     { tags: ["unit", "provider:docker", "local"] },
   );
 
+  // A project-root context (`context: "."`) also holds `.alchemy`, which every
+  // deploy writes to. Hashing it would give the image a new tag on every plan.
   test.effect(
-    "files excluded by .dockerignore do not change the tag",
+    "deploy output in a project-root context does not change the tag",
     () =>
       Effect.gen(function* () {
-        const { fs, path, context } = yield* makeProject();
-        yield* fs.writeFileString(path.join(context, ".dockerignore"), "notes.md\n");
-        yield* fs.writeFileString(path.join(context, "notes.md"), "draft\n");
-        const before = yield* computeStaticSourceHash({ context }, "linux/amd64");
-        yield* fs.writeFileString(path.join(context, "notes.md"), "edited\n");
-        expect(yield* computeStaticSourceHash({ context }, "linux/amd64")).toBe(before);
+        const { fs, path, root } = yield* makeProject();
+        yield* fs.writeFileString(path.join(root, ".gitignore"), ".alchemy\n");
+        yield* fs.writeFileString(path.join(root, "Dockerfile"), "FROM scratch\nCOPY app /app\n");
+        yield* fs.makeDirectory(path.join(root, ".alchemy", "log"), { recursive: true });
+        const before = yield* computeStaticSourceHash({ context: root }, "linux/amd64");
+        yield* fs.writeFileString(path.join(root, ".alchemy", "log", "deploy.log"), "deployed\n");
+        expect(yield* computeStaticSourceHash({ context: root }, "linux/amd64")).toBe(before);
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );

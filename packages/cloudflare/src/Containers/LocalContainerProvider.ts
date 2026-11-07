@@ -1,6 +1,6 @@
-import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
+import { hashDirectory } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
@@ -126,19 +126,20 @@ export const LocalContainerProvider = () =>
           const dockerfile = news.dockerfile
             ? yield* fs.realPath(news.dockerfile)
             : path.join(context, "Dockerfile");
-          // Hash what Docker receives (`.dockerignore` applied, no ancestor
-          // lockfile outside the context), like the live provider.
-          const contextHash = yield* hashDockerBuildInputs(
-            { context, dockerfile, platform: "local", buildArgs: news.build?.args },
-            "effective",
-          );
+          // Docker never receives a lockfile outside the context, so leave it out.
+          const contextHash = yield* hashDirectory({ cwd: context, memo: { lockfile: false } });
+          const dockerfileContent = yield* fs.readFileString(dockerfile);
           return {
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
               buildArgs: news.build?.args,
             } as DevContainerImage,
-            hash: contextHash,
+            hash: yield* sha256Object({
+              contextHash,
+              dockerfile: dockerfileContent,
+              buildArgs: news.build?.args,
+            }),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
 
