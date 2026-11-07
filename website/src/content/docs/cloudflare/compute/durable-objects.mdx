@@ -569,8 +569,9 @@ or roll back together. This works for SQLite and key/value writes on the
 R2 writes, and other objects' storage are outside this transaction.
 
 The existing `storage.transaction((txn) => effect)` overload remains
-supported. Nested transactions on the same fiber join the active
-transaction rather than create a savepoint. Keep transactional operations
+supported. A transaction started inside another one is nested: if it fails
+or rolls back, only its own writes and callbacks are undone, and the outer
+transaction carries on. Keep transactional operations
 on that fiber: sibling-fiber storage access is rejected, as are further
 writes after `txn.rollback()`. Storage rollback does not undo assignments
 to JavaScript variables.
