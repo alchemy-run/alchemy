@@ -71,6 +71,17 @@ const readGithubRepos = Query.fn(() =>
   ),
 );
 
+const readDeployments = Query.fn((environmentId: string, serviceId: string) =>
+  RailwayApi.deployments({ input: { environmentId, serviceId } }).pipe(
+    Query.map((deployment) => ({
+      id: deployment.id,
+      createdAt: deployment.createdAt,
+      status: deployment.status,
+      meta: deployment.meta,
+    })),
+  ),
+);
+
 const readEnvironmentConfig = Query.fn((id: string, projectId: string) => ({
   config: RailwayApi.environment({ id, projectId }).config,
 }));
@@ -712,6 +723,76 @@ test.provider.skipIf(!githubEntitled)(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+// Fixture repo: its default branch has no Dockerfile, so a deployment
+// Railway starts from it (with Railpack) fails. Only `fixtureBranch` has
+// `fixtureDockerfile`, an http-echo image answering `fixtureBody`.
+const fixtureRepo = "alchemy-run/railway-test-fixture";
+const fixtureBranch = "dockerfile";
+const fixtureDockerfile = "docker/echo.Dockerfile";
+const fixtureBody = "alchemy railway dockerfile branch";
+
+test.provider.skipIf(!githubEntitled)(
+  "a new repo service first deploys its branch and Dockerfile",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const api = yield* Railway.Service("Branch", {
+            project,
+            environment,
+            repo: fixtureRepo,
+            branch: fixtureBranch,
+            dockerfilePath: fixtureDockerfile,
+            port: 5678,
+          });
+          return { api };
+        }),
+      );
+
+      const instance = yield* readServiceInstance(created.api.environmentId, created.api.serviceId);
+      expect(instance.source?.repo).toEqual(fixtureRepo);
+      expect(instance.dockerfilePath).toEqual(fixtureDockerfile);
+
+      // Before the fix, serviceCreate attached the repo first and Railway
+      // deployed the default branch with Railpack before the branch and
+      // Dockerfile were set. Every deployment must come from the branch.
+      const deployments = yield* readDeployments(created.api.environmentId, created.api.serviceId);
+      expect(deployments.length).toBeGreaterThan(0);
+      const first = deployments.toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))[0]!;
+      expect(first.meta).toMatchObject({ branch: fixtureBranch });
+      for (const deployment of deployments) {
+        expect(deployment.meta).toMatchObject({ branch: fixtureBranch });
+      }
+
+      const client = yield* HttpClient.HttpClient;
+      const body = yield* client.get(created.api.url!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200 ? response.text : Effect.fail(response.status),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
+      );
+      expect(body.trim()).toEqual(fixtureBody);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );
 
