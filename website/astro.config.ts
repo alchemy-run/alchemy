@@ -1408,11 +1408,18 @@ export default defineConfig({
           label: "E2B",
           items: [
             { label: "Overview", link: "/e2b" },
+            { label: "What is E2B?", link: "/e2b/what-is-e2b" },
             { label: "Setup", link: "/e2b/setup" },
-            { label: "Concepts", link: "/e2b/concepts" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "e2b/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Team & API keys", link: "/e2b/api-keys" },
+                { label: "Network & secrets", link: "/e2b/network-and-secrets" },
+              ],
             },
             {
               label: "Sandboxes",
@@ -1424,15 +1431,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Data",
+              label: "Storage",
               items: [{ label: "Volumes", link: "/e2b/volumes" }],
-            },
-            {
-              label: "Security",
-              items: [
-                { label: "Network & secrets", link: "/e2b/network-and-secrets" },
-                { label: "API keys", link: "/e2b/api-keys" },
-              ],
             },
             {
               label: "Events",

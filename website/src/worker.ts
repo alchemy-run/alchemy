@@ -205,6 +205,7 @@ const REDIRECTS: Record<string, string> = {
   "/archil/network": "/archil/security/network",
   "/archil/frontend": "/archil/frontend/websites",
   "/archil/compute/services": "/archil/compute/programs",
+  "/e2b/concepts": "/e2b/what-is-e2b",
   "/providers/archil/reference/service": "/providers/archil/reference/sandbox",
   "/hetzner/frontend": "/hetzner/frontend/websites",
   "/hetzner/websites": "/hetzner/frontend/websites",

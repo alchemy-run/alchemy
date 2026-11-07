@@ -70,10 +70,10 @@ export interface Secret extends Resource<
  * metadata to recognise the secrets it owns.
  *
  * ### Creating a Secret
- * **Example:** A GitHub token from Alchemy config
+ * **Example:** A GitHub token from the stage's config
  * ```typescript
  * export const GitHubToken = E2B.Secret("GitHubToken", {
- *   value: Alchemy.Secret("GITHUB_TOKEN"),
+ *   value: Config.Redacted("GITHUB_TOKEN"),
  * });
  * ```
  *

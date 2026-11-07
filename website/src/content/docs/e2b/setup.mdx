@@ -1,13 +1,14 @@
 ---
 title: Setup
-description: Log Alchemy in to E2B.
+description: Install @alchemy.run/e2b, sign in to E2B with a profile, and deploy from CI.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-Sign up at [e2b.dev](https://e2b.dev). Alchemy logs in to E2B in your browser, finds your team, and mints a separate API key for each host that uses a binding.
+You need:
 
-E2B keys are not scoped: a key reaches every sandbox, template, volume, and secret in the team. Use a separate team for tests.
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- An E2B account, from [e2b.dev](https://e2b.dev)
 
 ## Add the provider
 
@@ -17,34 +18,41 @@ Install `@alchemy.run/e2b`:
 
 Then add `E2B.providers()` next to your cloud's providers:
 
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
 ```
 
-## Log in
+## Sign in
 
-```sh
-alchemy profile edit --add E2B
-```
+<PackageManagers run="alchemy profile edit --add E2B" />
 
-Pick **Browser login** and sign in to E2B. The profile keeps the login, and its token refreshes itself. To paste an access token or API key instead, pick **Access token or API key**.
+Pick **Browser login** and sign in to E2B. Alchemy deploys to your account's default team, and the login refreshes itself. To paste an access token or an API key instead, pick **Access token or API key**.
 
-See [Profiles](/environments/profiles) to learn how profiles work.
+E2B can't narrow an API key, so each one reaches everything in its team. Use a separate team for tests. See [Team & API keys](/e2b/api-keys).
 
-## Use environment variables in CI
+## In CI
 
-Set `E2B_ACCESS_TOKEN` and Alchemy uses it instead of your profile:
+Set `E2B_ACCESS_TOKEN`, and Alchemy uses it instead of your profile:
 
-```sh
-E2B_ACCESS_TOKEN=sk_e2b_... alchemy deploy
-```
+<PackageManagers script={`E2B_ACCESS_TOKEN=sk_e2b_... {run} alchemy deploy`} />
 
-An API key (`E2B_API_KEY`) is enough to deploy resources, but bindings and `E2B.ApiKey` need the access token: only it can mint keys.
+`E2B_API_KEY` is enough to deploy resources, but bindings and `E2B.ApiKey` create keys, which takes the access token. See [Team & API keys](/e2b/api-keys#in-ci).
 
-## Next steps
+## Next
 
-- [Build the tutorial](/e2b/tutorial/part-1)
-- [Concepts](/e2b/concepts)
+Build the [tutorial](/e2b/tutorial/part-1).

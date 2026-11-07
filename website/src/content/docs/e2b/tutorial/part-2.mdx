@@ -5,10 +5,11 @@ sidebar:
   order: 2
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 ## Bind the template to a Worker
 
-```typescript
-// src/Api.ts
+```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
 import * as Effect from "effect/Effect";
@@ -106,10 +107,10 @@ Provide both layers once:
   }),
 ```
 
-```sh
-alchemy deploy
-curl -X POST "$URL/run" --data 'console.log(6 * 7)'
-```
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/run" --data 'console.log(6 * 7)'`}
+/>
 
 ## Next
 

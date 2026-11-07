@@ -232,7 +232,7 @@ export interface Template extends Resource<
  * ```typescript
  * export const Private = E2B.Template("Private", {
  *   image: "ghcr.io/my-org/base:1",
- *   registry: { username: "my-org", password: Alchemy.Secret("GHCR_TOKEN") },
+ *   registry: { username: "my-org", password: Config.Redacted("GHCR_TOKEN") },
  * });
  * ```
  *

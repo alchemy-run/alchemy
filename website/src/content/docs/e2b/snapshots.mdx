@@ -3,10 +3,31 @@ title: Snapshots & forks
 description: Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
 ---
 
+import BranchGraph from "../../../components/diagrams/BranchGraph.astro";
+
+A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandboxes from it start where the original was: a repository cloned, its dependencies installed, a server listening. A **fork** snapshots a running sandbox and starts copies of it at once, while the original keeps running. Each copy changes on its own from then on.
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "agent", label: "Agent", type: "template" },
+    { id: "warm", label: "Warm", type: "snapshot", from: { branch: "agent", at: 1 } },
+    { id: "s42", label: "user-42", type: "sandbox", from: { branch: "warm", at: 3 }, tone: "accent" },
+    { id: "f1", label: "fork 1", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
+    { id: "f2", label: "fork 2", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
+  ]}
+  points={[
+    { branch: "warm", at: 2, label: "npm ci" },
+    { branch: "s42", at: 4.5, label: "edit files" },
+    { branch: "f1", at: 7.5, label: "test shard 1" },
+    { branch: "f2", at: 7.5, label: "test shard 2" },
+  ]}
+  caption="Warm is Agent after npm ci. user-42 starts from Warm, and two forks copy user-42 as it is, edits included, to run test shards side by side."
+/>
+
 ## A warm base at deploy time
 
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
 const warm = yield* E2B.Snapshot("Warm", {
   template: Agent,
   run: [

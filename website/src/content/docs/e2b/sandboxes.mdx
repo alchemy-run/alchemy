@@ -3,14 +3,33 @@ title: Sandboxes
 description: Create sandboxes from a Worker, run commands, read and write files, and manage their lifecycle.
 ---
 
-You create sandboxes at runtime with `E2B.CreateSandbox`. Pass a template or snapshot to create from it, or nothing and pass `templateID` per call.
+import StateMachine from "../../../components/diagrams/StateMachine.astro";
+
+A sandbox is one microVM, started from a template's snapshot. It runs for its **timeout**, counted from when it starts or resumes. When the timeout runs out, E2B kills it, or with `autoPause` pauses it: its memory, files and running processes are kept, and a resume picks up where it stopped.
+
+<StateMachine
+  states={[
+    { id: "running", label: "running", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "paused", label: "paused", type: "memory kept", col: 2, row: 0 },
+    { id: "killed", label: "killed", col: 1, row: 1, end: true },
+  ]}
+  transitions={[
+    { from: "running", to: "paused", label: "timeout · autoPause", bend: 0.7 },
+    { from: "paused", to: "running", label: "resume", bend: 0.7 },
+    { from: "running", to: "killed", label: "timeout · kill()" },
+    { from: "paused", to: "killed", label: "kill()" },
+  ]}
+  caption="A sandbox starts running. Its timeout kills it, or with autoPause pauses it with its memory until something resumes it. kill() ends it from either state."
+/>
+
+You create sandboxes while your app runs, with `E2B.CreateSandbox`. Pass a template or snapshot to create from it, or nothing and pass `templateID` per call.
 
 ```typescript
 // in the Worker's construction
 const sandboxes = yield* E2B.CreateSandbox(Agent);
 ```
 
-Provide `E2B.CreateSandboxHttp` on the Worker. The Worker gets its own E2B API key as a secret, revoked when the Worker is destroyed.
+Provide `E2B.CreateSandboxHttp` on the Worker. The Worker gets its own E2B API key as a secret, deleted when the Worker is destroyed.
 
 ## One sandbox per request
 
@@ -36,8 +55,7 @@ With `autoPause`, E2B pauses the sandbox instead of killing it when the timeout 
 
 ## A sandbox the stack owns
 
-```typescript
-// src/DevBox.ts
+```typescript title="src/DevBox.ts"
 import * as E2B from "@alchemy.run/e2b";
 import { Agent } from "./Agent.ts";
 

@@ -5,11 +5,11 @@ sidebar:
   order: 4
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 ## Deploy another stage
 
-```sh
-alchemy deploy --stage staging
-```
+<PackageManagers run="alchemy deploy --stage staging" />
 
 Each stage gets its own template and Worker, named after the stage. Without `--stage`, you deploy to `live_$USER`.
 

@@ -3,12 +3,31 @@ title: Templates
 description: Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
 ---
 
-A template is the image a sandbox boots from. E2B builds it remotely into a microVM snapshot, so deploys need no Docker, and a sandbox from it starts in well under a second.
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A **template** is the image a sandbox boots from. E2B builds it on its side, so deploys need no Docker. Then it boots the image once, runs its start command, waits for its ready command to pass, and snapshots the running microVM. Every sandbox from the template starts from that snapshot, already past the build and the start, so it's up in well under a second.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "build", label: "Agent", type: "template" },
+    { id: "s1", label: "user-42", type: "sandbox" },
+    { id: "s2", label: "user-43", type: "sandbox" },
+  ]}
+  bars={[
+    { lane: "build", start: 0, end: 3, label: "build image" },
+    { lane: "build", start: 3, end: 5, label: "startCmd" },
+    { lane: "build", start: 5, end: 7, label: "snapshot", tone: "accent" },
+    { lane: "s1", start: 7.5, end: 10, label: "running" },
+    { lane: "s2", start: 8.5, end: 10, label: "running" },
+  ]}
+  marks={[{ at: 5, label: "readyCmd passes" }]}
+  caption="A deploy builds the template once and snapshots it when readyCmd passes. Sandboxes created later start from the snapshot, with the start command already running."
+/>
 
 ## From a registry image
 
-```typescript
-// src/Sandbox.ts
+```typescript title="src/Sandbox.ts"
 import * as E2B from "@alchemy.run/e2b";
 
 export const Python = E2B.Template("Python", { image: "python:3.12-slim" });
@@ -16,8 +35,7 @@ export const Python = E2B.Template("Python", { image: "python:3.12-slim" });
 
 ## From a Dockerfile
 
-```typescript
-// src/Sandbox.ts
+```typescript title="src/Sandbox.ts"
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
@@ -71,7 +89,7 @@ E2B snapshots the template once `readyCmd` succeeds, so every sandbox starts wit
 ```typescript
 export const Private = E2B.Template("Private", {
   image: "ghcr.io/my-org/base:1",
-  registry: { username: "my-org", password: Alchemy.Secret("GHCR_TOKEN") },
+  registry: { username: "my-org", password: Config.Redacted("GHCR_TOKEN") },
 });
 ```
 

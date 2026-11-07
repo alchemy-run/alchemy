@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 Build an API that runs code in sandboxes: a one-shot sandbox per request, and a sandbox per user that keeps their files.
 
 The finished code is in [`examples/e2b-agent-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/e2b-agent-sandbox).
@@ -15,8 +17,7 @@ Finish [E2B setup](/e2b/setup) and [Cloudflare setup](/cloudflare/setup).
 
 ## Declare the template
 
-```typescript
-// src/Sandbox.ts
+```typescript title="src/Sandbox.ts"
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
@@ -34,8 +35,7 @@ Every sandbox boots from this image, with 2 vCPUs and 2 GiB of memory.
 
 ## Add it to the Stack
 
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as E2B from "@alchemy.run/e2b";
 import * as Alchemy from "alchemy";
@@ -58,9 +58,7 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-```sh
-alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 E2B builds the template on its side; you don't need Docker. The first build takes a minute or two. Later deploys rebuild only when the Dockerfile changes.
 

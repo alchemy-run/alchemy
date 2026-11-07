@@ -88,7 +88,7 @@ export interface Webhook extends Resource<
  * export const Lifecycle = E2B.Webhook("Lifecycle", {
  *   url: "https://hooks.example.com/e2b",
  *   events: ["sandbox.lifecycle.paused", "sandbox.lifecycle.killed"],
- *   signatureSecret: Alchemy.Secret("E2B_WEBHOOK_SECRET"),
+ *   signatureSecret: Config.Redacted("E2B_WEBHOOK_SECRET"),
  * });
  * ```
  *
