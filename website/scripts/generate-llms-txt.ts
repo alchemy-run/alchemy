@@ -665,6 +665,40 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
+  },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",
