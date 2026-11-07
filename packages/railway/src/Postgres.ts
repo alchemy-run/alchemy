@@ -906,10 +906,16 @@ export const PostgresProvider = () =>
     }),
 
     lookup: ({ projectId, environmentId, serviceId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
       readPostgresAttributes({
         id: serviceId,
-        output: { projectId, environmentId, serviceId },
-      }).pipe(Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs)))),
+        output: { projectId, environmentId, serviceId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
 
     read: readPostgresAttributes,
 

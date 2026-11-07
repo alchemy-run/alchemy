@@ -375,8 +375,12 @@ export const ProjectProvider = () =>
     }),
 
     lookup: ({ projectId }) =>
-      readProjectAttributes({ id: projectId, output: { projectId } }).pipe(
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readProjectAttributes({ id: projectId, output: { projectId, name: "" } }).pipe(
         Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
       ),
 
     read: readProjectAttributes,

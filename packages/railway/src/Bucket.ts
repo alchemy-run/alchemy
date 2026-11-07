@@ -626,8 +626,15 @@ export const BucketProvider = () =>
     }),
 
     lookup: ({ projectId, environmentId, bucketId }) =>
-      readBucketAttributes({ id: bucketId, output: { projectId, environmentId, bucketId } }).pipe(
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readBucketAttributes({
+        id: bucketId,
+        output: { projectId, environmentId, bucketId, name: "" },
+      }).pipe(
         Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
       ),
 
     read: readBucketAttributes,
