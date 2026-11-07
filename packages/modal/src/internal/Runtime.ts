@@ -1,3 +1,4 @@
+import * as classes from "@distilled.cloud/modal/classes";
 import * as functions from "@distilled.cloud/modal/functions";
 import * as secret from "@distilled.cloud/modal/secret";
 import { isResolved } from "alchemy/Diff";
@@ -22,6 +23,7 @@ import { putSecret } from "../Secret.ts";
 import { resolveDeclarations } from "./Declared.ts";
 import {
   buildRuntimeImage,
+  classTag,
   clientMount,
   DEFAULT_PORT,
   entrypointMount,
@@ -55,6 +57,8 @@ export interface RuntimeAttributes {
   command: string[];
   /** Content hash of the bundle, image and function definition. */
   hash: string;
+  /** The class (`cs-…`) of a function with RPC methods, which Modal runs as a class. */
+  classId?: string | undefined;
 }
 
 /** What differs between a Function and a Server. */
@@ -207,6 +211,8 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
       const definition: functions.Function = {
         ...base,
         ...specific,
+        // A class's service function is named `<tag>.*`, as Modal's clients name it.
+        functionName: specific.isClass ? classTag(tag) : tag,
         autoscalerSettings: { ...base.autoscalerSettings, ...specific.autoscalerSettings },
       };
       const secretIds = (news.secrets ?? []).flatMap((s) => idOf(s, "secretId") ?? []);
@@ -322,9 +328,19 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
         for (const warning of created.serverWarnings ?? []) {
           if (warning.message) yield* session.note(warning.message);
         }
+        // A class function needs its class: its containers hydrate it from
+        // the App layout, under the function's name.
+        const classId = definition.isClass
+          ? (yield* classes.createClass({
+              appId: app.appId,
+              existingClassId: output?.appId === app.appId ? output.classId : undefined,
+              onlyClassFunction: true,
+            })).classId
+          : undefined;
         yield* publishFunction(app, tag, {
           functionId: created.functionId,
           definitionId: created.handleMetadata?.definitionId,
+          classId,
         });
         return {
           attributes: {
@@ -339,6 +355,7 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
             port,
             command: image.command,
             hash,
+            classId,
           } satisfies RuntimeAttributes,
           metadata: created.handleMetadata,
         };

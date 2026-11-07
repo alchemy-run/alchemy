@@ -251,11 +251,24 @@ const lockFor = (appId: string) => {
  * `created` is `undefined`), keeping every other function and class the
  * App serves. Modal deploys an App as a whole, so a publish carries the full
  * map read back from the App's current layout.
+ *
+ * A class function (one with a `classId`) is published as Modal's clients
+ * publish `@app.cls`: its service function under `<tag>.*` and its class
+ * under `<tag>`, where its containers look the class up.
  */
+/** The service function name of the class `tag`, as Modal's clients name it. */
+export const classTag = (tag: string) => `${tag}.*`;
+
 export const publishFunction = (
   target: { readonly appId: string; readonly appName: string | undefined },
   tag: string,
-  created: { readonly functionId: string; readonly definitionId: string | undefined } | undefined,
+  created:
+    | {
+        readonly functionId: string;
+        readonly definitionId: string | undefined;
+        readonly classId?: string | undefined;
+      }
+    | undefined,
 ) =>
   Semaphore.withPermits(
     lockFor(target.appId),
@@ -265,13 +278,16 @@ export const publishFunction = (
       const { appLayout } = yield* app.appGetLayout({ appId: target.appId });
       const functionIds: Record<string, string> = {};
       for (const [key, value] of Object.entries(appLayout?.functionIds ?? {})) {
-        if (value !== undefined && key !== tag) functionIds[key] = value;
+        if (value !== undefined && key !== tag && key !== classTag(tag)) functionIds[key] = value;
       }
-      if (created !== undefined) functionIds[tag] = created.functionId;
+      if (created !== undefined) {
+        functionIds[created.classId ? classTag(tag) : tag] = created.functionId;
+      }
       const classIds: Record<string, string> = {};
       for (const [key, value] of Object.entries(appLayout?.classIds ?? {})) {
-        if (value !== undefined) classIds[key] = value;
+        if (value !== undefined && key !== tag) classIds[key] = value;
       }
+      if (created?.classId) classIds[tag] = created.classId;
       const published = new Set(Object.values(functionIds));
       const definitionIds: Record<string, string> = {};
       for (const object of appLayout?.objects ?? []) {

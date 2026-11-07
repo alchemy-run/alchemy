@@ -68,7 +68,7 @@ describe("Modal.Function", () => {
         const { appId } = yield* stack;
         const { appLayout } = yield* app.appGetLayout({ appId });
         expect(Object.keys(appLayout?.functionIds ?? {}).sort()).toEqual(
-          ["Api", "AsyncApi", "AsyncEmbed", "Embed", "Web"].sort(),
+          ["Api", "AsyncApi", "AsyncEmbed", "Embed.*", "Web"].sort(),
         );
       }),
     { tags: tags("function"), timeout: 900_000 },
@@ -253,7 +253,7 @@ describe("ReadApp", () => {
         tail: boolean;
         version: number;
       }>("/read-app");
-      expect(body.functions).toContain("Embed");
+      expect(body.functions).toContain("Embed.*");
       expect(body.tail).toBe(true);
       expect(body.version).toBeGreaterThan(0);
     }),
