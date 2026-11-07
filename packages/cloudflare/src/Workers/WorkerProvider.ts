@@ -3813,6 +3813,16 @@ export const LiveWorkerProvider = () =>
           exportsMap,
           yield* workerEntrypointExports(name, news.entrypoints, Object.keys(exportsMap)),
         );
+        // Cloudflare rejects the whole upload over the limit, so fail before
+        // anything is uploaded (#2976).
+        const exportCount = Object.keys(exportsMap).length;
+        if (exportCount > MAX_SCRIPT_EXPORTS) {
+          return yield* new TooManyWorkerExports({
+            scriptName: name,
+            count: exportCount,
+            tombstones: renamedClasses.length + deletedClasses.length,
+          });
+        }
         const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
 
         const metadataContainers = containerClasses;
@@ -5784,6 +5794,14 @@ const buildDurableObjectExports = (params: {
 };
 
 /**
+ * Cloudflare rejects a script upload whose `exports` map has more than 100
+ * entries (`BadRequest: \`exports\` has 129 entries; the maximum allowed is
+ * 100.`). Live classes, `renamed`/`deleted` tombstones and Worker entrypoints
+ * all count.
+ */
+const MAX_SCRIPT_EXPORTS = 100;
+
+/**
  * The `{ type: "worker", cache }` export entries for a Worker's configured
  * entrypoints. Fails when a name is also a Durable Object class: one export
  * name has exactly one type.
@@ -6085,6 +6103,28 @@ class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
   scriptName: string;
   reason: string;
 }> {}
+
+/**
+ * A Worker upload would declare more `exports` (Durable Object classes, their
+ * `renamed`/`deleted` tombstones, and entrypoints) than Cloudflare's limit of
+ * 100. A tombstone is only declared by the deploy that renames or deletes its
+ * class, so renaming or deleting fewer classes per deploy brings it under.
+ * Checked before anything is uploaded.
+ */
+export class TooManyWorkerExports extends Data.TaggedError("TooManyWorkerExports")<{
+  scriptName: string;
+  count: number;
+  tombstones: number;
+}> {
+  override get message() {
+    return (
+      `Worker '${this.scriptName}' would declare ${this.count} exports, ${this.tombstones} of them for renamed or deleted Durable Object classes; Cloudflare allows at most ${MAX_SCRIPT_EXPORTS}. ` +
+      (this.count - this.tombstones <= MAX_SCRIPT_EXPORTS
+        ? "Rename or delete fewer classes in this deploy, or move some Durable Objects to another Worker."
+        : "Move some Durable Objects to another Worker.")
+    );
+  }
+}
 
 class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoints")<{
   scriptName: string;
