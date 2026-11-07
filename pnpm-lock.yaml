@@ -3390,6 +3390,25 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  examples/cloudflare-modal-sandbox:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/modal':
+        specifier: workspace:*
+        version: link:../../packages/modal
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/cloudflare-neon-drizzle:
     dependencies:
       '@alchemy.run/cloudflare':
@@ -6854,6 +6873,22 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
+
+  examples/modal-functions:
+    dependencies:
+      '@alchemy.run/modal':
+        specifier: workspace:*
+        version: link:../../packages/modal
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
 
   examples/monorepo-multi-stack/backend:
     dependencies:
@@ -11127,6 +11162,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/modal':
+        specifier: workspace:*
+        version: link:../modal
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -11208,6 +11246,9 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
+      '@distilled.cloud/modal':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/modal
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -11524,6 +11565,37 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
+  packages/modal:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/modal':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/modal
+      rolldown:
+        specifier: 1.2.16
+        version: 1.2.16
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
@@ -11987,6 +12059,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../packages/hetzner
+      '@alchemy.run/modal':
+        specifier: workspace:*
+        version: link:../packages/modal
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../packages/neon
