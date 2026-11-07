@@ -64,6 +64,35 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 The client is typed from `Embed`'s methods. The binding also gives the Worker its own key, which the function checks on every call, so only bound callers can call its methods. Arguments and results travel as JSON, and a typed failure reaches the caller by its `_tag`, as with any [schemaless RPC](/apis/schemaless/).
 
+## Call it from another Function
+
+```typescript
+// src/Relay.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import Embed from "./Embed.ts";
+import { Inference } from "./Inference.ts";
+
+export default class Relay extends Modal.Function<Relay>()(
+  "Relay",
+  { main: import.meta.url, app: Inference },
+  Effect.gen(function* () {
+    const embed = yield* Modal.InvokeFunction(Embed);
+    return {
+      relay: Effect.fn(function* (text: string) {
+        return yield* embed.embed(text);
+      }),
+    };
+  }).pipe(Effect.provide(Modal.InvokeFunctionHttp)),
+) {}
+```
+
+The binding is the same one a Worker uses. Inside Modal, `Relay` calls Modal's API as its own container, so no Modal token is stored in it, but its calls still carry the key its binding issued.
+
+## Callers without a binding
+
+RPC methods answer only callers whose binding issued a key. A script, `modal run`, or Python's `modal.Cls.from_name` gets `401`. To call a function from those, give it no RPC methods: a function that serves only `fetch` takes [arguments](#call-it-with-arguments) from any caller Modal lets through.
+
 ## Return a stream
 
 ```diff lang="typescript"
