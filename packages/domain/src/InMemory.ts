@@ -341,7 +341,7 @@ export const make = (
               label: `saga ${key} → ${activity}`,
               lane: `saga:${key}`,
             });
-            return waiting(Deferred.await(turn));
+            return Deferred.await(turn).pipe(waiting);
           })
       : undefined,
     acquire,

@@ -371,7 +371,7 @@ const matchesOrder = (leaves: ReadonlyArray<Leaf>, actual: ReadonlyArray<unknown
   if (actual.length !== leaves.length) return false;
   const expected = leaves.map((leaf) => show(encodeInstance(leaf.event)));
   const got = actual.map(show);
-  const used = new Array<boolean>(leaves.length).fill(false);
+  const used = leaves.map(() => false);
   const dead = new Set<string>();
   const go = (position: number): boolean => {
     if (position === got.length) return true;
@@ -973,7 +973,9 @@ const explore = <E, R>(
         const failure = error.value;
         const head = `in another order of concurrent work: ${swaps.join("; ")}`;
         return yield* new StoryFailure({
-          ...failure,
+          step: failure.step,
+          steps: failure.steps,
+          events: failure.events,
           order: swaps,
           reason: `${failure.reason}\n  ${head}`,
           message: `${failure.reason}\n  ${head}${failure.message.slice(failure.reason.length)}`,
