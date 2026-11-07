@@ -1299,6 +1299,42 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
     }),
   );
 
+  // #3112: Auth reads Api through a ref, Api reads Auth directly. The ref
+  // closes a cycle through props, which deadlocked the plan once both
+  // existed. The deploy that closes it fails before touching either.
+  test.provider("a deploy whose ref closes a props cycle fails before any change", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Api", { string: "api" });
+        }),
+      );
+
+      const { events, record } = recorder();
+      const exit = yield* Effect.gen(function* () {
+        const apiRef = yield* TestResource.ref("Api");
+        const auth = yield* TestResource("Auth", {
+          string: "auth",
+          stringArray: [apiRef.string],
+        });
+        yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+      }).pipe(
+        stack.deploy,
+        hook({ create: record("create"), update: record("update") }),
+        Effect.timeout("10 seconds"),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain("RefCycleError");
+      }
+      expect(events).toEqual([]);
+      expect((yield* getState("Api"))?.props).toEqual({ string: "api" });
+      expect(yield* getState("Auth")).toBeUndefined();
+    }),
+  );
+
   test.provider(
     "a resource's ref to itself reads its persisted state without waiting on itself",
     (stack) =>
@@ -1746,6 +1782,51 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
 
         expect(yield* getState("A")).toBeUndefined();
         expectNotStarted(yield* getState("B"));
+      }),
+    );
+
+    // #3103: A binds B only by B's `name`, which the update keeps, so
+    // planning resolves that reference to its value and it orders nothing.
+    // B still references A's changing `string`. That is not a cycle: B must
+    // wait for A's update instead of starting against A's previous output.
+    test.provider("an update orders peers linked back only by a stable attribute", (stack) =>
+      Effect.gen(function* () {
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* BindingTarget("A", { name: "a", string: `a-${version}` });
+            const B = yield* BindingTarget("B", { name: "b", string: `b-${version}` });
+            yield* A.bind("FromB", { env: { PEER: B.name } });
+            yield* B.bind("FromA", { env: { PEER: A.string } });
+            return { A, B };
+          });
+
+        yield* stack.deploy(program("v1"));
+
+        const plan = yield* stack.plan(program("v2"));
+        expect([...plan.cycleMembers]).toEqual([]);
+
+        let aUpdated = false;
+        const bSawAUpdated: boolean[] = [];
+        const output = yield* program("v2").pipe(
+          stack.deploy,
+          hook({
+            update: (id) =>
+              id === "A"
+                ? // Give B every chance to run first if nothing orders it.
+                  Effect.sleep("50 millis").pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        aUpdated = true;
+                      }),
+                    ),
+                  )
+                : Effect.sync(() => void bSawAUpdated.push(aUpdated)),
+          }),
+        );
+
+        expect(bSawAUpdated).toEqual([true]);
+        expect(output.A.env).toEqual({ PEER: "b" });
+        expect(output.B.env).toEqual({ PEER: "a-v2" });
       }),
     );
 

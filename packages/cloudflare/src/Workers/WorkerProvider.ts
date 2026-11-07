@@ -3325,9 +3325,11 @@ export const LiveWorkerProvider = () =>
             }
             if (
               item.type === "durable_object_namespace" &&
-              (item.transferredFrom !== undefined || item.storage !== undefined)
+              (item.transferredFrom !== undefined ||
+                item.storage !== undefined ||
+                "hostNamespace" in item)
             ) {
-              const { transferredFrom: _, storage: __, ...rest } = item;
+              const { transferredFrom: _, storage: __, hostNamespace: ___, ...rest } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote

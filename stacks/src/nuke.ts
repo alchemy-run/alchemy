@@ -1,6 +1,7 @@
 import * as Archil from "@alchemy.run/archil";
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
@@ -20,6 +21,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Cloudflare.providers(),
+      Daytona.providers(),
       Fly.providers(),
       GCP.providers(),
       Hetzner.providers(),
