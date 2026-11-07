@@ -12044,6 +12044,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../packages/axiom
+      '@alchemy.run/boat':
+        specifier: workspace:*
+        version: link:../packages/boat
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../packages/cloudflare

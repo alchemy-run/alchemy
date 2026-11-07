@@ -28,6 +28,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Bootstrap": "./src/Bootstrap.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -38,6 +39,11 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Bootstrap": {
+        "types": "./src/Bootstrap.ts",
+        "bun": "./src/Bootstrap.ts",
+        "default": "./src/Bootstrap.ts"
       },
       "./internal/*": null,
       "./*": {
