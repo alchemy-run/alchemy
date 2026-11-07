@@ -55,6 +55,15 @@ At deploy, Alchemy registers a webhook pointing at the Worker's `/__alchemy/boat
 
 The Worker checks every request before your handler runs. It refuses, with 401, a request without Boat's signature, one signed with another secret, one whose body was changed after signing, and one more than five minutes old, so a captured delivery can't be replayed later. The signature covers the delivery id, the timestamp and the body, and the event's `id` must be the signed delivery id. Requests over 1 MB are refused unread, and events you didn't subscribe to are acknowledged without running the handler.
 
+## The Worker's two keys
+
+The Worker holds two keys, both deployed as Cloudflare secrets, never as plain-text variables:
+
+- **The signing secret** (`whsec_...`). Boat creates it with the webhook and signs every delivery with it; the Worker refuses anything not signed with it. Boat shows it only once, so Alchemy keeps it in state as a `Redacted` value. Destroying the Worker deletes the webhook, and the secret with it.
+- **A Boat API key** for the Worker alone, which can only read sandboxes (`sandbox.read`). The Worker uses it to look up which stack a sandbox belongs to. It reads any sandbox in the account, because Boat can't narrow a key by label; it can't create, change or delete anything. Destroying the Worker deletes it. With `scope: "account"` there is no lookup, and no key.
+
+The signing secret is what keeps others out: nothing reaches your handler without it.
+
 ## Only your stack's sandboxes
 
 Boat sends a webhook the events of every sandbox in the account. The event names only the sandbox's id, so the Worker reads its labels from Boat, with a key that can only read sandboxes, and hands your handler only the ones this stack and stage own: sandboxes the Stack declares, and the ones its bindings create.

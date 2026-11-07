@@ -64,7 +64,8 @@ export type SandboxEventsService = <Req = never>(
  * other webhook host.
  *
  * At deploy, a {@link Webhook} is created pointing at the host, and its
- * signing secret is given to the host as a secret. While the host runs,
+ * signing secret is given to the host as a secret (a Cloudflare secret on
+ * a Worker). While the host runs,
  * each delivery's `X-Ascii-Signature` (HMAC-SHA256 over the delivery id,
  * timestamp and raw body) is checked before the handler runs; an unsigned,
  * wrongly signed, altered or stale (over five minutes old) request is
@@ -73,7 +74,8 @@ export type SandboxEventsService = <Req = never>(
  *
  * Boat sends a webhook the events of every sandbox in the account, and an
  * account has at most 10 webhooks. With the default `scope: "stack"`, the
- * host looks each sandbox up with a read-only key of its own and drops
+ * host looks each sandbox up with a key of its own, created at deploy and
+ * deleted with the host, that can only read sandboxes (`sandbox.read`), and drops
  * events for sandboxes other stacks or stages own, and for sandboxes
  * already deleted. The scope is a filter, not an access boundary: anyone
  * in the account who can create sandboxes can label one with the stack's
