@@ -85,7 +85,12 @@ const program = Effect.scoped(
         devRemote,
         devAccess,
       },
-      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
+      {
+        accountId: config.accountId,
+        selfUrl: config.publicUrl,
+        listenerUrl: config.listenerUrl,
+        stack: config.stack,
+      },
     );
     const viteHost = "127.0.0.1";
     // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned

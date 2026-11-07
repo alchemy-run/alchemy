@@ -20,7 +20,10 @@ export const DEFAULT_DEV_PORT = 1337;
 /** Plain-data configuration transferred from the provider to a Vite child. */
 export interface ViteChildConfig {
   rootDir: string;
+  /** The URL clients reach the Worker at: its dev ingress origin when it has one. */
   publicUrl: string;
+  /** The Worker's local listener (the stable dev proxy), never an ingress origin. */
+  listenerUrl: string;
   accountId: string;
   storageDirectory: string;
   stack: { name: string; stage: string };
