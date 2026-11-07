@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -112,8 +113,34 @@ export type MirroringDeploymentGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MirroringDeploymentGroupLookup
 >;
+
+/**
+ * Props for {@link MirroringDeploymentGroup.lookup}: find a mirroring
+ * deployment group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface MirroringDeploymentGroupLookup {
+  /**
+   * Deployment group id (the `{mirroringDeploymentGroup}` segment of
+   * `projec
+   * ts/{project}/locations/{location}/mirroringDeploymentGroups/{mirroringDe
+   * ploymentGroup}`).
+   */
+  mirroringDeploymentGroupId: string;
+  /**
+   * Location of the group. Deployment groups are global — always
+   * `"global"`. `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security Integration mirroring deployment group — the global
@@ -148,6 +175,19 @@ export type MirroringDeploymentGroup = Resource<
  *   network: vpc.selfLink,
  *   description: "prod mirroring backends v2",
  *   labels: { env: "prod", role: "nsi" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing mirroring deployment group
+ * `MirroringDeploymentGroup.lookup` references a mirroring deployment group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared mirroring deployment group.
+ *
+ * **Example:** Reference an existing mirroring deployment group
+ * ```typescript
+ * const mirroringDeploymentGroup = GCP.NetworkSecurity.MirroringDeploymentGroup.lookup({
+ *   mirroringDeploymentGroupId: "my-mirroring-deployment-group",
  * });
  * ```
  *
@@ -301,6 +341,15 @@ export const MirroringDeploymentGroupProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ mirroringDeploymentGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, mirroringDeploymentGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

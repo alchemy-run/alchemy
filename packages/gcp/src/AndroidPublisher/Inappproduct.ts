@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LANGUAGE,
@@ -119,8 +120,30 @@ export type Inappproduct = Resource<
     gracePeriod: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InappproductLookup
 >;
+
+/**
+ * Props for {@link Inappproduct.lookup}: find an inappproduct this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InappproductLookup {
+  /**
+   * SKU unique within the app.
+   */
+  sku: string;
+  /**
+   * Play package name of the parent app (for example `com.example.app`).
+   */
+  packageName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Play in-app product (`inappproducts`).
@@ -158,6 +181,20 @@ export type Inappproduct = Resource<
  * const gem = yield* GCP.AndroidPublisher.Inappproduct("GemPack", {
  *   packageName: "com.example.app",
  *   listings: { "en-US": { title: "Starter gem pack" } },
+ * });
+ * ```
+ *
+ * ### Looking up an existing inappproduct
+ * `Inappproduct.lookup` references an inappproduct Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * inappproduct.
+ *
+ * **Example:** Reference an existing inappproduct
+ * ```typescript
+ * const inappproduct = GCP.AndroidPublisher.Inappproduct.lookup({
+ *   sku: "my-sku",
+ *   packageName: "my-package",
  * });
  * ```
  *
@@ -250,6 +287,14 @@ export const InappproductProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sku, packageName: lookupPackageName }) {
+      const env = yield* GcpEnvironment.current;
+      const packageName = lookupPackageName ?? "";
+      const existing = yield* getInappproduct(packageName, sku);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,6 +50,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { disk, snapshot };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionInstantSnapshot.lookup({
+          instantSnapshotName: created.snapshot.instantSnapshotName,
+          region: created.snapshot.region,
+        }),
+        created.snapshot,
       );
 
       expect(created.snapshot.instantSnapshotName).toEqual(expect.any(String));

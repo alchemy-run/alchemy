@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -215,8 +216,34 @@ export type CertificateTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateTemplateLookup
 >;
+
+/**
+ * Props for {@link CertificateTemplate.lookup}: find a certificate template
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CertificateTemplateLookup {
+  /**
+   * Template id (the `{certificateTemplate}` segment of
+   * `projects/{project}/
+   * locations/{location}/certificateTemplates/{certificateTemplate}`). Must
+   * match `[a-zA-Z0-9_-]{1,63}`.
+   */
+  certificateTemplateId: string;
+  /**
+   * Location of the template (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Authority Service certificate template — reusable issuance
@@ -279,6 +306,19 @@ export type CertificateTemplate = Resource<
  *     allowSubjectPassthrough: true,
  *     allowSubjectAltNamesPassthrough: false,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing certificate template
+ * `CertificateTemplate.lookup` references a certificate template Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate template.
+ *
+ * **Example:** Reference an existing certificate template
+ * ```typescript
+ * const certificateTemplate = GCP.PrivateCA.CertificateTemplate.lookup({
+ *   certificateTemplateId: "my-certificate-template",
  * });
  * ```
  *
@@ -585,6 +625,15 @@ export const CertificateTemplateProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ certificateTemplateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, certificateTemplateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

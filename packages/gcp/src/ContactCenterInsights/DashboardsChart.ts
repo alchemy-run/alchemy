@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { DateRangeConfig } from "./Dashboard.ts";
@@ -126,8 +127,31 @@ export type DashboardsChart = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DashboardsChartLookup
 >;
+
+/**
+ * Props for {@link DashboardsChart.lookup}: find a dashboards chart this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DashboardsChartLookup {
+  /**
+   * Chart id (the `{chart}` segment).
+   */
+  chartId: string;
+  /**
+   * Parent Dashboard resource name
+   * (`projects/{project}/locations/{location}/dashboards/{dashboard}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A chart widget on a Contact Center Insights dashboard.
@@ -144,6 +168,20 @@ export type DashboardsChart = Resource<
  *   parent: dashboard.name,
  *   displayName: "volume",
  *   chartVisualizationType: "BAR",
+ * });
+ * ```
+ *
+ * ### Looking up an existing dashboards chart
+ * `DashboardsChart.lookup` references a dashboards chart Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * dashboards chart.
+ *
+ * **Example:** Reference an existing dashboards chart
+ * ```typescript
+ * const dashboardsChart = GCP.ContactCenterInsights.DashboardsChart.lookup({
+ *   chartId: "my-chart",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -253,6 +291,14 @@ export const DashboardsChartProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ chartId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, chartId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

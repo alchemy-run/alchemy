@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import type { ServiceDirectoryConfig } from "./Connection.ts";
@@ -179,8 +180,33 @@ export type AccountConnector = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AccountConnectorLookup
 >;
+
+/**
+ * Props for {@link AccountConnector.lookup}: find an account connector this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AccountConnectorLookup {
+  /**
+   * Account connector id (the `{accountConnector}` segment of
+   * `projects/{pro
+   * ject}/locations/{location}/accountConnectors/{accountConnector}`).
+   */
+  accountConnectorId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Developer Connect account connector — the OAuth configuration that
@@ -229,6 +255,19 @@ export type AccountConnector = Resource<
  *   },
  *   labels: { env: "prod", team: "platform" },
  *   proxyConfig: { enabled: true },
+ * });
+ * ```
+ *
+ * ### Looking up an existing account connector
+ * `AccountConnector.lookup` references an account connector Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * account connector.
+ *
+ * **Example:** Reference an existing account connector
+ * ```typescript
+ * const accountConnector = GCP.DeveloperConnect.AccountConnector.lookup({
+ *   accountConnectorId: "my-account-connector",
  * });
  * ```
  *
@@ -392,6 +431,15 @@ export const AccountConnectorProvider = () =>
             previousCustom !== nextCustom),
       });
     }),
+
+    lookup: Effect.fn(function* ({ accountConnectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, accountConnectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

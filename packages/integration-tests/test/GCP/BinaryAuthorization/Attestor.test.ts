@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, TEST_PKIX_PUBLIC_KEY_PEM } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -59,6 +60,14 @@ test.provider(
           });
           return { note, attestor };
         }),
+      );
+      yield* expectFound(
+        GCP.BinaryAuthorization.Attestor.lookup({ attestorId: created.attestor.attestorId }),
+        created.attestor,
+      );
+      yield* expectFound(
+        GCP.ContainerAnalysis.Note.lookup({ noteId: created.note.noteId }),
+        created.note,
       );
 
       expect(created.attestor.name).toContain("/attestors/");

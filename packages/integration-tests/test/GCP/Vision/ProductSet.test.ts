@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as vision from "@distilled.cloud/gcp/vision_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,6 +59,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { product, set };
         }),
+      );
+      yield* expectFound(
+        GCP.Vision.ProductSet.lookup({
+          location: created.set.location,
+          productSetId: created.set.productSetId,
+        }),
+        created.set,
       );
 
       expect(

@@ -6,6 +6,7 @@ import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DeveloperConnect.AccountConnector.lookup({
+          accountConnectorId: created.accountConnectorId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.accountConnectorId).toEqual(expect.any(String));
