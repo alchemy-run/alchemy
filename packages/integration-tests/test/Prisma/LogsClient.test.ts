@@ -43,12 +43,13 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
     }).pipe(provideEnv),
   );
 
-  it.effect("leaves Authorization off log requests when the credentials have no token", () =>
+  it.effect("fails log requests with a ConfigError when the credentials have no token", () =>
     Effect.gen(function* () {
-      const deploymentLog = yield* getDeploymentLogsRequest("deployment-1");
-      const buildLog = yield* getBuildLogsRequest("build-1");
-      expect(deploymentLog.headers).toEqual({});
-      expect(buildLog.headers).toEqual({ Accept: "application/x-ndjson" });
+      const deploymentLog = yield* getDeploymentLogsRequest("deployment-1").pipe(Effect.flip);
+      const buildLog = yield* getBuildLogsRequest("build-1").pipe(Effect.flip);
+      for (const error of [deploymentLog, buildLog]) {
+        expect(error._tag).toBe("ConfigError");
+      }
     }).pipe(
       Effect.provideService(Credentials, Effect.succeed({ apiBaseUrl: "https://api.prisma.test" })),
     ),
