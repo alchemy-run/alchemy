@@ -125,6 +125,20 @@ export interface FunctionLookup {
 }
 
 /**
+ * The `Neon.Function` declaration: a Platform you can also look up. Named,
+ * so its type is never read as the global `Function` constructor.
+ */
+export interface NeonFunctionResource
+  extends
+    Platform<
+      Function,
+      FunctionEnvironment,
+      Main<FunctionEnvironment | FunctionRequest>,
+      FunctionRuntimeContext
+    >,
+    LookupMethod<Function> {}
+
+/**
  * Node.js 24 Fetch function, with native and Effect entrypoints.
  *
  * Functions have public URLs. The `functions:invoke` credential scope does not
@@ -181,13 +195,7 @@ export interface FunctionLookup {
  * @resource
  * @product Function
  */
-export const Function: Platform<
-  Function,
-  FunctionEnvironment,
-  Main<FunctionEnvironment | FunctionRequest>,
-  FunctionRuntimeContext
-> &
-  LookupMethod<Function> = Platform<Function>("Neon.Function", {
+export const Function: NeonFunctionResource = Platform<Function>("Neon.Function", {
   createRuntimeContext: makeFunctionRuntimeContext,
   // `{ branch: Main }` at module scope is an Effect. Yield it here so the
   // branch (or project) is registered and resolved at reconcile (same as
