@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as securityposture from "@distilled.cloud/gcp/securityposture_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   organization,
@@ -48,6 +49,14 @@ test.provider.skipIf(!runLifecycle)(
             annotations: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityPosture.Posture.lookup({
+          postureId: created.postureId,
+          organization: created.organization,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.postureId).toEqual(expect.any(String));

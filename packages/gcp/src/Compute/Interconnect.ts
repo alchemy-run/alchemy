@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -181,8 +182,26 @@ export type Interconnect = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterconnectLookup
 >;
+
+/**
+ * Props for {@link Interconnect.lookup}: find an interconnect this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InterconnectLookup {
+  /**
+   * Interconnect name (RFC1035, 1-63 characters).
+   */
+  interconnectName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine Dedicated Interconnect.
@@ -214,6 +233,19 @@ export type Interconnect = Resource<
  *   location: "iad-zone1-1",
  *   customerName: "Example Corp",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing interconnect
+ * `Interconnect.lookup` references an interconnect Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * interconnect.
+ *
+ * **Example:** Reference an existing interconnect
+ * ```typescript
+ * const interconnect = GCP.Compute.Interconnect.lookup({
+ *   interconnectName: "my-interconnect",
  * });
  * ```
  *
@@ -426,6 +458,13 @@ export const InterconnectProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interconnectName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, interconnectName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

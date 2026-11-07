@@ -6,6 +6,7 @@ import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -69,6 +70,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Redis.Instance.lookup({ instanceId: created.instanceId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/instances/");

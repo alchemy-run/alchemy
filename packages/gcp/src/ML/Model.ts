@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -102,8 +103,26 @@ export type Model = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ModelLookup
 >;
+
+/**
+ * Props for {@link Model.lookup}: find a model this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface ModelLookup {
+  /**
+   * Model id (the `{model}` segment of
+   * `projects/{project}/models/{model}`).
+   */
+  modelId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An AI Platform (legacy ML Engine) model — a named container for
@@ -142,6 +161,16 @@ export type Model = Resource<
  * const model = yield* GCP.ML.Model("Classifier", {
  *   description: "image classifier v2",
  * });
+ * ```
+ *
+ * ### Looking up an existing model
+ * `Model.lookup` references a model Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared model.
+ *
+ * **Example:** Reference an existing model
+ * ```typescript
+ * const model = GCP.ML.Model.lookup({ modelId: "my-model" });
  * ```
  *
  * @resource
@@ -217,6 +246,14 @@ export const ModelProvider = () =>
           previousConsole !== nextConsole,
       });
     }),
+
+    lookup: Effect.fn(function* ({ modelId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = modelResourceName(env.project, modelId);
+      const existing = yield* getModel(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

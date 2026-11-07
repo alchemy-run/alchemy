@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,32 @@ export type OrganizationMuteConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationMuteConfigLookup
 >;
+
+/**
+ * Props for {@link OrganizationMuteConfig.lookup}: find an organization
+ * mute config this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OrganizationMuteConfigLookup {
+  /**
+   * Mute config id (the `{muteConfig}` segment of
+   * `organizations/{organization}/muteConfigs/{muteConfig}`). Letters,
+   * digits, and hyphens; max 63 characters.
+   */
+  muteConfigId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Security Command Center mute config.
@@ -126,6 +151,19 @@ export type OrganizationMuteConfig = Resource<
  *   muteConfigId: "mute-low",
  *   filter: 'severity="LOW"',
  *   type: "STATIC",
+ * });
+ * ```
+ *
+ * ### Looking up an existing organization mute config
+ * `OrganizationMuteConfig.lookup` references an organization mute config
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared organization mute config.
+ *
+ * **Example:** Reference an existing organization mute config
+ * ```typescript
+ * const organizationMuteConfig = GCP.SecurityCenter.OrganizationMuteConfig.lookup({
+ *   muteConfigId: "my-mute-config",
  * });
  * ```
  *
@@ -186,6 +224,15 @@ export const OrganizationMuteConfigProvider = () =>
         replaceOn(olds?.type ?? output?.type, news.type)
       );
     }),
+
+    lookup: Effect.fn(function* ({ muteConfigId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, muteConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

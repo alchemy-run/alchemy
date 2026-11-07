@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -39,6 +40,10 @@ test.provider(
           });
           return { route };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Route.lookup({ routeName: created.route.routeName }),
+        created.route,
       );
 
       expect(created.route.routeName).toEqual(expect.any(String));
