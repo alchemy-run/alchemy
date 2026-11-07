@@ -724,6 +724,19 @@ const SECTIONS: Section[] = [
     pages: { directory: "daytona/observability" },
   },
   {
+    heading: "Modal",
+    intro:
+      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+    pages: {
+      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+    },
+  },
+  { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
+  { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
+  { heading: "Modal — Security", pages: { directory: "modal/security" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",

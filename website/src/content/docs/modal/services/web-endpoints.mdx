@@ -1,0 +1,51 @@
+---
+title: Web endpoints
+description: Serve a Modal Function on the web at a modal.run URL.
+---
+
+A function with `web` serves its `fetch` handler at a `*.modal.run` URL.
+
+## Serve fetch
+
+```typescript
+// src/Site.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Inference } from "./Inference.ts";
+
+export default class Site extends Modal.Function<Site>()(
+  "Site",
+  { main: import.meta.url, app: Inference, web: true },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("hello from Modal")) };
+  }),
+) {}
+```
+
+The URL is the `url` attribute.
+
+## Pick the label
+
+```typescript
+{ main: import.meta.url, app: Inference, web: { label: "site" } }
+```
+
+The URL becomes `https://<workspace>--site.modal.run`.
+
+## Require proxy auth
+
+```typescript
+{ main: import.meta.url, app: Inference, web: { requiresProxyAuth: true } }
+```
+
+Callers then send the `Modal-Key` and `Modal-Secret` headers of a [`Modal.WebhookToken`](/modal/security/access-control).
+
+## Call it from a Worker
+
+```typescript
+const site = yield* Modal.FetchServer(Site);
+const response = yield* site.fetch(HttpClientRequest.get("/"));
+```
+
+`FetchServer` adds the proxy auth headers for you.
