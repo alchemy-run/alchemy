@@ -1,11 +1,27 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import type {} from "../../Phase.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { runInBackground } from "../EventLifetime.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
+
+/**
+ * The native workerd `DurableObjectState` that `raw` exposes: the ambient
+ * global when the project loads one (tsconfig `"types"` or `wrangler types`),
+ * otherwise the `@cloudflare/workers-types` module export.
+ *
+ * Both declarations describe the same object, but TypeScript compares them
+ * structurally, and comparing the two copies of `facets` (a generic method
+ * returning `Fetcher<T>` over the `Rpc` types) never finishes. Typing `raw`
+ * with the declaration the project already uses keeps `state.raw` assignable
+ * to helpers written against it without that comparison.
+ */
+export type NativeDurableObjectState = [keyof DurableObjectState] extends [never]
+  ? cf.DurableObjectState
+  : DurableObjectState;
 
 /**
  * Options for {@link DurableObjectState.abort}.
@@ -37,7 +53,7 @@ export interface WorkerdDurableObjectState {
   /**
    * The raw native DurableObjectState, for interop with async APIs.
    */
-  readonly raw: cf.DurableObjectState;
+  readonly raw: NativeDurableObjectState;
   /**
    * Run `callback` while the engine holds every other event on this object.
    * The callback runs with the caller's full context (services, tracing),
@@ -86,7 +102,9 @@ export const fromDurableObjectState = (
   id: state.id,
   container: state.container,
   storage: fromDurableObjectStorage(state.storage),
-  raw: state,
+  // The same object either way; `unknown` skips comparing the two
+  // declarations, which is what hangs (see `NativeDurableObjectState`).
+  raw: state as unknown as NativeDurableObjectState,
   waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {

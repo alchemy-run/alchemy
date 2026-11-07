@@ -26,6 +26,14 @@ declare global {
    * the code that host never runs (signing with a key Alchemy created).
    */
   var __ALCHEMY_HOST_IDENTITY__: string | undefined;
+  /**
+   * Merges with workerd's ambient `DurableObjectState`, the one a project
+   * gets from tsconfig `"types": ["@cloudflare/workers-types"]` or from
+   * `wrangler types`. Empty on its own: it adds no members, so
+   * `NativeDurableObjectState` can tell whether the ambient declaration is
+   * loaded and type `raw` with it.
+   */
+  interface DurableObjectState<Props = unknown> {}
 }
 
 export type AlchemyPhase = "plan" | "runtime";

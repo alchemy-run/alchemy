@@ -112,7 +112,8 @@ const reportParking = (pass: AlarmPass) =>
       }
     }
   });
-const registries = new WeakMap<cf.DurableObjectState, CallbackRegistry>();
+// Keyed by the native state's identity, whichever declaration types it.
+const registries = new WeakMap<object, CallbackRegistry>();
 
 /**
  * @internal Run background work handed to `waitUntil` apart from the callback
