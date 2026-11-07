@@ -11,9 +11,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const out = yield* Config.String("DEV_TRUST_OUT");
+    // What this program's own process (the exec child) received.
+    const execTrust = yield* Config.String("ALCHEMY_DEV_TRUST").pipe(Config.withDefault(""));
     const child = yield* Command.Dev("Child", {
       command: "node child.cjs",
-      env: { DEV_TRUST_OUT: out },
+      env: { DEV_TRUST_OUT: out, EXEC_DEV_TRUST: execTrust },
     });
     return { url: child.url };
   }),
