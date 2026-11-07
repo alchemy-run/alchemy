@@ -995,6 +995,8 @@ const SECTIONS: Section[] = [
         "domain/unique-values",
         "domain/deadlines",
         "domain/cloudflare",
+        "domain/rivet",
+        "domain/effect-cluster",
         "domain/backfill",
         "domain/in-memory",
         "domain/http-api",
