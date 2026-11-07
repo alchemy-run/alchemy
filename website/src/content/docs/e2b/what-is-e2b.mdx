@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 E2B runs sandboxes: Linux microVMs for code you don't trust. Each **sandbox** boots from a **template**, an image E2B builds and snapshots once, so a new sandbox starts in well under a second with its files and processes already in place. A sandbox runs until its timeout, then E2B kills it or pauses it with its memory. Everything belongs to a **team**: its templates, sandboxes, volumes, secrets and API keys, and the bill.
 
-Take one small app: an `Agent` template with Node.js and git, and a `Warm` snapshot of it with a repository already cloned and installed. A Cloudflare Worker creates a sandbox from `Warm` for each user, mounts that user's `home-42` volume into it, and runs the agent's commands there.
+Take one small app: an `Agent` template with Node.js and git, and a `Warm` snapshot of it with a repository already cloned and installed. For each user, a Cloudflare Worker creates a volume for their files, `home-42`, then creates a sandbox from `Warm` with that volume mounted at `/home/user`, and runs the agent's commands there.
 
 <DAG
   nodes={[
@@ -15,16 +15,17 @@ Take one small app: an `Agent` template with Node.js and git, and a `Warm` snaps
     { id: "warm", label: "Warm", type: "snapshot", col: 1, row: 0 },
     { id: "home", label: "home-42", type: "volume", col: 0, row: 1 },
     { id: "sandbox", label: "user-42", type: "sandbox", tone: "accent", col: 1, row: 1 },
-    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 1, row: 2 },
+    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 0, row: 2 },
   ]}
   groups={[{ id: "team", label: "Team acme", nodes: ["agent", "warm", "sandbox", "home"] }]}
   edges={[
     { from: "agent", to: "warm", label: "snapshot" },
     { from: "warm", to: "sandbox", label: "boots" },
-    { from: "worker", to: "sandbox", label: "create" },
-    { from: "sandbox", to: "home", label: "mounts" },
+    { from: "home", to: "sandbox", label: "mounted at /home/user" },
+    { from: "worker", to: "home", label: "create" },
+    { from: "worker", to: "sandbox", label: "create", exit: "side" },
   ]}
-  caption="The template, its snapshot, the sandbox and the volume all belong to one team. The Worker runs outside E2B and creates the sandbox through E2B's API; the sandbox boots from the snapshot and mounts the volume."
+  caption="The template, its snapshot, the volume and the sandbox all belong to one team. The Worker runs outside E2B and creates the volume and the sandbox through E2B's API, passing the volume in the sandbox's mounts; the sandbox boots from the snapshot with the volume at /home/user."
 />
 
 ## Teams and API keys
