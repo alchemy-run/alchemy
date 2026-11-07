@@ -1,0 +1,110 @@
+---
+title: Sandboxes
+description: Create, find, run commands in, and stop Modal sandboxes from any runtime.
+---
+
+## Bind sandboxes
+
+`Modal.CreateSandbox` takes an image (sandboxes boot from it by default) or an app:
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(Warm);
+```
+
+Provide `Modal.CreateSandboxHttp`. It gives the Worker its own Modal service user, a `contributor` in the App's environment.
+
+## Create one per request
+
+```typescript
+const sandbox = yield* Effect.acquireRelease(
+  sandboxes.create({ timeout: "10 minutes" }),
+  (sandbox) => Effect.ignore(sandbox.terminate()),
+);
+```
+
+The sandbox stops when the request's scope closes.
+
+## Keep one per session
+
+```typescript
+const sandbox =
+  (yield* sandboxes.fromName(`session-${user}`)) ??
+  (yield* sandboxes.create({ name: `session-${user}`, idleTimeout: "10 minutes" }));
+```
+
+A name is unique among an app's running sandboxes. `idleTimeout` stops it once nobody uses it.
+
+## Run a command
+
+```typescript
+const result = yield* sandbox.exec(["pnpm", "test"], { cwd: "/work" });
+```
+
+`result` has `exitCode`, `stdout` and `stderr`; a non-zero exit is returned, not failed. A string runs with `sh -c`:
+
+```typescript
+const result = yield* sandbox.exec("pnpm install && pnpm test", { cwd: "/work" });
+```
+
+## Follow a running command
+
+```typescript
+const process = yield* sandbox.start("pnpm dev", { cwd: "/work" });
+yield* Stream.runForEach(process.output, (chunk) => Console.log(chunk.fd, chunk.data));
+```
+
+`output` streams as the command runs. `write` feeds its stdin, `kill` signals it, and `wait` returns its exit code. Closing the scope detaches; the command keeps running.
+
+## Open a terminal
+
+```typescript
+const terminal = yield* sandbox.pty.open({ cols: 120, rows: 40 });
+yield* terminal.write("ls -la\n");
+```
+
+Modal can't resize a running terminal, so `resize` fails with `Modal.SandboxPtyResizeUnsupported`.
+
+## Read and write files
+
+```typescript
+yield* sandbox.files.write("/tmp/task.json", JSON.stringify(task));
+const report = yield* sandbox.files.readText("/tmp/report.json");
+```
+
+`files` also has `read` (bytes), `list`, `stat`, `remove` and `makeDir`.
+
+## Reach a port
+
+```typescript
+const sandbox = yield* sandboxes.create({ encryptedPorts: [3000] });
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+`port.url` is the tunnel's public URL. A Worker in front of the sandbox can forward the request it received:
+
+```typescript
+return yield* port.fetch(yield* HttpServerRequest.HttpServerRequest);
+```
+
+`port.connect()` opens a TCP socket through the tunnel instead: TLS for `encryptedPorts`, plain TCP for `unencryptedPorts`.
+
+For a browser that shouldn't hold Modal credentials, use `sandbox.connectToken({ port: 3000 })`.
+
+## Find what a runtime created
+
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. List them by those tags to clean them up:
+
+```typescript
+const mine = yield* sandboxes.list({ tags: { "alchemy::stack": "my-app", "alchemy::stage": "prod" } });
+```
+
+Your own `tags` merge under the three. Stopping the App still terminates every sandbox in it.
+
+## Size it
+
+```typescript
+const sandbox = yield* sandboxes.create({ cpu: 2, memory: 4096, gpu: "A10G" });
+```
+
+A sandbox lives at most 24 hours.

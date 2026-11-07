@@ -44,6 +44,7 @@ function providersSidebarEntry() {
       { label: "Turso", link: "/turso" },
       { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
+      { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
@@ -1482,6 +1483,55 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Daytona"),
+          ],
+        },
+        {
+          label: "Modal",
+          items: [
+            { label: "Overview", link: "/modal" },
+            { label: "Setup", link: "/modal/setup" },
+            { label: "Concepts", link: "/modal/concepts" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "modal/tutorial" } }],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/modal/sandboxes/sandboxes" },
+                { label: "Programs", link: "/modal/sandboxes/programs" },
+                { label: "Images", link: "/modal/sandboxes/images" },
+                { label: "Snapshots", link: "/modal/sandboxes/snapshots" },
+                { label: "Persistent sandboxes", link: "/modal/sandboxes/persistent" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Volumes", link: "/modal/storage/volumes" },
+                { label: "Dicts", link: "/modal/storage/dicts" },
+                { label: "Queues", link: "/modal/storage/queues" },
+              ],
+            },
+            {
+              label: "Security",
+              items: [
+                { label: "Network & secrets", link: "/modal/security/network-and-secrets" },
+                { label: "Access control", link: "/modal/security/access-control" },
+              ],
+            },
+            {
+              label: "Services",
+              items: [
+                { label: "Functions", link: "/modal/services/functions" },
+                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
+                { label: "Servers", link: "/modal/services/servers" },
+                { label: "Operate services", link: "/modal/services/operating" },
+                { label: "Call Python functions", link: "/modal/services/calling-python" },
+                { label: "Autoscaling", link: "/modal/services/autoscaling" },
+              ],
+            },
+            providerResourcesEntry("Modal"),
           ],
         },
         {

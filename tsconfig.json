@@ -39,6 +39,9 @@
       "path": "./submodules/distilled/packages/e2b/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/modal/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
@@ -137,6 +140,9 @@
     },
     {
       "path": "./packages/e2b/tsconfig.json"
+    },
+    {
+      "path": "./packages/modal/tsconfig.json"
     },
     {
       "path": "./packages/planetscale/tsconfig.json"
@@ -375,6 +381,12 @@
     },
     {
       "path": "./examples/daytona-sandboxes/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-modal-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/modal-functions/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
