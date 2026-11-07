@@ -7,6 +7,7 @@ import { Resource, type ResourceBinding } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_STATE = "RUNNING" as const;
@@ -119,7 +120,8 @@ export type Queue = Resource<
     purgeTime: string | undefined;
   },
   QueueBinding,
-  Providers
+  Providers,
+  QueueLookup
 >;
 
 /**
@@ -137,6 +139,28 @@ export const QUEUE_EVENT_PATH_PREFIX = "/__alchemy/cloudtasks/";
 /** Whether a queue-level target is one a `QueueEventSource` bound. */
 const isBoundTarget = (target: QueueHttpTarget | undefined) =>
   target?.uriOverride?.pathOverride?.path?.startsWith(QUEUE_EVENT_PATH_PREFIX) === true;
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface QueueLookup {
+  /**
+   * Queue id (the `{queue}` segment of
+   * `projects/{project}/locations/{location}/queues/{queue}`).
+   */
+  queueId: string;
+  /**
+   * Location of the queue (e.g. `us-central1`). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Tasks queue.
@@ -178,6 +202,16 @@ const isBoundTarget = (target: QueueHttpTarget | undefined) =>
  * const queue = yield* GCP.CloudTasks.Queue("jobs", {
  *   state: "PAUSED",
  * });
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared queue.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const queue = GCP.CloudTasks.Queue.lookup({ queueId: "my-queue" });
  * ```
  *
  * @resource
@@ -354,6 +388,15 @@ export const QueueProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ queueId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, queueId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

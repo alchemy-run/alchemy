@@ -17,7 +17,7 @@ import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 
 /**
- * The RPCs of the views and aggregates an Api exposes. Shared by the Api
+ * The RPCs of the views and streams an Api exposes. Shared by the Api
  * (which serves them) and the platforms (which push their stream messages
  * over WebSockets), so both encode exactly the same wire values.
  *
@@ -28,9 +28,10 @@ import * as View from "./View.ts";
 const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.Number });
 
 /** Something an Api can expose for reading. */
-export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
+export type Readable = View.Any | DomainStream.Any;
 
-export const nameOf = (entry: Readable) =>
+/** The name of a view, a stream, or an aggregate a view reads from. */
+export const nameOf = (entry: Readable | Aggregate.Any) =>
   entry.kind === "View"
     ? entry.viewName
     : entry.kind === "Stream"
@@ -59,7 +60,7 @@ export const outputEvents = (view: View.Any): ReadonlyArray<Event.Any> => {
 };
 
 export interface ReadRpcs {
-  /** `get` for views and aggregates; `peek` for streams. */
+  /** `get` for views; `peek` for streams. */
   readonly get: Rpc.Any;
   readonly watch: Rpc.Any;
   readonly events: Rpc.Any;
@@ -68,19 +69,12 @@ export interface ReadRpcs {
   readonly snapshot?: Rpc.Any;
 }
 
-/**
- * The read contract an entry's RPCs are built from. An aggregate without
- * `read` gets an empty one so an Api still builds its schemas; serving that
- * Api dies with a DefinitionError instead (see `handlersOf` in Api.ts).
- */
-export const contractOf = (entry: Readable): Read.AnyContract =>
-  entry.kind === "View" || entry.kind === "Stream"
-    ? entry.definition
-    : (entry.definition.read ?? {});
+/** The read contract an entry's RPCs are built from. */
+export const contractOf = (entry: Readable): Read.AnyContract => entry.definition;
 
 const rpcCache = new WeakMap<object, ReadRpcs>();
 
-/** The RPCs of a view or aggregate exposed in an Api. */
+/** The RPCs of a view or stream exposed in an Api. */
 export const readRpcs = (entry: Readable): ReadRpcs => {
   const cached = rpcCache.get(entry);
   if (cached) return cached;
@@ -146,7 +140,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         }),
       ),
     };
-  } else if (entry.kind === "View") {
+  } else {
     const def = entry.definition;
     const key = Key.idSchemaOf(def.key);
     const state = Schema.NullOr(def.state ?? Schema.Null);
@@ -222,40 +216,21 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         }),
       ),
     };
-  } else {
-    const def = entry.definition;
-    const recorded = Schema.Struct({ event: union(def.events), envelope: Aggregate.Envelope });
-    rpcs = {
-      get: guard(Rpc.make(`${name}.get`, { payload: { key: def.id }, success: def.state, error })),
-      watch: guard(
-        Rpc.make(`${name}.watch`, {
-          payload: { key: def.id },
-          success: snapshotSchema(def.state),
-          error,
-          stream: true,
-        }),
-      ),
-      events: guard(
-        Rpc.make(`${name}.events`, {
-          payload: { key: def.id, after: Schema.optional(Schema.Number) },
-          success: Schema.Union([Read.CaughtUp, recorded]),
-          error,
-          stream: true,
-        }),
-      ),
-    };
   }
   rpcCache.set(entry, rpcs);
   return rpcs;
 };
 
-/** One call an Api serves, as the HTTP and AI surfaces publish it. */
+/** One call an Api serves, as the HTTP, CLI and AI surfaces publish it. */
 export interface Operation {
-  /** The command, view, stream or aggregate it belongs to. */
+  /** The command, query, view or stream it belongs to. */
   readonly served: Servable;
-  /** A command's tag, or a view's, stream's or aggregate's name. */
+  /** A command's tag, a query's name, or a view's, stream's or aggregate's name. */
   readonly name: string;
-  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
+  /**
+   * `send` for a command, `ask` for a query; the read's client method
+   * otherwise (`get`, `peek`, `watch`, ...).
+   */
   readonly operation: string;
   readonly rpc: Rpc.AnyWithProps;
   /** Whether the call answers with a stream of values (`watch`, `events`). */
@@ -276,9 +251,13 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
         served.annotations.description ?? SchemaAST.resolveDescription(served.ast);
       return [{ served, name: served.tag, operation: "send", rpc, stream: false, description }];
     }
-    // A query is one RPC the Api's own client calls; the derived surfaces do not serve it yet.
-    if (served.kind === "Query") return [];
     const { description } = served.annotations;
+    if (served.kind === "Query") {
+      const rpc = served.rpc as Rpc.AnyWithProps;
+      return [
+        { served, name: served.queryName, operation: "ask", rpc, stream: false, description },
+      ];
+    }
     const name = nameOf(served);
     return Object.entries(readRpcs(served)).flatMap(([call, read]) => {
       if (read === undefined) return [];
@@ -301,7 +280,7 @@ export const operationsOf = (serves: ReadonlyArray<Servable>): ReadonlyArray<Ope
 
 /**
  * The name of one call of an Api's client: a command's tag (`DepositMoney`),
- * or a read as `<Name>.<operation>` (`AccountSummary.get`).
+ * a query's name (`AccountLedger`), or a read as `<Name>.<operation>` (`AccountSummary.get`).
  */
 export type CallName<Client> = {
   readonly [K in keyof Client & string]: Client[K] extends (...args: never) => unknown
@@ -329,9 +308,13 @@ export type ClientOf<A> = A extends {
   ? Client
   : never;
 
+/** Whether the client calls it as a method of its own: a command's `send` or a query's `ask`. */
+export const isMethod = (op: Operation): boolean =>
+  op.operation === "send" || op.operation === "ask";
+
 /** The {@link CallName} of an operation. */
 export const callName = (op: Operation): string =>
-  op.operation === "send" ? op.name : `${op.name}.${op.operation}`;
+  isMethod(op) ? op.name : `${op.name}.${op.operation}`;
 
 /**
  * The operations a caller listed: nothing is exposed unless it is named.

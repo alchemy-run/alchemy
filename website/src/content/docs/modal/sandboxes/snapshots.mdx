@@ -1,0 +1,34 @@
+---
+title: Snapshots
+description: Save a sandbox's files or memory and start new sandboxes from it.
+---
+
+## Save the filesystem
+
+```typescript
+yield* sandbox.exec(["pnpm", "install"], { cwd: "/work" });
+const image = yield* sandbox.snapshotFilesystem();
+```
+
+The result is an image. Pass it to `create`:
+
+```typescript
+const next = yield* sandboxes.create({ image });
+```
+
+## Save memory too
+
+```typescript
+const sandbox = yield* sandboxes.create({ enableSnapshot: true });
+const snapshot = yield* sandbox.snapshotMemory();
+const restored = yield* sandboxes.restore(snapshot, { name: `session-${user}` });
+```
+
+A memory snapshot keeps running processes.
+
+## Save one directory
+
+```typescript
+const workspace = yield* sandbox.snapshotDirectory("/work");
+yield* other.mountDirectory("/work", workspace);
+```

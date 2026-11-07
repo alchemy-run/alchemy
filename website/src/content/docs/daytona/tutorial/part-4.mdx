@@ -1,0 +1,51 @@
+---
+title: "Part 4: Testing"
+description: Deploy the Stack in a test, call the Worker, and destroy it.
+sidebar:
+  order: 4
+---
+
+## Write the test
+
+```typescript
+// test/integ.test.ts
+import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), Daytona.providers()),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "runs a command in a fresh sandbox",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const response = yield* Test.executeWhenReady(
+      HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyJsonUnsafe({ command: "node --version" })),
+    );
+    const body = (yield* response.json) as { exitCode: number; result: string };
+    expect(body.exitCode).toBe(0);
+    expect(body.result).toMatch(/^v22\./);
+  }),
+  { timeout: 300_000 },
+);
+```
+
+`beforeAll` deploys the Stack once, and `afterAll` destroys it, which also deletes every sandbox and `user-` volume the Worker created.
+
+## Run it
+
+```sh
+bun test
+```

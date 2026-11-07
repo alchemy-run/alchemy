@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -44,8 +45,31 @@ export type ProjectService = Resource<
     disableOnDestroy: boolean;
   },
   never,
-  Providers
+  Providers,
+  ProjectServiceLookup
 >;
+
+/**
+ * Props for {@link ProjectService.lookup}: find a project service this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ProjectServiceLookup {
+  /**
+   * Service identifier, such as `compute.googleapis.com`.
+   */
+  service: string;
+  /**
+   * Disable the API when this resource is destroyed. Leave unset for APIs
+   * shared with resources outside this stack: disabling is project-wide.
+   */
+  disableOnDestroy?: boolean;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * Enables a Google Cloud API for a project — the GCP analog of a
@@ -71,6 +95,19 @@ export type ProjectService = Resource<
  * yield* GCP.ServiceUsage.ProjectService("TranslateApi", {
  *   service: "translate.googleapis.com",
  *   disableOnDestroy: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing project service
+ * `ProjectService.lookup` references a project service Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * project service.
+ *
+ * **Example:** Reference an existing project service
+ * ```typescript
+ * const projectService = GCP.ServiceUsage.ProjectService.lookup({
+ *   service: "my-service",
  * });
  * ```
  *
@@ -136,6 +173,15 @@ export const ProjectServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ service, disableOnDestroy }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      if (service === undefined) return undefined;
+      const current = yield* getService(project, service);
+      if (current?.state !== "ENABLED") return undefined;
+      return toAttrs(project, service, current.state, disableOnDestroy ?? false);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -1,0 +1,74 @@
+---
+title: "Part 4: Stages"
+description: Deploy isolated copies of the stack with --stage, each with its own disk, sandbox and URL.
+sidebar:
+  order: 4
+---
+
+A stage is a separate copy of the same Stack. Every developer, every
+environment, and every pull request can have its own.
+
+## The default stage
+
+Without `--stage`, Alchemy deploys to `live_$USER` (for example
+`live_sam`). The order Alchemy checks is: `--stage`, then
+`$ALCHEMY_STAGE`, then `live_$USER`.
+
+## Deploy a second stage
+
+```sh
+alchemy deploy --stage staging
+```
+
+Alchemy creates a new disk and program sandbox for `staging`, with
+their own `archil.app` URL. Your own stage is untouched.
+
+## What a stage owns
+
+Each stage has its own state and its own physical names: the stage is
+part of every name Alchemy generates, so `myapp-staging-files-…` and
+`myapp-live_sam-files-…` are different disks. Deploying or destroying one
+stage never touches another:
+
+```sh
+alchemy deploy --stage pr-42
+alchemy destroy --stage pr-42
+```
+
+Stage names match `[a-z0-9][-_a-z0-9]*`.
+
+## Size the sandbox per stage
+
+The props can be an Effect. Read the stage from the `Stack` service and
+pick the sandbox size from it:
+
+```diff lang="typescript"
+// src/Api.ts
++import { Stack } from "alchemy/Stack";
+
+export default class Api extends Archil.Sandbox<Api>()(
+  "Api",
+-  { main: import.meta.url, port: 3000 },
++  Effect.gen(function* () {
++    const { stage } = yield* Stack;
++    return {
++      main: import.meta.url,
++      port: 3000,
++      vcpuCount: stage === "prod" ? 2 : 1,
++      memSizeMiB: stage === "prod" ? 4096 : 2048,
++    };
++  }),
+  Effect.gen(function* () {
+```
+
+Each stage has its own sandbox, so only `prod` gets the bigger one.
+
+## Stages in tests
+
+`Test.make` deploys to `test_$USER` unless you pass `--stage`, so tests
+never collide with your own stage.
+
+## Recap
+
+One program, many isolated copies. In [Part 5](/archil/tutorial/part-5)
+you'll deploy from GitHub Actions, with a stage per pull request.

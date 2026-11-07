@@ -1903,6 +1903,7 @@ export const providers = () =>
     // at the stack level lets `Capability.execute(...)` Outputs (e.g.
     // `AWS.EC2.getAmi`) resolve during plan.
     Layer.provideMerge(EC2.GetAmiHttp),
+    Layer.provideMerge(EC2.GetManagedPrefixListHttp),
     // Fresh per call: these derive from the environment below, and shared
     // (memoized) instances built for another environment in the same run
     // would shadow an `AWSEnvironment` provided to this layer.

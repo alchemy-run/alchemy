@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { InternalAlb } from "../internalAlb.ts";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -124,6 +125,13 @@ test.provider.skipIf(!!process.env.FAST)(
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbRouteExtension.lookup({
+          lbRouteExtensionId: created.lbRouteExtensionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/lbRouteExtensions/");

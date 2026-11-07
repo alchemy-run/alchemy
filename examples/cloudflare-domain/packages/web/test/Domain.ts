@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { customer } from "@bank/domain/Actor";
-import { Bank } from "@bank/domain/Bank.model";
+import { Bank, BankReads } from "@bank/domain/Bank.model";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
 import {
   MainAccountProvisioning,
@@ -30,6 +30,7 @@ class WebBank extends Domain.Model("WebBank", {
 }) {}
 const Hosted = WebBank.layer(
   Layer.mergeAll(
+    BankReads,
     UsernameReservationLive,
     MainAccountProvisioningLive,
     Layer.merge(LedgerLive, AccountLedgerLive).pipe(Layer.provide(memoryLedger())),

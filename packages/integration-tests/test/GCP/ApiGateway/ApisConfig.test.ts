@@ -6,6 +6,7 @@ import * as apigateway from "@distilled.cloud/gcp/apigateway_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -102,6 +103,10 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.parent.state).toEqual("ACTIVE");
 
       const config = created.config;
+      yield* expectFound(
+        GCP.ApiGateway.ApisConfig.lookup({ apiConfigId: config.apiConfigId, api: config.api }),
+        config,
+      );
       expect(config.apiConfigId).toEqual(expect.any(String));
       expect(config.api).toEqual(api);
       expect(config.location).toEqual("global");

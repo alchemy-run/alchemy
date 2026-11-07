@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,13 @@ test.provider(
           return { policy, disk };
         }),
       );
+      yield* expectFound(
+        GCP.Compute.ResourcePolicy.lookup({
+          resourcePolicyName: created.policy.resourcePolicyName,
+          region: created.policy.region,
+        }),
+        created.policy,
+      );
 
       const member = yield* compute.getDisks({
         project: created.disk.project,
@@ -104,6 +112,13 @@ test.provider(
           });
           return { policy, disk, group };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InstantSnapshotGroup.lookup({
+          instantSnapshotGroupName: withGroup.group.instantSnapshotGroupName,
+          zone: withGroup.group.zone,
+        }),
+        withGroup.group,
       );
 
       expect(withGroup.group.instantSnapshotGroupName).toEqual(expect.any(String));

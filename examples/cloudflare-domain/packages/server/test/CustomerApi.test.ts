@@ -141,7 +141,7 @@ it.live(
     ),
 );
 
-it.live("a customer watches their account's own events; others are rejected", () =>
+it.live("a customer follows their account's events through its summary; others are rejected", () =>
   inBank(
     Effect.gen(function* () {
       const sam = yield* asCustomer("c-1");
@@ -149,14 +149,14 @@ it.live("a customer watches their account's own events; others are rejected", ()
       const accountId = yield* register(sam, "c-1", "sam");
       yield* sam.DepositMoney(accountId, { amount: 70 });
 
-      const events = yield* sam.Account.events(accountId).pipe(
+      const events = yield* sam.AccountSummary.events(accountId).pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );
       expect(events.map((e) => e.event._tag)).toEqual(["AccountOpened", "MoneyDeposited"]);
-      expect((yield* sam.Account.get(accountId))._tag).toBe("Open");
-      expect((yield* alex.Account.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");
+      expect((yield* sam.AccountSummary.get(accountId))?.balance).toBe(70);
+      expect((yield* alex.AccountSummary.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");
     }),
   ),
 );

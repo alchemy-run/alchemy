@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -194,8 +195,33 @@ export type Service = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must be
+   * 2-63 characters, start with a letter, and end with a letter or number.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc Metastore service — a managed Hive metastore.
@@ -240,6 +266,16 @@ export type Service = Resource<
  *   port: 9084,
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.Metastore.Service.lookup({ serviceId: "my-service" });
  * ```
  *
  * @resource
@@ -377,6 +413,15 @@ export const ServiceProvider = () =>
             fingerprint(news.networkConfig) !== fingerprint(olds.networkConfig)),
       });
     }),
+
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

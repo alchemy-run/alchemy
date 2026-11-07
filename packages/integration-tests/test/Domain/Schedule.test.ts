@@ -119,7 +119,7 @@ class Ticket extends Domain.Aggregate("Ticket", {
     OpenTicket: () => [new TicketOpened()],
     PauseTicket: () => [new TicketPaused()],
     ResumeTicket: () => [new TicketResumed()],
-    MarkStalled: (state) => (state.status === "open" ? [new TicketStalled()] : []),
+    MarkStalled: (ticket) => (ticket.status === "open" ? [new TicketStalled()] : []),
   },
   evolve: {
     TicketOpened: () => ({ status: "open" as const }),
@@ -258,8 +258,8 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       yield* holds.schedule("h-4", new ExpireHold(), { after: "20 millis", commandId: "x" });
       yield* holds.unschedule("h-3", "x");
       yield* Effect.sleep("100 millis");
-      expect((yield* holds.state("h-3")).status).toBe("none");
-      expect((yield* holds.state("h-4")).status).toBe("expired");
+      expect((yield* holds.get("h-3")).status).toBe("none");
+      expect((yield* holds.get("h-4")).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
 
@@ -298,7 +298,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       yield* holds.send("h-6", new PlaceHold(), { commandId: "x" });
       yield* holds.schedule("h-6", new ExpireHold(), { after: "20 millis", commandId: "x" });
       yield* Effect.sleep("100 millis");
-      expect((yield* holds.state("h-6")).status).toBe("expired");
+      expect((yield* holds.get("h-6")).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
 
@@ -345,7 +345,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       const holds = yield* Hold;
       yield* (yield* arm.start("h-11", { then: "wait" })).result;
       yield* Effect.sleep("100 millis");
-      expect((yield* holds.state("h-11")).status).toBe("expired");
+      expect((yield* holds.get("h-11")).status).toBe("expired");
       expect((yield* Effect.flip(holds.unschedule("h-11", "x")))._tag).toBe("AlreadyExecuted");
     }).pipe(Effect.provide(ArmingLive)),
   );
@@ -356,7 +356,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       const holds = yield* Hold;
       yield* (yield* arm.start("h-12", { then: "cancel" })).result;
       yield* Effect.sleep("100 millis");
-      expect((yield* holds.state("h-12")).status).toBe("none");
+      expect((yield* holds.get("h-12")).status).toBe("none");
       expect((yield* Effect.flip(holds.unschedule("h-12", "x")))._tag).toBe("AlreadyCancelled");
     }).pipe(Effect.provide(ArmingLive)),
   );

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -95,8 +96,41 @@ export type MembershipsFeature = Resource<
     deleteTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MembershipsFeatureLookup
 >;
+
+/**
+ * Props for {@link MembershipsFeature.lookup}: find a memberships feature
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface MembershipsFeatureLookup {
+  /**
+   * Feature id (the `{feature}` segment of
+   * `.../memberships/{membership}/features/{feature}`). Well-known Fleet
+   * Feature names such as `configmanagement`, `servicemesh`, or
+   * `policycontroller`.
+   */
+  featureId: string;
+  /**
+   * Location of the parent membership (`global`, `us-central1`, …). Used
+   * when `membership` is a bare id. Fleet memberships are typically
+   * `global`.
+   */
+  location?: string;
+  /**
+   * Parent Fleet membership. Full name
+   * `projects/{project}/locations/{location}/memberships/{membership}` or
+   * the membership id (combined with `location`).
+   */
+  membership: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A GKE Hub MembershipFeature — the per-membership settings for a Fleet
@@ -143,6 +177,20 @@ export type MembershipsFeature = Resource<
  *       configSync: { enabled: true, preventDrift: true },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing memberships feature
+ * `MembershipsFeature.lookup` references a memberships feature Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared memberships feature.
+ *
+ * **Example:** Reference an existing memberships feature
+ * ```typescript
+ * const membershipsFeature = GCP.GKEHub.MembershipsFeature.lookup({
+ *   featureId: "my-feature",
+ *   membership: "my-membership",
  * });
  * ```
  *
@@ -237,6 +285,20 @@ export const MembershipsFeatureProvider = () =>
           fingerprint(olds?.labels ?? output?.labels ?? {}) !== fingerprint(news.labels ?? {}),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      featureId,
+      location: lookupLocation,
+      membership: lookupMembership,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const membership = membershipName(lookupMembership ?? "", env.project, location);
+      const name = resourceName(membership, featureId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

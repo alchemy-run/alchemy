@@ -6,6 +6,7 @@ import * as agentidentity from "@distilled.cloud/gcp/agentidentity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -72,6 +73,13 @@ test.provider(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AgentIdentity.AuthProvider.lookup({
+          authProviderId: created.authProviderId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authProviders/");

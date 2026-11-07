@@ -18,8 +18,11 @@ const bareImports = (result: Bundle.BundleOutput) =>
 
 /** Each provider package's generated-entry bootstrap, and the package that ships it. */
 const BOOTSTRAPS = [
+  ["@alchemy.run/e2b", "@alchemy.run/e2b/Bootstrap"],
+  ["@alchemy.run/archil", "@alchemy.run/archil/Bootstrap"],
   ["@alchemy.run/fly", "@alchemy.run/fly/Bootstrap"],
   ["@alchemy.run/hetzner", "@alchemy.run/hetzner/Bootstrap"],
+  ["@alchemy.run/modal", "@alchemy.run/modal/Bootstrap"],
   ["@alchemy.run/prisma", "@alchemy.run/prisma/Bootstrap"],
   ["@alchemy.run/railway", "@alchemy.run/railway/Bootstrap"],
 ] as const;

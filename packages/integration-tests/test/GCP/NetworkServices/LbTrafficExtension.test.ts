@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { InternalAlb } from "../internalAlb.ts";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -84,6 +85,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { extension };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbTrafficExtension.lookup({
+          lbTrafficExtensionId: created.extension.lbTrafficExtensionId,
+          location: created.extension.location,
+        }),
+        created.extension,
       );
 
       expect(created.extension.name).toContain("/lbTrafficExtensions/");

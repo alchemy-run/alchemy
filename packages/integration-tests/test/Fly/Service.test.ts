@@ -29,6 +29,7 @@ import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -104,6 +105,15 @@ describe.concurrent("Service", () => {
             const api = yield* Api;
             return { app, ip, api };
           }),
+        );
+        yield* expectFound(
+          Fly.Service.lookup({
+            appName: deployed.api.appName,
+            name: deployed.api.baseName ?? deployed.api.name,
+          }),
+          deployed.api,
+          // The bundled program's hash is this stack's record, not Fly's.
+          { ignore: ["code"] },
         );
 
         expect(deployed.api.machineId).toEqual(expect.any(String));

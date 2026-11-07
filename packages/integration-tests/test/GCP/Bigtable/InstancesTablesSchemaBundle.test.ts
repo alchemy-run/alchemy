@@ -6,6 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -82,6 +83,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, table, bundle };
         }),
+      );
+      yield* expectFound(
+        GCP.Bigtable.InstancesTablesSchemaBundle.lookup({
+          schemaBundleId: created.bundle.schemaBundleId,
+          instance: created.bundle.instance,
+          table: created.bundle.table,
+        }),
+        created.bundle,
       );
 
       expect(created.bundle.name).toContain("/schemaBundles/");

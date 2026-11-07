@@ -47,11 +47,14 @@ The steps:
 - `given(ref, ...events)` records history. It reaches views, but never triggers policies.
 - `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
 - `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end.
+- `anyOrder(...events)` / `inOrder(...events)` group events inside a `then` when the model doesn't order them, e.g. a policy and a saga step writing one stream: `then(ref, anyOrder(a, b))`. They nest, and payloads and counts still have to match.
+
+A story runs every order of concurrent work that can matter: when several policies or saga steps that write the same stream are ready at once, it replays once per order, and every run must pass. An ordered `then` over events from concurrent writers fails in the order it doesn't hold; use `anyOrder`. More than 256 orders fails the story: split it.
 - `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
-- `query(Query, input, rows | partial | fn, { take, after }?)` asks a query as the provided context: `validate`, the handler and `visible` run, and the result goes through its schema. Rows are matched in order, each partially. Without an expectation, the query must be rejected, and the next step is `rejected(...)`.
+- `query(Query, input, rows | partial | fn, { take, after }?)` asks a query as the provided context: its handler runs, and the result goes through its schema. Rows are matched in order, each partially. Without an expectation, the query must be rejected, and the next step is `rejected(...)`.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
 - `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
 - `advance("1 day")` moves the clock forward by a duration (any `Duration.Input`) instead of to a time.
@@ -152,7 +155,7 @@ More: [Domain Model: Check the declaration](https://alchemy.run/domain/model#che
 
 ### What to cover
 
-For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds. For every query, cover the rows the owner sees, each refused caller (`rejected`), rows `visible` hides, and a second page.
+For every command, cover the happy path, each rejection, and each authorization case (owner, other customer, agent). For every policy, cover the reaction, the reaction when its command is rejected, and the reaction when an external call fails with its declared error. For every saga, cover completion, each failure with its compensation, and each wait (signal, timeout via `clock`). For every view, check its state after the events it folds. For every query, cover the rows the owner sees, each refused caller (`rejected`), rows of other callers left out, and a second page.
 
 ```ts
 as(sam),

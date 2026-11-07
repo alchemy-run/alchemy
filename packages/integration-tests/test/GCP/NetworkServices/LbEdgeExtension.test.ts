@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { WasmArtifacts, pluginImageUri, uploadPluginWasm } from "./fixtures/wasm.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -102,6 +103,13 @@ test.provider.skipIf(!!process.env.FAST)(
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbEdgeExtension.lookup({
+          lbEdgeExtensionId: created.lbEdgeExtensionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/lbEdgeExtensions/");

@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "mount",
+              "value": "type=cache,target=/c,id=npm,sharing=locked,mode=0755,uid=1000,gid=1000"
+            },
+            {
+              "name": "mount",
+              "value": "type=tmpfs,target=/t,size=64m"
+            },
+            {
+              "name": "mount",
+              "value": "type=secret,id=tok,required"
+            },
+            {
+              "name": "mount",
+              "value": "type=ssh,required=true"
+            },
+            {
+              "name": "mount",
+              "value": "type=bind,source=.,target=/src,rw"
+            },
+            {
+              "name": "mount",
+              "value": "type=bind,from=build,src=/out,dst=/o,ro=true"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

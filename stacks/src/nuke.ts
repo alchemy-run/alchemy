@@ -1,8 +1,12 @@
+import * as Archil from "@alchemy.run/archil";
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as E2B from "@alchemy.run/e2b";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
 import * as Hetzner from "@alchemy.run/hetzner";
+import * as Modal from "@alchemy.run/modal";
 import * as Neon from "@alchemy.run/neon";
 import * as Planetscale from "@alchemy.run/planetscale";
 import * as Prisma from "@alchemy.run/prisma";
@@ -19,6 +23,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Cloudflare.providers(),
+      Daytona.providers(),
       Fly.providers(),
       GCP.providers(),
       Hetzner.providers(),
@@ -28,6 +33,9 @@ export default Alchemy.Stack(
       Railway.providers(),
       Stripe.providers(),
       Turso.providers(),
+      E2B.providers(),
+      Archil.providers(),
+      Modal.providers(),
     ),
     state: Cloudflare.state(),
   },

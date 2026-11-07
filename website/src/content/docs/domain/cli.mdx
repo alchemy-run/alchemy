@@ -22,7 +22,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 const bank = toCli(CustomerApi, {
   name: "bank",
   // Only these calls get a subcommand.
-  expose: ["DepositMoney", "WithdrawMoney", "AccountSummary.get", "Statement.list"],
+  expose: ["DepositMoney", "WithdrawMoney", "AccountLedger", "AccountSummary.get", "Statement.list"],
   // The session middleware runs on the server; the CLI sends its token.
   headers: Config.redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
@@ -101,6 +101,20 @@ $ bank statement list --key a-1 --order desc --take 20
 ```
 
 `watch` and `events` stream, so they aren't commands.
+
+## Ask a query
+
+A query is a subcommand, like a command. Its input fields are flags, next to `--after`, `--take` and `--at-least`:
+
+```sh
+$ bank account-ledger --account a-1 --take 20
+{
+  "entries": [{ "id": "…", "amount": 1000 }],
+  "cursor": null
+}
+```
+
+Pass the `cursor` back as `--after` for the next page.
 
 ## Pass structured values
 

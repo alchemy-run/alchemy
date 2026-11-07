@@ -375,21 +375,28 @@ export interface SagaClass<
    * services its steps use (aggregate clients, external systems); the handler
    * it returns runs each run, with its key and input.
    */
-  toLayer<E, Req, HandlerReq>(
-    build: Effect.Effect<
-      Handler<
-        Schema.Struct.Type<PayloadFields<K, I>>,
-        ResultSchema<R>["Type"],
-        RejectsSchema<Rejects>["Type"],
-        HandlerReq
-      >,
-      E,
-      Req
+  // TODO(typescript>7.1.0): microsoft/TypeScript#64757 infers `HandlerReq` as
+  // `unknown` through the nested `Effect<Handler<..., HandlerReq>>`, so the
+  // handler is inferred whole as `H` and its requirements read back from it.
+  // To revert, restore `toLayer<E, Req, HandlerReq>(build: Effect.Effect<
+  // Handler<..., HandlerReq>, E, Req>)` and check that `pnpm exec tsrs -b`
+  // passes `test/Domain/Saga.test.ts` and the cloudflare-domain example's
+  // `Bank.story.test.ts` (each story's `R` must not be `unknown`).
+  toLayer<
+    H extends Handler<
+      Schema.Struct.Type<PayloadFields<K, I>>,
+      ResultSchema<R>["Type"],
+      RejectsSchema<Rejects>["Type"],
+      any
     >,
+    E,
+    Req,
+  >(
+    build: Effect.Effect<H, E, Req>,
   ): Layer.Layer<
     ImplementationKey<Name>,
     E,
-    Req | WorkflowEngine.WorkflowEngine | Exclude<HandlerReq, RunServices>
+    Req | WorkflowEngine.WorkflowEngine | Exclude<Effect.Services<ReturnType<H>>, RunServices>
   >;
 }
 

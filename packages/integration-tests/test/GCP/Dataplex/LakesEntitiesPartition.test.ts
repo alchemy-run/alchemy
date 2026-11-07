@@ -6,6 +6,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -78,6 +79,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { bucket, lake, zone, asset, entity, partition };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.LakesEntity.lookup({
+          entityId: created.entity.entityId,
+          zone: created.entity.zone,
+        }),
+        created.entity,
       );
 
       expect(created.partition.name).toContain("/partitions/");

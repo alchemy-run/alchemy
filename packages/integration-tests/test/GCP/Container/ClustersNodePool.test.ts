@@ -8,6 +8,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CAPACITY_ZONE, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -184,6 +185,14 @@ test.provider.skipIf(!runLifecycle)(
                 });
                 return { pool };
               }),
+            );
+            yield* expectFound(
+              GCP.Container.ClustersNodePool.lookup({
+                nodePoolId: created.pool.nodePoolId,
+                zone: created.pool.zone,
+                cluster: created.pool.clusterId,
+              }),
+              created.pool,
             );
 
             expect(created.pool.name).toContain("/nodePools/");

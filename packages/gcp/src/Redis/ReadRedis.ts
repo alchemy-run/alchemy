@@ -5,6 +5,11 @@ import * as Layer from "effect/Layer";
 import type { Instance } from "./Instance.ts";
 import { makeRedisBinding } from "./RedisBinding.ts";
 
+// Clients' runtime effects require redis's `RuntimeContext` twin, so it shows
+// up in users' inferred types. Exporting it here lets TypeScript name it
+// through this package without users depending on @alchemy.run/redis.
+export type { RuntimeContext as RedisRuntimeContext } from "@alchemy.run/redis/RuntimeContext";
+
 /**
  * Bind a Memorystore {@link Instance} with read access.
  *

@@ -6,6 +6,7 @@ import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -92,6 +93,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.WorkloadManager.Evaluation.lookup({
+          evaluationId: created.evaluationId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/evaluations/");

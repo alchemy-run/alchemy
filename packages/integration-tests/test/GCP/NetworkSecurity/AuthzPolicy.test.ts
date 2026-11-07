@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { InternalAlb } from "../internalAlb.ts";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -117,6 +118,13 @@ test.provider.skipIf(!!process.env.FAST)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.AuthzPolicy.lookup({
+          authzPolicyId: created.authzPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authzPolicies/");

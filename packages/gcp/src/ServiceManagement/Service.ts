@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   getByName,
@@ -59,8 +60,28 @@ export type Service = Resource<
     title: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * DNS service name (for example `hello.endpoints.my-project.cloud.goog`).
+   * After delete the name is reserved for 30 days; reconcile undeletes
+   * instead of recreating.
+   */
+  serviceName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Service Management managed service (Cloud Endpoints producer
@@ -96,6 +117,18 @@ export type Service = Resource<
  * ```typescript
  * const api = yield* GCP.ServiceManagement.Service("Hello", {
  *   title: "Hello API v2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.ServiceManagement.Service.lookup({
+ *   serviceName: "my-service",
  * });
  * ```
  *
@@ -152,6 +185,13 @@ export const ServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(serviceName);
+      if (existing === undefined) return undefined;
+      return yield* toAttrsLive(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

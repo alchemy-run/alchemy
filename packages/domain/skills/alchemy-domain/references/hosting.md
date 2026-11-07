@@ -68,13 +68,13 @@ More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-proces
 
 ## Queries
 
-A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its `validate` reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
+A query has no key, so no Durable Object owns it: it runs in the Worker, inside the Api, where the store it reads (D1) is bound. Its handler reads views from their Durable Objects; `atLeast` reads the command's events from the aggregate's object, then polls the projection's objects for their checkpoints.
 
 More: [Query](https://alchemy.run/domain/query), [Cloudflare](https://alchemy.run/domain/cloudflare).
 
 ## Live reads
 
-Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
+Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by the view's `validate` again, and hibernates in between. Commands go over HTTP.
 
 More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
 
@@ -124,7 +124,7 @@ Every command, event and reaction is traced automatically:
 - `Domain.policy` and `Domain.view` spans that continue the trace of the commit they react to.
 - `Domain.saga` and `Domain.projection` spans that start their own trace and link back to their cause.
 - `Domain.external` spans for external system calls.
-- `Domain.query` spans in the Worker, with `domain.outcome`, `domain.query.rows` and `domain.query.hidden`, and a `Domain.caughtUp` child when it waits for the caller's write.
+- `Domain.query` spans in the Worker, with `domain.outcome` and `domain.query.rows`, and a `Domain.caughtUp` child when it waits for the caller's write.
 
 All of them carry `domain.correlation_id`, the first command of the flow, which finds a whole flow across traces. Export to an OpenTelemetry backend to see each flow as one connected trace: declare an `Axiom.Dataset` per signal and an `Axiom.ApiToken` that may ingest into them, and add `Axiom.Telemetry({ token, traces, logs })` to the Worker's single `Effect.provide` (or `Alchemy.Telemetry.layerOtlp` for any OTLP endpoint). Name datasets per stage. `Cloudflare.Telemetry()` shows spans in Cloudflare's dashboard instead, but Cloudflare starts a new trace per Worker or Durable Object event, so flows don't connect and browser spans can't be added.
 
@@ -144,7 +144,7 @@ More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#k
 
 ## Conveniences for internal tools
 
-`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command by its name (`"DepositMoney"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the aggregate, view or command), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
+`toHttpApi`, `toMcp` and `toCli` publish the calls their `expose` option lists, and nothing else: a command or a query by its name (`"DepositMoney"`, `"AccountLedger"`), a read as `<Name>.<operation>` (`"AccountSummary.get"`). A name the Api does not serve is a type error. They use the domain's own payloads, replies and state as the wire format. That is quick for internal tooling (scripts, admin consoles, an agent working on your own data), but what each call returns is decided elsewhere (the command, view or query), so a reply or view that later gains a private field is published without anyone touching `expose`. Don't reach for them by default, and don't use them for a public or partner surface: write that API yourself (see [Public and partner APIs](#public-and-partner-apis)).
 
 ### Plain HTTP and OpenAPI
 

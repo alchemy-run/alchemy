@@ -148,8 +148,23 @@ export interface Application extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The display name of the existing application. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business application — the top-level container that indices,
@@ -176,6 +191,16 @@ export interface Application extends Resource<
  * const app = yield* AWS.QBusiness.Application("PublicAssistant", {
  *   identityType: "ANONYMOUS",
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const assistant = AWS.QBusiness.Application.lookup({ displayName: "assistant" });
  * ```
  *
  * @resource
@@ -318,6 +343,13 @@ export const ApplicationProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "applicationId" in props
+              ? yield* readApplicationById(props.applicationId)
+              : yield* findApplicationByName(props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.applicationId
             ? yield* readApplicationById(output.applicationId)

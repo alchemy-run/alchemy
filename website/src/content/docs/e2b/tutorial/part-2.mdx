@@ -1,0 +1,117 @@
+---
+title: "Part 2: Add a Worker"
+description: Create sandboxes from a Worker, run code in them, and keep a sandbox per user.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Bind the template to a Worker
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Agent } from "./Sandbox.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* E2B.CreateSandbox(Agent);
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }).pipe(Effect.provide(E2B.CreateSandboxHttp)),
+) {}
+```
+
+`E2B.CreateSandbox(Agent)` gives the Worker a client that creates sandboxes from `Agent`. The Worker gets your E2B API key as a secret.
+
+## Run code in a one-shot sandbox
+
+```diff lang="typescript"
+// src/Api.ts
+    const sandboxes = yield* E2B.CreateSandbox(Agent);
++
++    const run = Effect.fn("run")(function* (code: string) {
++      const sandbox = yield* Effect.acquireRelease(
++        sandboxes.create({ timeout: 120, network: { allowOut: [] } }),
++        (sandbox) => Effect.ignore(sandbox.kill()),
++      );
++      yield* sandbox.files.write("main.mjs", code);
++      return yield* sandbox.exec("node main.mjs");
++    });
+```
+
+The sandbox has no internet access and is killed when the request ends. `exec` returns `stdout`, `stderr`, and `exitCode`.
+
+## Serve it
+
+```diff lang="typescript"
+// src/Api.ts
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://api");
++        if (request.method === "POST" && url.pathname === "/run") {
++          const code = yield* request.text;
++          const result = yield* run(code).pipe(Effect.scoped);
++          return yield* HttpServerResponse.json(result);
++        }
+        return HttpServerResponse.text("ok");
+      }),
+```
+
+## Give each user a sandbox and a volume
+
+```diff lang="typescript"
+// src/Api.ts
+    const sandboxes = yield* E2B.CreateSandbox(Agent);
++    const volumes = yield* E2B.CreateVolume();
++
++    const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
++      const home = yield* volumes.getOrCreate(`home-${user}`);
++      const [existing] = yield* sandboxes.list({ metadata: { user }, state: ["running", "paused"] });
++      return existing !== undefined
++        ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
++        : yield* sandboxes.create({
++            metadata: { user },
++            timeout: 600,
++            autoPause: true,
++            mounts: [{ volume: home, path: "/home/user/work" }],
++          });
++    });
+```
+
+The user's sandbox is found by its metadata. `connect` resumes it if it paused. Their files live on a volume, so they survive even if the sandbox is killed.
+
+Provide both layers once:
+
+```diff lang="typescript"
+// src/Api.ts
+-  }).pipe(Effect.provide(E2B.CreateSandboxHttp)),
++  }).pipe(Effect.provide(Layer.mergeAll(E2B.CreateSandboxHttp, E2B.CreateVolumeHttp))),
+```
+
+## Deploy the Worker
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const agent = yield* Agent;
+-    return { templateId: agent.templateId };
++    const api = yield* Api;
++    return { url: api.url.as<string>(), templateId: agent.templateId };
+  }),
+```
+
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/run" --data 'console.log(6 * 7)'`}
+/>
+
+## Next
+
+[Part 3](/e2b/tutorial/part-3) tests the deployed API.

@@ -6,6 +6,7 @@ import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -73,6 +74,27 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { bus, pipeline, enrollment };
         }),
+      );
+      yield* expectFound(
+        GCP.Eventarc.Enrollment.lookup({
+          enrollmentId: created.enrollment.enrollmentId,
+          location: created.enrollment.location,
+        }),
+        created.enrollment,
+      );
+      yield* expectFound(
+        GCP.Eventarc.MessageBus.lookup({
+          messageBusId: created.bus.messageBusId,
+          location: created.bus.location,
+        }),
+        created.bus,
+      );
+      yield* expectFound(
+        GCP.Eventarc.Pipeline.lookup({
+          pipelineId: created.pipeline.pipelineId,
+          location: created.pipeline.location,
+        }),
+        created.pipeline,
       );
 
       expect(created.enrollment.name).toContain("/enrollments/");

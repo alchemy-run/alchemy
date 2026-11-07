@@ -6,7 +6,9 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
+import { missingTag } from "./entitlement.ts";
 import { NetAppNetwork } from "./fixtures/network.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -45,7 +47,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       const page = yield* netapp.listProjectsLocationsVolumes({
         parent: `projects/${project}/locations/-`,
@@ -84,6 +86,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.Volume.lookup({ volumeId: created.volumeId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/volumes/");
