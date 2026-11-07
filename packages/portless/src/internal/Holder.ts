@@ -10,6 +10,13 @@ import { run } from "./Run.ts";
 export const FLOCI_CONTAINER = "alchemy-floci";
 
 /**
+ * How long a probe may take. Probes only name the holder in an error, so a
+ * Docker daemon or `lsof` that never answers leaves the holder unnamed rather
+ * than hanging the deploy.
+ */
+const PROBE_TIMEOUT = "5 seconds";
+
+/**
  * The container that publishes a host port, from `docker ps --format
  * "{{.Names}}\t{{.Ports}}"`: a `Ports` entry such as `0.0.0.0:443->443/tcp`
  * publishes host port 443.
@@ -28,6 +35,7 @@ export const dockerContainerPublishing = (port: number) =>
     Effect.map((result) =>
       result.exitCode === 0 ? containerPublishing(result.stdout, port) : undefined,
     ),
+    Effect.timeout(PROBE_TIMEOUT),
     Effect.orElseSucceed(() => undefined),
   );
 
@@ -42,5 +50,6 @@ export const processListening = (port: number) =>
       const command = lines.find((line) => line.startsWith("c"))?.slice(1);
       return Number.isNaN(pid) ? undefined : { pid, command };
     }),
+    Effect.timeout(PROBE_TIMEOUT),
     Effect.orElseSucceed(() => undefined),
   );
