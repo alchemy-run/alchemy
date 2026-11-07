@@ -1,0 +1,9 @@
+{
+  "discovery": "fcm-v1",
+  "module": "fcm_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["fcm.googleapis.com"]
+  }
+}

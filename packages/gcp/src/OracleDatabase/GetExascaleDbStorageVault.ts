@@ -1,7 +1,9 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 import type { ExascaleDbStorageVault } from "./ExascaleDbStorageVault.ts";
 
 export interface GetExascaleDbStorageVaultRequest extends Omit<
@@ -40,4 +42,19 @@ export interface GetExascaleDbStorageVault extends Binding.Service<
 
 export const GetExascaleDbStorageVault = Binding.Service<GetExascaleDbStorageVault>(
   "GCP.OracleDatabase.GetExascaleDbStorageVault",
+);
+
+/**
+ * HTTP implementation of {@link GetExascaleDbStorageVault}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GetExascaleDbStorageVault
+ */
+export const GetExascaleDbStorageVaultHttp = Layer.effect(
+  GetExascaleDbStorageVault,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GetExascaleDbStorageVault",
+    operation: oracle.getProjectsLocationsExascaleDbStorageVaults,
+    iam: { role: "roles/oracledatabase.exascaleDbStorageVaultViewer" },
+  }),
 );

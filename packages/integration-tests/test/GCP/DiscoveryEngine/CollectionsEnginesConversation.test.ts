@@ -12,9 +12,13 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Conversations need the Large Language Model add-on (BadRequest "This
-// feature is only available when Large Language Model add-on is enabled.").
-// Set GCP_TEST_DISCOVERYENGINE_LLM=1 on a project with the add-on.
+// Conversations need the engine's Large Language Model add-on (without it,
+// BadRequest "This feature is only available when Large Language Model add-on
+// is enabled."), which needs the Enterprise tier. With both, create still
+// answers BadRequest "Engine ... must be associated with a data store for
+// ConversationalSearchService" although the engine lists its data store. Set
+// GCP_TEST_DISCOVERYENGINE_LLM=1 on a project where conversational search
+// works.
 const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
 
 const waitUntilGone = (name: string) =>
@@ -67,6 +71,10 @@ test.provider.skipIf(!runLifecycle)(
             location: "global",
             dataStoreIds: [store.dataStoreId],
             displayName: "conversation engine",
+            searchEngineConfig: {
+              searchTier: "SEARCH_TIER_ENTERPRISE",
+              searchAddOns: ["SEARCH_ADD_ON_LLM"],
+            },
           });
           const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
             engine: engine.name,
@@ -98,6 +106,10 @@ test.provider.skipIf(!runLifecycle)(
             location: "global",
             dataStoreIds: [store.dataStoreId],
             displayName: "conversation engine",
+            searchEngineConfig: {
+              searchTier: "SEARCH_TIER_ENTERPRISE",
+              searchAddOns: ["SEARCH_ADD_ON_LLM"],
+            },
           });
           const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
             engine: engine.name,

@@ -1,9 +1,10 @@
-import type * as datastore from "@distilled.cloud/gcp/datastore_v1";
+import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "../Firestore/Database.ts";
-import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
+import { type DatastoreDatabaseRequest, makeDatastoreHttpBinding } from "./BindingHttp.ts";
 
 /** Request for {@link Lookup}; project and database come from the bound database. */
 export type LookupRequest = DatastoreDatabaseRequest<datastore.LookupProjectsRequest>;
@@ -47,3 +48,18 @@ export interface Lookup extends Binding.Service<
 > {}
 
 export const Lookup = Binding.Service<Lookup>("GCP.Datastore.Lookup");
+
+/**
+ * HTTP implementation of {@link Lookup}.
+ *
+ * @layer
+ * @provides GCP.Datastore.Lookup
+ */
+export const LookupHttp = Layer.effect(
+  Lookup,
+  makeDatastoreHttpBinding({
+    tag: "GCP.Datastore.Lookup",
+    iam: { role: "roles/datastore.viewer", scopeByCondition: true },
+    operation: datastore.lookupProjects,
+  }),
+);

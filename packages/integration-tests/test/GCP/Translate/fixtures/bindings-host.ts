@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import { serveProbes } from "../../bindingHost.ts";
+import { EnEsGlossary } from "./glossary.ts";
 
 const location = "us-central1";
 
@@ -14,15 +15,6 @@ const location = "us-central1";
 export const modelDataset =
   !process.env.FAST && process.env.GCP_TEST_TRANSLATE_MODEL === "1"
     ? (process.env.GCP_TEST_TRANSLATE_MODEL_DATASET ?? "")
-    : "";
-
-/**
- * Glossary-entry bindings need an existing glossary:
- * `GCP_TEST_TRANSLATE_GLOSSARY=1` plus `GCP_TEST_TRANSLATE_GLOSSARY_NAME`.
- */
-export const glossaryName =
-  !process.env.FAST && process.env.GCP_TEST_TRANSLATE_GLOSSARY === "1"
-    ? (process.env.GCP_TEST_TRANSLATE_GLOSSARY_NAME ?? "")
     : "";
 
 /** Adaptive MT dataset (no sentence pairs) the dataset bindings bind. */
@@ -40,15 +32,18 @@ export const EnEs = GCP.Translate.Model("EnEs", {
   displayName: "enes",
 });
 
-/** Glossary entry; declared only when {@link glossaryName} is set. */
-export const Hello = GCP.Translate.GlossariesGlossaryEntry("Hello", {
-  parent: glossaryName,
-  location,
-  description: "greeting",
-  termsPair: {
-    sourceTerm: { languageCode: "en", text: "hello" },
-    targetTerm: { languageCode: "es", text: "hola" },
-  },
+/** Glossary entry the entry binding binds. */
+export const Hello = Effect.gen(function* () {
+  const glossary = yield* EnEsGlossary;
+  return yield* GCP.Translate.GlossariesGlossaryEntry("Hello", {
+    parent: glossary.name,
+    location,
+    description: "greeting",
+    termsPair: {
+      sourceTerm: { languageCode: "en", text: "hello" },
+      targetTerm: { languageCode: "es", text: "hola" },
+    },
+  });
 });
 
 const modelProbes = Effect.gen(function* () {
@@ -84,15 +79,13 @@ export default class TranslateBindingsHost extends GCP.Function<TranslateBinding
     env: {
       GCP_TEST_TRANSLATE_MODEL: modelDataset ? "1" : "",
       GCP_TEST_TRANSLATE_MODEL_DATASET: modelDataset,
-      GCP_TEST_TRANSLATE_GLOSSARY: glossaryName ? "1" : "",
-      GCP_TEST_TRANSLATE_GLOSSARY_NAME: glossaryName,
     },
   },
   Effect.gen(function* () {
     const getDataset = yield* GCP.Translate.GetAdaptiveMtDataset(Dataset);
     const adaptiveTranslate = yield* GCP.Translate.AdaptiveMtTranslate(Dataset);
     const model = modelDataset ? yield* modelProbes : {};
-    const glossary = glossaryName ? yield* glossaryProbes : {};
+    const glossary = yield* glossaryProbes;
 
     return {
       fetch: serveProbes({

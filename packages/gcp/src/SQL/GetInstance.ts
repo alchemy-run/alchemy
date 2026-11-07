@@ -1,7 +1,9 @@
-import type * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
+import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSqlInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<
@@ -41,3 +43,18 @@ export interface GetInstance extends Binding.Service<
 > {}
 
 export const GetInstance = Binding.Service<GetInstance>("GCP.SQL.GetInstance");
+
+/**
+ * HTTP implementation of {@link GetInstance}.
+ *
+ * @layer
+ * @provides GCP.SQL.GetInstance
+ */
+export const GetInstanceHttp = Layer.effect(
+  GetInstance,
+  makeSqlInstanceHttpBinding({
+    tag: "GCP.SQL.GetInstance",
+    iam: { role: "roles/cloudsql.viewer", scopeByCondition: true },
+    operation: sqladmin.getInstances,
+  }),
+);

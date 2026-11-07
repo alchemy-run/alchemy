@@ -1,7 +1,11 @@
-import type * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
+import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 export interface RunJobRequest extends Omit<scheduler.RunProjectsLocationsJobsRequest, "name"> {}
@@ -36,3 +40,24 @@ export interface RunJob extends Binding.Service<
 > {}
 
 export const RunJob = Binding.Service<RunJob>("GCP.CloudScheduler.RunJob");
+
+/**
+ * HTTP implementation of {@link RunJob}.
+ *
+ * @layer
+ * @provides GCP.CloudScheduler.RunJob
+ */
+export const RunJobHttp: Layer.Layer<RunJob, never, Credentials | HttpClient.HttpClient> =
+  Layer.effect(
+    RunJob,
+    makeJobHttpBinding<
+      scheduler.RunProjectsLocationsJobsRequest,
+      scheduler.Job,
+      scheduler.RunProjectsLocationsJobsError
+    >({
+      tag: "GCP.CloudScheduler.RunJob",
+      // Cloud Scheduler has no resource-level IAM.
+      iam: { role: "roles/cloudscheduler.jobRunner" },
+      operation: scheduler.runProjectsLocationsJobs,
+    }),
+  );

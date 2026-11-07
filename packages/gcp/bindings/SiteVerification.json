@@ -1,0 +1,15 @@
+{
+  "discovery": "siteVerification-v1",
+  "module": "siteVerification_v1",
+  "resources": {
+    "WebResource": {
+      "pattern": "webResource/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {},
+    "enable": ["siteverification.googleapis.com"]
+  }
+}

@@ -1,14 +1,13 @@
 import type * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Table } from "./Table.ts";
+import { makeBigQueryTableBinding, readTableIam } from "./TableHttp.ts";
+import { QueryNotComplete } from "./TableTypes.ts";
 
-/** A query job did not finish within the client's bounded wait. */
-export class QueryNotComplete extends Data.TaggedError("GCP.BigQuery.QueryNotComplete")<{
-  jobId: string | undefined;
-}> {}
+export { QueryNotComplete };
 
 export interface ListTableOptions {
   /** Maximum rows per page. */
@@ -94,3 +93,19 @@ export interface ReadTable extends Binding.Service<
 > {}
 
 export const ReadTable = Binding.Service<ReadTable>("GCP.BigQuery.ReadTable");
+
+/**
+ * HTTP implementation of {@link ReadTable} over the BigQuery REST API.
+ *
+ * @layer
+ * @provides GCP.BigQuery.ReadTable
+ * @category BigQuery
+ */
+export const ReadTableHttp = Layer.effect(
+  ReadTable,
+  makeBigQueryTableBinding({
+    tag: "GCP.BigQuery.ReadTable",
+    iam: readTableIam,
+    makeClient: (helpers, table) => helpers.makeRead(table),
+  }),
+);

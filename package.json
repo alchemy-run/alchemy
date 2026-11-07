@@ -33,6 +33,7 @@
     "docs:build": "pnpm --dir website docs:build",
     "docs:check-jsdoc": "node ./scripts/fix-api-jsdocs.ts --check",
     "exports:check": "node scripts/sync-exports.ts --check",
+    "gcp:bindings:check": "node scripts/generate-gcp-bindings.ts --check",
     "exports:sync": "node scripts/sync-exports.ts",
     "docs:check": "pnpm --dir website docs:check",
     "docs:fix-jsdoc": "node ./scripts/fix-api-jsdocs.ts",

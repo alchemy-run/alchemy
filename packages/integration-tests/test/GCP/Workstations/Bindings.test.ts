@@ -14,7 +14,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "WorkstationsBindings");
 
 // Workstation clusters take ~20 minutes to create and delete.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;
@@ -113,7 +113,7 @@ describe.skipIf(!runLifecycle)(
 
     describe("GetWorkstationCluster", () => {
       test.provider(
-        "reads the bound cluster as the host, with workstations.viewer on the project",
+        "reads the bound cluster as the host, with workstations.workstationCreator on the project",
         (_stack) =>
           Effect.gen(function* () {
             const out = yield* expectProbe<{ name: string; network: string }>(
@@ -124,7 +124,7 @@ describe.skipIf(!runLifecycle)(
             expect(out.network).toContain("/networks/default");
             // Clusters have no IAM policy of their own.
             expect(yield* projectRoles()).toEqual([
-              { role: "roles/workstations.viewer", condition: undefined },
+              { role: "roles/workstations.workstationCreator", condition: undefined },
             ]);
           }),
         {
@@ -136,7 +136,7 @@ describe.skipIf(!runLifecycle)(
 
     describe("GetWorkstationConfig", () => {
       test.provider(
-        "reads the bound config as the host, with workstations.viewer on the config only",
+        "reads the bound config as the host, with workstations.workstationCreator on the config only",
         (_stack) =>
           Effect.gen(function* () {
             const out = yield* expectProbe<{
@@ -145,7 +145,7 @@ describe.skipIf(!runLifecycle)(
             }>(baseUrl, "getWorkstationConfig");
             expect(out.name).toEqual(configName);
             expect(out.machineType).toEqual("e2-standard-2");
-            expect(yield* configRoles()).toEqual(["roles/workstations.viewer"]);
+            expect(yield* configRoles()).toEqual(["roles/workstations.workstationCreator"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],
@@ -156,7 +156,7 @@ describe.skipIf(!runLifecycle)(
 
     describe("GetWorkstation", () => {
       test.provider(
-        "reads the bound workstation as the host, with workstations.viewer on it",
+        "reads the bound workstation as the host, with workstations.user on it",
         (_stack) =>
           Effect.gen(function* () {
             const out = yield* expectProbe<{ name: string; state: string }>(
@@ -165,7 +165,7 @@ describe.skipIf(!runLifecycle)(
             );
             expect(out.name).toEqual(workstationName);
             expect(out.state).toEqual("STATE_STOPPED");
-            expect(yield* workstationRoles()).toContain("roles/workstations.viewer");
+            expect(yield* workstationRoles()).toContain("roles/workstations.user");
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],
@@ -214,17 +214,14 @@ describe.skipIf(!runLifecycle)(
 
     describe("StopWorkstation", () => {
       test.provider(
-        "stops the bound workstation as the host; the host holds only user and viewer on it",
+        "stops the bound workstation as the host; the host holds only user on it",
         (_stack) =>
           Effect.gen(function* () {
             const out = yield* expectProbe<{ name: string }>(baseUrl, "stopWorkstation");
             expect(out.name).toContain("/operations/");
             const live = yield* waitForState("STATE_STOPPED");
             expect(live.state).toEqual("STATE_STOPPED");
-            expect(yield* workstationRoles()).toEqual([
-              "roles/workstations.user",
-              "roles/workstations.viewer",
-            ]);
+            expect(yield* workstationRoles()).toEqual(["roles/workstations.user"]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:workstations", "live"],

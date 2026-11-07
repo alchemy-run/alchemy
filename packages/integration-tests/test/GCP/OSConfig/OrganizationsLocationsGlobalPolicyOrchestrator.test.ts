@@ -48,7 +48,7 @@ test.provider(
           name: `${organization}/locations/global/policyOrchestrators/alchemy-missing-orch`,
         }),
       );
-      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),

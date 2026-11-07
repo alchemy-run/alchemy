@@ -1,7 +1,9 @@
-import type * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
+import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeParameterVersionHttpBinding } from "./BindingHttp.ts";
 import type { ParametersVersion } from "./ParametersVersion.ts";
 
 export interface GetParameterVersionRequest {
@@ -57,4 +59,33 @@ export interface GetParameterVersion extends Binding.Service<
 
 export const GetParameterVersion = Binding.Service<GetParameterVersion>(
   "GCP.ParameterManager.GetParameterVersion",
+);
+
+/**
+ * HTTP implementation of {@link GetParameterVersion}.
+ *
+ * @layer
+ * @provides GCP.ParameterManager.GetParameterVersion
+ */
+export const GetParameterVersionHttp = Layer.effect(
+  GetParameterVersion,
+  makeParameterVersionHttpBinding<
+    parametermanager.GetProjectsLocationsParametersVersionsRequest,
+    parametermanager.ParameterVersion,
+    parametermanager.GetProjectsLocationsParametersVersionsError,
+    GetParameterVersionRequest
+  >({
+    tag: "GCP.ParameterManager.GetParameterVersion",
+    // Parameter Manager has no resource-level IAM; an IAM Condition on the
+    // version name scopes the project grant to this version.
+    iam: {
+      role: "roles/parametermanager.parameterViewer",
+      scopeByCondition: true,
+    },
+    operation: parametermanager.getProjectsLocationsParametersVersions,
+    toInput: (name, request) => ({
+      name,
+      view: request?.view ?? "FULL",
+    }),
+  }),
 );

@@ -1,7 +1,11 @@
-import type * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeCollectorHttpBinding } from "./BindingHttp.ts";
 import type { Collector } from "./Collector.ts";
 
 export interface RegisterCollectorRequest extends Omit<
@@ -43,4 +47,27 @@ export interface RegisterCollector extends Binding.Service<
 
 export const RegisterCollector = Binding.Service<RegisterCollector>(
   "GCP.RapidMigrationAssessment.RegisterCollector",
+);
+
+/**
+ * HTTP implementation of {@link RegisterCollector}.
+ *
+ * @layer
+ * @provides GCP.RapidMigrationAssessment.RegisterCollector
+ */
+export const RegisterCollectorHttp: Layer.Layer<
+  RegisterCollector,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
+  RegisterCollector,
+  makeCollectorHttpBinding<
+    rma.RegisterProjectsLocationsCollectorsRequest,
+    rma.Operation,
+    rma.RegisterProjectsLocationsCollectorsError
+  >({
+    tag: "GCP.RapidMigrationAssessment.RegisterCollector",
+    iam: { role: "roles/rma.runner" },
+    operation: rma.registerProjectsLocationsCollectors,
+  }),
 );

@@ -1,0 +1,100 @@
+{
+  "discovery": "dataplex-v1",
+  "module": "dataplex_v1",
+  "resources": {
+    "AspectType": {
+      "pattern": "projects/*/locations/*/aspectTypes/*"
+    },
+    "DataDomain": {
+      "pattern": "projects/*/locations/*/dataDomains/*"
+    },
+    "DataDomainsBinding": {
+      "pattern": "projects/*/locations/*/dataDomains/*/bindings/*"
+    },
+    "DataProduct": {
+      "pattern": "projects/*/locations/*/dataProducts/*"
+    },
+    "DataProductsDataAsset": {
+      "pattern": "projects/*/locations/*/dataProducts/*/dataAssets/*"
+    },
+    "DataScan": {
+      "pattern": "projects/*/locations/*/dataScans/*"
+    },
+    "EncryptionConfig": {
+      "pattern": "organizations/*/locations/*/encryptionConfigs/*"
+    },
+    "EntryGroup": {
+      "pattern": "projects/*/locations/*/entryGroups/*"
+    },
+    "EntryGroupsEntry": {
+      "pattern": "projects/*/locations/*/entryGroups/*/entries/*"
+    },
+    "EntryGroupsEntryLink": {
+      "pattern": "projects/*/locations/*/entryGroups/*/entryLinks/*"
+    },
+    "EntryType": {
+      "pattern": "projects/*/locations/*/entryTypes/*"
+    },
+    "GlossariesCategory": {
+      "pattern": "projects/*/locations/*/glossaries/*/categories/*"
+    },
+    "GlossariesTerm": {
+      "pattern": "projects/*/locations/*/glossaries/*/terms/*"
+    },
+    "Glossary": {
+      "pattern": "projects/*/locations/*/glossaries/*"
+    },
+    "Lake": {
+      "pattern": "projects/*/locations/*/lakes/*"
+    },
+    "LakesAsset": {
+      "pattern": "projects/*/locations/*/lakes/*/zones/*/assets/*"
+    },
+    "LakesEntitiesPartition": {
+      "pattern": "projects/*/locations/*/lakes/*/zones/*/entities/*/partitions/*"
+    },
+    "LakesEntity": {
+      "pattern": "projects/*/locations/*/lakes/*/zones/*/entities/*"
+    },
+    "LakesTask": {
+      "pattern": "projects/*/locations/*/lakes/*/tasks/*"
+    },
+    "LakesZone": {
+      "pattern": "projects/*/locations/*/lakes/*/zones/*"
+    },
+    "MetadataFeed": {
+      "pattern": "projects/*/locations/*/metadataFeeds/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "DataProduct": "ProbeDataProduct",
+      "EntryGroup": "ProbeEntryGroup",
+      "EntryType": "ProbeEntryType",
+      "Glossary": "ProbeGlossary",
+      "Lake": "ProbeLake",
+      "AspectType": "ProbeAspectType",
+      "EntryGroupsEntry": "ProbeEntry",
+      "GlossariesCategory": "ProbeCategory",
+      "GlossariesTerm": "ProbeTerm",
+      "LakesZone": "ProbeZone",
+      "DataScan": "ProbeScan",
+      "LakesAsset": "ProbeAsset",
+      "MetadataFeed": "ProbeMetadataFeed",
+      "LakesEntity": "ProbeEntity",
+      "LakesEntitiesPartition": "ProbePartition",
+      "LakesTask": "ProbeTask",
+      "EntryGroupsEntryLink": "ProbeEntryLink",
+      "DataProductsDataAsset": "ProbeDataAsset"
+    },
+    "untestable": {
+      "DataDomain": "Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
+      "DataDomainsBinding": "Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
+      "EncryptionConfig": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    }
+  },
+  "permissionCollections": {
+    "dataScans": "datascans",
+    "jobs": "datascans"
+  }
+}

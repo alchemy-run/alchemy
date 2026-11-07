@@ -1,6 +1,8 @@
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
+import { makeStorageBucketBinding } from "./BucketHttp.ts";
 import type { ReadBucketClient } from "./ReadBucket.ts";
 import type { WriteBucketClient } from "./WriteBucket.ts";
 
@@ -29,3 +31,22 @@ export interface ReadWriteBucket extends Binding.Service<
 > {}
 
 export const ReadWriteBucket = Binding.Service<ReadWriteBucket>("GCP.Storage.ReadWriteBucket");
+
+/**
+ * HTTP implementation of {@link ReadWriteBucket} over the Cloud Storage JSON API.
+ *
+ * @layer
+ * @provides GCP.Storage.ReadWriteBucket
+ * @category Storage
+ */
+export const ReadWriteBucketHttp = Layer.effect(
+  ReadWriteBucket,
+  makeStorageBucketBinding({
+    tag: "GCP.Storage.ReadWriteBucket",
+    role: "roles/storage.objectUser",
+    makeClient: (helpers, name) => ({
+      ...helpers.makeRead(name),
+      ...helpers.makeWrite(name),
+    }),
+  }),
+);

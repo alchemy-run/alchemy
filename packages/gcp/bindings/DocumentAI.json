@@ -1,0 +1,23 @@
+{
+  "discovery": "documentai-v1",
+  "module": "documentai_v1",
+  "resources": {
+    "Processor": {
+      "pattern": "projects/*/locations/*/processors/*"
+    },
+    "Schema": {
+      "pattern": "projects/*/locations/*/schemas/*"
+    },
+    "SchemasSchemaVersion": {
+      "pattern": "projects/*/locations/*/schemas/*/schemaVersions/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Processor": "OcrBind",
+      "Schema": "Invoice",
+      "SchemasSchemaVersion": "InvoiceV1"
+    },
+    "location": "us"
+  }
+}

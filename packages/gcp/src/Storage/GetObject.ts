@@ -1,8 +1,15 @@
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
-import type { ObjectContent, ObjectNotFound, ObjectRequestFailed } from "./ObjectMedia.ts";
+import { GrantOnBucket } from "./ObjectHttp.ts";
+import {
+  type ObjectContent,
+  type ObjectNotFound,
+  type ObjectRequestFailed,
+  makeObjectMedia,
+} from "./ObjectMedia.ts";
 
 export type { ObjectContent } from "./ObjectMedia.ts";
 
@@ -45,3 +52,30 @@ export interface GetObject extends Binding.Service<
 > {}
 
 export const GetObject = Binding.Service<GetObject>("GCP.Storage.GetObject");
+
+/**
+ * HTTP implementation of {@link GetObject}.
+ *
+ * @layer
+ * @provides GCP.Storage.GetObject
+ */
+export const GetObjectHttp = Layer.effect(
+  GetObject,
+  Effect.gen(function* () {
+    const grantOnBucket = yield* GrantOnBucket;
+    const media = yield* makeObjectMedia;
+    return Effect.fn(function* (bucket: Bucket) {
+      yield* grantOnBucket("GCP.Storage.GetObject", bucket, "roles/storage.objectViewer");
+      const bucketName = yield* bucket.bucketName;
+      return Effect.fn(`GCP.Storage.GetObject(${bucket.LogicalId})`)(function* (
+        request: GetObjectRequest,
+      ) {
+        return yield* media.download({
+          bucket: yield* bucketName,
+          object: request.object,
+          generation: request.generation,
+        });
+      });
+    });
+  }),
+);

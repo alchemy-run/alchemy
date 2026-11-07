@@ -1,7 +1,10 @@
-import type * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
+import * as developerconnect from "@distilled.cloud/gcp/developerconnect_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
+import { makeGitRepositoryLinkHttpBinding } from "./BindingHttp.ts";
 import type { ConnectionsGitRepositoryLink } from "./ConnectionsGitRepositoryLink.ts";
 
 export interface FetchReadTokenRequest extends Omit<
@@ -44,4 +47,30 @@ export interface FetchReadToken extends Binding.Service<
 
 export const FetchReadToken = Binding.Service<FetchReadToken>(
   "GCP.DeveloperConnect.FetchReadToken",
+);
+
+/**
+ * HTTP implementation of {@link FetchReadToken}.
+ *
+ * @layer
+ * @provides GCP.DeveloperConnect.FetchReadToken
+ */
+export const FetchReadTokenHttp = Layer.effect(
+  FetchReadToken,
+  makeGitRepositoryLinkHttpBinding<
+    developerconnect.FetchReadTokenProjectsLocationsConnectionsGitRepositoryLinksRequest,
+    developerconnect.FetchReadTokenResponse,
+    developerconnect.FetchReadTokenProjectsLocationsConnectionsGitRepositoryLinksError
+  >({
+    tag: "GCP.DeveloperConnect.FetchReadToken",
+    iam: { role: "roles/developerconnect.readTokenAccessor" },
+    operation: Effect.gen(function* () {
+      const call = yield* GCPBindings.withCredentials(
+        developerconnect.fetchReadTokenProjectsLocationsConnectionsGitRepositoryLinks,
+      );
+      return (
+        input: developerconnect.FetchReadTokenProjectsLocationsConnectionsGitRepositoryLinksRequest,
+      ) => call(input);
+    }),
+  }),
 );

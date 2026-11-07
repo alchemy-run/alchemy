@@ -1,7 +1,9 @@
-import type * as retail from "@distilled.cloud/gcp/retail_v2";
+import * as retail from "@distilled.cloud/gcp/retail_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServingConfigHttpBinding } from "./BindingHttp.ts";
 import type { CatalogsServingConfig } from "./CatalogsServingConfig.ts";
 
 export interface SearchRequest extends Omit<
@@ -44,3 +46,18 @@ export interface Search extends Binding.Service<
 > {}
 
 export const Search = Binding.Service<Search>("GCP.Retail.Search");
+
+/**
+ * HTTP implementation of {@link Search}.
+ *
+ * @layer
+ * @provides GCP.Retail.Search
+ */
+export const SearchHttp = Layer.effect(
+  Search,
+  makeServingConfigHttpBinding({
+    tag: "GCP.Retail.Search",
+    operation: retail.searchProjectsLocationsCatalogsServingConfigs,
+    iam: { role: "roles/retail.viewer" },
+  }),
+);

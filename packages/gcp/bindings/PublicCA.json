@@ -1,0 +1,9 @@
+{
+  "discovery": "publicca-v1",
+  "module": "publicca_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["publicca.googleapis.com"]
+  }
+}

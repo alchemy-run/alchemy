@@ -1,7 +1,9 @@
-import type * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
+import * as cloudbuild from "@distilled.cloud/gcp/cloudbuild_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 export interface FetchGitRefsRequest extends Omit<
@@ -47,3 +49,18 @@ export interface FetchGitRefs extends Binding.Service<
 > {}
 
 export const FetchGitRefs = Binding.Service<FetchGitRefs>("GCP.CloudBuild.FetchGitRefs");
+
+/**
+ * HTTP implementation of {@link FetchGitRefs}.
+ *
+ * @layer
+ * @provides GCP.CloudBuild.FetchGitRefs
+ */
+export const FetchGitRefsHttp = Layer.effect(
+  FetchGitRefs,
+  makeRepositoryHttpBinding({
+    tag: "GCP.CloudBuild.FetchGitRefs",
+    iam: { role: "roles/cloudbuild.connectionViewer" },
+    operation: cloudbuild.fetchGitRefsProjectsLocationsConnectionsRepositories,
+  }),
+);

@@ -1,0 +1,33 @@
+{
+  "discovery": "managedidentities-v1",
+  "module": "managedidentities_v1",
+  "resources": {
+    "Domain": {
+      "pattern": "projects/*/locations/global/domains/*"
+    },
+    "DomainsBackup": {
+      "pattern": "projects/*/locations/global/domains/*/backups/*"
+    },
+    "Peering": {
+      "pattern": "projects/*/locations/global/peerings/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Domain": "ProbeDomain",
+      "DomainsBackup": "ProbeBackup"
+    },
+    "untestable": {
+      "Peering": "Domain peering is cross-project only. Same-project create returns `BadRequest` (\"DomainPeering should be used when network and domain resource belong to different projects\"). Full lifecycle needs a (GCP_TEST_MANAGEDIDENTITIES)"
+    },
+    "deployMinutes": 90,
+    "locations": {
+      "ListDomains": "global",
+      "ListPeerings": "global"
+    }
+  },
+  "names": {
+    "ListGlobalDomains": "ListDomains",
+    "ListGlobalPeerings": "ListPeerings"
+  }
+}

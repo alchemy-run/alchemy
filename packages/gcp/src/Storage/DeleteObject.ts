@@ -1,8 +1,10 @@
-import type * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
+import { makeObjectHttpBinding } from "./ObjectHttp.ts";
 
 export interface DeleteObjectRequest extends Omit<storage.DeleteObjectsRequest, "bucket"> {}
 
@@ -35,3 +37,18 @@ export interface DeleteObject extends Binding.Service<
 > {}
 
 export const DeleteObject = Binding.Service<DeleteObject>("GCP.Storage.DeleteObject");
+
+/**
+ * HTTP implementation of {@link DeleteObject}.
+ *
+ * @layer
+ * @provides GCP.Storage.DeleteObject
+ */
+export const DeleteObjectHttp = Layer.effect(
+  DeleteObject,
+  makeObjectHttpBinding({
+    tag: "GCP.Storage.DeleteObject",
+    role: "roles/storage.objectUser",
+    operation: storage.deleteObjects,
+  }),
+);

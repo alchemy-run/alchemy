@@ -2,7 +2,7 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/documentai_v1";
 import type { Output } from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam } from "../HttpBinding.ts";
 import type { Processor } from "./Processor.ts";
 import type { Schema } from "./Schema.ts";
 import type { SchemasSchemaVersion } from "./SchemasSchemaVersion.ts";
@@ -31,7 +31,7 @@ const makeNamedHttpBinding = <
     return Effect.fn(function* (resource: Resource) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(options.iam, resource.name)],
+          iam: grantsFor(options.iam, resource.name),
         });
       }
       const name = yield* resource.name;

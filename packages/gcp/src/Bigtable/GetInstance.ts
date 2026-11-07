@@ -1,7 +1,9 @@
-import type * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
+import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBigtableInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<bigtable.GetProjectsInstancesRequest, "name"> {}
@@ -35,3 +37,18 @@ export interface GetInstance extends Binding.Service<
 > {}
 
 export const GetInstance = Binding.Service<GetInstance>("GCP.Bigtable.GetInstance");
+
+/**
+ * HTTP implementation of {@link GetInstance}.
+ *
+ * @layer
+ * @provides GCP.Bigtable.GetInstance
+ */
+export const GetInstanceHttp = Layer.effect(
+  GetInstance,
+  makeBigtableInstanceHttpBinding({
+    tag: "GCP.Bigtable.GetInstance",
+    iam: { role: "roles/bigtable.viewer", on: "bigtable.instance" },
+    operation: bigtable.getProjectsInstances,
+  }),
+);

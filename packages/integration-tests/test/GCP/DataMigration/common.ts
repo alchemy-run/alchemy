@@ -10,7 +10,7 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-export const runSlowLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const runSlowLifecycle = !process.env.FAST;
 
 export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 

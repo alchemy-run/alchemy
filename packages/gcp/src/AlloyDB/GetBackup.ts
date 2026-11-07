@@ -1,8 +1,10 @@
-import type * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
+import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Backup } from "./Backup.ts";
+import { makeAlloyDbBackupHttpBinding } from "./BindingHttp.ts";
 
 export interface GetBackupRequest extends Omit<
   alloydb.GetProjectsLocationsBackupsRequest,
@@ -38,3 +40,18 @@ export interface GetBackup extends Binding.Service<
 > {}
 
 export const GetBackup = Binding.Service<GetBackup>("GCP.AlloyDB.GetBackup");
+
+/**
+ * HTTP implementation of {@link GetBackup}.
+ *
+ * @layer
+ * @provides GCP.AlloyDB.GetBackup
+ */
+export const GetBackupHttp = Layer.effect(
+  GetBackup,
+  makeAlloyDbBackupHttpBinding({
+    tag: "GCP.AlloyDB.GetBackup",
+    iam: { role: "roles/alloydb.viewer" },
+    operation: alloydb.getProjectsLocationsBackups,
+  }),
+);

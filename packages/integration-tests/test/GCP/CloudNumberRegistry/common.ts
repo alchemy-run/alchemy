@@ -1,3 +1,4 @@
+import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -8,10 +9,18 @@ export const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// The Cloud Number Registry API is not enabled in the testing project. Set
-// GCP_TEST_CLOUD_NUMBER_REGISTRY=1 on a project where it is.
-export const entitled = !!process.env.GCP_TEST_CLOUD_NUMBER_REGISTRY;
-export const runLifecycle = entitled && !process.env.FAST;
+// The testing project doesn't enable the Cloud Number Registry API by
+// default: every test deploys it first.
+// Lifecycles need an IPAM admin scope, which needs an organization-level number
+// registry: create answers BadRequest "OrgNumberRegistry must be created for
+// organization N with admin project N before creating an IPAM admin scope",
+// and registry books "Failed to find IPAM admin scope for project N". Set
+// GCP_TEST_CLOUD_NUMBER_REGISTRY_ORG=1 on a project whose organization has one.
+export const orgRegistry = !!process.env.GCP_TEST_CLOUD_NUMBER_REGISTRY_ORG && !process.env.FAST;
+
+export const CloudNumberRegistryApi = GCP.ServiceUsage.ProjectService("CloudNumberRegistryApi", {
+  service: "cloudnumberregistry.googleapis.com",
+});
 
 export const currentProject = GcpEnvironment.current.pipe(Effect.map((env) => env.project));
 export const location = "global";

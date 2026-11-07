@@ -53,7 +53,7 @@ test.provider.skipIf(!entitled)(
 );
 
 test.provider.skipIf(entitled)(
-  "getProjectsGroups fails with ServiceDisabled while the API is disabled",
+  "getProjectsGroups fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       // With the API enabled, this project (no App Engine app / no Firebase
@@ -68,7 +68,7 @@ test.provider.skipIf(entitled)(
           name: `${parent}/groups/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),

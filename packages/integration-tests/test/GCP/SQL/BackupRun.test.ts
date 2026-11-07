@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { TestInstance } from "./fixtures/test-instance.ts";
 
 const { test } = Test.make({
   providers: GCP.providers() as Layer.Layer<GCP.ProviderRequirements, never, StackServices>,
@@ -15,10 +16,8 @@ const { test } = Test.make({
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Runs against an existing Cloud SQL instance (creating one takes well over
-// 5 minutes); set GCP_SQL_INSTANCE to its name.
-const sqlInstance = process.env.GCP_SQL_INSTANCE || process.env.GCP_TEST_SQL_INSTANCE;
-const runLifecycle = !!sqlInstance && !process.env.FAST;
+// The lifecycle creates its own instance (5-10 minutes), so `--fast` skips it.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (instance: string, backupRunId: string) =>
   GcpEnvironment.current.pipe(
@@ -31,7 +30,11 @@ const waitUntilGone = (instance: string, backupRunId: string) =>
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // Destroy also removes the test's instance; Cloud SQL hides a missing
+          // instance behind SqlInstanceNotAuthorized.
+          Effect.catchTag(["NotFound", "SqlInstanceNotAuthorized"], () =>
+            Effect.succeed("gone" as const),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (status) => status === "gone",
@@ -91,12 +94,14 @@ test.provider.skipIf(!runLifecycle)(
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
 
-      const instance = sqlInstance!;
+      const { instanceName: instance } = yield* stack.deploy(TestInstance);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.BackupRun("Nightly", {
-            instance,
+            instance: db.instanceName,
             description: "alchemy-on-demand",
           });
         }),
@@ -119,8 +124,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          // Depend on the instance so destroy removes this first.
+          const db = yield* TestInstance;
           return yield* GCP.SQL.BackupRun("Nightly", {
-            instance,
+            instance: db.instanceName,
             description: "alchemy-on-demand",
           });
         }),
@@ -141,5 +148,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.instance, created.backupRunId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:sql", "live"], timeout: 1_800_000 },
 );

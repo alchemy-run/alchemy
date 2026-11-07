@@ -1,7 +1,9 @@
-import type * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
+import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDocumentSchemaHttpBinding } from "./BindingHttp.ts";
 import type { DocumentSchema } from "./DocumentSchema.ts";
 
 export interface GetDocumentSchemaRequest extends Omit<
@@ -43,4 +45,19 @@ export interface GetDocumentSchema extends Binding.Service<
 
 export const GetDocumentSchema = Binding.Service<GetDocumentSchema>(
   "GCP.ContentWarehouse.GetDocumentSchema",
+);
+
+/**
+ * HTTP implementation of {@link GetDocumentSchema}.
+ *
+ * @layer
+ * @provides GCP.ContentWarehouse.GetDocumentSchema
+ */
+export const GetDocumentSchemaHttp = Layer.effect(
+  GetDocumentSchema,
+  makeDocumentSchemaHttpBinding({
+    tag: "GCP.ContentWarehouse.GetDocumentSchema",
+    operation: cw.getProjectsLocationsDocumentSchemas,
+    iam: { role: "roles/contentwarehouse.documentSchemaViewer" },
+  }),
 );

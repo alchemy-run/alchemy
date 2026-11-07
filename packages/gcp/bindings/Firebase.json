@@ -1,0 +1,35 @@
+{
+  "discovery": "firebase-v1beta1",
+  "module": "firebase_v1beta1",
+  "resources": {
+    "AndroidApp": {
+      "pattern": "projects/*/androidApps/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "AndroidApp": "Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)"
+    },
+    "allowedOutcomes": {
+      "NotFound": "the testing project has no Firebase (adding Firebase to a GCP project is permanent), so its project reads answer NotFound"
+    },
+    "skip": {
+      "RemoveProjectAnalytics": "removes Google Analytics from a Firebase project; the testing project has no Firebase"
+    }
+  },
+  "permissionCollections": {
+    "iosApps": "clients",
+    "androidApps": "clients",
+    "webApps": "clients",
+    "sha": "clients",
+    "availableLocations": "locations",
+    "defaultLocation": "projects",
+    "availableProjects": "projects"
+  },
+  "verbPermissions": {
+    "getConfig": "get",
+    "remove": "delete",
+    "finalize": "update"
+  }
+}

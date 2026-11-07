@@ -1,0 +1,20 @@
+{
+  "discovery": "androidmanagement-v1",
+  "module": "androidmanagement_v1",
+  "resources": {
+    "Enterprise": {
+      "pattern": "enterprises/*"
+    },
+    "EnterprisesEnrollmentToken": {
+      "pattern": "enterprises/*/enrollmentTokens/*"
+    },
+    "EnterprisesWebApp": {
+      "pattern": "enterprises/*/webApps/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {},
+    "enable": ["androidmanagement.googleapis.com"]
+  }
+}

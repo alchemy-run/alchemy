@@ -1,8 +1,10 @@
-import type * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
+import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdminTopic } from "./AdminTopic.ts";
+import { makeTopicNameHttpBinding } from "./BindingHttp.ts";
 
 export interface GetTopicRequest extends Omit<
   pubsublite.GetAdminProjectsLocationsTopicsRequest,
@@ -45,3 +47,18 @@ export interface GetTopic extends Binding.Service<
 > {}
 
 export const GetTopic = Binding.Service<GetTopic>("GCP.PubSubLite.GetTopic");
+
+/**
+ * HTTP implementation of {@link GetTopic}.
+ *
+ * @layer
+ * @provides GCP.PubSubLite.GetTopic
+ */
+export const GetTopicHttp = Layer.effect(
+  GetTopic,
+  makeTopicNameHttpBinding({
+    tag: "GCP.PubSubLite.GetTopic",
+    iam: { role: "roles/pubsublite.viewer" },
+    operation: pubsublite.getAdminProjectsLocationsTopics,
+  }),
+);

@@ -1,0 +1,15 @@
+{
+  "discovery": "storageinsights-v1",
+  "module": "storageinsights_v1",
+  "resources": {
+    "ReportConfig": {
+      "pattern": "projects/*/locations/*/reportConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ReportConfig": "ProbeReportConfig"
+    },
+    "enable": ["storageinsights.googleapis.com"]
+  }
+}

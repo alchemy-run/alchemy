@@ -1,0 +1,29 @@
+{
+  "discovery": "dns-v1",
+  "module": "dns_v1",
+  "resources": {
+    "ManagedZone": {
+      "pattern": "projects/*/managedZones/*",
+      "_flat": true
+    },
+    "Policy": {
+      "pattern": "projects/*/policies/*",
+      "_flat": true
+    },
+    "ResourceRecordSet": {
+      "pattern": "projects/*/managedZones/*/rrsets/*/*",
+      "_flat": true
+    },
+    "ResponsePolicy": {
+      "pattern": "projects/*/responsePolicies/*",
+      "_flat": true
+    },
+    "ResponsePolicyRule": {
+      "pattern": "projects/*/responsePolicies/*/rules/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

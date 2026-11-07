@@ -1,8 +1,10 @@
-import type * as file from "@distilled.cloud/gcp/file_v1";
+import * as file from "@distilled.cloud/gcp/file_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Backup } from "./Backup.ts";
+import { makeFilestoreBackupHttpBinding } from "./BindingHttp.ts";
 
 export interface GetBackupRequest extends Omit<file.GetProjectsLocationsBackupsRequest, "name"> {}
 
@@ -35,3 +37,18 @@ export interface GetBackup extends Binding.Service<
 > {}
 
 export const GetBackup = Binding.Service<GetBackup>("GCP.Filestore.GetBackup");
+
+/**
+ * HTTP implementation of {@link GetBackup}.
+ *
+ * @layer
+ * @provides GCP.Filestore.GetBackup
+ */
+export const GetBackupHttp = Layer.effect(
+  GetBackup,
+  makeFilestoreBackupHttpBinding({
+    tag: "GCP.Filestore.GetBackup",
+    iam: { role: "roles/file.viewer" },
+    operation: file.getProjectsLocationsBackups,
+  }),
+);
