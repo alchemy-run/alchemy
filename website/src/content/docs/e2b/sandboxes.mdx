@@ -10,12 +10,12 @@ A sandbox is one microVM, started from a template's snapshot. It runs for its **
 <StateMachine
   states={[
     { id: "running", label: "running", col: 0, row: 0, start: true, tone: "accent" },
-    { id: "paused", label: "paused", type: "memory kept", col: 2, row: 0 },
-    { id: "killed", label: "killed", col: 1, row: 1, end: true },
+    { id: "paused", label: "paused", type: "memory kept", col: 1, row: 0 },
+    { id: "killed", label: "killed", col: 0.5, row: 1, end: true },
   ]}
   transitions={[
-    { from: "running", to: "paused", label: "timeout · autoPause", bend: 0.7 },
-    { from: "paused", to: "running", label: "resume", bend: 0.7 },
+    { from: "running", to: "paused", label: "autoPause", bend: 0.15 },
+    { from: "paused", to: "running", label: "resume", bend: 0.45 },
     { from: "running", to: "killed", label: "timeout · kill()" },
     { from: "paused", to: "killed", label: "kill()" },
   ]}
