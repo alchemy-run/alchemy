@@ -1,0 +1,37 @@
+---
+title: Persistent sandboxes
+description: One sandbox whose filesystem outlives its sessions.
+---
+
+A persistent sandbox keeps its files between sessions. Each session runs up to an hour and pauses after five idle minutes. The next session resumes where it stopped.
+
+## Declare a box
+
+```typescript
+// src/DevBox.ts
+import * as Modal from "@alchemy.run/modal";
+import { Coder, Warm } from "./Coder.ts";
+
+export const DevBox = Modal.PersistentSandbox("DevBox", { app: Coder, image: Warm, workdir: "/work" });
+```
+
+## Resume it from a Worker
+
+```typescript
+// construction phase
+const box = yield* Modal.ConnectSandbox(DevBox);
+// in fetch:
+const session = yield* box.session();
+const status = yield* session.exec("git status");
+```
+
+`session()` returns the running session, or resumes the box from its last session's files.
+
+## One per user, at runtime
+
+```typescript
+const box = yield* sandboxes.createPersistent({ image: "node:22-bookworm" });
+// store box.persistentSandboxId with the user
+```
+
+Persistent sandboxes are experimental on Modal: no names, GPUs, `env` or tags yet.
