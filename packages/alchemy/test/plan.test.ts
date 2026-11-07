@@ -18,7 +18,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import { UnsatisfiedResourceCycle } from "@/Plan";
+import { type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
@@ -4178,22 +4178,38 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
   // #3112: two resources that reference each other, one through a ref,
   // deadlocked the plan.
   describe("a ref that closes a cycle (#3112)", () => {
-    test(
-      "props cycle: plan finishes and plans noops",
-      Effect.gen(function* () {
-        yield* seed({
-          Api: row("Api", { string: "api", stringArray: ["auth"] }, {}, []),
-          Auth: row("Auth", { string: "auth", stringArray: ["api"] }, {}, []),
-        });
-        const plan = yield* Effect.gen(function* () {
-          const api = yield* TestResource.ref("Api");
-          const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
-          yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
-        }).pipe(makePlan, Effect.timeout("5 seconds"));
-        expect(plan.resources.Api!.action).toBe("noop");
-        expect(plan.resources.Auth!.action).toBe("noop");
-      }),
-    );
+    const refCycle = Effect.gen(function* () {
+      const api = yield* TestResource.ref("Api");
+      const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
+      yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+    });
+
+    for (const [name, seeded] of [
+      ["neither exists", {}],
+      [
+        "both exist",
+        {
+          Api: row("Api", { string: "api", stringArray: ["auth"] }),
+          Auth: row("Auth", { string: "auth", stringArray: ["api"] }),
+        },
+      ],
+    ] as const) {
+      test(
+        `props cycle fails the plan with RefCycleError when ${name}`,
+        Effect.gen(function* () {
+          yield* seed(seeded);
+          const exit = yield* refCycle.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause) as RefCycleError;
+            expect(error._tag).toBe("RefCycleError");
+            expect(error.owner).toBe("Auth");
+            expect(error.target).toBe("Api");
+            expect(error.message).toContain("Auth -> Api -> Auth");
+          }
+        }),
+      );
+    }
 
     test(
       "binding cycle: plan finishes and plans noops",
