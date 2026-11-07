@@ -872,6 +872,20 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * ### Run your own image
+ * `context` builds a directory's `Dockerfile` as it is, on a Fly remote
+ * builder, and runs the image's own `CMD`. A change to any file in the
+ * directory updates the Machines.
+ *
+ * **Example:** A Dockerfile build
+ * ```typescript
+ * const worker = yield* Fly.Service("Worker", {
+ *   context: "./worker",
+ *   public: false,
+ *   services: [],
+ * });
+ * ```
+ *
  * ### Custom proxy services
  * `services` defaults to HTTP 80 (redirecting to HTTPS) + HTTPS 443
  * toward `port`, or plain HTTP 80 for a private Service. Pass a custom

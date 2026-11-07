@@ -134,6 +134,6 @@ A RivetKit program also runs its own process on every node of its pool, so it ne
 
 ## The same control planes and pools
 
-All four are a `Rivet.DurableObject` given a pool: a Durable Object passes its implementation, and a RivetKit program passes only its entry file, and a Rust one its crate. So all four run on any [control plane](/rivet/control-planes), and move between pools the same way. A Rust program needs a pool that builds images from a Dockerfile; see [Rust Actors](/rivet/rust).
+All four are a `Rivet.DurableObject` given a pool: a Durable Object passes its implementation, and a RivetKit program passes only its entry file, and a Rust one its crate. So all four run on any [control plane](/rivet/control-planes) and any [pool](/rivet/pools), on any cloud, and move between them the same way.
 
 Next, [Durable Object](/rivet/durable-objects): how Alchemy's form is written.

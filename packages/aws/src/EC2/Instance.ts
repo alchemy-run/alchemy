@@ -398,6 +398,16 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * }
  * ```
  *
+ * ### Running a container
+ * **Example:** A Dockerfile build, run with Docker on the instance
+ * ```typescript
+ * const worker = yield* AWS.EC2.Instance("Worker", {
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "t4g.small",
+ *   context: "./worker",
+ * });
+ * ```
+ *
  * ### Looking up an existing instance
  * `Instance.lookup` references an instance Alchemy doesn't manage (created in the
  * console or by another stack), found by `instanceId` or its `Name` tag. It is read during

@@ -156,6 +156,15 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ) {}
  * ```
  *
+ * ### Running your own image
+ * **Example:** A Dockerfile build, run with Docker on the Server
+ * ```typescript
+ * const worker = yield* Hetzner.Service("Worker", {
+ *   server,
+ *   context: "./worker",
+ * });
+ * ```
+ *
  * ### Volumes
  * **Example:** Mount a Volume
  * ```typescript

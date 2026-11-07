@@ -141,7 +141,7 @@ export const Counter = Rivet.DurableObject("Counter", {
 
 ## Give it a pool of its own
 
-The binary runs its own process on every node, so its pool runs nothing else. The pool has to build images from a Dockerfile: `RivetDocker.SwarmPool`, `RivetAWS.EcsPool`, `RivetKubernetes.DeploymentPool`, `RivetRailway.ServicePool` or `RivetCloud.Pool`.
+The binary runs its own process on every node, so its pool runs nothing else. Any pool on any cloud works:
 
 ```typescript title="src/cluster.ts"
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
@@ -152,7 +152,7 @@ export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
 ```
 
-A pool whose nodes run JavaScript bundles, such as `RivetFly.MachinePool` or `RivetHetzner.ServerPool`, doesn't provide what a crate needs, so the Stack doesn't type-check.
+Pools on container platforms build and run the image there: ECS, Kubernetes, Cloud Run, Fly and Railway build it from the crate, and Rivet Cloud takes an upload of it. Pools of plain VMs (EC2, Compute Engine and Hetzner Servers) run it in Docker on each VM: Alchemy builds it for the VM's architecture, ships it to the VM, and starts it there.
 
 ## Reach it from other code
 

@@ -360,6 +360,15 @@ export type WorkerPoolShape =
  * const live = yield* getWorkerPool();
  * ```
  *
+ * ### Worker Pool from a Dockerfile
+ * **Example:** Build a directory's Dockerfile and run its image
+ * ```typescript
+ * const workers = yield* GCP.Run.WorkerPool("Workers", {
+ *   context: "./worker",
+ *   scaling: { manualInstanceCount: 1 },
+ * });
+ * ```
+ *
  * ### Effect-native Worker Pool with bindings
  * **Example:** Pull workers with Memorystore
  * ```typescript
