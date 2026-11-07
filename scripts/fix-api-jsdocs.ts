@@ -27,6 +27,7 @@ const packages = [
   "e2b",
   "daytona",
   "archil",
+  "modal",
   "planetscale",
   "neon",
   "prisma",

@@ -94,6 +94,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/daytona/src",
   },
   {
+    srcRoot: "packages/modal/src",
+    providerPrefix: "Modal",
+    sourceDisplayPrefix: "packages/modal/src",
+  },
+  {
     srcRoot: "packages/planetscale/src",
     providerPrefix: "Planetscale",
     sourceDisplayPrefix: "packages/planetscale/src",

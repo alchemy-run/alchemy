@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-modal-sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-modal-sandbox"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
+  }
+}
