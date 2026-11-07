@@ -14,9 +14,10 @@ const { test } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
- * `DomainCloudflare.layer({ jurisdiction: "eu" })` keeps the model's objects in the
- * EU namespace: switching the same Worker to the unrestricted platform finds
- * none of them, and switching back finds them where they were left.
+ * `DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })` keeps the
+ * model's objects in the EU namespace: switching the same Worker to the
+ * unrestricted platform finds none of them, and switching back finds them
+ * where they were left.
  */
 test.provider(
   "a Domain model's Durable Objects live in its jurisdiction",

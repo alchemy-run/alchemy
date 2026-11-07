@@ -1,6 +1,6 @@
 # Hosting on Cloudflare with alchemy
 
-The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layer()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
+The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts
 // packages/server/src/BankWorker.ts
@@ -22,7 +22,7 @@ const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
-    Layer.mergeAll(DomainCloudflare.layer(), SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
+    Layer.mergeAll(DomainCloudflare.layerDurableObjects(), SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
   ),
 );
 
@@ -44,21 +44,26 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-- Swap `DomainCloudflare.layer()` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
+- Swap `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
 ## Hosting on Rivet or Effect Cluster
 
-Every platform is one Layer provided to the model: `DomainCloudflare.layer()`, `DomainRivet.layer(options)`, `DomainCluster.layer(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
 
 ```ts
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
 export const BankLive = Bank.layer(BankHandlers).pipe(
   Layer.provide(
-    DomainRivet.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
-    // or DomainCluster.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default })
+    DomainRivet.layerDurableObjects({
+      name: "Bank",
+      main: import.meta.url,
+      handler: "BankLive",
+      pool: Default,
+    }),
+    // on Effect Cluster: DomainCluster.layerEntities, with the same options
   ),
 );
 ```

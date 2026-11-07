@@ -6,7 +6,9 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import { Batches, GroupId, Ping, Pinger, Pongs, PongWriterLive } from "./batches.ts";
 
-const BatchesLive = Batches.layer(PongWriterLive).pipe(Layer.provide(DomainCloudflare.layer()));
+const BatchesLive = Batches.layer(PongWriterLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
 
 /** `POST /ping/<group>/<id>[?slow=true]` sends a ping; `GET /pongs/<group>` lists the group's pongs. */
 const ROUTE = /^\/(ping|pongs)\/([^/]+)(?:\/([^/]+))?$/;

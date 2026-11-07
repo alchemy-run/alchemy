@@ -18,7 +18,7 @@ import {
   Support,
 } from "./isolation.ts";
 
-const Platform = DomainCloudflare.layer();
+const Platform = DomainCloudflare.layerDurableObjects();
 
 /** Billing's and Audit's Account and Owners. */
 const views = Effect.all({

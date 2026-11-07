@@ -356,7 +356,7 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
   address.entityId.slice(WORKFLOWS.length + 1),
 );
 
-/** Options for {@link layer}. */
+/** Options for {@link layerEntities}. */
 export interface LayerOptions<PoolReq> {
   /** The entity that hosts the model: its type in the cluster. */
   readonly name: string;
@@ -377,7 +377,7 @@ export interface LayerOptions<PoolReq> {
 
 /**
  * Host a domain model on Effect Cluster entities. Provide it to the model's
- * Layer, as `Domain.InMemory` or `DomainCloudflare.layer()` would be, in
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()` would be, in
  * every runtime that serves the model: a container, a Lambda, a Worker.
  *
  * The model's aggregate instances, view keys, policies and projection keys
@@ -412,7 +412,12 @@ export interface LayerOptions<PoolReq> {
  *
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainCluster.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+ *     DomainCluster.layerEntities({
+ *       name: "Bank",
+ *       main: import.meta.url,
+ *       handler: "BankLive",
+ *       pool: Default,
+ *     }),
  *   ),
  * );
  *
@@ -430,7 +435,7 @@ export interface LayerOptions<PoolReq> {
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layer = <PoolReq>(
+export const layerEntities = <PoolReq>(
   options: LayerOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,

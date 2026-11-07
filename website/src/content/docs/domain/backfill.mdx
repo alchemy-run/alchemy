@@ -48,7 +48,7 @@ The deploy waits 30 minutes at most. Set `backfillTimeout` to change that:
 
 ```ts
 const BankLive = Bank.layer(BankPolicies).pipe(
-  Layer.provide(DomainCloudflare.layer({ backfillTimeout: "2 hours" })),
+  Layer.provide(DomainCloudflare.layerDurableObjects({ backfillTimeout: "2 hours" })),
 );
 ```
 

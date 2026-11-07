@@ -383,7 +383,7 @@ const cloudflareHost = (
  *
  * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.layer()),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -404,7 +404,7 @@ const cloudflareHost = (
  * import { Bank, BankPolicies } from "./Bank.ts";
  *
  * const BankLive = Bank.layer(BankPolicies).pipe(
- *   Layer.provide(DomainCloudflare.layer({ jurisdiction: "eu" })),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
  * );
  * ```
  *
@@ -422,7 +422,7 @@ const cloudflareHost = (
  * import { Audit, AuditHandlers } from "./Audit.ts";
  * import { Billing, BillingHandlers } from "./Billing.ts";
  *
- * const Platform = DomainCloudflare.layer();
+ * const Platform = DomainCloudflare.layerDurableObjects();
  * const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
  * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
  * ```
@@ -435,7 +435,7 @@ const cloudflareHost = (
  * import { Bank, BankPolicies } from "./Bank.ts";
  *
  * const BankLive = Bank.layer(BankPolicies).pipe(
- *   Layer.provide(DomainCloudflare.layer({ jurisdiction: "eu" })),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
  * );
  * ```
  *
@@ -443,7 +443,10 @@ const cloudflareHost = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function layer({ jurisdiction, backfillTimeout }: DurableObjectsOptions = {}): Layer.Layer<
+export function layerDurableObjects({
+  jurisdiction,
+  backfillTimeout,
+}: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
   Worker | SecureRandom.SecureRandom
@@ -505,7 +508,7 @@ const legacyEngine = (
     }),
   );
 
-/** Options for {@link layer}. */
+/** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions {
   /**
    * Create and store every Durable Object of the model (aggregates, views,
@@ -540,9 +543,3 @@ const platforms = new Map<
   string,
   Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker | SecureRandom.SecureRandom>
 >();
-
-/**
- * The old name of {@link layer}.
- * @deprecated Use `DomainCloudflare.layer()`.
- */
-export const layerDurableObjects = layer;

@@ -6,7 +6,7 @@ import { DomainPool } from "./domain-cluster.ts";
 
 export const ConformanceRivetLive = ConformanceLive.pipe(
   Layer.provide(
-    DomainRivet.layer({
+    DomainRivet.layerDurableObjects({
       name: "DomainObjects",
       main: import.meta.url,
       handler: "ConformanceRivetLive",

@@ -15,7 +15,9 @@ export default class DomainTwiceWorker extends Cloudflare.Worker<DomainTwiceWork
   { main: import.meta.url },
   Effect.gen(function* () {
     const accounts = Effect.map(Effect.all({ accounts: Account }), ({ accounts }) => accounts);
-    const BillingLive = Billing.layer(Layer.empty).pipe(Layer.provide(DomainCloudflare.layer()));
+    const BillingLive = Billing.layer(Layer.empty).pipe(
+      Layer.provide(DomainCloudflare.layerDurableObjects()),
+    );
     const writer = yield* Effect.provide(accounts, BillingLive);
     const reader = yield* Effect.provide(accounts, BillingLive);
     return {

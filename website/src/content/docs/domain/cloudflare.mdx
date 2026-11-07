@@ -8,7 +8,7 @@ Host your model on Cloudflare, and every aggregate instance, view key and policy
 
 ## Host the model
 
-Provide `DomainCloudflare.layer()` to the model's Layer, as you would `DomainRivet.layer` or `Domain.InMemory`, and serve your Apis from the Worker.
+Provide `DomainCloudflare.layerDurableObjects()` to the model's Layer, as you would `DomainRivet.layerDurableObjects` or `Domain.InMemory`, and serve your Apis from the Worker.
 
 ```typescript
 // packages/server/src/BankWorker.ts
@@ -35,7 +35,7 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 /**
  * Everything the Worker serves: the middleware both Apis declare, and the
  * Bank hosted on Durable Objects, with the ledger in D1. Swap
- * `DomainCloudflare.layer()` for `Domain.InMemory` and nothing else changes.
+ * `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes.
  */
 const BankLive = Layer.mergeAll(
   SessionLive,
@@ -48,7 +48,7 @@ const BankLive = Layer.mergeAll(
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
     Layer.mergeAll(
-      DomainCloudflare.layer(),
+      DomainCloudflare.layerDurableObjects(),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,
@@ -145,12 +145,12 @@ Sagas run on `Cloudflare.Workflows.layerDurableObjectEngine()`, the same engine 
 
 ## Keep the model in a jurisdiction
 
-Pass a `jurisdiction` to `DomainCloudflare.layer` in `BankLive` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
+Pass a `jurisdiction` to `DomainCloudflare.layerDurableObjects` in `BankLive` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
 
 ```typescript
   Layer.provide(
     Layer.mergeAll(
-      DomainCloudflare.layer({ jurisdiction: "eu" }),
+      DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" }),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,
@@ -162,7 +162,7 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layer()`. Two different models with the same name in one Worker fail its deploy.
+Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
 
 Renaming a model renames its classes, and the model starts empty under the new names.
 
@@ -178,7 +178,7 @@ import * as Layer from "effect/Layer";
 import { Audit, AuditHandlers } from "./Audit.ts";
 import { Billing, BillingHandlers } from "./Billing.ts";
 
-const Platform = DomainCloudflare.layer();
+const Platform = DomainCloudflare.layerDurableObjects();
 // Billing keeps the accounts both models wrote; Audit starts empty.
 export const BillingLive = Billing.layer(BillingHandlers, { legacyData: true }).pipe(
   Layer.provide(Platform),

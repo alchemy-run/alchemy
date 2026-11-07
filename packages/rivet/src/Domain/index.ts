@@ -202,7 +202,7 @@ const multiplexed = (
   );
 };
 
-/** Options for {@link layer}. */
+/** Options for {@link layerDurableObjects}. */
 export interface LayerOptions<PoolReq> {
   /** The Rivet Durable Object class that hosts the model: its actors' name. */
   readonly name: string;
@@ -267,7 +267,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
 
 /**
  * Host a domain model on Rivet Durable Objects. Provide it to the model's
- * Layer, as `Domain.InMemory` or `DomainCloudflare.layer()` would be, in
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()` would be, in
  * every runtime that serves the model: a Worker, a Lambda, a container.
  *
  * The model's aggregate instances, view keys, policies and saga runs are
@@ -300,7 +300,12 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  *
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainRivet.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+ *     DomainRivet.layerDurableObjects({
+ *       name: "Bank",
+ *       main: import.meta.url,
+ *       handler: "BankLive",
+ *       pool: Default,
+ *     }),
  *   ),
  * );
  *
@@ -318,7 +323,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layer = <PoolReq>(
+export const layerDurableObjects = <PoolReq>(
   options: LayerOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,

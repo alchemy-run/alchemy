@@ -8,7 +8,7 @@ Host your model on [Effect Cluster](/cluster), and every aggregate instance, vie
 
 ## Host the model
 
-Provide `DomainCluster.layer` to the model's Layer, as you would `DomainCloudflare.layer()` or `Domain.InMemory`. Name the entity that holds the model, point `main` and `handler` at the export the runners load, and give it a pool.
+Provide `DomainCluster.layerEntities` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the entity that holds the model, point `main` and `handler` at the export the runners load, and give it a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -24,7 +24,12 @@ const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.p
 export const BankLive = Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
-      DomainCluster.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+      DomainCluster.layerEntities({
+        name: "Bank",
+        main: import.meta.url,
+        handler: "BankLive",
+        pool: Default,
+      }),
       SiftFraudCheck,
     ),
   ),

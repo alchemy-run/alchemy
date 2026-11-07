@@ -58,4 +58,4 @@ export const ledgerWorker = (
 export const hosted = <L extends Layer.Layer<any, any, any>>(
   model: L,
   options?: DomainCloudflare.DurableObjectsOptions,
-) => model.pipe(Layer.provide(DomainCloudflare.layer(options)));
+) => model.pipe(Layer.provide(DomainCloudflare.layerDurableObjects(options)));

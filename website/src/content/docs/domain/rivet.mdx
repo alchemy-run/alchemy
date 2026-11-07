@@ -8,7 +8,7 @@ Host your model on [Rivet](/rivet), and every aggregate instance, view key and p
 
 ## Host the model
 
-Provide `DomainRivet.layer` to the model's Layer, as you would `DomainCloudflare.layer()` or `Domain.InMemory`. Name the class that holds the model, point `main` and `handler` at the export the nodes load, and give it a pool.
+Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` and `handler` at the export the nodes load, and give it a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -24,7 +24,12 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 export const BankLive = Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
-      DomainRivet.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+      DomainRivet.layerDurableObjects({
+        name: "Bank",
+        main: import.meta.url,
+        handler: "BankLive",
+        pool: Default,
+      }),
       SiftFraudCheck,
     ),
   ),

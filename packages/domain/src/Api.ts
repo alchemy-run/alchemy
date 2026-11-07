@@ -1105,7 +1105,7 @@ const build = (
  *
  * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.layer()),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
