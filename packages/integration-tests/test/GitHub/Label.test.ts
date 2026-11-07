@@ -6,6 +6,7 @@ import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { repoOf, expectFound } from "./lookup.ts";
 import { scopedToOwner } from "./scope.ts";
 import { gh } from "./scope.ts";
 
@@ -53,6 +54,10 @@ test.provider(
         );
 
       const result1 = yield* deploy1();
+      yield* expectFound(
+        GitHub.Label.lookup({ ...repoOf(result1.label.url), name: result1.label.name }),
+        result1.label,
+      );
       expect(result1.label.name).toBe("bug");
       expect(result1.label.color).toBe("d73a4a");
       expect(result1.label.description).toBe("Something isn't working");

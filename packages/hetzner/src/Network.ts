@@ -139,8 +139,18 @@ export type Network = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  NetworkLookup
 >;
+
+/**
+ * Props for {@link Network.lookup}: find a network this stack
+ * doesn't manage by its name.
+ */
+export interface NetworkLookup {
+  /** Network name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud private Network — an isolated IPv4 range that Cloud
@@ -187,6 +197,22 @@ export type Network = Resource<
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
  *   labels: { env: "prod", role: "vpc" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing network
+ * `Network.lookup` references a network Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Attach a Server to an existing network
+ * ```typescript
+ * const network = Hetzner.Network.lookup({ name: "private" });
+ * const server = yield* Hetzner.Server("Web", {
+ *   serverType: "cpx12",
+ *   image: "ubuntu-24.04",
+ *   location: "nbg1",
+ *   networks: [network],
  * });
  * ```
  *
@@ -523,6 +549,11 @@ export const NetworkProvider = () =>
         return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
     }),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {

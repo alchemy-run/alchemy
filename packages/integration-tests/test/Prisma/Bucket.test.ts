@@ -22,6 +22,7 @@ import {
   markCreating,
   patchStateAttr,
 } from "./fixtures/Live.ts";
+import { expectFound } from "./lookup.ts";
 
 const live = Test.make({ providers: Prisma.providers() });
 
@@ -83,6 +84,7 @@ live.test.provider(
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(bucketStack({ name: "uploads" }));
+    yield* expectFound(Prisma.Bucket.lookup({ bucketId: initial.bucket.bucketId }), initial.bucket);
     expect(initial.bucket.logicalId).toBe("Uploads");
     const created = yield* observeBucket(initial.bucket.bucketId);
     expect(created.project.id).toBe(initial.project.projectId);

@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Archil.providers() });
 
@@ -33,6 +34,7 @@ test.provider(
         });
 
       const { disk, sandbox } = yield* stack.deploy(app({ ports: [3000] }));
+      yield* expectFound(Archil.Sandbox.lookup({ name: sandbox.name }), sandbox);
       expect(sandbox.name).toMatch(/^[a-z0-9-]+$/);
       expect(sandbox.endpoints.map((e) => e.port)).toEqual([3000]);
       const live = yield* observe(sandbox.sandboxId);

@@ -14,6 +14,7 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import MongoApi, { Db, Site } from "./fixtures/mongo-api.ts";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
@@ -151,6 +152,14 @@ test.provider(
           const db = yield* Railway.mongo("Db", { project, environment });
           return { project, environment, db };
         }),
+      );
+      yield* expectFound(
+        Railway.Mongo.lookup({
+          projectId: created.db.projectId,
+          environmentId: created.db.environmentId,
+          serviceId: created.db.serviceId,
+        }),
+        created.db,
       );
 
       expect(created.db.serviceId).toEqual(expect.any(String));
