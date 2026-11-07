@@ -1,20 +1,25 @@
 /**
- * What a runner's bootstrap knows while it builds its entrypoints: that it
- * is a runner, the entities Layers built there host (a Domain platform's
- * entity, built by the model's Layer rather than exported as a class), and
- * the Layers they hand it to launch inside the cluster (with Sharding and
- * the workflow engine), on every runner of the pool.
+ * The runner a Layer is being built on. A runner's bootstrap provides it
+ * while it builds its entrypoints, so a Layer that hosts an entity itself
+ * (a Domain platform's, built by the model's Layer rather than exported as
+ * a class) hands the runner that entity, and the Layer to launch with it
+ * inside the cluster (with Sharding and the workflow engine). Anywhere
+ * else, the service is absent.
  *
  * @internal
  */
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { HostedEntity } from "../Entity.ts";
 
-export const RunnerHost: {
-  /** Set by the runner's bootstrap before it builds its entrypoints. */
-  active: boolean;
-  /** Entities hosted by Layers, in the order they were built. */
-  readonly hosted: Array<HostedEntity>;
-  /** Layers to launch in the cluster with the runner's entities. */
-  readonly layers: Array<Layer.Layer<never, never, any>>;
-} = { active: false, hosted: [], layers: [] };
+export class RunnerHost extends Context.Service<
+  RunnerHost,
+  {
+    /** Host an entity on this runner, launching `layer` in the cluster beside it. */
+    readonly host: (
+      entity: HostedEntity,
+      layer: Layer.Layer<never, never, any>,
+    ) => Effect.Effect<void>;
+  }
+>()("Cluster.RunnerHost") {}

@@ -46,6 +46,7 @@ import {
   PlatformDeclaration,
 } from "../Entity.ts";
 import { makeNamespace } from "../internal/Gateway.ts";
+import { HasNoPool } from "../internal/HostedRuntime.ts";
 import { RunnerHost } from "../internal/RunnerHost.ts";
 import type { PoolLayer } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
@@ -557,20 +558,26 @@ export const layer = <PoolReq>(
         Effect.succeed(instance).pipe(Effect.provide(options.pool)),
       );
 
-      if (RunnerHost.active) {
+      const runner = yield* Effect.serviceOption(RunnerHost);
+      if (Option.isSome(runner)) {
         // A runner of the pool: host the entity, as the bootstrap hosts an
         // exported one, with the classes the model declares here.
         const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
         const hosted = (
           Context.get(context, entrypointTag).RuntimeContext as EntityRuntimeContext
         ).hosted();
-        if (hosted !== undefined) RunnerHost.hosted.push(hosted);
+        if (hosted === undefined) {
+          return yield* Effect.die(
+            new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
+          );
+        }
         const registrations: Array<
           readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
         > = [];
         // Sagas register while the model's Layer builds, before the runner
         // joins the cluster: hold them until then, then run every call on its engine.
-        RunnerHost.layers.push(
+        yield* runner.value.host(
+          hosted,
           Effect.gen(function* () {
             const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
             for (const [workflow, execute] of registrations)

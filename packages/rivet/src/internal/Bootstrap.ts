@@ -19,10 +19,12 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import {
   DurableObjectHasNoPool,
   PlatformDeclaration,
   type DurableObjectRuntimeContext,
+  type HostedDurableObject,
 } from "../DurableObject.ts";
 import { NodeHost } from "./NodeHost.ts";
 import { runDurableObjects } from "./Runtime.ts";
@@ -45,16 +47,22 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
   );
 
   const program = Effect.gen(function* () {
-    const hosted = [];
-    NodeHost.active = true;
+    // Every class this node hosts: its exported ones, and those Layers host themselves.
+    const hosted = yield* Ref.make<ReadonlyArray<HostedDurableObject>>([]);
+    const host = (built: HostedDurableObject) =>
+      Ref.update(hosted, (all) =>
+        all.some((other) => other.name === built.name) ? all : [...all, built],
+      );
     for (const entrypoint of entrypoints) {
       // A class's `yield*` is its namespace; the node builds its Platform.
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
-      const context = yield* Layer.build(entrypointLayer(declaration));
+      const context = yield* Layer.build(entrypointLayer(declaration)).pipe(
+        Effect.provideService(NodeHost, NodeHost.of({ host })),
+      );
       // A Layer that hosts its classes itself (a Domain model's) provides
-      // none: they are in `NodeHost.hosted`.
+      // none: it handed them to `NodeHost`.
       const self = Context.getOption(context, entrypointTag);
       if (Option.isNone(self)) continue;
       const runtime = self.value.RuntimeContext as DurableObjectRuntimeContext;
@@ -66,11 +74,9 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
           }),
         );
       }
-      hosted.push(built);
+      yield* host(built);
     }
-    for (const built of NodeHost.hosted)
-      if (!hosted.some((other) => other.name === built.name)) hosted.push(built);
-    return yield* runDurableObjects(hosted);
+    return yield* runDurableObjects(yield* Ref.get(hosted));
   }).pipe(Effect.provide(platform), Effect.scoped);
 
   return runProcess("Rivet node", program);

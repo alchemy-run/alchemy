@@ -1,15 +1,19 @@
 /**
- * What a node's bootstrap knows while it builds its entrypoints: that it is
- * a node, and the classes Layers built there host (a Domain platform's
- * class, built by the model's Layer rather than exported as a class).
+ * The node a Layer is being built on. A node's bootstrap provides it while
+ * it builds its entrypoints, so a Layer that hosts a class itself (a Domain
+ * platform's, built by the model's Layer rather than exported as a class)
+ * hands the node that class. Anywhere else, the service is absent.
  *
  * @internal
  */
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type { HostedDurableObject } from "../DurableObject.ts";
 
-export const NodeHost: {
-  /** Set by the node's bootstrap before it builds its entrypoints. */
-  active: boolean;
-  /** Classes hosted by Layers, in the order they were built. */
-  readonly hosted: Array<HostedDurableObject>;
-} = { active: false, hosted: [] };
+export class NodeHost extends Context.Service<
+  NodeHost,
+  {
+    /** Host a class on this node. */
+    readonly host: (hosted: HostedDurableObject) => Effect.Effect<void>;
+  }
+>()("Rivet.NodeHost") {}

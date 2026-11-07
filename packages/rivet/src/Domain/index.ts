@@ -28,6 +28,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type { WorkflowEngine } from "effect/workflow";
 import {
@@ -333,14 +334,15 @@ export const layer = <PoolReq>(
         { main: options.main, handler: options.handler ?? "default" },
         hostClassPhase(options.name, classes).pipe(Effect.provide(options.pool)),
       );
-      if (NodeHost.active) {
+      const node = yield* Effect.serviceOption(NodeHost);
+      if (Option.isSome(node)) {
         // A node of the pool: host the class, as the bootstrap hosts an
         // exported one, with the classes the model declares here.
         const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
         const hosted = (
           Context.get(context, entrypointTag).RuntimeContext as DurableObjectRuntimeContext
         ).hosted();
-        if (hosted !== undefined) NodeHost.hosted.push(hosted);
+        if (hosted !== undefined) yield* node.value.host(hosted);
         // Calls between the model's objects go through the control plane, as
         // any caller's do: the object they reach may run on another node.
         const self = makeNamespace(
