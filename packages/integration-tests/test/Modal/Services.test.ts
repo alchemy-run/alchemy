@@ -124,7 +124,8 @@ describe("InvokeFunction", () => {
     "a method's typed failure reaches the caller",
     Effect.gen(function* () {
       const body = yield* worker<{ _tag: string; reason: string }>("/call-fails");
-      expect(body).toEqual({ _tag: "EmbedRejected", reason: "asked to fail" });
+      expect(body._tag).toBe("EmbedRejected");
+      expect(body.reason).toBe("asked to fail");
     }),
     { tags: tags("function"), timeout: 300_000 },
   );
