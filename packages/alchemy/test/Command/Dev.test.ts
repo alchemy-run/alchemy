@@ -1,4 +1,5 @@
 import * as NodeNet from "node:net";
+import { delimiter } from "node:path";
 import { assert, describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
@@ -33,6 +34,7 @@ const fixtureScript = pathe.join(fixtureDir, "long-running.cjs");
 const urlServerScript = pathe.join(fixtureDir, "url-server.cjs");
 const portServerScript = pathe.join(fixtureDir, "port-server.cjs");
 const dieScript = pathe.join(fixtureDir, "die.cjs");
+const trustEnvScript = pathe.join(fixtureDir, "trust-env.cjs");
 
 // The provider runs `command.split(" ")` and uses `shell: false`, so the
 // fixture path must not contain spaces. The in-repo path doesn't, but a CI
@@ -621,6 +623,189 @@ inProcessTest.provider(
       expect(error.reason.stderr).toContain("I'm not feeling it...");
     }),
   { tags: ["local"] },
+);
+
+// The reader splits text and never parses a certificate, so the bodies are
+// arbitrary base64.
+const certificate = (body: string) =>
+  `-----BEGIN CERTIFICATE-----\n${body}\n-----END CERTIFICATE-----\n`;
+
+/** What `trust-env.cjs` reported about the trust it started with. */
+const readTrust = (path: string, marker: string) =>
+  waitForPidFile(path, marker).pipe(
+    Effect.flatMap(() => FileSystem.FileSystem),
+    Effect.flatMap((fs) => fs.readFileString(path)),
+    Effect.map(
+      (text) =>
+        JSON.parse(text) as {
+          pid: number;
+          bundle: string | undefined;
+          certificates: string | undefined;
+        },
+    ),
+  );
+
+/** Runs `use` with these variables set on the process, as `alchemy dev` sets its own. */
+const withEnv = <A, E, R>(
+  variables: Record<string, string | undefined>,
+  use: Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(
+        Object.keys(variables).map((key) => [key, process.env[key]]),
+      );
+      for (const [key, value] of Object.entries(variables)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      return previous;
+    }),
+    () => use,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }),
+  );
+
+inProcessTest.provider(
+  "gives the process one bundle of the caller's CA and every contributed CA",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const caller = pathe.join(tmp, "caller.pem");
+      const contributed = pathe.join(tmp, "contributed.pem");
+      yield* fs.writeFileString(caller, certificate("Q0FMTEVS"));
+      yield* fs.writeFileString(contributed, certificate("Q09OVFJJQg=="));
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      yield* withEnv(
+        {
+          NODE_EXTRA_CA_CERTS: caller,
+          // A CA another provider hasn't created yet sits between them.
+          ALCHEMY_DEV_TRUST: [contributed, pathe.join(tmp, "not-yet.pem")].join(delimiter),
+        },
+        stack.deploy(
+          Command.Dev("Dev", {
+            command: `node ${trustEnvScript}`,
+            env: { PID_FILE: pidFile, MARKER: "trust" },
+          }),
+        ),
+      );
+
+      const seen = yield* readTrust(pidFile, "trust");
+      expect(seen.bundle).toBeDefined();
+      expect(seen.bundle).not.toBe(caller);
+      expect(seen.certificates).toBe(`${certificate("Q0FMTEVS")}${certificate("Q09OVFJJQg==")}`);
+
+      // The bundle lives as long as the process.
+      expect(yield* fs.exists(seen.bundle!)).toBe(true);
+      yield* stack.destroy();
+      yield* waitForDeath(seen.pid);
+      expect(yield* fs.exists(seen.bundle!)).toBe(false);
+    }),
+  // Sets process-global environment variables.
+  { tags: ["local"], timeout: 30_000, exclusive: true },
+);
+
+inProcessTest.provider(
+  "gives a restarted process a CA that was created after the first one started",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const caller = pathe.join(tmp, "caller.pem");
+      const contributed = pathe.join(tmp, "contributed.pem");
+      yield* fs.writeFileString(caller, certificate("Q0FMTEVS"));
+      const pidFile = pathe.join(tmp, "pid.json");
+      const dev = (marker: string) =>
+        Command.Dev("Dev", {
+          command: `node ${trustEnvScript}`,
+          env: { PID_FILE: pidFile, MARKER: marker },
+        });
+
+      yield* withEnv(
+        { NODE_EXTRA_CA_CERTS: caller, ALCHEMY_DEV_TRUST: contributed },
+        Effect.gen(function* () {
+          yield* stack.deploy(dev("early"));
+          // Nothing to add yet: the process keeps the caller's file as it is.
+          expect((yield* readTrust(pidFile, "early")).bundle).toBe(caller);
+
+          yield* fs.writeFileString(contributed, certificate("TEFURQ=="));
+          yield* stack.deploy(dev("late"));
+        }),
+      );
+
+      const seen = yield* readTrust(pidFile, "late");
+      expect(seen.bundle).not.toBe(caller);
+      expect(seen.certificates).toBe(`${certificate("Q0FMTEVS")}${certificate("TEFURQ==")}`);
+      yield* stack.destroy();
+      yield* waitForDeath(seen.pid);
+    }),
+  { tags: ["local"], timeout: 30_000, exclusive: true },
+);
+
+inProcessTest.provider(
+  "keeps the resource's own NODE_EXTRA_CA_CERTS",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const contributed = pathe.join(tmp, "contributed.pem");
+      const own = pathe.join(tmp, "own.pem");
+      yield* fs.writeFileString(contributed, certificate("Q09OVFJJQg=="));
+      yield* fs.writeFileString(own, certificate("T1dO"));
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      yield* withEnv(
+        { NODE_EXTRA_CA_CERTS: undefined, ALCHEMY_DEV_TRUST: contributed },
+        stack.deploy(
+          Command.Dev("Dev", {
+            command: `node ${trustEnvScript}`,
+            env: { PID_FILE: pidFile, MARKER: "own", NODE_EXTRA_CA_CERTS: own },
+          }),
+        ),
+      );
+
+      const seen = yield* readTrust(pidFile, "own");
+      expect(seen.bundle).toBe(own);
+      expect(seen.certificates).toBe(certificate("T1dO"));
+      yield* stack.destroy();
+      yield* waitForDeath(seen.pid);
+    }),
+  { tags: ["local"], timeout: 30_000, exclusive: true },
+);
+
+inProcessTest.provider(
+  "leaves NODE_EXTRA_CA_CERTS alone outside alchemy dev",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const caller = pathe.join(tmp, "caller.pem");
+      yield* fs.writeFileString(caller, certificate("Q0FMTEVS"));
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      yield* withEnv(
+        { NODE_EXTRA_CA_CERTS: caller, ALCHEMY_DEV_TRUST: undefined },
+        stack.deploy(
+          Command.Dev("Dev", {
+            command: `node ${trustEnvScript}`,
+            env: { PID_FILE: pidFile, MARKER: "plain" },
+          }),
+        ),
+      );
+
+      const seen = yield* readTrust(pidFile, "plain");
+      expect(seen.bundle).toBe(caller);
+      yield* stack.destroy();
+      yield* waitForDeath(seen.pid);
+    }),
+  { tags: ["local"], timeout: 30_000, exclusive: true },
 );
 
 describe("extractUrl", { tags: ["unit", "local"] }, () => {
