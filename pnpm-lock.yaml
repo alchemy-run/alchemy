@@ -4852,6 +4852,66 @@ importers:
         specifier: 4.1.0
         version: 4.1.0
 
+  examples/e2b-agent-sandbox:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../../packages/e2b
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
+  examples/e2b-program:
+    dependencies:
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../../packages/e2b
+      '@distilled.cloud/e2b':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/e2b
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
+  examples/e2b-program-async:
+    dependencies:
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../../packages/e2b
+      '@distilled.cloud/e2b':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/e2b
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/fly-app:
     dependencies:
       '@alchemy.run/fly':
@@ -9920,6 +9980,34 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
 
+  packages/e2b:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/e2b':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/e2b
+    devDependencies:
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/effect-cluster:
     dependencies:
       '@effect/platform-node':
@@ -11012,6 +11100,9 @@ importers:
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../e2b
       '@alchemy.run/effect-cluster':
         specifier: workspace:*
         version: link:../effect-cluster
@@ -11099,6 +11190,9 @@ importers:
       '@distilled.cloud/daytona':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/daytona
+      '@distilled.cloud/e2b':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/e2b
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
@@ -11878,6 +11972,9 @@ importers:
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../packages/daytona
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../packages/e2b
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../packages/fly

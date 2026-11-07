@@ -64,6 +64,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/axiom/src",
   },
   {
+    srcRoot: "packages/e2b/src",
+    providerPrefix: "E2B",
+    sourceDisplayPrefix: "packages/e2b/src",
+  },
+  {
     srcRoot: "packages/doppler/src",
     providerPrefix: "Doppler",
     sourceDisplayPrefix: "packages/doppler/src",

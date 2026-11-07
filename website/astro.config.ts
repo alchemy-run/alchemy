@@ -42,6 +42,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
       { label: "Archil", link: "/archil" },
       { label: "Prisma", link: "/prisma" },
@@ -1403,6 +1404,43 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Turso"),
+          ],
+        },
+        {
+          label: "E2B",
+          items: [
+            { label: "Overview", link: "/e2b" },
+            { label: "What is E2B?", link: "/e2b/what-is-e2b" },
+            { label: "Setup", link: "/e2b/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "e2b/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Team & API keys", link: "/e2b/api-keys" },
+                { label: "Network & secrets", link: "/e2b/network-and-secrets" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Templates", link: "/e2b/templates" },
+                { label: "Sandboxes", link: "/e2b/sandboxes" },
+                { label: "Snapshots & forks", link: "/e2b/snapshots" },
+                { label: "Template programs", link: "/e2b/programs" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [{ label: "Volumes", link: "/e2b/volumes" }],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Lifecycle events", link: "/e2b/lifecycle-events" }],
+            },
+            providerResourcesEntry("E2B"),
           ],
         },
         {

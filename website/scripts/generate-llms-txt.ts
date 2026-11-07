@@ -564,6 +564,31 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/what-is-e2b",
+        "e2b/setup",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/api-keys",
+        "e2b/network-and-secrets",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
     heading: "Archil — start here",
     intro:
       "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",

@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, missingService } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -54,6 +55,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.FirebaseDataConnect.Service.lookup({
+          serviceId: created.serviceId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/services/");

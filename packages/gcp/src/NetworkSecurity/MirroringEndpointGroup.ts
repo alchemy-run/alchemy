@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,34 @@ export type MirroringEndpointGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MirroringEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link MirroringEndpointGroup.lookup}: find a mirroring
+ * endpoint group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface MirroringEndpointGroupLookup {
+  /**
+   * Endpoint group id (the `{mirroringEndpointGroup}` segment of
+   * `projects/{
+   * project}/locations/{location}/mirroringEndpointGroups/{mirroringEndpoint
+   * Group}`).
+   */
+  mirroringEndpointGroupId: string;
+  /**
+   * Location of the group. Endpoint groups are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security Integration mirroring endpoint group — the consumer
@@ -157,6 +184,19 @@ export type MirroringEndpointGroup = Resource<
  *   mirroringDeploymentGroup: group.name,
  *   description: "prod mirroring frontend v2",
  *   labels: { env: "prod", role: "nsi" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing mirroring endpoint group
+ * `MirroringEndpointGroup.lookup` references a mirroring endpoint group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared mirroring endpoint group.
+ *
+ * **Example:** Reference an existing mirroring endpoint group
+ * ```typescript
+ * const mirroringEndpointGroup = GCP.NetworkSecurity.MirroringEndpointGroup.lookup({
+ *   mirroringEndpointGroupId: "my-mirroring-endpoint-group",
  * });
  * ```
  *
@@ -319,6 +359,15 @@ export const MirroringEndpointGroupProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ mirroringEndpointGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, mirroringEndpointGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

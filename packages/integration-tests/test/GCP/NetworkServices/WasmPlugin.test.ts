@@ -10,6 +10,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -124,6 +125,13 @@ test.provider(
           });
           return { artifacts, plugin };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.WasmPlugin.lookup({
+          wasmPluginId: created.plugin.wasmPluginId,
+          location: created.plugin.location,
+        }),
+        created.plugin,
       );
 
       expect(created.plugin.name).toContain("/wasmPlugins/");

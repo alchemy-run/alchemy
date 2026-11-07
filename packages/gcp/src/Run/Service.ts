@@ -8,7 +8,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
 import { tagRecord } from "alchemy/Tags";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
@@ -18,7 +18,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createGcpHostRuntimeContext,
   RPC_METHODS_ENV,
@@ -33,6 +38,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -423,8 +429,34 @@ export type Service = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must
+   * begin with a letter, not end with a hyphen, and be fewer than 50
+   * characters.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type ServiceRuntimeContext = GcpHostRuntimeContext;
 export type ServiceServices = Credentials | GcpEnvironment | ServerHost;
@@ -657,15 +689,25 @@ export type ServiceShape = Main<ServiceServices>;
  * const live = yield* getService();
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.Run.Service.lookup({ serviceId: "my-service" });
+ * ```
+ *
  * @resource
  * @category Run
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("GCP.Run.Service", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
-      rpc: "private",
-    }) as (id: string) => ServiceRuntimeContext,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("GCP.Run.Service", {
+  createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
+    rpc: "private",
+  }) as (id: string) => ServiceRuntimeContext,
+});
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
   resourceName: string;
@@ -1269,6 +1311,23 @@ export const ServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -74,8 +75,39 @@ export type VolumesSnapshot = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumesSnapshotLookup
 >;
+
+/**
+ * Props for {@link VolumesSnapshot.lookup}: find a volumes snapshot this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface VolumesSnapshotLookup {
+  /**
+   * Region used when `volume` is a bare id. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Parent boot volume. Full name
+   * `projects/{project}/locations/{location}/volumes/{volume}` or the
+   * volume id (combined with `location`). Only boot volumes accept
+   * snapshots.
+   */
+  volume: string;
+  /**
+   * Snapshot id (the `{snapshot}` segment of
+   * `{volume}/snapshots/{snapshot}`).
+   */
+  snapshotId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Bare Metal Solution boot-volume snapshot — a point-in-time copy of a
@@ -103,6 +135,19 @@ export type VolumesSnapshot = Resource<
  * const snap = yield* GCP.BareMetalSolution.VolumesSnapshot("Nightly", {
  *   volume: volume.name,
  *   description: "nightly boot snapshot",
+ * });
+ * ```
+ *
+ * ### Looking up an existing volumes snapshot
+ * `VolumesSnapshot.lookup` references a volumes snapshot Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * volumes snapshot.
+ *
+ * **Example:** Reference an existing volumes snapshot
+ * ```typescript
+ * const volumesSnapshot = GCP.BareMetalSolution.VolumesSnapshot.lookup({
+ *   volume: "my-volume",
  * });
  * ```
  *
@@ -171,6 +216,20 @@ export const VolumesSnapshotProvider = () =>
         nextParent: nextVolume,
       });
     }),
+
+    lookup: Effect.fn(function* ({ location: lookupLocation, volume: lookupVolume, snapshotId }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const volumeHint = lookupVolume ?? "";
+      if (volumeHint.length === 0) return undefined;
+      const volume = volumeOf(volumeHint, env.project, location);
+      const name = snapshotId !== undefined ? resourceName(volume, snapshotId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project, env.region);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

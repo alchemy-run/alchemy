@@ -6,6 +6,7 @@ import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -63,6 +64,13 @@ test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
             parent: card.name,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterInsights.QaScorecardsRevision.lookup({
+          qaScorecardRevisionId: created.qaScorecardRevisionId,
+          parent: created.parent,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/revisions/");

@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,20 @@ test.provider(
           });
           return { subnet, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.NetworkAttachment.lookup({
+          networkAttachmentName: created.attachment.networkAttachmentName,
+          region: created.attachment.region,
+        }),
+        created.attachment,
+      );
+      yield* expectFound(
+        GCP.Compute.Subnetwork.lookup({
+          subnetworkName: created.subnet.subnetworkName,
+          region: created.subnet.region,
+        }),
+        created.subnet,
       );
 
       expect(created.attachment.networkAttachmentName.length).toBeGreaterThan(0);

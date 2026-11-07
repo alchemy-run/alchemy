@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -112,8 +113,30 @@ export type Job = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  JobLookup
 >;
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface JobLookup {
+  /**
+   * Job id (the `{jobId}` segment of `projects/{project}/jobs/{jobId}`).
+   * Letters, numbers, underscores, and dashes; max 1,024 characters.
+   */
+  jobId: string;
+  /**
+   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google BigQuery job — a one-shot query, load, copy, or extract.
@@ -154,6 +177,16 @@ export type Job = Resource<
  *     writeDisposition: "WRITE_TRUNCATE",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared job.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const job = GCP.BigQuery.Job.lookup({ jobId: "my-job" });
  * ```
  *
  * @resource
@@ -374,6 +407,15 @@ export const JobProvider = () =>
       // insert of a retired id), so never delete-first.
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const project = env.project;
+      const existing = yield* getByRef(project, jobId, location);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

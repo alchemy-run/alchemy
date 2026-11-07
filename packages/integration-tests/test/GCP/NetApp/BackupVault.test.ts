@@ -6,6 +6,8 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -35,7 +37,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/backupVaults/alchemy-netapp-missing`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       const page = yield* netapp.listProjectsLocationsBackupVaults({
         parent: `projects/${project}/locations/-`,
@@ -50,7 +52,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!entitled)(
   "create, update, and delete a backup vault",
   (stack) =>
     Effect.gen(function* () {
@@ -63,6 +65,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.BackupVault.lookup({
+          backupVaultId: created.backupVaultId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/backupVaults/");

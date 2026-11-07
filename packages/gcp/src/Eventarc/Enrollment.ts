@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,33 @@ export type Enrollment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnrollmentLookup
 >;
+
+/**
+ * Props for {@link Enrollment.lookup}: find an enrollment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EnrollmentLookup {
+  /**
+   * Enrollment id (the `{enrollment}` segment of
+   * `projects/{project}/locations/{location}/enrollments/{enrollment}`).
+   * Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  enrollmentId: string;
+  /**
+   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc Advanced enrollment that subscribes to messages on a
@@ -159,6 +185,19 @@ export type Enrollment = Resource<
  *   destination: pipeline.name,
  *   celMatch: "message.type == 'google.cloud.pubsub.topic.v1.messagePublished'",
  *   labels: { env: "prod", role: "enrollment" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing enrollment
+ * `Enrollment.lookup` references an enrollment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * enrollment.
+ *
+ * **Example:** Reference an existing enrollment
+ * ```typescript
+ * const enrollment = GCP.Eventarc.Enrollment.lookup({
+ *   enrollmentId: "my-enrollment",
  * });
  * ```
  *
@@ -225,6 +264,15 @@ export const EnrollmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ enrollmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, enrollmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
