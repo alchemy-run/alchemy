@@ -7,6 +7,7 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import Api from "./api-server.ts";
 import { AsyncEmbed } from "./async-function.ts";
 import Embed from "./embed-function.ts";
@@ -52,21 +53,30 @@ export default class ServicesFunction extends AWS.Lambda.Function<ServicesFuncti
         const url = new URL(request.url, "http://host");
         switch (url.pathname) {
           case "/call":
-            return yield* HttpServerResponse.json(
-              yield* embed.call(["hello modal world"], { source: "worker" }),
-            );
+            return yield* HttpServerResponse.json(yield* embed.embed("hello modal world"));
           case "/call-fails": {
-            const failed = yield* embed.call(["fail"]).pipe(Effect.flip);
-            return yield* HttpServerResponse.json({ tag: failed._tag, message: failed.message });
+            const failed = yield* embed.fail("asked to fail").pipe(Effect.flip);
+            return yield* HttpServerResponse.json(failed);
           }
+          case "/call-stream":
+            return yield* HttpServerResponse.json(yield* Stream.runCollect(embed.count(3)));
           case "/map":
-            return yield* HttpServerResponse.json(yield* embed.map([["a"], ["b c"], ["d e f"]]));
+            return yield* HttpServerResponse.json(
+              yield* asyncEmbed.map([["a"], ["b c"], ["d e f"]]),
+            );
           case "/spawn": {
-            const job = yield* embed.spawn(["one two"]);
-            return yield* HttpServerResponse.json(yield* embed.result(job));
+            const job = yield* asyncEmbed.spawn(["one two"]);
+            return yield* HttpServerResponse.json(yield* asyncEmbed.result(job));
           }
           case "/call-async":
-            return yield* HttpServerResponse.json(yield* asyncEmbed.call(["ping"]));
+            return yield* HttpServerResponse.json(
+              yield* asyncEmbed.call(["ping"], { source: "lambda" }),
+            );
+          case "/server-rpc":
+            return yield* HttpServerResponse.json({
+              greeting: yield* api.greet("modal"),
+              letters: yield* Stream.runCollect(api.letters("abc")),
+            });
           case "/server":
             return yield* relay(yield* api.fetch(HttpClientRequest.get("/hello")));
           case "/web":

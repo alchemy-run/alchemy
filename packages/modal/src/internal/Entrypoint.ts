@@ -7,9 +7,16 @@
  * from the function's env secret) once per container and hands it work as
  * HTTP on `PORT`:
  *
+ * - `Rpc` (a class function) has one method per RPC method of the program
+ *   (`ALCHEMY_MODAL_RPC_METHODS`, from the function's env secret); a call is
+ *   sent to the program's `POST /__rpc__/<method>` with the positional
+ *   arguments as a JSON array, and returns the JSON result (a value, or an
+ *   error envelope the caller fails with). A streamed result is read to its
+ *   end and returned as its list of values;
  * - `call` and `schedule` forward each input as `POST /__modal/call` or
  *   `POST /__modal/schedule` with a JSON body `{ "args": [...], "kwargs":
- *   {...} }`, and return the JSON response;
+ *   {...} }`, and return the JSON response (an async program's calls, and
+ *   schedule ticks);
  * - `web` (a `WEBHOOK_TYPE_WEB_SERVER` function) starts the program, then
  *   Modal proxies its `*.modal.run` URL to `PORT`;
  * - `Server` (`is_server`) starts the program in `@modal.enter`, then Modal
@@ -29,7 +36,21 @@ export const ENTRYPOINT = {
   schedule: "schedule",
   web: "web",
   server: "Server",
+  rpc: "Rpc",
 } as const;
+
+/** Env var listing a program's RPC methods (a JSON array), set at plan. */
+export const RPC_METHODS_ENV = "ALCHEMY_MODAL_RPC_METHODS";
+
+/**
+ * Env var that turns on the program's `/__rpc__/*` routes. Set only where
+ * Modal authenticates every request: a class function's calls and a Server
+ * behind proxy auth. A public web endpoint never serves RPC.
+ */
+export const RPC_SERVE_ENV = "ALCHEMY_MODAL_SERVE_RPC";
+
+/** A streamed RPC result, as {@link ENTRYPOINT_SOURCE} returns it: its values in order. */
+export const RPC_STREAM_KEY = "~alchemy/modal/rpc-stream";
 
 export const ENTRYPOINT_SOURCE = `"""Alchemy's entrypoint for a JavaScript program on Modal (generated, do not edit)."""
 
@@ -100,6 +121,48 @@ def _forward(path, args, kwargs):
     if response.getheader("content-type", "").startswith("application/json"):
         return json.loads(data)
     return data.decode(errors="replace")
+
+
+def _post(path, body):
+    _wait_until_listening(_start())
+    connection = http.client.HTTPConnection("127.0.0.1", _PORT)
+    try:
+        connection.request("POST", path, body=body, headers={"content-type": "application/json"})
+        response = connection.getresponse()
+        return response, response.read()
+    finally:
+        connection.close()
+
+
+def _rpc(name):
+    def method(self, *args, **kwargs):
+        if kwargs:
+            raise TypeError(f"RPC method {name} takes positional arguments only")
+        body = json.dumps(list(args), default=_json_default).encode()
+        response, data = _post("/__rpc__/" + name, body)
+        if response.status >= 400:
+            raise RuntimeError(f"RPC method {name} returned {response.status}: {data.decode(errors='replace')}")
+        if response.getheader("x-alchemy-rpc-stream") is not None:
+            lines = [json.loads(line) for line in data.decode().splitlines() if line]
+            return {"~alchemy/modal/rpc-stream": lines}
+        return json.loads(data) if data else None
+
+    method.__name__ = name
+    return modal.method()(method)
+
+
+def _rpc_enter(self):
+    _wait_until_listening(_start())
+
+
+Rpc = type(
+    "Rpc",
+    (),
+    {
+        "start": modal.enter()(_rpc_enter),
+        **{name: _rpc(name) for name in json.loads(os.environ.get("ALCHEMY_MODAL_RPC_METHODS") or "[]")},
+    },
+)
 
 
 def call(*args, **kwargs):

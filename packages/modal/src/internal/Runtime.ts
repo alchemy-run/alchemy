@@ -68,6 +68,8 @@ export interface RuntimeKind<P extends ContainerProps> {
   ) => functions.Function;
   /** The program's bootstrap for an Effect-native `main`. */
   readonly bootstrap: (handler: string) => (importPath: string) => string;
+  /** Env the kind adds to the program's (e.g. turning RPC on). */
+  readonly env?: (props: P) => Record<string, string>;
 }
 
 const resolveRef = <T>(value: Ref<T>) =>
@@ -208,15 +210,14 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
         autoscalerSettings: { ...base.autoscalerSettings, ...specific.autoscalerSettings },
       };
       const secretIds = (news.secrets ?? []).flatMap((s) => idOf(s, "secretId") ?? []);
-      const hash = yield* sha256Object({
-        image: image.hash,
-        definition,
-        secretIds,
-        env: Object.fromEntries(
+      const env = {
+        ...Object.fromEntries(
           Object.entries(news.env ?? {}).map(([key, value]) => [key, envText(value)]),
         ),
-      });
-      return { port, tag, app, image, definition, secretIds, hash };
+        ...kind.env?.(news),
+      };
+      const hash = yield* sha256Object({ image: image.hash, definition, secretIds, env });
+      return { port, tag, app, image, definition, secretIds, env, hash };
     });
 
     return {
@@ -260,11 +261,16 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
         session: { note: (message: string) => Effect.Effect<void> };
         bindings: MountBindings;
       }) {
-        const { port, tag, app, image, definition, secretIds, hash } = yield* prepare(
-          id,
-          news,
-          bindings,
-        );
+        const {
+          port,
+          tag,
+          app,
+          image,
+          definition,
+          secretIds,
+          env: programEnv,
+          hash,
+        } = yield* prepare(id, news, bindings);
         for (const warning of image.warnings) yield* session.note(warning);
         const secretName = output?.secretName ?? `${yield* objectName(id, undefined, 58)}-env`;
 
@@ -278,7 +284,7 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
           HOST: "0.0.0.0",
           PORT: String(port),
         };
-        for (const [key, value] of Object.entries(news.env ?? {})) env[key] = envText(value);
+        Object.assign(env, programEnv);
         const stored = yield* putSecret(
           yield* secret.secretGetOrCreate,
           secretName,

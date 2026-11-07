@@ -112,20 +112,42 @@ describe("Modal.Server", () => {
 
 describe("InvokeFunction", () => {
   test(
-    "call an Effect function with args and kwargs",
+    "call an Effect function's RPC method",
     Effect.gen(function* () {
-      const body = yield* worker<{ model: string; tokens: number; kwargs: unknown }>("/call");
-      expect(body).toEqual({ model: "words", tokens: 3, kwargs: { source: "worker" } });
+      const body = yield* worker<{ model: string; tokens: number }>("/call");
+      expect(body).toEqual({ model: "words", tokens: 3 });
     }),
     { tags: tags("function"), timeout: 300_000 },
   );
 
   test(
-    "a failed call surfaces the program's error",
+    "a method's typed failure reaches the caller",
     Effect.gen(function* () {
-      const body = yield* worker<{ tag: string; message: string }>("/call-fails");
-      expect(body.tag).toBe("Modal.FunctionCallFailed");
-      expect(body.message).toContain("asked to fail");
+      const body = yield* worker<{ _tag: string; reason: string }>("/call-fails");
+      expect(body).toEqual({ _tag: "EmbedRejected", reason: "asked to fail" });
+    }),
+    { tags: tags("function"), timeout: 300_000 },
+  );
+
+  test(
+    "a method's stream arrives whole",
+    Effect.gen(function* () {
+      expect(yield* worker<number[]>("/call-stream")).toEqual([1, 2, 3]);
+    }),
+    { tags: tags("function"), timeout: 300_000 },
+  );
+
+  test(
+    "call an async function with args and kwargs",
+    Effect.gen(function* () {
+      const body = yield* worker<{ greeting: string; echo: string; kwargs: unknown }>(
+        "/call-async",
+      );
+      expect(body).toEqual({
+        greeting: "hello from an async function",
+        echo: "ping",
+        kwargs: { source: "lambda" },
+      });
     }),
     { tags: tags("function"), timeout: 300_000 },
   );
@@ -133,8 +155,8 @@ describe("InvokeFunction", () => {
   test(
     "map fans inputs out and keeps their order",
     Effect.gen(function* () {
-      const body = yield* worker<Array<{ tokens: number }>>("/map");
-      expect(body.map((r) => r.tokens)).toEqual([1, 2, 3]);
+      const body = yield* worker<Array<{ echo: string }>>("/map");
+      expect(body.map((r) => r.echo)).toEqual(["a", "b c", "d e f"]);
     }),
     { tags: tags("function"), timeout: 300_000 },
   );
@@ -142,17 +164,8 @@ describe("InvokeFunction", () => {
   test(
     "spawn a call and read its result",
     Effect.gen(function* () {
-      const body = yield* worker<{ tokens: number }>("/spawn");
-      expect(body.tokens).toBe(2);
-    }),
-    { tags: tags("function"), timeout: 300_000 },
-  );
-
-  test(
-    "call an async function",
-    Effect.gen(function* () {
-      const body = yield* worker<{ greeting: string; echo: string }>("/call-async");
-      expect(body).toEqual({ greeting: "hello from an async function", echo: "ping" });
+      const body = yield* worker<{ echo: string }>("/spawn");
+      expect(body.echo).toBe("one two");
     }),
     { tags: tags("function"), timeout: 300_000 },
   );
@@ -164,6 +177,15 @@ describe("FetchServer", () => {
     Effect.gen(function* () {
       const body = yield* worker<{ kind: string; path: string }>("/server");
       expect(body).toEqual({ kind: "server", path: "/hello" });
+    }),
+    { tags: tags("server"), timeout: 300_000 },
+  );
+
+  test(
+    "call a server's RPC methods from a Lambda function",
+    Effect.gen(function* () {
+      const body = yield* worker<{ greeting: string; letters: string[] }>("/server-rpc");
+      expect(body).toEqual({ greeting: "hello modal", letters: ["a", "b", "c"] });
     }),
     { tags: tags("server"), timeout: 300_000 },
   );

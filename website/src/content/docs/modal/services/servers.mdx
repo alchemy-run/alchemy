@@ -51,11 +51,37 @@ export default class Gateway extends Cloudflare.Worker<Gateway>()(
 
 Servers require Modal's proxy auth. The binding creates a `Modal.WebhookToken` for the Worker and sends its headers with every request.
 
+## Add RPC methods
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  return {
++    greet: Effect.fn(function* (name: string) {
++      return `hello ${name}`;
++    }),
+    fetch: Effect.succeed(HttpServerResponse.text("ok")),
+  };
+}),
+```
+
+Every function the program returns besides `fetch` is an RPC method, served at `POST /__rpc__/<method>` next to your routes.
+
+## Call a method
+
+```typescript
+const api = yield* Modal.FetchServer(Api);
+const greeting = yield* api.greet("modal");
+```
+
+The client is typed from `Api`'s methods and goes through Modal's proxy auth like `fetch`. A method that returns a `Stream` streams to the caller as values are produced. See [schemaless RPC](/apis/schemaless/) for what methods can take and return.
+
 ## Serve the public
 
 ```typescript
 { main: import.meta.url, app: Backend, unauthenticated: true }
 ```
+
+An unauthenticated Server serves only `fetch`. Its RPC methods answer `404`, so the public can't call them.
 
 ## Scale on concurrency
 

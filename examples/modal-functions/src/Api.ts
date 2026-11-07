@@ -15,7 +15,7 @@ export default class Api extends Modal.Function<Api>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const text = new URL(request.url, "http://api").searchParams.get("text") ?? "";
-        const result = yield* embed.call<{ tokens: number }>([text]);
+        const result = yield* embed.embed(text);
         return yield* HttpServerResponse.json({ text, ...result });
       }).pipe(Effect.orDie),
     };

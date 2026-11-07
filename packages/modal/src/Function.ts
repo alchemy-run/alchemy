@@ -2,15 +2,13 @@ import type * as functions from "@distilled.cloud/modal/functions";
 import { Platform, type Main } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-  type ServerHost,
-} from "alchemy/Runtime/Process";
+import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ContainerProps } from "./Container.ts";
 import { seconds } from "./internal.ts";
-import { ENTRYPOINT } from "./internal/Entrypoint.ts";
+import { ENTRYPOINT, RPC_SERVE_ENV } from "./internal/Entrypoint.ts";
+import { createModalRuntimeContext, rpcMethodNamesOf } from "./internal/Rpc.ts";
 import {
   resolveContainerProps,
   runtimeLifecycle,
@@ -69,8 +67,8 @@ export interface FunctionProps extends ContainerProps {
    */
   web?: boolean | WebEndpointOptions;
   /**
-   * Run on a schedule. Each tick arrives at the program as a call to
-   * `/__modal/schedule` (`Modal.FunctionCall` reports `scheduled: true`).
+   * Run on a schedule. Each tick arrives at the program's `fetch` handler
+   * as `POST /__modal/schedule`.
    */
   schedule?: FunctionSchedule;
   /** Retry failed calls: a count, or a backoff policy. Not for web functions. */
@@ -86,7 +84,14 @@ export interface FunctionProps extends ContainerProps {
 export interface FunctionAttributes extends RuntimeAttributes {
   /** The web endpoint's URL, for a function with `web`. */
   url: string | undefined;
+  /** The program's RPC methods, which `Modal.InvokeFunction` calls. */
+  methods: string[];
 }
+
+/** A Function's program returns RPC methods and also asks for `web` or a `schedule`. */
+export class FunctionRpcConflict extends Data.TaggedError("Modal.FunctionRpcConflict")<{
+  readonly message: string;
+}> {}
 
 export type Function = Resource<
   "Modal.Function",
@@ -108,18 +113,19 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * Alchemy bundles `main`, builds it into an image on Modal's builder (no
  * Docker), and deploys the function into its `Modal.App`. Modal starts each
  * container with its Python entrypoint; Alchemy's entrypoint starts your
- * program and hands it work as HTTP:
+ * program and hands it work:
  *
- * - a call (from `Modal.InvokeFunction`, or Python's `Function.remote`)
- *   arrives as `POST /__modal/call` with `{ args, kwargs }`; the JSON
- *   response is the result;
- * - a `schedule` tick arrives as `POST /__modal/schedule`;
+ * - the program's RPC methods (every function it returns besides `fetch`)
+ *   become the function's methods: `Modal.InvokeFunction` calls them with
+ *   typed arguments and results, and Modal queues, retries and autoscales
+ *   the calls;
  * - with `web`, Modal routes the function's `*.modal.run` URL to the
- *   program's `fetch` handler.
+ *   program's `fetch` handler;
+ * - a `schedule` tick arrives at `fetch` as `POST /__modal/schedule`.
  *
- * `Modal.FunctionCall` decodes a call in an Effect program. The program's
- * env, including the credentials its bindings need, goes into a Modal
- * Secret, never into the image.
+ * A function serves one of these. To serve methods next to `fetch`, use a
+ * `Modal.Server`. The program's env, including the credentials its
+ * bindings need, goes into a Modal Secret, never into the image.
  *
  * ### Effect program
  * **Example:** A function other runtimes call
@@ -127,7 +133,6 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * // src/Embed.ts
  * import * as Modal from "@alchemy.run/modal";
  * import * as Effect from "effect/Effect";
- * import * as HttpServerResponse from "effect/http/HttpServerResponse";
  * import { Inference } from "./Inference.ts";
  *
  * export default class Embed extends Modal.Function<Embed>()(
@@ -135,11 +140,9 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  *   { main: import.meta.url, app: Inference },
  *   Effect.gen(function* () {
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const call = yield* Modal.FunctionCall;
- *         const [text] = (call?.args ?? [""]) as [string];
- *         return yield* HttpServerResponse.json({ tokens: text.split(/\s+/).length });
- *       }).pipe(Effect.orDie),
+ *       embed: Effect.fn(function* (text: string) {
+ *         return { tokens: text.split(/\s+/).length };
+ *       }),
  *     };
  *   }),
  * ) {}
@@ -148,7 +151,7 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * **Example:** Call it from a Cloudflare Worker
  * ```typescript
  * const embed = yield* Modal.InvokeFunction(Embed);
- * const { tokens } = yield* embed.call<{ tokens: number }>(["hello modal"]);
+ * const { tokens } = yield* embed.embed("hello modal");
  * ```
  *
  * ### Async program
@@ -243,7 +246,7 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  */
 export const Function: Platform<Function, FunctionServices, FunctionShape, FunctionRuntimeContext> =
   Platform("Modal.Function", {
-    createRuntimeContext: createHostRuntimeContext("Modal.Function"),
+    createRuntimeContext: createModalRuntimeContext("Modal.Function"),
     transformProps: resolveContainerProps,
   });
 
@@ -283,6 +286,35 @@ const definitionOf = (
   props: FunctionProps,
   context: { readonly port: number; readonly startupTimeout: number },
 ): functions.Function => {
+  const methods = rpcMethodNamesOf(props.env);
+  if (methods.length > 0) {
+    // One method per RPC method: callers send its name as the input's
+    // `method_name`, and the entrypoint's `Rpc` class forwards it to the
+    // program's `/__rpc__/<method>`.
+    const formats = ["DATA_FORMAT_PICKLE", "DATA_FORMAT_CBOR"];
+    return {
+      implementationName: ENTRYPOINT.rpc,
+      isClass: true,
+      methodDefinitions: Object.fromEntries(
+        methods.map((name) => [
+          name,
+          {
+            functionName: name,
+            functionType: "FUNCTION_TYPE_FUNCTION",
+            supportedInputFormats: formats,
+            supportedOutputFormats: formats,
+          },
+        ]),
+      ),
+      supportedInputFormats: formats,
+      supportedOutputFormats: formats,
+      retryPolicy: retriesOf(props.retries),
+      maxConcurrentInputs: props.maxConcurrentInputs ?? 0,
+      targetConcurrentInputs: props.targetConcurrentInputs ?? 0,
+      singleUseContainers: props.singleUseContainers,
+      maxInputs: props.singleUseContainers ? 1 : 0,
+    };
+  }
   if (props.web) {
     const web = props.web === true ? {} : props.web;
     return {
@@ -325,6 +357,9 @@ export const FunctionProvider = () =>
         type: "Modal.Function",
         definition: definitionOf,
         bootstrap: bootstrapEntry,
+        // Modal authenticates every call of a class function, so its
+        // program serves RPC (see `createModalRuntimeContext`).
+        env: (props) => (rpcMethodNamesOf(props.env).length > 0 ? { [RPC_SERVE_ENV]: "1" } : {}),
       });
       return {
         stables: lifecycle.stables,
@@ -334,6 +369,12 @@ export const FunctionProvider = () =>
           return found === undefined ? undefined : (output as FunctionAttributes);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session, bindings }) {
+          const methods = rpcMethodNamesOf(news.env);
+          if (methods.length > 0 && (news.web || news.schedule)) {
+            return yield* new FunctionRpcConflict({
+              message: `${id} returns RPC methods (${methods.join(", ")}) and sets ${news.web ? "web" : "schedule"}: a Modal.Function serves calls to its methods, a web endpoint or a schedule. Serve methods next to fetch with a Modal.Server.`,
+            });
+          }
           const { attributes, metadata } = yield* lifecycle.reconcile({
             id,
             news,
@@ -341,7 +382,7 @@ export const FunctionProvider = () =>
             session,
             bindings,
           });
-          return { ...attributes, url: news.web ? metadata?.webUrl : undefined };
+          return { ...attributes, url: news.web ? metadata?.webUrl : undefined, methods };
         }),
         delete: lifecycle.delete,
       };

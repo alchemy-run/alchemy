@@ -1,26 +1,32 @@
 import * as Modal from "@alchemy.run/modal";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
 import { Services } from "./services.ts";
 
-/** An Effect function other runtimes call: counts the words of its argument. */
+/** The `fail` method's typed failure. */
+export class EmbedRejected extends Data.TaggedError("EmbedRejected")<{
+  readonly reason: string;
+}> {}
+
+/** An Effect function other runtimes call through its RPC methods. */
 export default class Embed extends Modal.Function<Embed>()(
   "Embed",
   { main: import.meta.url, app: Services, env: { MODEL: "words" } },
   Effect.gen(function* () {
     return {
-      fetch: Effect.gen(function* () {
-        const call = yield* Modal.FunctionCall;
-        if (call === undefined) return HttpServerResponse.text("not a call", { status: 404 });
-        const [text] = call.args as [string];
-        if (text === "fail") return HttpServerResponse.text("asked to fail", { status: 500 });
-        return yield* HttpServerResponse.json({
-          model: yield* Config.String("MODEL"),
+      /** Counts the words of `text`. */
+      embed: Effect.fn(function* (text: string) {
+        return {
+          model: yield* Config.String("MODEL").pipe(Effect.orDie),
           tokens: text.split(/\s+/).filter(Boolean).length,
-          kwargs: call.kwargs,
-        });
-      }).pipe(Effect.orDie),
+        };
+      }),
+      /** Always fails with a typed error. */
+      fail: (reason: string) => Effect.fail(new EmbedRejected({ reason })),
+      /** The numbers 1 to `n`, as a stream. */
+      count: (n: number) => Stream.range(1, n),
     };
   }),
 ) {}

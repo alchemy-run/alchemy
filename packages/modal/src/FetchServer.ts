@@ -7,6 +7,7 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { Endpoint } from "./Endpoint.ts";
 import type { ServerUrlMissing } from "./FetchServerHttp.ts";
 import type { Function } from "./Function.ts";
+import type { ShapeOf } from "./internal/Rpc.ts";
 import type { Server } from "./Server.ts";
 
 /** Send requests to a deployed Modal Server, web Function or model Endpoint. */
@@ -27,10 +28,24 @@ export interface ServerClient {
 }
 
 /**
+ * The client {@link FetchServer} returns: `url` and `fetch`, plus the RPC
+ * methods of a `Modal.Server` program (everything it returns besides
+ * `fetch` and `run`).
+ */
+export type FetchClient<T> = ServerClient &
+  ([ShapeOf<T>] extends [never] ? {} : Omit<ShapeOf<T>, "fetch" | "run" | "url">);
+
+/**
  * Call a `Modal.Server`, a `Modal.Function` with `web`, or a model
- * `Modal.Endpoint` from any runtime. Servers and endpoints require Modal's proxy auth by default: the binding
- * creates a `Modal.WebhookToken` for the host and sends its `Modal-Key` /
- * `Modal-Secret` headers with every request.
+ * `Modal.Endpoint` from any runtime. Servers and endpoints require Modal's
+ * proxy auth by default: the binding creates a `Modal.WebhookToken` for the
+ * host and sends its `Modal-Key` / `Modal-Secret` headers with every request.
+ *
+ * A `Modal.Server` program's RPC methods come back on the client too. Each
+ * call is a `POST /__rpc__/<method>` to the Server through Modal's proxy,
+ * with the arguments and result as JSON; a method that returns a `Stream`
+ * streams. A Server serves its methods only behind proxy auth, so an
+ * `unauthenticated` Server answers them with `404`.
  *
  * ### Call a Server
  * **Example:** From a Cloudflare Worker
@@ -57,13 +72,37 @@ export interface ServerClient {
  * ) {}
  * ```
  *
+ * ### Call a Server's methods
+ * **Example:** RPC methods next to `fetch`
+ * ```typescript
+ * // src/Api.ts
+ * export default class Api extends Modal.Server<Api>()(
+ *   "Api",
+ *   { main: import.meta.url, app: Backend },
+ *   Effect.gen(function* () {
+ *     return {
+ *       greet: Effect.fn(function* (name: string) {
+ *         return `hello ${name}`;
+ *       }),
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Call them from a Cloudflare Worker
+ * ```typescript
+ * const api = yield* Modal.FetchServer(Api);
+ * const greeting = yield* api.greet("modal");
+ * ```
+ *
  * @binding
  * @product Server
  */
 export interface FetchServer extends Binding.Service<
   FetchServer,
   "Modal.FetchServer",
-  (server: Server | Function | Endpoint) => Effect.Effect<ServerClient>
+  <T extends Server | Function | Endpoint>(server: T) => Effect.Effect<FetchClient<T>>
 > {}
 
 export const FetchServer = Binding.Service<FetchServer>("Modal.FetchServer");

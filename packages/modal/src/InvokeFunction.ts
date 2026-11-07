@@ -6,6 +6,7 @@ import type { downloadBlob, uploadBlob } from "./Blob.ts";
 import type { Function } from "./Function.ts";
 import type { FunctionLookupError } from "./FunctionTarget.ts";
 import type { ErrorOf, OpError } from "./internal.ts";
+import type { ShapeOf } from "./internal/Rpc.ts";
 import type { InvokeOps } from "./InvokeFunctionHttp.ts";
 
 /** A function deployed outside the Stack (`modal deploy`), by name. */
@@ -33,7 +34,6 @@ export class FunctionCallFailed extends Data.TaggedError("Modal.FunctionCallFail
   readonly traceback?: string;
 }> {}
 
-/** The call didn't finish within its timeout. */
 /** Calling a function: looking it up, sending inputs, reading outputs, and the call's own failure. */
 export type InvokeError =
   | FunctionLookupError
@@ -42,6 +42,7 @@ export type InvokeError =
   | FunctionCallFailed
   | FunctionCallTimeout;
 
+/** The call didn't finish within its timeout. */
 export class FunctionCallTimeout extends Data.TaggedError("Modal.FunctionCallTimeout")<{
   readonly functionCallId: string;
   readonly message: string;
@@ -87,17 +88,60 @@ export interface FunctionClient {
 }
 
 /**
+ * The RPC methods of a `Modal.Function` program: every function it returns
+ * besides `fetch` and `run`, called through Modal with the same arguments
+ * and results.
+ */
+export type FunctionStub<Shape> = Omit<Shape, "fetch" | "run">;
+
+/**
+ * The client {@link InvokeFunction} returns: the RPC methods of a
+ * `Modal.Function` program that has some, and a {@link FunctionClient}
+ * otherwise (a Python function, an async program).
+ */
+export type InvokeClient<T> = [ShapeOf<T>] extends [never]
+  ? FunctionClient
+  : keyof FunctionStub<ShapeOf<T>> extends never
+    ? FunctionClient
+    : FunctionStub<ShapeOf<T>>;
+
+/**
  * Call a Modal Function from any runtime: a Worker, a Lambda, a Durable
  * Object, another Modal Function. Bind a `Modal.Function` of the Stack, or
  * a function deployed with `modal deploy` by name.
  *
- * Arguments and results are CBOR (Modal's cross-language format): numbers,
- * strings, bytes, lists, dicts, booleans and `None`. A `Modal.Function`
- * program receives them as JSON (`Modal.FunctionCall`); a Python function
- * needs no changes. Payloads over 2 MiB go through Modal's blob store.
+ * A `Modal.Function` program's RPC methods come back as a typed client:
+ * each call goes through Modal (queued, retried and autoscaled like any
+ * Modal call) to the method of that name. Arguments and results are JSON
+ * values, and a typed failure reaches the caller by its `_tag`. A method
+ * that returns a `Stream` arrives whole, once the call finishes.
+ *
+ * A Python function, or an async program, gets a {@link FunctionClient}
+ * instead: `call`, `map` and `spawn` with CBOR arguments (Modal's
+ * cross-language format). Payloads over 2 MiB go through Modal's blob store.
  *
  * ### Call a function
- * **Example:** A `Modal.Function` of the Stack, from a Cloudflare Worker
+ * **Example:** RPC methods of a `Modal.Function`
+ * ```typescript
+ * // src/Embed.ts
+ * import * as Modal from "@alchemy.run/modal";
+ * import * as Effect from "effect/Effect";
+ * import { Inference } from "./Inference.ts";
+ *
+ * export default class Embed extends Modal.Function<Embed>()(
+ *   "Embed",
+ *   { main: import.meta.url, app: Inference },
+ *   Effect.gen(function* () {
+ *     return {
+ *       embed: Effect.fn(function* (text: string) {
+ *         return { tokens: text.split(/\s+/).length };
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Call it from a Cloudflare Worker
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as Modal from "@alchemy.run/modal";
@@ -112,8 +156,8 @@ export interface FunctionClient {
  *     const embed = yield* Modal.InvokeFunction(Embed);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const result = yield* embed.call<{ tokens: number }>(["hello world"]);
- *         return yield* HttpServerResponse.json(result);
+ *         const { tokens } = yield* embed.embed("hello world");
+ *         return yield* HttpServerResponse.json({ tokens });
  *       }).pipe(Effect.orDie),
  *     };
  *   }).pipe(Effect.provide(Modal.InvokeFunctionHttp)),
@@ -155,7 +199,7 @@ export interface FunctionClient {
 export interface InvokeFunction extends Binding.Service<
   InvokeFunction,
   "Modal.InvokeFunction",
-  (target: FunctionTarget) => Effect.Effect<FunctionClient>
+  <T extends FunctionTarget>(target: T) => Effect.Effect<InvokeClient<T>>
 > {}
 
 export const InvokeFunction = Binding.Service<InvokeFunction>("Modal.InvokeFunction");

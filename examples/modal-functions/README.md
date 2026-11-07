@@ -2,7 +2,7 @@
 
 Modal Functions and a Server in one App, written in TypeScript:
 
-- `Embed` is a function other runtimes call (`Modal.InvokeFunction`).
+- `Embed` is a function other runtimes call: its `embed` method is an RPC method (`Modal.InvokeFunction`).
 - `Api` is a web function at a `*.modal.run` URL that calls `Embed`.
 - `Status` is a public `Modal.Server` reporting `Embed`'s load (`Modal.ReadFunction`).
 

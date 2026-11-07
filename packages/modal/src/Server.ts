@@ -2,16 +2,13 @@ import * as functions from "@distilled.cloud/modal/functions";
 import { Platform, type Main } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-  type ServerHost,
-} from "alchemy/Runtime/Process";
+import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { ContainerProps } from "./Container.ts";
 import { environmentOf, seconds } from "./internal.ts";
-import { ENTRYPOINT } from "./internal/Entrypoint.ts";
+import { ENTRYPOINT, RPC_SERVE_ENV } from "./internal/Entrypoint.ts";
+import { createModalRuntimeContext } from "./internal/Rpc.ts";
 import {
   resolveContainerProps,
   runtimeLifecycle,
@@ -168,7 +165,7 @@ export type ServerRuntimeContext = HostRuntimeContext;
 export const Server: Platform<Server, ServerServices, ServerShape, ServerRuntimeContext> = Platform(
   "Modal.Server",
   {
-    createRuntimeContext: createHostRuntimeContext("Modal.Server"),
+    createRuntimeContext: createModalRuntimeContext("Modal.Server"),
     transformProps: resolveContainerProps,
   },
 );
@@ -225,6 +222,9 @@ export const ServerProvider = () =>
               };
         },
         bootstrap: bootstrapEntry,
+        // Behind proxy auth Modal authenticates every request, so the
+        // program serves RPC; an unauthenticated Server never does.
+        env: (props) => (props.unauthenticated ? {} : { [RPC_SERVE_ENV]: "1" }),
       });
 
       /** The Server's URL: Modal assigns it once the App is published. */

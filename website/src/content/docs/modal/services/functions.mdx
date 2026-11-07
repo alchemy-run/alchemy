@@ -20,7 +20,6 @@ export const Inference = Modal.App("Inference", {});
 // src/Embed.ts
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Inference } from "./Inference.ts";
 
 export default class Embed extends Modal.Function<Embed>()(
@@ -28,17 +27,15 @@ export default class Embed extends Modal.Function<Embed>()(
   { main: import.meta.url, app: Inference },
   Effect.gen(function* () {
     return {
-      fetch: Effect.gen(function* () {
-        const call = yield* Modal.FunctionCall;
-        const [text] = (call?.args ?? [""]) as [string];
-        return yield* HttpServerResponse.json({ tokens: text.split(/\s+/).length });
-      }).pipe(Effect.orDie),
+      embed: Effect.fn(function* (text: string) {
+        return { tokens: text.split(/\s+/).length };
+      }),
     };
   }),
 ) {}
 ```
 
-Each call reaches `fetch` as a request. `Modal.FunctionCall` decodes its arguments, and the JSON you return is the result.
+Every function the program returns is an RPC method. Alchemy deploys each one as a method of the Modal function, so Modal queues, retries and autoscales its calls.
 
 ## Call it from a Worker
 
@@ -57,30 +54,28 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const embed = yield* Modal.InvokeFunction(Embed);
     return {
       fetch: Effect.gen(function* () {
-        const result = yield* embed.call<{ tokens: number }>(["hello modal"]);
-        return yield* HttpServerResponse.json(result);
+        const { tokens } = yield* embed.embed("hello modal");
+        return yield* HttpServerResponse.json({ tokens });
       }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Modal.InvokeFunctionHttp)),
 ) {}
 ```
 
-Arguments travel as CBOR, so Python callers work too.
+The client is typed from `Embed`'s methods. Arguments and results travel as JSON, and a typed failure reaches the caller by its `_tag`, as with any [schemaless RPC](/apis/schemaless/).
 
-## Fan out
+## Return a stream
 
-```typescript
-const results = yield* embed.map<{ tokens: number }>([["a"], ["b c"], ["d e f"]]);
+```diff lang="typescript"
+ return {
+   embed: Effect.fn(function* (text: string) {
+     return { tokens: text.split(/\s+/).length };
+   }),
++  chunks: (text: string) => Stream.fromIterable(text.split(/\s+/)),
+ };
 ```
 
-Modal spreads the inputs across containers and returns the results in order.
-
-## Fire and forget
-
-```typescript
-const job = yield* embed.spawn(["a long document"]);
-const result = yield* embed.result(job, { timeout: "10 minutes" });
-```
+A method can return a `Stream`. The call collects it in the container and the caller reads it once the call finishes. To stream as values are produced, serve the method from a [Server](/modal/services/servers).
 
 ## Run on a schedule
 
@@ -105,7 +100,7 @@ export default class Digest extends Modal.Function<Digest>()(
 ) {}
 ```
 
-`schedule` also takes `{ period: "1 hour" }`.
+`schedule` also takes `{ period: "1 hour" }`. Each tick reaches `fetch` as `POST /__modal/schedule`. A function serves calls to its methods, a web endpoint or a schedule, so a scheduled function has no RPC methods.
 
 ## Write it without Effect
 
@@ -138,6 +133,30 @@ Bun.serve({
 ```
 
 The program runs on Bun. Calls arrive as `POST /__modal/call` with `{ args, kwargs }`.
+
+## Call it with arguments
+
+```typescript
+const embed = yield* Modal.InvokeFunction(Embed);
+const result = yield* embed.call<{ tokens: number }>(["hello modal"], { model: "small" });
+```
+
+A function without RPC methods, like this one, takes positional and keyword arguments as CBOR, as Python functions do.
+
+## Fan out
+
+```typescript
+const results = yield* embed.map<{ tokens: number }>([["a"], ["b c"], ["d e f"]]);
+```
+
+Modal spreads the inputs across containers and returns the results in order.
+
+## Fire and forget
+
+```typescript
+const job = yield* embed.spawn(["a long document"]);
+const result = yield* embed.result(job, { timeout: "10 minutes" });
+```
 
 ## GPUs, volumes and warm containers
 

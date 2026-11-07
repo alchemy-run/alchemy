@@ -22,7 +22,6 @@ export * from "./FetchServer.ts";
 export * from "./FetchServerHttp.ts";
 export * from "./Function.ts";
 export * from "./FunctionAutoscaler.ts";
-export * from "./FunctionCall.ts";
 export * from "./Image.ts";
 export * from "./ImageBuild.ts";
 export * from "./InvokeFunction.ts";
