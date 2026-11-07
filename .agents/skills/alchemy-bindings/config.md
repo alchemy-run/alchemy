@@ -64,9 +64,9 @@ Service-level keys that reshape the target:
 
 ## What it is granted
 
-Not in the config. A bound method's grant is its distilled operation's
-`iam` (`op.iam`: the permission it checks and the predefined roles that
-grant it), recorded in `submodules/distilled/packages/gcp/patches/<module>/iam.json`.
+Not in the config. A bound method's grant is its operation's `iam` in
+distilled's meta module (`@distilled.cloud/gcp/meta/<module>`, data only:
+the permission it checks and the predefined roles that grant it), recorded in `submodules/distilled/packages/gcp/patches/<module>/iam.json`.
 Correct a grant there, with a `description` saying why, and regenerate
 distilled. The config only says where the grant goes:
 
