@@ -10,7 +10,13 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
-import { Cluster, FRONT_NODE_PORT, FRONT_PORT, Kind } from "./fixtures/kubernetes/cluster.ts";
+import {
+  Cluster,
+  CONTROL_PLANE_PORT,
+  FRONT_NODE_PORT,
+  FRONT_PORT,
+  Kind,
+} from "./fixtures/kubernetes/cluster.ts";
 import { CounterLive } from "./fixtures/kubernetes/counter-live.ts";
 import Front, { FRONT_NAME } from "./fixtures/kubernetes/front.ts";
 import { expectRustCounter, RustActors, rustTarget, type RustTarget } from "./fixtures/rust.ts";
@@ -93,7 +99,12 @@ describe.skipIf(!!process.env.FAST)(
     test(
       "a Rust Durable Object runs on a Deployment pool",
       Effect.gen(function* () {
-        yield* expectRustCounter(rust, "kubernetes-rust");
+        // The attribute is the in-cluster address callers in the cluster use;
+        // from this machine, the control plane is on kind's published port.
+        yield* expectRustCounter(
+          { ...rust, endpoint: `http://localhost:${CONTROL_PLANE_PORT}` },
+          "kubernetes-rust",
+        );
       }),
       { timeout: 300_000 },
     );

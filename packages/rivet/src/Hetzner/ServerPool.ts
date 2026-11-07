@@ -87,6 +87,9 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
           image: "ubuntu-24.04",
           location,
           firewalls: [firewall],
+          // Nodes only dial out to the control plane's IPv4 address: an
+          // IPv6 address would only use up the project's primary IPs.
+          enableIpv6: false,
         });
         yield* Hetzner.Service(`${id}Node${i}Service`, {
           server,
