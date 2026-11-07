@@ -7,6 +7,7 @@ import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,14 @@ test.provider.skipIf(!runLifecycle)(
             enableMetastoreEncryption: false,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.EncryptionConfig.lookup({
+          organizationId: created.organizationId,
+          location: created.location,
+          encryptionConfigId: created.encryptionConfigId,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/encryptionConfigs/");

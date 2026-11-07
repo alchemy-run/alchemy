@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,13 @@ test.provider(
           });
           return { mesh, route };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.TcpRoute.lookup({
+          tcpRouteId: created.route.tcpRouteId,
+          location: created.route.location,
+        }),
+        created.route,
       );
 
       expect(created.route.name).toContain("/tcpRoutes/");

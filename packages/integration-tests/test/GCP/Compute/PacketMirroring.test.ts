@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -274,6 +275,13 @@ test.provider(
             mirroredResources: { tags: ["alchemy-pm"] },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.PacketMirroring.lookup({
+          packetMirroringName: created.packetMirroringName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.packetMirroringName).toEqual(expect.any(String));

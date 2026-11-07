@@ -68,6 +68,8 @@
     // run produces, and the `.tsx` files use React's JSX runtime rather than
     // this package's default `@opentui/solid` jsxImportSource.
     "test/AWS/Website/fixtures/react-router-app",
+    // Typed against the workerd globals by its own tsconfig (#3119).
+    "test/Cloudflare/Workers/fixtures/ambient-types",
     // Foldkit mode overlays are copied over a clone of the SSR fixture;
     // their imports resolve only inside that clone.
     "test/Website/fixtures/foldkit-modes"
@@ -105,8 +107,10 @@
       "path": "../effect-cluster/tsconfig.json"
     },
     { "path": "../turso/tsconfig.json" },
+    { "path": "../e2b/tsconfig.json" },
     { "path": "../daytona/tsconfig.json" },
     { "path": "../archil/tsconfig.json" },
+    { "path": "../modal/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },
     { "path": "../prisma/tsconfig.json" },

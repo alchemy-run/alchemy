@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -55,6 +56,14 @@ test.provider(
           });
           return { workspace, rule };
         }),
+      );
+      yield* expectFound(
+        GCP.DataMigration.ConversionWorkspacesMappingRule.lookup({
+          mappingRuleId: created.rule.mappingRuleId,
+          location: created.rule.location,
+          conversionWorkspace: created.rule.conversionWorkspace,
+        }),
+        created.rule,
       );
 
       expect(created.rule.mappingRuleId).toEqual(expect.any(String));

@@ -1,0 +1,44 @@
+---
+title: Dicts
+description: Share key-value data between sandboxes, functions and Workers.
+---
+
+## Create a dict
+
+```typescript
+// src/Storage.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Results = Modal.Dict("Results", {});
+```
+
+## Bind it
+
+```typescript
+const results = yield* Modal.ReadWriteDict(Results);
+```
+
+Provide `Modal.ReadWriteDictHttp`. Use `ReadDict` or `WriteDict` for one direction.
+
+## Write
+
+```typescript
+yield* results.put("last-run", { ok: true });
+yield* results.update([["a", 1], ["b", 2]]);
+```
+
+## Read
+
+```typescript
+const last = yield* results.get<{ ok: boolean }>("last-run");
+const all = yield* results.entries();
+```
+
+## Remove
+
+```typescript
+const popped = yield* results.pop("a");
+yield* results.clear();
+```
+
+Keys and values are JSON. Python reads them with `json.loads`. Entries expire 7 days after their last write.

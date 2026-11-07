@@ -19,6 +19,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -90,6 +91,21 @@ test.provider(
       });
 
     const initial = yield* stack.deploy(resources());
+    yield* expectFound(
+      Prisma.Database.lookup({ databaseId: initial.named.databaseId }),
+      initial.named,
+      // Prisma returns connection strings only from a create.
+      {
+        ignore: [
+          "directConnectionString",
+          "pooledConnectionString",
+          "accelerateConnectionString",
+          "host",
+          "user",
+          "password",
+        ],
+      },
+    );
     const branches = yield* getProjectBranches({
       projectId: initial.project.projectId,
     });
@@ -155,6 +171,10 @@ test.provider(
       });
 
     const initial = yield* stack.deploy(resources("id"));
+    yield* expectFound(Prisma.Branch.lookup({ branchId: initial.first.branchId }), initial.first, {
+      // The default branch a deploy replaced is this stack's record.
+      ignore: ["previousDefaultBranchId"],
+    });
     expect(initial.first.isDefault).toBe(false);
     expect(initial.second.isDefault).toBe(false);
     yield* expectDatabase(initial.database, initial.first.branchId);
@@ -458,13 +478,96 @@ test.provider(
   { tags: logicalIdTags, timeout: 180_000 },
 );
 
+// A host (e.g. the `prisma` CLI holding a `prisma login` session) provides
+// its own PrismaEnvironment whose Effect returns the current token. Alchemy
+// must run it on every request so a refreshed token reaches the next call.
+const hostEnvironment = (() => {
+  let resolutions = 0;
+  const requests: { url: string; authorization: string | undefined }[] = [];
+  const profile = Layer.mergeAll(Prisma.managementApi(), FetchHttpClient.layer);
+  const environment = Layer.effect(
+    Prisma.PrismaEnvironment,
+    Effect.map(Prisma.PrismaEnvironment.current, (current) =>
+      Effect.sync(() => {
+        resolutions++;
+        return current;
+      }),
+    ),
+  ).pipe(Layer.provide(profile));
+  const transport = Layer.effect(
+    HttpClient.HttpClient,
+    Effect.map(HttpClient.HttpClient, (client) =>
+      client.pipe(
+        HttpClient.mapRequest((request) => {
+          requests.push({ url: request.url, authorization: request.headers.authorization });
+          return request;
+        }),
+      ),
+    ),
+  ).pipe(Layer.provide(FetchHttpClient.layer));
+  const providers = Layer.effect(
+    Prisma.Providers,
+    Provider.collection([Prisma.Project, Prisma.Database]),
+  ).pipe(
+    Layer.provideMerge(Layer.mergeAll(Prisma.ProjectProvider(), Prisma.DatabaseProvider())),
+    Layer.provideMerge(Prisma.PrismaClientLive),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.effect(
+          Credentials,
+          Effect.map(Prisma.PrismaEnvironment, (resolve) =>
+            Effect.map(resolve, (env) => ({ apiToken: env.serviceToken, apiBaseUrl: env.baseUrl })),
+          ),
+        ),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
+    Layer.provideMerge(environment),
+    Layer.provideMerge(transport),
+    Layer.orDie,
+  );
+  return {
+    requests,
+    resolutions: () => resolutions,
+    reset: () => {
+      resolutions = 0;
+      requests.length = 0;
+    },
+    ...Test.make({ providers }),
+  };
+})();
+
+hostEnvironment.test.provider(
+  "resolves a host-provided PrismaEnvironment on every Management API request",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    hostEnvironment.reset();
+
+    const deployed = yield* stack.deploy(databaseStack());
+    const observed = yield* observeDatabase(deployed.database.databaseId);
+    expect(observed.project.id).toBe(deployed.project.projectId);
+
+    const requests = hostEnvironment.requests.filter((request) => request.url.includes("/v1/"));
+    expect(requests.length).toBeGreaterThan(1);
+    expect(requests.every((request) => request.authorization?.startsWith("Bearer "))).toBe(true);
+    expect(hostEnvironment.resolutions()).toBeGreaterThanOrEqual(requests.length);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(deployed.database.databaseId);
+    yield* expectProjectGone(deployed.project.projectId);
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+// A host (the `prisma` CLI) can instead authenticate every request in its own
+// HttpClient, e.g. to refresh the session and retry on a 401.
 const hostAuthenticated = (() => {
   const requests: { url: string; authorization: string | undefined }[] = [];
   const environment = Layer.mergeAll(Prisma.managementApi(), FetchHttpClient.layer);
   const transport = Layer.effect(
     HttpClient.HttpClient,
     Effect.gen(function* () {
-      const { serviceToken } = yield* Prisma.PrismaEnvironment;
+      const { serviceToken } = yield* Prisma.PrismaEnvironment.current;
       const client = yield* HttpClient.HttpClient;
       return client.pipe(
         HttpClient.mapRequest((request) => {
@@ -478,7 +581,9 @@ const hostAuthenticated = (() => {
   ).pipe(Layer.provide(environment));
   const environmentWithoutToken = Layer.effect(
     Prisma.PrismaEnvironment,
-    Effect.map(Prisma.PrismaEnvironment, ({ serviceToken: _, ...env }) => env),
+    Effect.map(Prisma.PrismaEnvironment, (resolve) =>
+      Effect.map(resolve, ({ serviceToken: _, ...env }) => env),
+    ),
   ).pipe(Layer.provide(environment));
   const providers = Layer.effect(
     Prisma.Providers,
@@ -490,8 +595,8 @@ const hostAuthenticated = (() => {
       Layer.mergeAll(
         Layer.effect(
           Credentials,
-          Effect.map(Prisma.PrismaEnvironment, (env) =>
-            Effect.succeed({ apiBaseUrl: env.baseUrl }),
+          Effect.map(Prisma.PrismaEnvironment, (resolve) =>
+            Effect.map(resolve, (env) => ({ apiBaseUrl: env.baseUrl })),
           ),
         ),
         Layer.succeed(Retry.Retry, Retry.makeDefault),

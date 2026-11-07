@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -78,8 +79,31 @@ export type TensorboardsExperiment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TensorboardsExperimentLookup
 >;
+
+/**
+ * Props for {@link TensorboardsExperiment.lookup}: find a tensorboards
+ * experiment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface TensorboardsExperimentLookup {
+  /**
+   * Experiment id (the `{experiment}` segment).
+   */
+  experimentId: string;
+  /**
+   * Parent Tensorboard resource name
+   * (`projects/{project}/locations/{location}/tensorboards/{tensorboard}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI TensorboardExperiment grouping runs from a training job.
@@ -93,6 +117,20 @@ export type TensorboardsExperiment = Resource<
  * const experiment = yield* GCP.AIPlatform.TensorboardsExperiment("RunGroup", {
  *   parent: board.name,
  *   displayName: "baseline",
+ * });
+ * ```
+ *
+ * ### Looking up an existing tensorboards experiment
+ * `TensorboardsExperiment.lookup` references a tensorboards experiment
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared tensorboards experiment.
+ *
+ * **Example:** Reference an existing tensorboards experiment
+ * ```typescript
+ * const tensorboardsExperiment = GCP.AIPlatform.TensorboardsExperiment.lookup({
+ *   experimentId: "my-experiment",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -190,6 +228,14 @@ export const TensorboardsExperimentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ experimentId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, experimentId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

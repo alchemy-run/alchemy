@@ -713,6 +713,27 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 - [Tokens](https://alchemy.run/turso/tokens) — Create tokens for apps that run outside your Stack.
 - [Team & organization](https://alchemy.run/turso/organization) — Invite teammates and change your Turso organization's settings.
 
+## E2B
+
+E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.
+
+- [E2B](https://alchemy.run/e2b) — Run sandboxes for agents on E2B with Alchemy. Declare templates, warm snapshots, volumes and secrets in TypeScript, and create sandboxes from any Worker or Function.
+- [What is E2B?](https://alchemy.run/e2b/what-is-e2b) — The concepts behind E2B — teams and API keys, templates, sandboxes, snapshots and forks, volumes, network rules and secrets, and lifecycle events — and how @alchemy.run/e2b models each of them.
+- [Setup](https://alchemy.run/e2b/setup) — Install @alchemy.run/e2b, sign in to E2B with a profile, and deploy from CI.
+- [Part 1: Your First Template](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and deploy it.
+- [Part 2: Add a Worker](https://alchemy.run/e2b/tutorial/part-2) — Create sandboxes from a Worker, run code in them, and keep a sandbox per user.
+- [Part 3: Testing](https://alchemy.run/e2b/tutorial/part-3) — Deploy the Stack in a test, call the API, and check the result.
+- [Part 4: Stages](https://alchemy.run/e2b/tutorial/part-4) — Deploy separate copies of the Stack, each with its own templates and Worker.
+- [Part 5: CI/CD](https://alchemy.run/e2b/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
+- [Team & API keys](https://alchemy.run/e2b/api-keys) — How an E2B team holds your templates and sandboxes, how your profile picks the team Alchemy deploys to, and what key each host gets instead of yours.
+- [Network & secrets](https://alchemy.run/e2b/network-and-secrets) — Limit where a sandbox can connect, and add credentials to its requests without the sandbox seeing them.
+- [Templates](https://alchemy.run/e2b/templates) — Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
+- [Sandboxes](https://alchemy.run/e2b/sandboxes) — Create sandboxes from a Worker, run commands, read and write files, and manage their lifecycle.
+- [Snapshots & forks](https://alchemy.run/e2b/snapshots) — Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
+- [Template programs](https://alchemy.run/e2b/programs) — Run your own Effect program, or a plain JavaScript program, in every sandbox.
+- [Volumes](https://alchemy.run/e2b/volumes) — Keep files that outlive sandboxes, mount them by name, and read or write them without a sandbox.
+- [Lifecycle events](https://alchemy.run/e2b/lifecycle-events) — Handle sandbox lifecycle events in a Worker as E2B sends them.
+
 ## Archil — start here
 
 Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.
@@ -866,6 +887,50 @@ Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and sc
 ## Daytona — Observability
 
 - [Telemetry, webhooks and audit](https://alchemy.run/daytona/observability/telemetry) — Send a Daytona organization's sandbox logs, traces and metrics to your backend, get webhooks for sandbox events, and read usage and the audit log from a Worker.
+
+## Modal
+
+Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.
+
+- [Modal](https://alchemy.run/modal) — Run functions, servers and agent sandboxes on Modal, and keep files there, from your Workers and Lambdas.
+- [Setup](https://alchemy.run/modal/setup) — Log in to Modal, or give Alchemy a Modal token.
+- [Concepts](https://alchemy.run/modal/concepts) — How Modal environments, apps and objects map to your Stack.
+
+## Modal — Tutorial
+
+- [Part 1: Your First Stack](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, app and image.
+- [Part 2: Add a Sandbox](https://alchemy.run/modal/tutorial/part-2) — Create a sandbox from a Worker and give each user a volume.
+- [Part 3: Testing](https://alchemy.run/modal/tutorial/part-3) — Test the deployed API against real Modal sandboxes.
+- [Part 4: Stages](https://alchemy.run/modal/tutorial/part-4) — Deploy separate dev, staging and prod copies, each in its own Modal environment.
+- [Part 5: CI/CD](https://alchemy.run/modal/tutorial/part-5) — Deploy from GitHub Actions with a Modal token in repository secrets.
+
+## Modal — Sandboxes
+
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One sandbox whose filesystem outlives its sessions.
+- [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
+- [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a sandbox's files or memory and start new sandboxes from it.
+
+## Modal — Storage
+
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
+- [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
+
+## Modal — Security
+
+- [Access control](https://alchemy.run/modal/security/access-control) — Separate workloads with environments, member roles and scoped tokens.
+- [Network & secrets](https://alchemy.run/modal/security/network-and-secrets) — Limit what a sandbox can reach and give it credentials it can't read.
+
+## Modal — Services
+
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
+- [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
+- [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
+- [Servers](https://alchemy.run/modal/services/servers) — Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
+- [Web endpoints](https://alchemy.run/modal/services/web-endpoints) — Serve a Modal Function on the web at a modal.run URL.
 
 ## Better Auth
 
@@ -1113,4 +1178,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~239 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~248 KB) — only fetch it when you need to locate a specific resource's reference page.

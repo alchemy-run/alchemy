@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -184,8 +185,27 @@ export type InstanceTemplate = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceTemplateLookup
 >;
+
+/**
+ * Props for {@link InstanceTemplate.lookup}: find an instance template this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InstanceTemplateLookup {
+  /**
+   * Template name. Must be 1-63 characters matching
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  templateName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine instance template.
@@ -215,6 +235,19 @@ export type InstanceTemplate = Resource<
  *     },
  *   ],
  *   networkInterfaces: [{ network: "global/networks/default" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance template
+ * `InstanceTemplate.lookup` references an instance template Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * instance template.
+ *
+ * **Example:** Reference an existing instance template
+ * ```typescript
+ * const instanceTemplate = GCP.Compute.InstanceTemplate.lookup({
+ *   templateName: "my-template",
  * });
  * ```
  *
@@ -476,6 +509,13 @@ export const InstanceTemplateProvider = () =>
           previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ templateName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, templateName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

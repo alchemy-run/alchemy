@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -69,6 +70,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.DataProductsDataAsset.lookup({
+          dataAssetId: created.dataAssetId,
+          parent: created.parent,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dataAssets/");

@@ -65,8 +65,28 @@ export type EnvironmentsKeyvaluemap = Resource<
     maskedValues: boolean;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsKeyvaluemapLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsKeyvaluemap.lookup}: find an environments
+ * keyvaluemap this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsKeyvaluemapLookup {
+  /**
+   * Key value map id.
+   */
+  keyvaluemapId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An environment-scoped Apigee key value map.
@@ -90,6 +110,20 @@ export type EnvironmentsKeyvaluemap = Resource<
  *   environment: "eval",
  *   keyvaluemapId: "app-config",
  *   maskedValues: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments keyvaluemap
+ * `EnvironmentsKeyvaluemap.lookup` references an environments keyvaluemap
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments keyvaluemap.
+ *
+ * **Example:** Reference an existing environments keyvaluemap
+ * ```typescript
+ * const environmentsKeyvaluemap = GCP.Apigee.EnvironmentsKeyvaluemap.lookup({
+ *   keyvaluemapId: "my-keyvaluemap",
+ *   environment: "my-environment",
  * });
  * ```
  *
@@ -156,6 +190,16 @@ export const EnvironmentsKeyvaluemapProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ keyvaluemapId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, keyvaluemapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

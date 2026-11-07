@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -163,8 +164,31 @@ export type PacketMirroring = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PacketMirroringLookup
 >;
+
+/**
+ * Props for {@link PacketMirroring.lookup}: find a packet mirroring this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PacketMirroringLookup {
+  /**
+   * PacketMirroring name (RFC1035, 1-63 characters).
+   */
+  packetMirroringName: string;
+  /**
+   * Region the policy lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine packet mirroring policy.
@@ -218,6 +242,19 @@ export type PacketMirroring = Resource<
  *   collectorIlb: collector.selfLink,
  *   mirroredResources: { tags: ["mirror-me"] },
  *   enable: false,
+ * });
+ * ```
+ *
+ * ### Looking up an existing packet mirroring
+ * `PacketMirroring.lookup` references a packet mirroring Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * packet mirroring.
+ *
+ * **Example:** Reference an existing packet mirroring
+ * ```typescript
+ * const packetMirroring = GCP.Compute.PacketMirroring.lookup({
+ *   packetMirroringName: "my-packet-mirroring",
  * });
  * ```
  *
@@ -486,6 +523,14 @@ export const PacketMirroringProvider = () =>
           previousRegion === nextRegion,
       };
     }),
+
+    lookup: Effect.fn(function* ({ packetMirroringName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, packetMirroringName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -50,7 +50,7 @@ import {
 } from "./ContainerConfiguration.ts";
 import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { retryContainerBuild, retryContainerPublication } from "./ContainerPublication.ts";
+import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
 
 export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
@@ -723,7 +723,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerBuild);
+            .pipe(retryContainerPublication);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -763,7 +763,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerBuild);
+            .pipe(retryContainerPublication);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather

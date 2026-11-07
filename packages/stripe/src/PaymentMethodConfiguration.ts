@@ -296,8 +296,18 @@ export type PaymentMethodConfiguration = Resource<
     livemode: boolean;
   } & PaymentMethodAttributes,
   never,
-  Providers
+  Providers,
+  PaymentMethodConfigurationLookup
 >;
+
+/**
+ * Props for {@link PaymentMethodConfiguration.lookup}: find a payment method configuration this stack
+ * doesn't manage by its id.
+ */
+export interface PaymentMethodConfigurationLookup {
+  /** Stripe payment method configuration id, e.g. `"pmc_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Payment Method Configuration — which payment methods Checkout,
@@ -350,6 +360,16 @@ export type PaymentMethodConfiguration = Resource<
  * const checkout = yield* Stripe.PaymentMethodConfiguration("checkout", {
  *   name: "Checkout",
  * });
+ * ```
+ *
+ * ### Looking up an existing payment method configuration
+ * `PaymentMethodConfiguration.lookup` references a payment method configuration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing payment method configuration
+ * ```typescript
+ * const ref = Stripe.PaymentMethodConfiguration.lookup({ id: "pmc_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -523,6 +543,11 @@ export const PaymentMethodConfigurationProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

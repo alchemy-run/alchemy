@@ -1,0 +1,57 @@
+---
+title: "Part 3: Testing"
+description: Deploy the Stack in a test, call the API, and check the result.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Deploy once per test file
+
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "runs code in a one-shot sandbox",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    yield* Test.getWhenReady(url);
+    const res = yield* HttpClient.execute(
+      HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText("console.log(6 * 7)")),
+    );
+    const body = (yield* res.json) as { stdout: string; exitCode: number };
+    expect(body).toMatchObject({ stdout: "42\n", exitCode: 0 });
+  }),
+  { timeout: 180_000 },
+);
+```
+
+The test deploys the Stack to a stage of its own, and destroys it afterwards. The Worker kills each sandbox when its request ends, so none is left behind.
+
+## Run it
+
+<PackageManagers script={`bun test`} />
+
+Set `NO_DESTROY=1` to keep the deployment between runs while you iterate.
+
+## Next
+
+[Part 4](/e2b/tutorial/part-4) deploys more than one copy.

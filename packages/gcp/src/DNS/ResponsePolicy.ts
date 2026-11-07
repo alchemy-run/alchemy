@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   createInternalLabels,
@@ -75,8 +76,28 @@ export type ResponsePolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ResponsePolicyLookup
 >;
+
+/**
+ * Props for {@link ResponsePolicy.lookup}: find a response policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ResponsePolicyLookup {
+  /**
+   * User-assigned response policy name, unique within the project. Must be
+   * 1-63 characters, begin with a letter, end with a letter or digit, and
+   * contain only lowercase letters, digits, or dashes.
+   */
+  responsePolicyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud DNS response policy applied to one or more VPC networks.
@@ -104,6 +125,19 @@ export type ResponsePolicy = Resource<
  *   description: "split-horizon answers",
  *   labels: { env: "prod" },
  *   networks: ["app-vpc"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing response policy
+ * `ResponsePolicy.lookup` references a response policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * response policy.
+ *
+ * **Example:** Reference an existing response policy
+ * ```typescript
+ * const responsePolicy = GCP.DNS.ResponsePolicy.lookup({
+ *   responsePolicyName: "my-response-policy",
  * });
  * ```
  *
@@ -253,6 +287,13 @@ export const ResponsePolicyProvider = () =>
       // network.
       return { action: "replace" as const, deleteFirst: true };
     }),
+
+    lookup: Effect.fn(function* ({ responsePolicyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, responsePolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

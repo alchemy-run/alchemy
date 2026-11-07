@@ -35,7 +35,7 @@ const testLayer = (config: Record<string, string>, options: { storedToken?: stri
 describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, () => {
   it.effect("resolves stored credentials and API base URL from config", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
@@ -53,7 +53,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
   it.effect("prefers PRISMA_API_URL over PRISMA_MANAGEMENT_API_URL", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.baseUrl).toBe("https://api-url.prisma.test");
     }).pipe(
@@ -71,7 +71,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
   it.effect("resolves stored profile credentials", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
@@ -82,7 +82,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
   it.effect("allows HTTP only for loopback Management API URLs", () =>
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
+      const env = yield* PrismaEnvironment.current;
       expect(env.baseUrl).toBe("http://127.0.0.1:8787");
     }).pipe(
       Effect.provide(

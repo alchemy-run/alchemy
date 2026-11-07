@@ -14,7 +14,7 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { Platform, type Main, type MainRpc, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import type { Resource } from "alchemy/Resource";
+import type { LookupMethod, Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { packEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
@@ -63,6 +63,7 @@ import {
   deleteReplicaSet,
   hasPublishedService,
   listReplicaSets,
+  lookupReplicaSet,
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
@@ -334,8 +335,23 @@ export type Service = Resource<
     code: { hash: string };
   },
   ServiceBinding,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a Service this stack doesn't
+ * manage by its App, and its name when the App holds several.
+ */
+export interface ServiceLookup {
+  /** Fly App name the Service's Machines run in. */
+  appName: string;
+  /**
+   * Machine name of the Service, for an App that runs several. Omit it to
+   * take every Machine in the App.
+   */
+  name?: string;
+}
 
 export const isService = (value: unknown): value is Service =>
   typeof value === "object" &&
@@ -1025,33 +1041,45 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * See the [deployment guide](/fly/compute/deployments) for recovery,
  * idle capacity, application responsibilities, and verification limits.
  *
+ * ### Looking up an existing Service
+ * `Service.lookup` references a Service Alchemy doesn't manage (deployed
+ * with `fly deploy` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted, and `url`, `endpoints` and
+ * `privateUrl` come from the Machines and addresses Fly reports.
+ *
+ * **Example:** Call a Service another stack deployed
+ * ```typescript
+ * const api = Fly.Service.lookup({ appName: "my-api" });
+ * const url = api.privateUrl;
+ * ```
+ *
  * @resource
  * @product Service
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("Fly.Service", {
-    createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
-    // `{ app: Site }` at module scope is an Effect. Yield it here so the
-    // App is registered and `news.app` is resolved attributes at
-    // reconcile (same DX as `yield* App(...)` inside Effect.gen).
-    transformProps: (id, props) =>
-      Effect.gen(function* () {
-        if (globalThis.__ALCHEMY_RUNTIME__) return props;
-        const app = Effect.isEffect(props.app)
-          ? yield* props.app as Effect.Effect<App, never, Providers>
-          : props.app;
-        if (app !== undefined) {
-          // Report the ports this Service publishes so the App can reject
-          // two Services on the same port before either one is deployed.
-          yield* app.bind(id, {
-            service: id,
-            services: props.services,
-            bindingPort: props.bindingPort,
-          });
-        }
-        return { ...props, app } as typeof props;
-      }),
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("Fly.Service", {
+  createRuntimeContext: createFlyHostRuntimeContext("Fly.Service"),
+  // `{ app: Site }` at module scope is an Effect. Yield it here so the
+  // App is registered and `news.app` is resolved attributes at
+  // reconcile (same DX as `yield* App(...)` inside Effect.gen).
+  transformProps: (id, props) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__) return props;
+      const app = Effect.isEffect(props.app)
+        ? yield* props.app as Effect.Effect<App, never, Providers>
+        : props.app;
+      if (app !== undefined) {
+        // Report the ports this Service publishes so the App can reject
+        // two Services on the same port before either one is deployed.
+        yield* app.bind(id, {
+          service: id,
+          services: props.services,
+          bindingPort: props.bindingPort,
+        });
+      }
+      return { ...props, app } as typeof props;
+    }),
+});
 
 export class ServiceNotCreated extends Data.TaggedError("Fly.ServiceNotCreated")<{
   resourceName: string;
@@ -1700,6 +1728,24 @@ export const ServiceProvider = () =>
             }
           }
           return output.rolloutPending ? { action: "update" as const } : undefined;
+        }),
+
+        lookup: Effect.fn(function* ({ appName, name }) {
+          const found = yield* lookupReplicaSet({ appName, name });
+          if (found === undefined) return undefined;
+          const app = yield* machines
+            .getApp({ app_name: appName })
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+          const attrs = toAttrs(found, "", {
+            // Reported as Alchemy-owned only so the endpoints follow the App's
+            // observed addresses, as a declared Service's own App's do.
+            ownsApp: true,
+            isPublic: yield* hasPublicAddress(appName),
+            network: app?.network,
+            bindingPort: DEFAULT_BINDING_PORT,
+            orgSlug: app?.organization?.slug,
+          });
+          return { ...attrs, ownsApp: false };
         }),
 
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
