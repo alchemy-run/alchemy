@@ -62,9 +62,9 @@ import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { layerDurableObjectEngine, makeEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
-import { hostModel } from "./HostModel.ts";
+import { domainClass, type LegacyClass } from "./DomainClass.ts";
 import { RUN_ROOT } from "./MigrationRun.ts";
-import { ID_KEY, type LegacyClass } from "./ModelClass.ts";
+import { ID_KEY } from "./Router.ts";
 import { backfillRuntime, exclusively, type Random } from "./Runtime.ts";
 import { beforeVersionsBinding, DeployVersion } from "./Version.ts";
 
@@ -1548,7 +1548,7 @@ const durableObjectPlatform = (
         Effect.provide(effect, init);
       const inJurisdiction = (namespace: Namespace): Namespace =>
         jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
-      // Version 1: every object of a model in one class, `Billing.Domain` (see `HostModel.ts`).
+      // Version 1: every object of a model in one class, `Billing.Domain` (see `DomainClass.ts`).
       const oneClassPerModel = version !== undefined && version >= 1;
       /**
        * Each model's old classes, which a deploy moves to the shared class: a
@@ -1574,7 +1574,9 @@ const durableObjectPlatform = (
       // Workflow. Models that share a definition never share its data.
       const hostFor = ({ modelName, legacyData }: HostedModel) =>
         Effect.gen(function* () {
-          const shared = oneClassPerModel ? yield* inInit(hostModel(random, modelName)) : undefined;
+          const shared = oneClassPerModel
+            ? yield* inInit(domainClass(random, modelName))
+            : undefined;
           const named = (name: string) =>
             version === undefined ? name : className(modelName, name);
           const object = (name: string, impl: ObjectImpl) =>
@@ -2418,7 +2420,7 @@ export function layerDurableObjects({
                 makeEngine(jurisdiction, (name, impl) => {
                   // Recorded when the model is hosted, before its sagas register.
                   const modelName = sagaModels.get(name) ?? name.slice(0, name.indexOf("."));
-                  return Effect.flatMap(hostModel(random, modelName), (shared) =>
+                  return Effect.flatMap(domainClass(random, modelName), (shared) =>
                     shared.object(
                       name,
                       listedRuns(modelName, name, impl),

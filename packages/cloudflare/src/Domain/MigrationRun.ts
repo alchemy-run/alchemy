@@ -7,16 +7,8 @@ import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { makeRpcStub } from "../Workers/Rpc.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { sleep, task } from "../Workflows/Workflow.ts";
-import {
-  type Classes,
-  DomainMoveFailed,
-  MOVED,
-  type ObjectImpl,
-  type Resolver,
-  type Stub,
-  failed,
-  orDie,
-} from "./ModelClass.ts";
+import type { Classes, ObjectImpl, Resolver, Stub } from "./DomainClass.ts";
+import { DomainMoveFailed, MOVED, failed } from "./Router.ts";
 import { backfillRuntime } from "./Runtime.ts";
 
 /**
@@ -24,6 +16,9 @@ import { backfillRuntime } from "./Runtime.ts";
  * every object of a model's old classes into its class, and the Workflow a
  * deploy reaches it through.
  */
+
+export const orDie = <A>(effect: Effect.Effect<unknown, unknown>) =>
+  effect.pipe(Effect.orDie) as Effect.Effect<A>;
 
 /**
  * The migration run's route in the shared class. Its root (`run:<target>`)
