@@ -126,13 +126,28 @@ const declare = DurableObject as unknown as (
   Worker
 >;
 
-const makeEngine = (
+/**
+ * An engine that declares each workflow's class with `declareClass`: a Domain
+ * model's engine hosts its runs in the Domain's shared class.
+ *
+ * @internal
+ */
+export const makeEngine = (
   jurisdiction: DurableObjectJurisdiction | undefined,
+  declareClass: (...args: Parameters<Declare>) => Effect.Effect<
+    Effect.Success<ReturnType<Declare>> & {
+      readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => unknown;
+    },
+    never,
+    Worker
+  > = declare,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   makeDurableObjectEngine({
     declare: (name, impl) =>
-      Effect.map(declare(name, impl), (namespace) =>
-        jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+      Effect.map(declareClass(name, impl), (namespace) =>
+        jurisdiction === undefined
+          ? namespace
+          : (namespace.jurisdiction(jurisdiction) as typeof namespace),
       ),
     state: DurableObjectState,
   });

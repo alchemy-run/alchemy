@@ -1,12 +1,9 @@
-import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
-import * as Queue from "effect/Queue";
-import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import { type ReplayInput, type ReplayResult, type Routed, routeLive } from "./CatchUp.ts";
+import * as FanOut from "./FanOut.ts";
 import type { Delivery } from "./Platform.ts";
 
 /**
@@ -43,29 +40,10 @@ import type { Delivery } from "./Platform.ts";
 // ---------------------------------------------------------------- runtime
 
 /** A key-ordered store, as a Durable Object's storage is. */
-export interface Storage {
-  readonly get: <A>(key: string) => Effect.Effect<A | undefined>;
-  readonly put: (entries: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
-  readonly delete: (keys: ReadonlyArray<string>) => Effect.Effect<void>;
-  /** Entries under `prefix`, in key order, after `startAfter`. */
-  readonly list: <A>(options: {
-    readonly prefix: string;
-    readonly startAfter?: string;
-    readonly limit?: number;
-  }) => Effect.Effect<ReadonlyArray<readonly [string, A]>>;
-  /** Run `effect` with every other call on this object held back. */
-  readonly exclusive: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
-}
+export type Storage = FanOut.Storage;
 
 /** Durable, at-least-once jobs on one object: a job with the same id replaces a pending one. */
-export interface Jobs {
-  /**
-   * Run job `id` after `afterMillis`. The earliest request wins: a job already due
-   * sooner isn't postponed (every job is idempotent, so running early is safe),
-   * including one asked for while that job runs.
-   */
-  readonly schedule: (id: string, afterMillis: number) => Effect.Effect<void>;
-}
+export type Jobs = FanOut.Jobs;
 
 /** An instance listed in the directory: its source (aggregate or view) and id. */
 export interface SourceRef {
@@ -482,25 +460,12 @@ const LIST_PAGE = 512;
 /** How long a key started with a wait pauses between pages that couldn't go further. */
 const WAIT_PAUSE_MS = 50;
 
-/**
- * Cloudflare refuses calls when an account puts too much load on Durable
- * Objects, and resets an isolate whose objects (many share one) use too much
- * memory. Either is a sign to send less: a refused call is tried again later,
- * not at once, so a wide run backs off to the load the account can take
- * rather than collapse under its own retries.
- */
-export const overloaded = (cause: Cause.Cause<unknown>) => {
-  const error = Cause.squash(cause);
-  return /too much load|too many concurrent|overloaded|try again later|exceeded its memory limit/i.test(
-    Predicate.hasProperty(error, "message") ? String(error.message) : String(error),
-  );
-};
-
-/** A wait after `failures` failures in a row: doubling from `base`, up to `max`, jittered. */
-const backoff = (failures: number, base: number, max: number) =>
-  Effect.map(Random.next, (jitter) =>
-    Math.round(Math.min(max, base * 2 ** Math.max(0, failures - 1)) * (0.5 + jitter)),
-  );
+export const overloaded = FanOut.overloaded;
+/** How long a call may take, beyond the work it was asked to wait for, before it counts as lost. */
+const CALL_TIMEOUT_MS = 20_000;
+/** How long a key works on its history before it answers a relay that is waiting for it. */
+const RELAY_KEY_WAIT_MS = 10_000;
+const backoff = FanOut.backoff;
 
 /** A key's pause between pages: short while it makes progress, backing off while calls fail. */
 const pause = (failures: number) =>
@@ -1668,308 +1633,77 @@ export type Node = ReturnType<typeof makeNode>;
 
 // ---------------------------------------------------------------- relay
 
+/** How a backfill's relays list the directory and handle a source instance: see `FanOut`. */
+const backfillWork = (net: Network): FanOut.Work<RelayRun, SourceRef> => ({
+  label: "backfill",
+  list: (run, path, after) =>
+    Effect.map(net.node.list(path, after), (page) => {
+      // The root lists one subtree per source: only those the consumer reads.
+      const sources = path === "" ? run.plan.sources : undefined;
+      return {
+        entries: [
+          ...page.rows.map((ref) => ({ ref: withGeneration(ref, run.plan) })),
+          ...page.children
+            .filter((child) => sources === undefined || sources.includes(sourceOfPath(child) ?? ""))
+            .map((child) => ({ path: child })),
+        ],
+        ...(page.next === undefined ? {} : { next: page.next }),
+      };
+    }),
+  // Start the instance's key (a consumer keyed by its source), or call the
+  // instance's scanner: to push its history (`discover`), or to tell the keys it
+  // pushed to that all history is in (`ready`).
+  handle: (run, ref, wait) =>
+    run.plan.singleSource
+      ? Effect.map(
+          net.consumer.start(run.target, ref.id, ref, wait),
+          (started) => started === "settled",
+        )
+      : run.phase === "discover"
+        ? net.scanner.scan(run.target, ref, wait)
+        : net.scanner.ready(run.target, ref, wait),
+  describe: (ref) => `${ref.source}/${ref.id}`,
+  relay: (name, run, entries) => net.relay.run(name, run, entries),
+});
+
 /**
  * How many calls a relay makes at once: Cloudflare runs at most six outgoing
  * calls per invocation, so a wider relay would queue its own calls.
  */
-export const RELAY_FANOUT = 6;
-
-/** How long a key works on its history before it answers a relay that is waiting for it. */
-const RELAY_KEY_WAIT_MS = 10_000;
+export const RELAY_FANOUT = FanOut.RELAY_FANOUT;
 
 /**
- * How many subtrees a run's root lists the directory into, at least: small
- * steps for its window, a few hundred keys each at a million instances.
- */
-const FRONTIER_SIZE = 512;
-
-/** A relay's count of the calls the account's load refused. */
-interface Tally {
-  refused: number;
-  /** Source instances done. */
-  instances: number;
-  /** A call given up on, and why. */
-  failure?: string;
-}
-
-/** How long a call may take, beyond the work it was asked to wait for, before it counts as lost. */
-const CALL_TIMEOUT_MS = 20_000;
-
-/**
- * How long a relay waits before it calls again after a failure, doubling each
- * time up to {@link RELAY_RETRY_MAX_MS}: an object still on older code moves to
- * the deployed code only once it has been idle, so calls at a fixed short pace
- * would keep it there.
- */
-const RELAY_RETRY_MS = 250;
-const RELAY_RETRY_MAX_MS = 30_000;
-/** Calls the account's load refused before a relay gives an item back to the run's root. */
-const RELAY_REFUSALS = 3;
-
-/** Failed calls a relay makes again at once, before it waits. */
-const RELAY_RETRY_AT_ONCE = 2;
-
-/**
- * A relay: one node of the tree a pass of a run fans out over, each its own
- * object. Given more than {@link RELAY_FANOUT} items it splits them among as
- * many child relays; given one directory node, it lists it and works through
- * what it lists; given a few, it handles each source instance itself and
- * hands each directory node to a child relay. Every relay answers once
- * everything under it is done, so a pass is done when the first one answers,
- * after about log6 of the instances levels of calls.
- *
- * For each source instance, it starts the instance's key (a consumer keyed by
- * its source), or calls the instance's scanner: to push its history
- * (`discover`), or to tell the keys it pushed to that all history is in
- * (`ready`).
- *
- * It keeps no state: a relay that fails is called again, and work already
- * done answers at once. It reads the directory, which any code serves, and
+ * A relay of a backfill's run (see `FanOut.makeRelay`): it lists directory
+ * nodes and works through what they list. For each source instance, it starts
+ * the instance's key (a consumer keyed by its source), or calls the
+ * instance's scanner. It reads the directory, which any code serves, and
  * calls keys and scanners, which are new with the deploy: so a run never
  * waits for an existing object to run the deployed code.
  */
 export const makeRelay = (net: Network) => {
-  /**
-   * Keep at `effect` until it succeeds or `until` (epoch ms) has passed; `undefined`
-   * then, after logging why (`what` names the call).
-   */
-  const persist = <A>(
-    effect: Effect.Effect<A>,
-    until: number,
-    what: () => string,
-    /** How long one attempt may take before it counts as lost: a hung call would stall its subtree. */
-    attempt: () => Effect.Effect<number> = () => Effect.succeed(CALL_TIMEOUT_MS),
-    /** Counts the calls the account's load refused, for the run's root to pace itself by. */
-    tally?: Tally,
-  ): Effect.Effect<A | undefined> =>
-    Effect.gen(function* () {
-      // A pass with no time to retry (one try at everything) expects failures: it doesn't log them.
-      const quiet = until <= (yield* Clock.currentTimeMillis);
-      for (let tries = 0, refusals = 0; ; tries++) {
-        const limit = yield* attempt();
-        const result = yield* (
-          quiet ? effect : effect.pipe(Effect.timeout(`${limit} millis`))
-        ).pipe(
-          Effect.map((value) => ({ value })),
-          Effect.catchCause((cause) => Effect.succeed({ cause })),
-        );
-        if ("value" in result) return result.value;
-        // A call lost in transit: try again at once, a couple of times, then wait. A
-        // call the account's load refused: wait at once, longer each time.
-        const refused = overloaded(result.cause);
-        const failure = () => `${what()}: ${String(Cause.squash(result.cause)).slice(0, 300)}`;
-        if (refused && tally !== undefined) tally.refused += 1;
-        // Refused a few times: give it back to the run's root, which sends it again at a
-        // lower load, rather than hold the rest of its round until the pass's deadline.
-        if (refused && ++refusals >= RELAY_REFUSALS) {
-          if (tally !== undefined) tally.failure ??= failure();
-          return undefined;
-        }
-        if (!refused && tries < RELAY_RETRY_AT_ONCE) continue;
-        const wait = yield* backoff(
-          refused ? tries + 1 : tries - RELAY_RETRY_AT_ONCE + 1,
-          refused ? 1_000 : RELAY_RETRY_MS,
-          RELAY_RETRY_MAX_MS,
-        );
-        if ((yield* Clock.currentTimeMillis) + wait >= until) {
-          if (!quiet) yield* Effect.logInfo(`backfill relay-failed ${failure()}`);
-          if (tally !== undefined) tally.failure ??= failure();
-          return undefined;
-        }
-        yield* Effect.sleep(`${wait} millis`);
-      }
-    });
-
-  /** Every page a directory node lists: its instances' keys, and its children. */
-  const listed = (path: string, run: RelayRun, until: number, tally?: Tally) =>
-    Effect.gen(function* () {
-      const items: Array<RelayItem> = [];
-      let after: string | undefined;
-      while (true) {
-        const page = yield* persist(
-          net.node.list(path, after),
-          until,
-          () => `list ${path}`,
-          undefined,
-          tally,
-        );
-        if (page === undefined) return undefined;
-        for (const ref of page.rows) items.push({ ref: withGeneration(ref, run.plan) });
-        // The root lists one subtree per source: only those the consumer reads.
-        const sources = path === "" ? run.plan.sources : undefined;
-        for (const child of page.children)
-          if (sources === undefined || sources.includes(sourceOfPath(child) ?? ""))
-            items.push({ path: child });
-        if (page.next === undefined) return items;
-        after = page.next;
-      }
-    });
-
-  /** One source instance's part of a pass; keep at it until it is done, or time is up. */
-  const instance = (run: RelayRun, ref: SourceRef, until: number, tally: Tally) =>
-    Effect.gen(function* () {
-      const call = (wait: number): Effect.Effect<boolean> =>
-        run.plan.singleSource
-          ? Effect.map(
-              net.consumer.start(run.target, ref.id, ref, wait),
-              (started) => started === "settled",
-            )
-          : run.phase === "discover"
-            ? net.scanner.scan(run.target, ref, wait)
-            : net.scanner.ready(run.target, ref, wait);
-      const quiet = until <= (yield* Clock.currentTimeMillis);
-      while (true) {
-        const left = until - (yield* Clock.currentTimeMillis);
-        const wait = Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left));
-        const done = yield* persist(
-          call(wait),
-          until,
-          () => `${run.phase} ${ref.source}/${ref.id}`,
-          () => Effect.succeed(wait + CALL_TIMEOUT_MS),
-          tally,
-        );
-        if (done === true) {
-          tally.instances += 1;
-          return true;
-        }
-        if ((yield* Clock.currentTimeMillis) >= until) {
-          if (done === false && !quiet)
-            yield* Effect.logInfo(
-              `backfill relay-pending ${run.target} ${run.phase} ${ref.source}/${ref.id}`,
-            );
-          return false;
-        }
-      }
-    });
-
-  const run = (
-    name: string,
-    relayRun: RelayRun,
-    items: ReadonlyArray<RelayItem>,
-  ): Effect.Effect<RelayResult> =>
-    Effect.gen(function* () {
-      const tally: Tally = { refused: 0, instances: 0 };
-      const done = yield* work(name, relayRun, items, tally);
-      return {
-        done,
-        refused: tally.refused,
-        instances: tally.instances,
-        ...(tally.failure === undefined ? {} : { failure: tally.failure }),
-      };
-    });
-
-  /** Work through `items`: whether each is done. */
-  const work = (
-    name: string,
-    relayRun: RelayRun,
-    items: ReadonlyArray<RelayItem>,
-    tally: Tally,
-  ): Effect.Effect<ReadonlyArray<boolean>> =>
-    Effect.gen(function* () {
-      const until = relayRun.deadline;
-      const child = (suffix: string, chunk: ReadonlyArray<RelayItem>) =>
-        Effect.map(
-          persist(
-            net.relay.run(`${name}${suffix}`, relayRun, chunk),
-            until,
-            () => `relay ${name}${suffix}`,
-            // A child answers by the pass's deadline: allow it that, and a little more.
-            () => Effect.map(Clock.currentTimeMillis, (now) => until - now + CALL_TIMEOUT_MS),
-            tally,
-          ),
-          (result): ReadonlyArray<boolean> => {
-            if (result === undefined) return chunk.map(() => false);
-            tally.refused += result.refused;
-            tally.instances += result.instances ?? 0;
-            tally.failure ??= result.failure;
-            return result.done;
-          },
-        );
-      if (items.length > RELAY_FANOUT) {
-        // Too many to call at once: split them among child relays.
-        const size = Math.ceil(items.length / RELAY_FANOUT);
-        const chunks = Array.from({ length: RELAY_FANOUT }, (_, i) =>
-          items.slice(i * size, (i + 1) * size),
-        ).filter((chunk) => chunk.length > 0);
-        const done = yield* Effect.forEach(chunks, (chunk, i) => child(`/${i}`, chunk), {
-          concurrency: RELAY_FANOUT,
-        });
-        return done.flat();
-      }
-      const only = items.length === 1 ? items[0]! : undefined;
-      if (only !== undefined && "path" in only) {
-        // One directory node: list it, and work through what it lists here.
-        const next = yield* listed(only.path, relayRun, until, tally);
-        if (next === undefined) return [false];
-        yield* trace("relay-listed", { name, path: only.path, items: next.length });
-        return [(yield* work(name, relayRun, next, tally)).every(Boolean)];
-      }
-      return yield* Effect.forEach(
-        items,
-        (item, i) =>
-          "path" in item
-            ? Effect.map(child(`.${i}`, [item]), (done) => done[0] === true)
-            : instance(relayRun, item.ref, until, tally),
-        { concurrency: RELAY_FANOUT },
-      );
-    });
-
-  /**
-   * The subtrees a run's root paces its passes over: the directory listed level
-   * by level until there are at least {@link FRONTIER_SIZE} of them (or nothing
-   * left to list), with any instances listed above them. Many small subtrees
-   * let the root steer its load finely.
-   */
-  const frontier = (run: RelayRun, until: number) =>
-    Effect.gen(function* () {
-      let level: ReadonlyArray<RelayItem> = [{ path: "" }];
-      while (level.length < FRONTIER_SIZE && level.some((item) => "path" in item)) {
-        const next: Array<RelayItem> = [];
-        const listings = yield* Effect.forEach(
-          level,
-          (item): Effect.Effect<ReadonlyArray<RelayItem> | undefined> =>
-            "path" in item ? listed(item.path, run, until) : Effect.succeed([item]),
-          { concurrency: RELAY_FANOUT },
-        );
-        for (const listing of listings) {
-          if (listing === undefined) return undefined;
-          next.push(...listing);
-        }
-        level = next;
-      }
-      return level;
-    });
-
-  return { run, frontier };
+  const relay = FanOut.makeRelay(backfillWork(net));
+  return {
+    run: relay.run,
+    /** The subtrees a run's root paces its passes over: see `FanOut.makeRelay`. */
+    frontier: (run: RelayRun, until: number) => relay.frontier(run, [{ path: "" }], until),
+  };
 };
 
 export type Relay = ReturnType<typeof makeRelay>;
 
 // ---------------------------------------------------------------- runs
 
-/** A run's progress, at its root. */
-interface RunState {
-  readonly plan: Plan;
-  readonly phase: "discover" | "ready" | "complete";
-  /** Passes in a row that weren't done: the next waits longer (see {@link RELAY_RETRY_MS}). */
-  readonly misses?: number;
-  /** How many subtrees it works through at once: see {@link makeRun}. */
-  readonly window?: number;
-}
-
-/** Subtrees a run's root starts with at once: it grows to all of them while the account takes the load. */
-const RUN_WINDOW = 16;
-
-/** Calls a run's root keeps out at once: one object runs at most six. */
-const RUN_CALLS = 6;
+/** A frontier entry's name in the root's marks of what is done (kept as it was before `FanOut`). */
+const entryKey = (entry: RelayItem) =>
+  "path" in entry ? `p:${entry.path}` : `i:${refKey(entry.ref)}`;
 
 /**
  * The root of a consumer's run: it drives passes of a relay tree from its own
- * jobs. A consumer keyed by its source needs one pass (each key reads its own
- * source). Any other needs two, with a barrier between: `discover` pushes every
- * source's history to its keys, and only once all of it is in does `ready`
- * tell the keys to apply it, in timestamp order. Each pass is repeated until
- * it is done.
+ * jobs (see `FanOut.makeRun`). A consumer keyed by its source needs one pass
+ * (each key reads its own source). Any other needs two, with a barrier
+ * between: `discover` pushes every source's history to its keys, and only
+ * once all of it is in does `ready` tell the keys to apply it, in timestamp
+ * order. Each pass is repeated until it is done.
  */
 export const makeRun = (
   storage: Storage,
@@ -1982,195 +1716,33 @@ export const makeRun = (
     readonly againMillis: number;
   },
 ) => {
-  const relay = makeRelay(net);
-  const stateKey = (target: string) => `run:${enc(target)}`;
-  const getState = (target: string) => storage.get<RunState>(stateKey(target));
-  const progressKey = (target: string) => `prog:${enc(target)}`;
-  const getProgress = (target: string) => storage.get<Progress>(progressKey(target));
-
-  /** A frontier item's mark that it is done in a phase: a pass that runs again skips it. */
-  const doneKey = (target: string, phase: string, item: RelayItem) =>
-    `rd:${enc(target)}:${phase}:${"path" in item ? `p:${item.path}` : `i:${refKey(item.ref)}`}`;
-
-  const drive = (target: string): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const state = yield* getState(target);
-      if (state === undefined || state.phase === "complete") return;
-      const started = yield* Clock.currentTimeMillis;
-      const deadline = started + options.waitMillis;
-      // One try at everything: every round runs in this pass, whatever the clock says.
-      const quiet = options.waitMillis <= 0;
-      const relayRun: RelayRun = {
+  const run = FanOut.makeRun<Plan, RelayRun, SourceRef>(
+    storage,
+    jobs,
+    FanOut.makeRelay(backfillWork(net)),
+    entryKey,
+    {
+      label: "backfill",
+      firstPhase: "discover",
+      nextPhase: (state) =>
+        state.plan.singleSource || state.phase === "ready" ? "complete" : "ready",
+      pass: (target, state, deadline) => ({
         target,
         plan: state.plan,
-        phase: state.phase,
+        phase: state.phase as "discover" | "ready",
         deadline,
-      };
-      const items = yield* relay.frontier(relayRun, deadline);
-      const todo: Array<RelayItem> = [];
-      for (const item of items ?? [])
-        if ((yield* storage.get(doneKey(target, state.phase, item))) === undefined) todo.push(item);
-      // What a deploy reports while it waits: kept apart from the state, written as it moves.
-      const before = yield* getProgress(target);
-      let progress: Progress = {
-        target,
-        phase: state.phase,
-        subtrees: items?.length ?? before?.subtrees ?? 0,
-        done: (items?.length ?? 0) - todo.length,
-        instances: before?.phase === state.phase ? before.instances : 0,
-        passes: (before?.phase === state.phase ? before.passes : 0) + 1,
-        refused: before?.refused ?? 0,
-        startedAt: before?.startedAt ?? started,
-        updatedAt: started,
-        ...(before?.lastError === undefined ? {} : { lastError: before.lastError }),
-      };
-      yield* storage.put({ [progressKey(target)]: progress });
-      // Up to `window` subtrees out at once, in six calls (one object runs at most six at
-      // once), each handing the relay tree its share; a new call as each one answers, with
-      // what was given back sent again later. Like TCP's congestion window, `window` doubles
-      // while the account takes the load, then grows slowly, and halves (once per window)
-      // when Cloudflare refuses calls: a wide run stays under the account's limit rather
-      // than hit it all at once and wait it out.
-      let window = state.window ?? RUN_WINDOW;
-      let growing = state.window === undefined;
-      const queue = [...todo];
-      let active = 0;
-      let calls = 0;
-      let refused = 0;
-      let done = items !== undefined;
-      let cutAt = 0;
-      const finished = yield* Queue.unbounded<{
-        readonly batch: ReadonlyArray<RelayItem>;
-        readonly result: RelayResult;
-        readonly launched: number;
-      }>();
-      while (queue.length > 0 || active > 0) {
-        const open = quiet || (yield* Clock.currentTimeMillis) < deadline;
-        while (open && active < RUN_CALLS && queue.length > 0) {
-          const batch = queue.splice(0, Math.max(1, Math.round(window / RUN_CALLS)));
-          const launched = yield* Clock.currentTimeMillis;
-          const name = `${state.phase}-${state.misses ?? 0}/${calls++}`;
-          yield* Effect.forkChild(
-            relay
-              .run(name, relayRun, batch)
-              .pipe(Effect.flatMap((result) => Queue.offer(finished, { batch, result, launched }))),
-          );
-          active += 1;
-        }
-        if (active === 0) break;
-        const { batch, result, launched } = yield* Queue.take(finished);
-        active -= 1;
-        refused += result.refused;
-        const marks: Record<string, true> = {};
-        const back: Array<RelayItem> = [];
-        batch.forEach((item, i) => {
-          if (result.done[i] === true) marks[doneKey(target, state.phase, item)] = true;
-          else back.push(item);
-        });
-        progress = {
-          ...progress,
-          done: progress.done + Object.keys(marks).length,
-          instances: progress.instances + (result.instances ?? 0),
-          refused: progress.refused + result.refused,
-          updatedAt: yield* Clock.currentTimeMillis,
-          ...(result.failure === undefined ? {} : { lastError: result.failure }),
-        };
-        yield* storage.put({ ...marks, [progressKey(target)]: progress });
-        if (result.refused > 0) {
-          growing = false;
-          if (launched >= cutAt) {
-            window = Math.max(1, window / 2);
-            cutAt = yield* Clock.currentTimeMillis;
-          }
-        } else {
-          const step = batch.length;
-          window = Math.min(todo.length, growing ? window + step : window + (step * step) / window);
-        }
-        if (back.length === 0) continue;
-        // One try at everything: what wasn't done waits for the next pass.
-        if (quiet) {
-          done = false;
-          continue;
-        }
-        queue.push(...back);
-        // Nothing went through: wait a little before sending it again.
-        if (back.length === batch.length)
-          yield* Effect.sleep(`${yield* backoff(1, 1_000, 5_000)} millis`);
-      }
-      if (queue.length > 0) done = false;
-      window = Math.max(1, Math.round(window));
-      yield* Effect.logInfo(
-        `backfill run-pass ${target} ${state.phase} done=${done} subtrees=${todo.length} window=${window} refused=${refused} in ${(yield* Clock.currentTimeMillis) - started}ms`,
-      );
-      if (!done) {
-        const misses = (state.misses ?? 0) + 1;
-        yield* storage.put({ [stateKey(target)]: { ...state, misses, window } });
-        return yield* jobs.schedule(
-          `drive:${target}`,
-          Math.min(RELAY_RETRY_MAX_MS, options.againMillis * 2 ** (misses - 1)),
-        );
-      }
-      const phase =
-        state.plan.singleSource || state.phase === "ready" ? "complete" : ("ready" as const);
-      yield* storage.put({
-        [stateKey(target)]: { plan: state.plan, phase, window },
-        [progressKey(target)]: {
-          ...progress,
-          phase,
-          updatedAt: yield* Clock.currentTimeMillis,
-        } satisfies Progress,
-      });
-      if (phase !== "complete") yield* jobs.schedule(`drive:${target}`, 0);
-      else yield* clearPrefix(`rd:${enc(target)}:`);
-    });
-
-  const clearPrefix = (prefix: string) =>
-    Effect.gen(function* () {
-      while (true) {
-        const rows = yield* storage.list({ prefix, limit: 128 });
-        if (rows.length === 0) return;
-        yield* storage.delete(rows.map(([key]) => key));
-      }
-    });
-
-  return {
-    begin: (target: string, plan: Plan) =>
-      storage.exclusive(
-        Effect.gen(function* () {
-          const state = yield* getState(target);
-          if (state !== undefined) {
-            // The first plan stands: a run reads one set of sources, start to finish.
-            if (!samePlan(state.plan, plan))
-              return { status: "changed", started: state.plan } satisfies Begin;
-            return { status: state.phase === "complete" ? "complete" : "started" } satisfies Begin;
-          }
-          yield* storage.put({
-            [stateKey(target)]: { plan, phase: "discover" } satisfies RunState,
-          });
-          yield* jobs.schedule(`drive:${target}`, 0);
-          return { status: "started" } satisfies Begin;
-        }),
-      ),
-    phase: (target: string) =>
-      Effect.map(getState(target), (state): Phase => state?.phase ?? "unknown"),
-    /** How far the run has got; its phase is the run's own, so it never reads ahead of it. */
-    progress: (target: string) =>
-      Effect.gen(function* () {
-        const phase: Phase = (yield* getState(target))?.phase ?? "unknown";
-        const progress = yield* getProgress(target);
-        return {
-          target,
-          subtrees: 0,
-          done: 0,
-          instances: 0,
-          passes: 0,
-          refused: 0,
-          ...progress,
-          phase,
-        } satisfies Progress;
       }),
-    /** Run a scheduled job by its id. */
-    run: (id: string) => (id.startsWith("drive:") ? drive(id.slice("drive:".length)) : Effect.void),
+      roots: () => [{ path: "" }],
+      samePlan,
+    },
+    options,
+  );
+  return {
+    begin: (target: string, plan: Plan): Effect.Effect<Begin> => run.begin(target, plan),
+    phase: (target: string) => Effect.map(run.phase(target), (phase) => phase as Phase),
+    progress: (target: string) =>
+      Effect.map(run.progress(target), (progress) => progress as Progress),
+    run: run.run,
   };
 };
 

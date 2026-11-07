@@ -1,3 +1,4 @@
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -84,6 +85,16 @@ export const benchWorker = (version: string, added?: BenchView) =>
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname.split("/");
         if (path[1] === "version") return HttpServerResponse.text(version);
+        // `GET /move/<key>`: where the move of account `<key>` has got to (Domain version 1).
+        if (path[1] === "move") {
+          const env = (yield* WorkerEnvironment) as Record<string, any>;
+          const shared = env["Ledger.Domain"];
+          if (shared === undefined) return yield* HttpServerResponse.json(null);
+          const stub = shared.getByName(`Ledger.AccountAggregate/${path[2]!}`);
+          return yield* HttpServerResponse.json(
+            yield* Effect.promise(() => stub.domainMoveState() as Promise<unknown>),
+          );
+        }
         if (path[1] === "view") {
           const key = path[2]!;
           const state: unknown = deposits

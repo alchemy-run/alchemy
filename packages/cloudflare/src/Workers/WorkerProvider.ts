@@ -3,8 +3,10 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
+import * as workflowsApi from "@distilled.cloud/cloudflare/workflows";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import { Artifacts } from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -30,6 +32,7 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
+import { migrateModel } from "../Domain/Migration.ts";
 import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -3439,7 +3442,7 @@ export const LiveWorkerProvider = () =>
         const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
         yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
         if (domainClasses.length > 0) {
-          const renamed = yield* DomainVersion.migrate({
+          const { renamed, kept } = yield* DomainVersion.migrate({
             scriptName: name,
             deployed: deployedDomainVersion,
             classes: domainClasses,
@@ -3461,6 +3464,13 @@ export const LiveWorkerProvider = () =>
             }
             // A Domain class's logical id is its class name.
             oldDoClassNameByLogicalId[to] = from;
+          }
+          // Kept under its own name, now through the binding of the model that keeps it.
+          for (const { className, binding } of kept) {
+            for (const [logicalId, deployedClass] of Object.entries(oldDoClassNameByLogicalId)) {
+              if (deployedClass === className) delete oldDoClassNameByLogicalId[logicalId];
+            }
+            oldDoClassNameByLogicalId[binding] = className;
           }
         }
         const currentDoClassNameByLogicalId = Object.fromEntries(
@@ -3783,7 +3793,15 @@ export const LiveWorkerProvider = () =>
         // The Domain version goes up with every upload that can change the
         // classes, in the same request, so the tag and the classes never disagree.
         const domainTags =
-          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
+          domainClasses.length > 0
+            ? [
+                // The layout the code deployed: version 1 code records its
+                // classes as movers; tests still deploy version 0 layouts.
+                DomainVersion.versionTag(
+                  domainClasses.some((domainClass) => domainClass.mover) ? 1 : 0,
+                ),
+              ]
+            : [];
         const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
@@ -4851,9 +4869,9 @@ export const LiveWorkerProvider = () =>
           const observed = { workerName: name };
           return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
         }),
-        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
+        precreate: Effect.fn(function* ({ id, news, session, bindings: declared }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
+          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, declared);
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -4919,7 +4937,30 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const exportMap = news.exports ?? {};
+          // Old Domain classes the script doesn't already have are left out, as
+          // reconcile leaves them out: a placeholder that declared them would
+          // keep them live (see `withoutSettledDomainMovers`).
+          const hostedSettings = declared.some((binding) =>
+            (binding.data.domainClasses ?? []).some((domainClass) => domainClass.mover),
+          )
+            ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                Effect.catchTags({
+                  WorkerNotFound: () => Effect.undefined,
+                  WorkerHasNoVersions: () => Effect.undefined,
+                  DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                  DispatchNamespaceNotFound: () => Effect.undefined,
+                }),
+              )
+            : undefined;
+          const { bindings, dropped } = yield* withoutSettledDomainMovers({
+            accountId,
+            scriptName: name,
+            bindings: declared,
+            existingSettings: hostedSettings,
+          });
+          const exportMap = Object.fromEntries(
+            Object.entries(news.exports ?? {}).filter(([className]) => !dropped.has(className)),
+          );
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
@@ -5459,7 +5500,135 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
+          // Old Domain classes whose objects have all moved leave the upload:
+          // their bindings and their exports (Cloudflare deletes a class only
+          // once the code no longer exports it).
+          const settled = yield* withoutSettledDomainMovers({
+            accountId,
+            scriptName: name,
+            bindings,
+            existingSettings,
+          });
+          /** Upload the Worker without the `dropped` classes. */
+          const upload = (
+            dropped: ReadonlySet<string>,
+            uploaded: ResourceBinding<Worker["Binding"]>[],
+            settings: typeof existingSettings,
+          ) =>
+            Effect.gen(function* () {
+              // The build planned with every class: build again without the dropped ones.
+              if (dropped.size > 0) {
+                const artifacts = yield* Effect.serviceOption(Artifacts);
+                if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
+              }
+              return yield* putWorker(
+                id,
+                fqn,
+                dropped.size === 0 || news.exports === undefined
+                  ? news
+                  : {
+                      ...news,
+                      exports: Object.fromEntries(
+                        Object.entries(news.exports).filter(
+                          ([className]) => !dropped.has(className),
+                        ),
+                      ),
+                    },
+                uploaded,
+                olds,
+                output,
+                session,
+                settings,
+              );
+            });
+          const uploaded = yield* upload(settled.dropped, settled.bindings, existingSettings);
+
+          // Domain models whose old classes this upload kept: move their objects now, then
+          // upload again without each old class the move accounted for, so this one deploy
+          // leaves only the models' classes.
+          const migrations = bindings.flatMap((b) => b.data.domainMigrations ?? []);
+          const keptClasses = new Set(
+            settled.bindings.flatMap((b) =>
+              (b.data.bindings ?? []).flatMap((item: WorkerBinding) =>
+                item.type === "durable_object_namespace" && "className" in item && item.className
+                  ? [item.className]
+                  : [],
+              ),
+            ),
+          );
+          const moving = migrations
+            .map((migration) => ({
+              ...migration,
+              classes: migration.classes.filter(
+                ({ className }) =>
+                  keptClasses.has(className) &&
+                  uploaded.durableObjectNamespaces[className] !== undefined,
+              ),
+            }))
+            .filter((migration) => migration.classes.length > 0);
+          if (moving.length === 0) return uploaded;
+          const workflowName = settled.bindings
+            .flatMap((b) => b.data.bindings ?? [])
+            .find(
+              (item: WorkerBinding) =>
+                item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
+            ) as { readonly workflowName?: unknown } | undefined;
+          if (typeof workflowName?.workflowName !== "string") return uploaded;
+          // Code from before Domain versions listed none of its objects: what it wrote in its
+          // last minutes is in neither the directory nor Cloudflare's listing yet. Its old
+          // classes stay for a later upload, which deletes them once the move has settled.
+          const listedEverything =
+            DomainVersion.deployedVersion(existingSettings?.tags ?? []) !== undefined;
+          const moved = yield* Effect.forEach(
+            moving,
+            (migration) =>
+              Effect.map(
+                migrateModel({
+                  id: `${migration.model}.DomainMigration`,
+                  news: {
+                    scriptName: name,
+                    workflowName: workflowName.workflowName as string,
+                    domainClass: migration.domainClass,
+                    classes: [...migration.classes],
+                    namespaces: uploaded.durableObjectNamespaces,
+                    deployment: undefined,
+                    walk: true,
+                    ...(migration.timeoutSeconds === undefined
+                      ? {}
+                      : { timeoutSeconds: migration.timeoutSeconds }),
+                  },
+                  session,
+                }),
+                (result) => ({ migration, skipped: result.skipped }),
+              ),
+            { concurrency: "unbounded" },
+          );
+          if (!listedEverything) return uploaded;
+          // Every old class the move accounted for: each object it had is in the model's
+          // directory or Cloudflare's listing, or a source's history named it. Saga runs are
+          // listed nowhere until they start on this code, so their classes wait for the passes.
+          const accounted = new Set(
+            moved.flatMap(({ migration, skipped }) =>
+              migration.classes
+                .filter(
+                  ({ className }) =>
+                    !className.endsWith("Workflow") && (skipped[className] ?? 0) === 0,
+                )
+                .map(({ className }) => className),
+            ),
+          );
+          if (accounted.size === 0) return uploaded;
+          yield* session.note(
+            `Deleting ${accounted.size} old Domain classes: every object of theirs has moved.`,
+            { kind: "status" },
+          );
+          const dropped = new Set([...settled.dropped, ...accounted]);
+          const settings = yield* getScriptSettings(accountId, name, dispatchNamespace);
+          return yield* upload(
+            dropped,
+            withoutClasses(settled.bindings, name, accounted),
+            settings as typeof existingSettings,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
@@ -5798,6 +5967,178 @@ const buildDurableObjectExports = (params: {
  * all count.
  */
 const MAX_SCRIPT_EXPORTS = 100;
+
+/** `bindings` without the Durable Object bindings of `classes` on this script. */
+const withoutClasses = (
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+  classes: ReadonlySet<string>,
+) =>
+  classes.size === 0
+    ? bindings
+    : bindings.map((binding) =>
+        binding.data.bindings === undefined
+          ? binding
+          : {
+              ...binding,
+              data: {
+                ...binding.data,
+                bindings: binding.data.bindings.filter(
+                  (item: WorkerBinding) =>
+                    !(
+                      item.type === "durable_object_namespace" &&
+                      "className" in item &&
+                      item.className !== undefined &&
+                      classes.has(item.className) &&
+                      (item.scriptName === undefined || item.scriptName === scriptName)
+                    ),
+                ),
+              },
+            },
+      );
+
+/** `bindings` without the Durable Object bindings named in `names`. */
+const withoutBindings = (
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+  names: ReadonlySet<string>,
+) =>
+  names.size === 0
+    ? bindings
+    : bindings.map((binding) =>
+        binding.data.bindings === undefined
+          ? binding
+          : {
+              ...binding,
+              data: {
+                ...binding.data,
+                bindings: binding.data.bindings.filter(
+                  (item: WorkerBinding) =>
+                    !(
+                      item.type === "durable_object_namespace" &&
+                      names.has(item.name) &&
+                      (item.scriptName === undefined || item.scriptName === scriptName)
+                    ),
+                ),
+              },
+            },
+      );
+
+/**
+ * Leave out of the upload each version 0 Domain class whose objects have all
+ * moved to the shared class, so the upload deletes it (see
+ * `DomainVersion.keptMovers`). The others stay live, to finish moving.
+ */
+const withoutSettledDomainMovers = Effect.fn(function* ({
+  accountId,
+  scriptName,
+  bindings,
+  existingSettings,
+}: {
+  accountId: string;
+  scriptName: string;
+  bindings: ResourceBinding<Worker["Binding"]>[];
+  existingSettings:
+    | {
+        readonly tags?: ReadonlyArray<string> | null;
+        readonly bindings?: ReadonlyArray<unknown> | null;
+      }
+    | undefined;
+}) {
+  const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
+  const allMovers = domainClasses.filter((domainClass) => domainClass.mover);
+  if (allMovers.length === 0) return { bindings, dropped: new Set<string>() };
+  const tags = Array.from(existingSettings?.tags ?? []);
+  const deployed = DomainVersion.deployedVersion(tags);
+  const deployedClasses = new Set(
+    (existingSettings?.bindings ?? []).flatMap((binding) =>
+      typeof binding === "object" &&
+      binding !== null &&
+      "type" in binding &&
+      binding.type === "durable_object_namespace" &&
+      "className" in binding &&
+      typeof binding.className === "string" &&
+      !("scriptName" in binding && binding.scriptName && binding.scriptName !== scriptName)
+        ? [binding.className]
+        : [],
+    ),
+  );
+  // Classes from before Domain versions are renamed to their version 0 names in this upload.
+  const { renamed } = yield* DomainVersion.migrate({
+    scriptName,
+    deployed,
+    classes: domainClasses,
+    deployedClasses,
+  });
+  for (const { to } of renamed) deployedClasses.add(to);
+  // A class from before Domain versions that models shared is bound by each of
+  // them: only the binding of the model that keeps its data stays.
+  const beforeVersions = allMovers.filter((mover) => mover.binding !== undefined);
+  const keepers = yield* DomainVersion.legacyKeepers({
+    scriptName,
+    classes: beforeVersions,
+    deployedClasses,
+  });
+  const unkept = new Set(
+    beforeVersions
+      .filter((mover) => keepers.get(mover.className)?.binding !== mover.binding)
+      .map((mover) => mover.binding!),
+  );
+  const movers = allMovers.filter(
+    (mover) => mover.binding === undefined || !unkept.has(mover.binding),
+  );
+  const leaveOut = (dropped: ReadonlySet<string>) => ({
+    bindings: withoutBindings(withoutClasses(bindings, scriptName, dropped), scriptName, unkept),
+    dropped,
+  });
+  // None of them on the script (a new Worker, or every one deleted): nothing to look up.
+  if (!movers.some((mover) => deployedClasses.has(mover.className)))
+    return leaveOut(new Set(allMovers.map((mover) => mover.className)));
+  // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
+  const workflowName = bindings
+    .flatMap((b) => b.data.bindings ?? [])
+    .find(
+      (item: WorkerBinding) =>
+        item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
+    );
+  const passes =
+    workflowName === undefined ||
+    !("workflowName" in workflowName) ||
+    typeof workflowName.workflowName !== "string"
+      ? []
+      : Array.from(
+          yield* workflowsApi.listInstances
+            .items({
+              accountId,
+              workflowName: workflowName.workflowName as string,
+              status: "complete",
+            })
+            .pipe(
+              Stream.map((instance) => instance.id),
+              Stream.runCollect,
+              Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
+            ),
+        );
+  // Each class's namespace: a pass counts only for the namespace it moved.
+  const namespaces = new Map<string, string>();
+  for (const namespace of yield* durableObjectsApi.listNamespaces
+    .items({ accountId })
+    .pipe(Stream.runCollect))
+    if (namespace.script === scriptName && namespace.class && namespace.id)
+      namespaces.set(namespace.class, namespace.id);
+  const kept = DomainVersion.keptMovers({ movers, deployedClasses, namespaces, passes });
+  for (const className of kept) {
+    const namespace = namespaces.get(className);
+    const times =
+      namespace === undefined ? [] : DomainVersion.passesOf(className, namespace, passes);
+    yield* Effect.logInfo(
+      `Keeping the old Domain class ${className} while its objects move (namespace ${namespace ?? "not listed"}, passes at ${times.length === 0 ? "none" : times.join(", ")}).`,
+    );
+  }
+  return leaveOut(
+    new Set(allMovers.map((mover) => mover.className).filter((className) => !kept.has(className))),
+  );
+});
 
 /**
  * The `{ type: "worker", cache }` export entries for a Worker's configured

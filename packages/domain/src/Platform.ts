@@ -207,6 +207,15 @@ export interface AggregateKit {
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
+  /**
+   * What instance `id`'s stored events route to, for every subscriber, policies
+   * included: each consumer and key its history reaches. Nothing is sent. A
+   * layout change uses it to find every consumer object exactly.
+   */
+  readonly consumersOf: (
+    id: string,
+    rows: ReadonlyArray<StoredEvent>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
 }
 
 /**
@@ -384,6 +393,11 @@ export interface ViewKit {
   >;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<ViewEntry>) => Effect.Effect<ReplayResult>;
+  /** What key `id`'s emitted entries route to, for every subscriber: see `AggregateKit.consumersOf`. */
+  readonly consumersOf: (
+    id: string,
+    rows: ReadonlyArray<ViewEntry>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,

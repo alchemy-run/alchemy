@@ -14,6 +14,7 @@ import * as Stream from "effect/Stream";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import WorkerV0 from "./fixtures/version/v0.ts";
 import WorkerV1 from "./fixtures/version/v1.ts";
+import { boundClasses } from "./move.ts";
 
 /** A route answered with something other than what the test waits for. */
 class NotYet extends Data.TaggedError("NotYet")<{
@@ -91,21 +92,9 @@ const watch = (url: string, path: string, answers: Array<{ status: number; body:
     Effect.repeat(Schedule.spaced("250 millis")),
   );
 
-/** The model's Durable Object classes on the Worker, by class name. */
+/** The Worker's Durable Object classes, by class name: see `boundClasses`. */
 const classes = (scriptName: string) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const namespaces = yield* durableObjects.listNamespaces
-      .items({ accountId })
-      .pipe(Stream.runCollect);
-    return Object.fromEntries(
-      namespaces.flatMap((namespace) =>
-        namespace.script === scriptName && namespace.class?.match(/^Bank\.(Summary|Latest)View/)
-          ? [[namespace.class, namespace.id]]
-          : [],
-      ),
-    );
-  }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
+  boundClasses(scriptName).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
 
 for (const dev of [true, false]) {
   describe(
@@ -164,10 +153,9 @@ for (const dev of [true, false]) {
 
             if (!dev) {
               const after = yield* classes(worker.workerName);
-              // The summary was rebuilt in its own storage; the latest view in a new one.
-              expect(after["Bank.SummaryView"]).toBe(before["Bank.SummaryView"]);
-              expect(after["Bank.SummaryViewV1"]).toBeUndefined();
-              expect(after["Bank.LatestViewV1"]).toBeDefined();
+              // Rebuilt views, in place or in a new generation, stay in the model's class.
+              expect(Object.keys(after)).toEqual(["Bank.Domain"]);
+              expect(after).toEqual(before);
             }
 
             yield* stack.destroy();

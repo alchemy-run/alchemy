@@ -97,9 +97,15 @@ const checkViews = (url: string) =>
   Effect.gen(function* () {
     const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
     for (const i of [0, ACCOUNTS / 2, ACCOUNTS - 1]) {
-      const view = JSON.parse(yield* call(url, "GET", `/view/b${i}`)) as {
-        amounts: Array<number>;
-      } | null;
+      // A Worker isolate still on the code before the deploy has no view: it answers null.
+      const view = yield* call(url, "GET", `/view/b${i}`).pipe(
+        Effect.map((body) => JSON.parse(body) as { amounts: Array<number> } | null),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (view) => view !== null,
+          times: 15,
+        }),
+      );
       expect(view?.amounts).toEqual(expected);
     }
     const history = JSON.parse(yield* call(url, "GET", "/history")) as { complete: boolean };
@@ -119,7 +125,10 @@ const lastWait = (workerName: string) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
     const all = yield* workflows.listWorkflows.items({ accountId }).pipe(Stream.runCollect);
-    const workflow = [...all].find((w) => w.scriptName === workerName);
+    // The Worker's backfill Workflow, not its migration one.
+    const workflow = [...all].find(
+      (w) => w.scriptName === workerName && w.className.endsWith("DomainBackfill"),
+    );
     expect(workflow).toBeDefined();
     const instances = yield* workflows.listInstances
       .items({ accountId, workflowName: workflow!.name, status: "complete" })

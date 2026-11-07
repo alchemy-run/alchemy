@@ -47,7 +47,6 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
@@ -60,10 +59,14 @@ import { makeRpcStub } from "../Workers/Rpc.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
-import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { layerDurableObjectEngine, makeEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
-import { DeployVersion } from "./Version.ts";
+import { domainClass, type LegacyClass } from "./DomainClass.ts";
+import { RUN_ROOT } from "./Migration.ts";
+import { ID_KEY } from "./Router.ts";
+import { backfillRuntime, exclusively, type Random } from "./Runtime.ts";
+import { beforeVersionsBinding, DeployVersion } from "./Version.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -181,19 +184,6 @@ const runClass = (keys: string) => `${keys}Run`;
 
 /** A consumer's generation from its target id: `view:Name#2` is 2. */
 const generationOfTarget = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
-
-/**
- * Run `effect` with every other event on this instance held back. Durable
- * Objects run each event in its own I/O context, so cross-event in-memory
- * coordination (semaphores, refs, deferreds) is unsafe; the platform's gate
- * is not.
- */
-const exclusively = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    const exit = yield* state.blockConcurrencyWhile(() => Effect.exit(effect));
-    return yield* exit;
-  });
 
 /** What `scheduled:<name>` holds once that command is cancelled; never a job token. */
 const CANCELLED = "cancelled";
@@ -417,157 +407,6 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
     }
   });
 
-/**
- * What the backfill protocol runs on in one Durable Object: its storage (an
- * exclusive section is one transaction, with every other event held back),
- * and its jobs as durable callbacks. Each step counts as progress, so a long
- * backfill never exhausts a callback's retry budget.
- */
-/** How many due backfill jobs one tick runs, and for how long, before it hands over to the next. */
-const TICK_RUNS = 64;
-const TICK_MILLIS = 5_000;
-
-type Random = SecureRandom.SecureRandom["Service"];
-
-const backfillRuntime = (
-  random: Random,
-  run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
-) =>
-  Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    const context = yield* captureContext<DurableObjectState | RuntimeContext>();
-    const provide = <A, E>(
-      effect: Effect.Effect<A, E, DurableObjectState | RuntimeContext>,
-    ): Effect.Effect<A, E> => Effect.provide(effect, context);
-    const storage: Backfill.Storage = {
-      get: <A>(key: string) => provide(state.storage.get<A>(key)),
-      put: (entries) =>
-        provide(
-          Object.keys(entries).length === 0
-            ? Effect.void
-            : state.storage.put(entries as Record<string, unknown>),
-        ),
-      delete: (keys) =>
-        provide(keys.length === 0 ? Effect.void : Effect.asVoid(state.storage.delete([...keys]))),
-      list: <A>(options: {
-        readonly prefix: string;
-        readonly startAfter?: string;
-        readonly limit?: number;
-      }) =>
-        provide(
-          state.storage
-            .list<A>({
-              prefix: options.prefix,
-              ...(options.startAfter === undefined ? {} : { startAfter: options.startAfter }),
-              ...(options.limit === undefined ? {} : { limit: options.limit }),
-            })
-            .pipe(Effect.map((rows) => [...rows.entries()])),
-        ),
-      exclusive: (effect) =>
-        state.storage.transaction(effect).pipe(exclusively, Effect.orDie, provide),
-    };
-    // Jobs are rows here (`bf:job:<id>` holds when it's due and a token), run by one
-    // alarm callback, the tick. A tick runs every due job, and those its jobs schedule
-    // at once, until none is left or its budget is spent: scheduling a job writes one
-    // row, where a callback of its own writes about ten. The tick's callback is
-    // removed only once it returns, so a crash in between runs the tick again; a
-    // job's row is removed only if it wasn't scheduled again while it ran.
-    const jobKey = (id: string) => `bf:job:${id}`;
-    let ticking = false;
-    let dirty = false;
-    /** The job running now, and the token of its row: that row doesn't count as already scheduled. */
-    let current: { readonly id: string; readonly token: string } | undefined;
-    const now = Clock.currentTimeMillis;
-    // One at a time: the callback is one row, so a later schedule would replace a sooner one.
-    const tickLock = yield* Semaphore.make(1);
-    /** Make sure a tick fires by `due`. */
-    const tickBy = (due: number) =>
-      Effect.gen(function* () {
-        const pending = yield* state.storage.get<number>("bf:tick");
-        if (pending !== undefined && pending <= due) return;
-        const at = yield* now;
-        // A callback ignores a schedule whose progress isn't past the last one's: count
-        // them, rather than use the clock (each event has its own, and they disagree).
-        const progress = ((yield* state.storage.get<number>("bf:tick-progress")) ?? 0) + 1;
-        yield* callback.schedule("tick", {
-          after: `${Math.max(0, due - at)} millis`,
-          payload: {},
-          progress,
-        });
-        yield* state.storage.put({ "bf:tick": due, "bf:tick-progress": progress });
-      }).pipe(Effect.orDie, tickLock.withPermits(1));
-    const tick: Effect.Effect<void, never, DurableObjectState | RuntimeContext> = Effect.gen(
-      function* () {
-        yield* state.storage.delete("bf:tick");
-        ticking = true;
-        const started = yield* now;
-        let runs = 0;
-        while (true) {
-          dirty = false;
-          const at = yield* now;
-          const rows = [
-            ...(yield* state.storage.list<{ due: number; token: string }>({
-              prefix: "bf:job:",
-            })).entries(),
-          ];
-          const due = rows.filter(([, job]) => job.due <= at);
-          const spent = runs >= TICK_RUNS || at - started >= TICK_MILLIS;
-          if ((due.length === 0 && !dirty) || spent) {
-            ticking = false;
-            const next = Math.min(...rows.map(([, job]) => job.due));
-            if (Number.isFinite(next)) yield* tickBy(spent ? Math.min(next, at) : next);
-            return;
-          }
-          for (const [key, job] of due) {
-            runs += 1;
-            current = { id: key.slice("bf:job:".length), token: job.token };
-            yield* run(current.id);
-            current = undefined;
-            const after = yield* state.storage.get<{ due: number; token: string }>(key);
-            if (after?.token === job.token) yield* state.storage.delete(key);
-          }
-        }
-      },
-    ).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          ticking = false;
-          current = undefined;
-        }),
-      ),
-    );
-    const callback = yield* makeCallback("domain:backfill", (_: unknown) => tick);
-    const jobs: Backfill.Jobs = {
-      schedule: (id, afterMillis) =>
-        provide(
-          Effect.gen(function* () {
-            const due = (yield* now) + afterMillis;
-            const stored = yield* state.storage.get<{ due: number; token: string }>(jobKey(id));
-            // The running job's own row is done once it returns; one scheduled while it
-            // ran (by a message that arrived meanwhile) still stands.
-            const existing =
-              stored !== undefined && current?.id === id && stored.token === current.token
-                ? undefined
-                : stored;
-            // The earliest request wins: already due sooner, that run sees this cause too.
-            if (existing !== undefined && existing.due <= due) return;
-            const token = yield* random.uuidV4();
-            yield* state.storage.put(jobKey(id), {
-              due: existing !== undefined ? Math.min(existing.due, due) : due,
-              token,
-            });
-            // A running tick picks it up.
-            if (ticking) {
-              dirty = true;
-              return;
-            }
-            yield* tickBy(due);
-          }).pipe(Effect.orDie),
-        ),
-    };
-    return { storage, jobs, provide };
-  });
-
 /** A directory node: one Durable Object per path in the tree. */
 /** What a backfill needs to know of a consumer, in the deployed model. */
 type PlanOf = (target: string) => Backfill.Plan | undefined;
@@ -637,7 +476,6 @@ const reachable = <A>(effect: Effect.Effect<A>) =>
 const REACH_RETRIES = { limit: 3, delay: "1 second", backoff: "constant" } as const;
 
 /** The object of a consumer's class at the root of its run: it drives the run's passes. */
-const RUN_ROOT = "~run";
 
 /** The object of a consumer's class for one relay of its run. */
 const relayName = (target: string, name: string) => `~relay/${target}/${name}`;
@@ -665,9 +503,6 @@ const runRpc = (relay: Backfill.Relay, run: () => Backfill.Run) => ({
 /** How long before a key that couldn't list itself in the directory tries again. */
 const REGISTER_RETRY_MS = 2_000;
 
-/** The id an instance was listed under, saved so jobs that fire later find it. */
-const ID_KEY = "bf:id";
-
 /**
  * List an instance in the directory before its first commit, so every
  * instance with an event can be reached when a consumer is added later.
@@ -679,6 +514,40 @@ const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
     yield* net.node.register(Backfill.leafOf(ref), ref);
     yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
   });
+
+/**
+ * A page of the consumer objects a source's stored rows reached, once each, and
+ * where the next page starts (`null` after the last). Rows are numbered without
+ * gaps, so a full page ends at `after + count`.
+ */
+const consumersPage = (
+  deliveries: Effect.Effect<ReadonlyArray<Delivery>>,
+  after: number,
+  count: number,
+  limit: number,
+) =>
+  Effect.map(deliveries, (all) => {
+    const seen = new Map<string, { readonly target: Delivery["target"]; readonly key: string }>();
+    for (const { target, key } of all)
+      seen.set(
+        `${target.kind}:${target.name}#${target.generation ?? 0}${target.inPlace ? "@" : ""}/${key}`,
+        {
+          target,
+          key,
+        },
+      );
+    return { consumers: [...seen.values()], next: count < limit ? null : after + count };
+  });
+
+/**
+ * The directory subtree an object that isn't a source lists itself under:
+ * policies, streams, projections and saga runs. Named like their classes
+ * (`NotifyPolicy`), so they never share a subtree with the sources a backfill
+ * reads. With every object of a model listed, a later layout change finds each
+ * one exactly, with no wait on Cloudflare's listing.
+ */
+export const registryName = (kind: "Policy" | "Stream" | "Projection" | "Workflow", name: string) =>
+  `${name}${kind}`;
 
 const aggregateObject = (
   kit: AggregateKit,
@@ -877,6 +746,18 @@ const aggregateObject = (
         // Any code answers these: a run reads its log, and routes it with its own code.
         bfLog: (id: string, after: number, limit: number) =>
           reportDefects(sourceFor(id).log(after, limit)),
+        // A layout change: every consumer object this instance's history reached.
+        mgConsumers: (id: string, after: number, limit: number) =>
+          reportDefects(
+            Effect.flatMap(sourceFor(id).log(after, limit), (rows) =>
+              consumersPage(
+                kit.consumersOf(id, rows as ReadonlyArray<StoredEvent>),
+                after,
+                rows.length,
+                limit,
+              ),
+            ),
+          ),
         bfCursor: (id: string, target: string) => reportDefects(sourceFor(id).cursor(target)),
         bfRead: (id: string, target: string, key: string, after: number, limit: number) =>
           reportDefects(sourceFor(id).read(target, key, after, limit)),
@@ -1083,6 +964,18 @@ const viewObject = (
         // first: a view or projection catching up never sees it still filling.
         bfLog: (key: string, after: number, limit: number) =>
           reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+        // A layout change: every consumer object this key's entries reached.
+        mgConsumers: (key: string, after: number, limit: number) =>
+          reportDefects(
+            Effect.flatMap(sourceFor(key).log(after, limit), (rows) =>
+              consumersPage(
+                kit.consumersOf(key, rows as ReadonlyArray<ViewEntry>),
+                after,
+                rows.length,
+                limit,
+              ),
+            ),
+          ),
         bfCursor: (key: string, target: string) =>
           reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
         bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
@@ -1129,7 +1022,7 @@ const viewObject = (
     });
   });
 
-const policyObject = (kit: PolicyKit) =>
+const policyObject = (kit: PolicyKit, net: Backfill.Network) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1138,6 +1031,11 @@ const policyObject = (kit: PolicyKit) =>
         receive: (delivery: Delivery) =>
           reportDefects(
             Effect.gen(function* () {
+              // Listed before its first write.
+              yield* ensureRegistered(net, {
+                source: registryName("Policy", kit.name),
+                id: delivery.key,
+              });
               const id = `${delivery.source}:${delivery.seq}`;
               const accepted = yield* exclusively(
                 state.storage.transaction(
@@ -1365,7 +1263,9 @@ const projectionObject = (
             ),
           after: runtime.provide(state.waitUntil(outsideAlarmPass(drain.pipe(Effect.ignoreCause)))),
         }));
-      const keep = (key: string) => state.storage.put(ID_KEY, key);
+      // Listed before its first write.
+      const keep = (key: string) =>
+        ensureRegistered(net, { source: registryName("Projection", kit.name), id: key });
       return {
         receive: (key: string, delivery: Delivery) =>
           reportDefects(
@@ -1393,7 +1293,7 @@ const projectionObject = (
     });
   });
 
-const streamObject = (kit: StreamKit) =>
+const streamObject = (kit: StreamKit, net: Backfill.Network) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1411,6 +1311,8 @@ const streamObject = (kit: StreamKit) =>
       return {
         append: (key: string, write: StreamWrite) =>
           Effect.gen(function* () {
+            // Listed before its first write.
+            yield* ensureRegistered(net, { source: registryName("Stream", kit.name), id: key });
             const meta = yield* readMeta;
             if (!isAfter(write.origin, meta.origin)) return;
             const added: Array<StreamEntry> = write.events.map((event, index) => {
@@ -1514,14 +1416,94 @@ const className = (modelName: string, name: string) =>
  * before Domain version 0, so the deploy carries its data over. See
  * `Version.ts`.
  */
-const record = (modelName: string, legacyName: string, legacyData: boolean, name = legacyName) =>
+const record = (
+  modelName: string,
+  legacyName: string,
+  legacyData: boolean,
+  name = legacyName,
+  mover = false,
+) =>
   Effect.gen(function* () {
     const worker = yield* CloudflareWorker;
     const current = className(modelName, name);
     yield* worker.bind`${current}.DomainVersion`({
-      domainClasses: [{ model: modelName, className: current, legacyName, legacyData }],
+      domainClasses: [
+        {
+          model: modelName,
+          className: current,
+          legacyName,
+          legacyData,
+          ...(mover ? { mover } : {}),
+        },
+      ],
     });
   });
+
+/**
+ * Tell the Worker deploy about a class from before Domain version 0 that
+ * version 1 code keeps under its own name while its objects move (`legacyName`,
+ * now `current`), and the binding the model reaches it by. See `Version.ts`.
+ */
+const recordBeforeVersions = (
+  modelName: string,
+  legacyName: string,
+  legacyData: boolean,
+  current: string,
+) =>
+  Effect.gen(function* () {
+    const worker = yield* CloudflareWorker;
+    const binding = beforeVersionsBinding(current);
+    yield* worker.bind`${binding}.DomainVersion`({
+      domainClasses: [
+        { model: modelName, className: legacyName, legacyName, legacyData, mover: true, binding },
+      ],
+    });
+  });
+
+/** The classes a version 1 route's objects may still be on: its version 0 class, and its class from before versions. */
+const legacyClassesOf = (current: string, legacyName: string): ReadonlyArray<LegacyClass> => [
+  { binding: current, className: current },
+  { binding: beforeVersionsBinding(current), className: legacyName },
+];
+
+/** Each saga workflow's version 0 class, and its class from before versions. */
+const sagaLegacyNames = new Map<string, string>();
+/** Each saga workflow's version 0 class, and the model that runs it. */
+const sagaModels = new Map<string, string>();
+/** Each hosted model's directory, by model name: where its saga runs list themselves. */
+const directories = new Map<string, Backfill.Network>();
+
+/**
+ * A saga's run objects, listed in their model's directory as they start, like
+ * every other object of the model: a later layout change finds each run
+ * exactly. The workflow engine stays as it is; only `start` is wrapped.
+ */
+const listedRuns = (modelName: string, route: string, impl: ObjectImpl): ObjectImpl =>
+  Effect.map(impl, (make) =>
+    Effect.map(make, (instance) => {
+      const start = instance.start as
+        | ((executionId: string, ...rest: ReadonlyArray<unknown>) => Effect.Effect<unknown>)
+        | undefined;
+      if (typeof start !== "function") return instance;
+      const source = registryName(
+        "Workflow",
+        route.slice(route.indexOf(".") + 1, -"Workflow".length),
+      );
+      return {
+        ...instance,
+        start: (executionId: string, ...rest: ReadonlyArray<unknown>) =>
+          Effect.andThen(
+            Effect.suspend(() => {
+              const net = directories.get(modelName);
+              return net === undefined
+                ? Effect.void
+                : ensureRegistered(net, { source, id: executionId });
+            }),
+            start(executionId, ...rest),
+          ),
+      };
+    }),
+  );
 
 /** The models each Worker hosts, by name. */
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
@@ -1564,6 +1546,23 @@ const durableObjectPlatform = (
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
         Effect.provide(effect, init);
+      const inJurisdiction = (namespace: Namespace): Namespace =>
+        jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
+      // Version 1: every object of a model in one class, `Billing.Domain` (see `DomainClass.ts`).
+      const oneClassPerModel = version !== undefined && version >= 1;
+      /**
+       * Each model's old classes, which a deploy moves to the shared class: a
+       * route's version 0 class, and its class from before versions.
+       */
+      const moversOf = new Map<string, Array<LegacyClass & { readonly route: string }>>();
+      const mover = (modelName: string, route: string, legacyName: string) => {
+        const movers = moversOf.get(modelName) ?? [];
+        if (!movers.some((moving) => moving.route === route)) {
+          for (const legacy of legacyClassesOf(route, legacyName))
+            movers.push({ ...legacy, route });
+        }
+        moversOf.set(modelName, movers);
+      };
 
       // Model names are unique per Worker, not per platform build: two
       // different models named alike would declare the same classes. The
@@ -1575,12 +1574,28 @@ const durableObjectPlatform = (
       // Workflow. Models that share a definition never share its data.
       const hostFor = ({ modelName, legacyData }: HostedModel) =>
         Effect.gen(function* () {
+          const shared = oneClassPerModel
+            ? yield* inInit(domainClass(random, modelName))
+            : undefined;
           const named = (name: string) =>
             version === undefined ? name : className(modelName, name);
           const object = (name: string, impl: ObjectImpl) =>
             version === undefined
               ? declareIn(name, impl)
-              : Effect.andThen(record(modelName, name, legacyData), declareIn(named(name), impl));
+              : shared === undefined
+                ? Effect.andThen(record(modelName, name, legacyData), declareIn(named(name), impl))
+                : // The old classes stay declared, to move their objects over.
+                  Effect.andThen(
+                    Effect.all([
+                      record(modelName, name, legacyData, name, true),
+                      recordBeforeVersions(modelName, name, legacyData, named(name)),
+                      Effect.sync(() => mover(modelName, named(name), name)),
+                    ]),
+                    Effect.map(
+                      shared.object(named(name), impl, legacyClassesOf(named(name), name)),
+                      inJurisdiction,
+                    ),
+                  );
           // Every consumer in the model this isolate runs, set once the model is built.
           let model: ReadonlyArray<string> = [];
           let planOf: PlanOf = () => undefined;
@@ -1598,6 +1613,10 @@ const durableObjectPlatform = (
            * it still reaches every aggregate, view and projection this way.
            */
           const bound = (binding: string): Namespace | undefined => {
+            if (shared !== undefined) {
+              const view = shared.bound(binding);
+              return view === undefined ? undefined : inJurisdiction(view as Namespace);
+            }
             const namespace = env?.[binding];
             return namespace !== undefined && typeof namespace.getByName === "function"
               ? fromBinding(namespace)
@@ -1733,6 +1752,51 @@ const durableObjectPlatform = (
                 ),
             },
           };
+          // Saga runs list themselves in this directory too (see `listedRuns`).
+          directories.set(modelName, net);
+          /** The stream routes each projection writes, as the model hosts them. */
+          const projectionStreams = new Map<string, Array<string>>();
+          /** Each projection's keys' route, in the generation this code runs. */
+          const projectionRoutes = new Map<string, string>();
+          const hosted = (route: string) => shared?.bound(route) !== undefined;
+          // How a migration run finds every object of this model (see `Shared.Resolver`).
+          if (shared !== undefined)
+            yield* shared.resolve({
+              namespace: inJurisdiction(shared.namespace),
+              directory: named("DomainDirectory"),
+              entry: (ref) => {
+                const aggregate = named(`${ref.source}Aggregate`);
+                if (hosted(aggregate)) return { route: aggregate, source: true };
+                const view = named(
+                  consumerClass(
+                    "view",
+                    ref.source,
+                    ref.generation ?? viewGenerations.get(ref.source) ?? 0,
+                  ),
+                );
+                if (hosted(view)) return { route: view, source: true };
+                // Listed objects that aren't sources: policies, streams, projections, saga runs.
+                const projection = /^(.*)Projection$/.exec(ref.source);
+                const other = projection ? projectionRoutes.get(projection[1]!) : named(ref.source);
+                return other !== undefined && hosted(other)
+                  ? { route: other, source: false }
+                  : undefined;
+              },
+              consumer: (target) => {
+                if (target.kind === "policy") {
+                  const route = named(`${target.name}Policy`);
+                  return { keys: route, run: route };
+                }
+                const keys = named(
+                  consumerClass(target.kind, target.name, generationOfTarget(targetId(target))),
+                );
+                return { keys, run: runClass(keys) };
+              },
+              streams: (projection) => projectionStreams.get(projection) ?? [],
+              runs: () =>
+                shared.routes().filter((route) => /(View|Projection)(V\d+)?Run$/.test(route)),
+              scanner: scannerName,
+            });
           directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
           // A deploy's backfill: start each new consumer's run, then wait until every one is
@@ -1753,15 +1817,20 @@ const durableObjectPlatform = (
                     const root = (target: string) =>
                       Effect.suspend(() => {
                         const { kind, name } = Backfill.consumerOf(target);
+                        const cls = runClass(
+                          named(consumerClass(kind, name, generationOfTarget(target))),
+                        );
                         const namespace =
-                          workerEnv[
-                            runClass(named(consumerClass(kind, name, generationOfTarget(target))))
-                          ];
+                          shared === undefined
+                            ? workerEnv[cls] === undefined
+                              ? undefined
+                              : fromBinding(workerEnv[cls])
+                            : bound(cls);
                         return namespace === undefined
                           ? Effect.die(
                               new Error(`backfill: ${target} isn't in the code this runs yet`),
                             )
-                          : Effect.succeed(fromBinding(namespace).getByName(RUN_ROOT));
+                          : Effect.succeed(namespace.getByName(RUN_ROOT));
                       });
                     for (const target of targets) {
                       const begun = yield* task(
@@ -2025,11 +2094,22 @@ const durableObjectPlatform = (
             projection: (projection, kit) =>
               inInit(
                 Effect.gen(function* () {
+                  projectionStreams.set(
+                    projection.projectionName,
+                    (
+                      (
+                        projection.definition as {
+                          readonly writes?: ReadonlyArray<{ readonly streamName: string }>;
+                        }
+                      ).writes ?? []
+                    ).map((stream) => named(`${stream.streamName}Stream`)),
+                  );
                   const cls = consumerClass(
                     "projection",
                     projection.projectionName,
                     kit.generation,
                   );
+                  projectionRoutes.set(projection.projectionName, named(cls));
                   const namespace = yield* object(
                     cls,
                     projectionObject(kit, net, consumerPlans, random),
@@ -2054,7 +2134,10 @@ const durableObjectPlatform = (
             stream: (stream, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${stream.streamName}Stream`, streamObject(kit));
+                  const namespace = yield* object(
+                    `${stream.streamName}Stream`,
+                    streamObject(kit, net),
+                  );
                   const read = (key: string) =>
                     unwrapDefects<StreamMeta>(namespace.getByName(key).read());
                   const after = (key: string, cursor: number) =>
@@ -2092,6 +2175,32 @@ const durableObjectPlatform = (
             start: (targets, plansOfTarget, backfilled) =>
               Effect.gen(function* () {
                 // At deploy time: reconciliation runs the backfill of new consumers and waits.
+                // At deploy time: move the objects of the model's version 0 classes.
+                const movers = moversOf.get(modelName);
+                if (
+                  !globalThis.__ALCHEMY_RUNTIME__ &&
+                  shared !== undefined &&
+                  movers !== undefined
+                ) {
+                  yield* inInit(
+                    Effect.gen(function* () {
+                      // The Worker's deploy moves them, between its two uploads.
+                      const worker = yield* CloudflareWorker;
+                      yield* worker.bind`${named("DomainMigration")}`({
+                        domainMigrations: [
+                          {
+                            model: modelName,
+                            domainClass: shared.className,
+                            classes: movers,
+                            ...(backfillTimeoutSeconds === undefined
+                              ? {}
+                              : { timeoutSeconds: backfillTimeoutSeconds }),
+                          },
+                        ],
+                      });
+                    }),
+                  );
+                }
                 if (!globalThis.__ALCHEMY_RUNTIME__ && backfilled.length > 0) {
                   yield* inInit(
                     Effect.gen(function* () {
@@ -2132,7 +2241,10 @@ const durableObjectPlatform = (
             policy: (policy, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                  const namespace = yield* object(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit, net),
+                  );
                   return {
                     receive: (delivery) =>
                       unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
@@ -2151,15 +2263,27 @@ const durableObjectPlatform = (
             // engine, named after the model too.
             for (const saga of model.sagas)
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
-              else
+              else {
+                const current = className(model.modelName, `${saga}Workflow`);
+                const legacyName = `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`;
+                if (oneClassPerModel) {
+                  mover(model.modelName, current, legacyName);
+                  sagaLegacyNames.set(current, legacyName);
+                  sagaModels.set(current, model.modelName);
+                  yield* inInit(
+                    recordBeforeVersions(model.modelName, legacyName, model.legacyData, current),
+                  );
+                }
                 yield* inInit(
                   record(
                     model.modelName,
-                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                    legacyName,
                     model.legacyData,
                     `${saga}Workflow`,
+                    oneClassPerModel,
                   ),
                 );
+              }
             const hosted = hosts.get(model.modelName);
             if (hosted !== undefined) return hosted;
             const host = yield* hostFor(model);
@@ -2171,10 +2295,12 @@ const durableObjectPlatform = (
   );
 
 /**
- * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
- * and policy becomes a Durable Object class on the host Worker, declared
- * while the model's Layer is built, so there are no bindings to write. One
- * instance per aggregate id, per view key, and per policy and source.
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view,
+ * policy, projection, stream and saga run of a model is a Durable Object of
+ * one class named after the model, `Billing.Domain`, declared while the
+ * model's Layer is built, so there are no bindings to write. One instance per
+ * aggregate id, per view key, and per policy and source, named after its
+ * model, its definition and its key (`Billing.AccountAggregate/a-1`).
  *
  * Commands to one instance run one at a time, and their events, state and
  * outbox commit together. Deliveries to views and policies are at least once
@@ -2227,11 +2353,17 @@ const durableObjectPlatform = (
  * ```
  *
  * ### Hosting several models in one Worker
- * Each model gets its own Durable Object classes, named after the model
- * (`Billing.AccountAggregate`), so models that list the same aggregate never
- * share its data. A deploy moves data a Worker deployed with an earlier Domain
- * layout to the current one; see `legacyData` on a model's `layer` for models
- * that shared a class before Domain versions existed.
+ * Each object's name starts with its model (`Billing.AccountAggregate/a-1`),
+ * so models that list the same aggregate never share its data. However many
+ * models and definitions a Worker hosts, it declares one Durable Object
+ * class, well within Cloudflare's 100 per Worker.
+ *
+ * A deploy moves data a Worker deployed with an earlier Domain layout to the
+ * current one. A Worker from before the shared class keeps its old classes
+ * while the deploy moves each of their objects into it (see
+ * `Cloudflare.Domain.Migration`); a later deploy deletes them once they are
+ * empty. See `legacyData` on a model's `layer` for models that shared a class
+ * before Domain versions existed.
  *
  * **Example:** Two models that both list `Account`
  * ```typescript
@@ -2281,7 +2413,27 @@ export function layerDurableObjects({
       (platform = Layer.unwrap(
         Effect.gen(function* () {
           const version = yield* DeployVersion;
-          const engine = layerDurableObjectEngine({ jurisdiction });
+          const random = yield* SecureRandom.SecureRandom;
+          const engine =
+            version !== undefined && version >= 1
+              ? // Saga runs in the shared class too, each workflow's on its own route.
+                makeEngine(jurisdiction, (name, impl) => {
+                  // Recorded when the model is hosted, before its sagas register.
+                  const modelName = sagaModels.get(name) ?? name.slice(0, name.indexOf("."));
+                  return Effect.flatMap(domainClass(random, modelName), (shared) =>
+                    shared.object(
+                      name,
+                      listedRuns(modelName, name, impl),
+                      legacyClassesOf(
+                        name,
+                        // Recorded when the model is hosted, before its sagas register.
+                        sagaLegacyNames.get(name) ??
+                          name.slice(name.indexOf(".") + 1).replace(/[^A-Za-z0-9_]/g, "_"),
+                      ),
+                    ),
+                  );
+                })
+              : layerDurableObjectEngine({ jurisdiction });
           const legacySagas = new Map<string, string>();
           return Layer.merge(
             durableObjectPlatform(jurisdiction, timeoutSeconds, version, legacySagas),

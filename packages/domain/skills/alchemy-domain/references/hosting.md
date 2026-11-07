@@ -1,6 +1,6 @@
 # Hosting on Cloudflare with alchemy
 
-The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
+The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` hosts every aggregate, view, policy, projection, stream and saga run of a model in one Durable Object class named after the model, `Bank.Domain`, declared while the Worker builds. It runs sagas on the same engine as `Cloudflare.Workflows.layerDurableObjectEngine()`, in that class too. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts
 // packages/server/src/BankWorker.ts
@@ -137,8 +137,8 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
-- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
-- Deploys keep data across Domain layout changes. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
+- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, objects named after the model (`Billing.AccountAggregate/a-1`). Two models with the same name on one platform fail.
+- Deploys keep data across Domain layout changes: a Worker from before one class per model keeps its old classes while the deploy moves their objects in, and a later deploy deletes them. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
 
 More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).
 

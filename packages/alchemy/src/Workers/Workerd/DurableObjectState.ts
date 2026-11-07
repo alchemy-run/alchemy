@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { runInBackground } from "../EventLifetime.ts";
+import { trackWork } from "./DurableObjectMove.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
@@ -87,7 +88,9 @@ export const fromDurableObjectState = (
   container: state.container,
   storage: fromDurableObjectStorage(state.storage),
   raw: state,
-  waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
+  // Background work on a source being moved: its seal waits for it.
+  waitUntil: (effect) =>
+    runInBackground(effect, (promise) => state.waitUntil(trackWork(state.storage, promise))),
   blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();

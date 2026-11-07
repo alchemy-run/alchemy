@@ -3,16 +3,19 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DuplicateWorker from "./fixtures/duplicate-worker.ts";
 import Stack from "./fixtures/isolation-stack.ts";
 import TwiceWorker from "./fixtures/twice-worker.ts";
+import { boundClasses } from "./move.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -93,7 +96,21 @@ test(
       (yield* getWorkerTags(workerName, accountId)).filter((tag) =>
         tag.startsWith("alchemy:domain:"),
       ),
-    ).toEqual(["alchemy:domain:v0"]);
+    ).toEqual(["alchemy:domain:v1"]);
+  }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
+);
+
+test(
+  "every object of a model lives in one Durable Object class, named after the model",
+  Effect.gen(function* () {
+    const { workerName } = yield* stack;
+    expect(Object.keys(yield* boundClasses(workerName)).sort()).toEqual([
+      "Audit.Domain",
+      "Billing.Domain",
+      "Sales.Domain",
+      "Support.Domain",
+    ]);
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );

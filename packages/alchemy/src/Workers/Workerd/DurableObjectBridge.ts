@@ -17,6 +17,7 @@ import type { DurableObjectExport } from "../DurableObject.ts";
 import { makeDurableObjectInstance, type DurableObjectInstance } from "../DurableObjectBridge.ts";
 import type { Pin, WorkerBuild } from "../Worker.ts";
 import { dispatchAlarmCallbacks, initializeAlarmCallbacks } from "./AlarmCallback.ts";
+import { counted, OwnsAlarmCallbacks } from "./DurableObjectMove.ts";
 import { makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 
@@ -124,8 +125,15 @@ export const makeDurableObjectBridge =
       async alarm(alarmInfo?: cf.AlarmInvocationInfo): Promise<void> {
         const state = this.#state;
         await this.#core.execute((instance) =>
-          dispatchAlarmCallbacks(state, instance.alarm !== undefined).pipe(
-            Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void),
+          // On an object being moved, the alarm is work under way: its seal waits for it.
+          counted(
+            state.storage,
+            // An object whose stored callbacks belong to code it no longer runs
+            // (its data is moving to another object) handles the alarm itself.
+            (Object.hasOwn(instance, OwnsAlarmCallbacks)
+              ? Effect.void
+              : Effect.asVoid(dispatchAlarmCallbacks(state, instance.alarm !== undefined))
+            ).pipe(Effect.andThen(() => instance.alarm?.(alarmInfo) ?? Effect.void)),
           ),
         );
       }

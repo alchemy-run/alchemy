@@ -34,7 +34,7 @@ import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
-import type { DomainClass } from "../Domain/Version.ts";
+import type { DomainClass, DomainMigration } from "../Domain/Version.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
@@ -1502,6 +1502,8 @@ export type Worker<Bindings = any> = Resource<
      * version's names. See `Domain/Version.ts`.
      */
     domainClasses?: DomainClass[];
+    /** Models whose old classes this Worker's deploy moves into their class. See `Domain/Version.ts`. */
+    domainMigrations?: DomainMigration[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
