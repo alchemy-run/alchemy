@@ -140,8 +140,18 @@ export type Bucket = Resource<
     bucketName: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find a Tigris bucket this stack
+ * doesn't manage by its name.
+ */
+export interface BucketLookup {
+  /** Tigris bucket / add-on name. */
+  name: string;
+}
 
 /**
  * A Fly.Bucket is Tigris S3-compatible object storage, billed through
@@ -250,6 +260,18 @@ export type Bucket = Resource<
  *   name: "BUCKET_NAME",
  *   value: Data.bucketName,
  * });
+ * ```
+ *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created with
+ * `fly storage create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. Tigris returns a bucket's access keys
+ * only when it is created, so a looked-up bucket's credential attributes
+ * are `undefined` unless Fly still reports them.
+ *
+ * **Example:** Reference an existing bucket
+ * ```typescript
+ * const assets = Fly.Bucket.lookup({ name: "my-assets" });
  * ```
  *
  * @resource
@@ -778,6 +800,15 @@ export const BucketProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      if (found === undefined) return undefined;
+      const detail = yield* addons
+        .addOn({ id: found.id, name: found.name ?? name, provider: TIGRIS })
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+      return toAttrs(detail ?? found, undefined, { name });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
