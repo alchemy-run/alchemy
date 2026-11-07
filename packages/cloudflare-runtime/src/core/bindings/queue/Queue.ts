@@ -1,6 +1,8 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const QueueBrokerWorker = {
@@ -232,6 +234,7 @@ export const QueueLive = Layer.effect(
           // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- requirements come from the ambient context, see comment at the cast below
           Effect.gen(function* () {
             const endpoint = `http://127.0.0.1:${port}/message`;
+            const http = yield* HttpClient.HttpClient;
 
             const iteration = Effect.gen(function* () {
               const res = yield* queues.pullMessage({
@@ -245,14 +248,15 @@ export const QueueLive = Layer.effect(
               for (const message of messages) {
                 if (!message.leaseId) continue;
                 const { body, contentType } = decodePulledMessage(message);
-                const response = yield* Effect.tryPromise(() =>
-                  fetch(endpoint, {
-                    method: "POST",
-                    headers: { "X-Msg-Fmt": contentType },
-                    body,
-                  }),
+                const response = yield* http.execute(
+                  HttpClientRequest.post(endpoint).pipe(
+                    HttpClientRequest.setHeader("X-Msg-Fmt", contentType),
+                    typeof body === "string"
+                      ? HttpClientRequest.bodyText(body)
+                      : HttpClientRequest.bodyUint8Array(body),
+                  ),
                 );
-                if (response.ok) {
+                if (response.status >= 200 && response.status < 300) {
                   acks.push({ leaseId: message.leaseId });
                 }
                 // Non-ok: leave unacked — the visibility timeout redelivers.

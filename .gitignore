@@ -91,11 +91,15 @@ examples/cloudflare-worker/src/scratch.ts
 !packages/aws/src/globals.d.ts
 !packages/kubernetes/src/globals.d.ts
 !packages/fly/src/globals.d.ts
+!packages/e2b/src/globals.d.ts
+!packages/modal/src/globals.d.ts
 !packages/github/src/globals.d.ts
 !packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
+!packages/archil/src/globals.d.ts
 !packages/neon/src/globals.d.ts
 !packages/railway/src/globals.d.ts
+!packages/daytona/src/globals.d.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg

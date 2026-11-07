@@ -26,6 +26,8 @@ export interface Engine {
    * is checked.
    */
   readonly recoveryWithinMillis?: number;
+  /** Each case's tags, including its kind: `"local"` or `"live"`. */
+  readonly tags: ReadonlyArray<string>;
   /** Each case's timeout. */
   readonly timeout: number;
   /**
@@ -43,7 +45,7 @@ export interface Engine {
  * serving `app` over `WorkflowsLive`.
  */
 export const conformance = (engine: Engine) => {
-  const { test, timeout } = engine;
+  const { test, tags, timeout } = engine;
 
   const request = <T>(path: string, method: "GET" | "POST" = "GET") =>
     Effect.gen(function* () {
@@ -116,7 +118,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "hello sam" });
       expect(yield* journal(id)).toEqual(["greet", "log"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -132,7 +134,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["greet", "log"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -143,7 +145,7 @@ export const conformance = (engine: Engine) => {
         _tag: "NotStarted",
       });
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -154,7 +156,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
       expect(yield* journal(id)).toEqual(["before", "after"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -169,7 +171,7 @@ export const conformance = (engine: Engine) => {
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(engine.napsWithinMillis);
       expect(yield* journal(id)).toEqual(["after"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -187,7 +189,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["requested", "approved:agent"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -202,7 +204,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["requested", "approved:early"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -221,7 +223,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* run.status).toEqual({ _tag: "Completed", result: "approved by first" });
       expect(yield* journal(id)).toEqual(["requested", "approved:first"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -235,7 +237,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["reserve", "declined", "release"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -246,7 +248,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "charged" });
       expect(yield* journal(id)).toEqual(["reserve", "charged"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -260,7 +262,7 @@ export const conformance = (engine: Engine) => {
       expect(JSON.stringify(status)).toContain("boom: request timed out");
       expect(yield* journal(id)).toEqual(["crash"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -278,7 +280,7 @@ export const conformance = (engine: Engine) => {
       }
       expect(yield* journal(id)).toEqual(["attempt", "attempt", "attempt", "after"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -291,7 +293,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
       expect(yield* journal(id)).toEqual(["reserve", "release"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -303,7 +305,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
       expect(yield* journal(id)).toEqual(["reserve", "release"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -316,7 +318,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Interrupted" });
       expect(yield* journal(id)).toEqual(["before"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -331,7 +333,7 @@ export const conformance = (engine: Engine) => {
       yield* run.interrupt;
       expect(yield* run.status).toEqual({ _tag: "Completed", result: "hello world" });
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -345,7 +347,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["reserve", "release"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -359,7 +361,7 @@ export const conformance = (engine: Engine) => {
       });
       expect(yield* journal(id)).toEqual(["attempt:1", "attempt:2", "attempt:3"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -370,7 +372,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "recovered" });
       expect(yield* journal(id)).toEqual(["fail", "recovered"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -386,7 +388,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "resumed" });
       expect(yield* journal(id)).toEqual(["reserve", "attempt", "attempt"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -404,7 +406,7 @@ export const conformance = (engine: Engine) => {
       expect(entries.filter((entry) => entry === "release")).toEqual(["release"]);
       expect(entries.at(-1)).toBe("release");
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -420,7 +422,7 @@ export const conformance = (engine: Engine) => {
       expect(at).toBeGreaterThanOrEqual(started + 2_000);
       expect(yield* journal(id)).toEqual(["woke", "decoded"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -443,7 +445,7 @@ export const conformance = (engine: Engine) => {
       expect(entries).not.toContain("caught");
       expect(entries).not.toContain("release");
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -464,7 +466,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "fast" });
       expect(yield* journal(id)).toEqual(["raced:fast"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -483,7 +485,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* journal(`${id}-child`)).toEqual(["requested", "approved:agent"]);
       expect(yield* journal(id)).toEqual(["parent:approved by agent"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -494,7 +496,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: 6 });
       expect([...(yield* journal(id))].sort()).toEqual(["part:1", "part:2", "part:3"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -509,7 +511,7 @@ export const conformance = (engine: Engine) => {
       expect(yield* journal(`${id}-child`)).toEqual(["reserve", "declined", "release"]);
       expect(yield* journal(id)).toEqual(["parent:child card declined"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 
   test(
@@ -524,6 +526,6 @@ export const conformance = (engine: Engine) => {
       expect(yield* journal(`${id}-child`)).toEqual(["greet", "log"]);
       expect(yield* journal(id)).toEqual(["parent:hello child"]);
     }),
-    { timeout },
+    { tags, timeout },
   );
 };

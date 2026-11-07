@@ -1,0 +1,59 @@
+---
+title: Railway
+description: Run pools of Rivet nodes on Railway, on a control plane on another cloud.
+---
+
+Host your rooms' nodes on Railway, and each pool is a Railway Service with no public domain. Railway runs the nodes only: give the pool a control plane from another cloud, or [Rivet Cloud](/rivet/rivet-cloud).
+
+```typescript title="src/cluster.ts"
+import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
+import * as RivetRailway from "@alchemy.run/rivet/Railway";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+
+export const Default = RivetRailway.ServicePool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/railway` and finish [Railway setup](/railway/setup).
+
+## The pool
+
+The pool gets a Railway Project of its own. Put it in one you have instead:
+
+```typescript title="src/cluster.ts"
+export const Project = Railway.Project("Rooms");
+
+export const Default = RivetRailway.ServicePool("Default", {
+  project: Project,
+  region: "us-west2",
+}).pipe(Layer.provide(Cluster));
+```
+
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a Railway service with no public domain:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetRailway.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+## Call it from a Railway Service
+
+```typescript title="src/api.ts"
+export default class Api extends Railway.Service<Api>()(
+  "Api",
+  { project: Project, main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const visitors = yield* rooms.getByName("lobby").join();
+        return yield* HttpServerResponse.json({ visitors });
+      }),
+    };
+  }),
+) {}
+```
+
+Every option, with its default, is in the reference: [ServicePool](/providers/rivet/railway#servicepool) and [ServicesPool](/providers/rivet/railway#servicespool).

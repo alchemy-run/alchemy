@@ -24,6 +24,8 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -214,6 +216,8 @@ export type Server = Resource<
     volumeIds: number[];
     /** Attached private Network IDs. */
     networkIds: number[];
+    /** The Server's address on each attached private Network, in {@link networkIds} order. */
+    privateIps: string[];
     /** Firewall IDs applied to the public NIC. */
     firewallIds: number[];
     /** Placement Group ID, or `undefined` if unassigned. */
@@ -390,6 +394,10 @@ const toAttrs = (server: CloudServer): Server["Attributes"] => ({
   networkIds: server.private_net
     .map((item) => item.network)
     .filter((id): id is number => typeof id === "number"),
+  privateIps: server.private_net
+    .filter((item) => typeof item.network === "number")
+    .map((item) => item.ip)
+    .filter((ip): ip is string => typeof ip === "string"),
   firewallIds: (server.public_net.firewalls ?? [])
     .map((item) => item.id)
     .filter((id): id is number => typeof id === "number"),
@@ -872,14 +880,14 @@ export const ServerProvider = () =>
         // Cloud-init runs once, on first boot — a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameRef(news.serverType, output.serverType, output.serverTypeId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const imageId = output.imageId;
         const imageMatches =
@@ -887,15 +895,25 @@ export const ServerProvider = () =>
             ? true
             : imageId !== undefined && news.image === String(imageId);
         if (!imageMatches) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id ?? previous?.serverId,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = {
         ...toAttrs(found),
         privateKey: output?.privateKey,

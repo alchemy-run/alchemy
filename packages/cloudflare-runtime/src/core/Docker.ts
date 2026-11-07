@@ -4,6 +4,7 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -206,6 +207,7 @@ export const DockerLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const runFork = yield* FiberSet.makeRuntime();
+    const random = yield* SecureRandom.SecureRandom;
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
@@ -213,7 +215,7 @@ export const DockerLive = Layer.effect(
     // Every container created through the proxy carries this runtime's label.
     // Native containers can start from images nobody prepared (snapshots,
     // managed `cloudflare/*` images), so per-image cleanup cannot find them.
-    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
+    const runtimeLabels = { [RUNTIME_LABEL]: yield* random.uuidV4() };
     // Set once workerd asks the proxy to create a container. A runtime that
     // never did has nothing to remove and must not wait on the daemon.
     let createdContainers = false;
@@ -532,7 +534,9 @@ export const DockerLive = Layer.effect(
     // Connect to the daemon on first use. Only Workers with containers ask for
     // the engine configuration, so every other runtime never touches Docker.
     // It runs in the layer's scope, so it outlives the caller that started it.
-    const context = yield* Effect.context<Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>();
+    const context = yield* Effect.context<
+      Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | SecureRandom.SecureRandom
+    >();
     const startDocker = Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),

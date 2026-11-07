@@ -55,14 +55,14 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
             first!,
             action === "book" ? new BookTour({ orgId, unit: third! }) : new CancelTour({ orgId }),
           );
-          const state = yield* schedules.query(orgId, {
+          const state = yield* schedules.get(orgId, {
             atLeast: { stream: receipt.stream, version: receipt.version },
           });
           return yield* HttpServerResponse.json(Option.getOrNull(state));
         }
         const orgId = OrgId.make(first!);
         if (action === "schedule")
-          return yield* HttpServerResponse.json(Option.getOrNull(yield* schedules.query(orgId)));
+          return yield* HttpServerResponse.json(Option.getOrNull(yield* schedules.get(orgId)));
         if (action === "events") {
           const { entries } = yield* schedules.list(orgId);
           return yield* HttpServerResponse.json(
@@ -75,8 +75,8 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
             entries.map((entry) => ({ id: entry.envelope.id, ...entry.event })),
           );
         }
-        if (action === "board") return yield* HttpServerResponse.json(yield* boards.state(orgId));
-        return yield* HttpServerResponse.json(Option.getOrNull(yield* busy.query(orgId)));
+        if (action === "board") return yield* HttpServerResponse.json(yield* boards.get(orgId));
+        return yield* HttpServerResponse.json(Option.getOrNull(yield* busy.get(orgId)));
       }).pipe(
         // The view has not caught up with the write yet: the caller retries.
         Effect.catchTag("ConsistencyTimeout", () =>

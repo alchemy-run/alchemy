@@ -10,11 +10,9 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = Hetzner.waitUntilPlacementGroupGone;
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a placement group",
   (stack) =>
     Effect.gen(function* () {
@@ -85,7 +83,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed placement group",
   (stack) =>
     Effect.gen(function* () {

@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -104,6 +105,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { template, manager, request };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InstanceGroupManagerResizeRequest.lookup({
+          resizeRequestName: created.request.resizeRequestName,
+          zone: created.request.zone,
+          instanceGroupManager: created.request.instanceGroupManager,
+        }),
+        created.request,
       );
 
       expect(created.request.resizeRequestName).toEqual(expect.any(String));

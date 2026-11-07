@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Schedule from "effect/Schedule";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as View from "./View.ts";
@@ -52,6 +53,7 @@ export type Handler<T> = (trigger: T) => Effect.Effect<void>;
  */
 export interface Any extends Context.Key<unknown, unknown> {
   readonly kind: "Policy";
+  readonly annotations: Annotations;
   readonly policyName: string;
   readonly definition: {
     readonly from: From;
@@ -177,6 +179,23 @@ export interface PolicyKey<Name extends string> {
  * );
  * ```
  *
+ * ### Annotating policies
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Nothing a client calls shows it; it is for the people and the tools that
+ * read the model, as `X.annotations`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class MainAccountProvisioning extends Domain.Policy(
+ *   "MainAccountProvisioning",
+ *   { from: Customer, on: [CustomerRegistered] },
+ *   { description: "Opens a main account for every new customer." },
+ * ) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -187,10 +206,12 @@ export const make = <
 >(
   name: Name,
   definition: Definition<F, On, Key>,
+  annotations: Annotations = {},
 ): PolicyClass<Name, F, On, Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
   const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly policyName: Name = name;
     static readonly definition = definition;
     static toLayer<Self extends Any, E, R>(
@@ -237,6 +258,7 @@ export interface PolicyClass<
   Handler<Trigger<F, Aggregate.InstanceOf<On[number]>, Key>>
 > {
   readonly kind: "Policy";
+  readonly annotations: Annotations;
   readonly policyName: Name;
   readonly definition: {
     readonly from: F;

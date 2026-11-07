@@ -278,7 +278,25 @@ export interface SinkAttributes {
   modifiedAt: string;
 }
 
-export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>;
+/**
+ * Props for {@link Sink.lookup}: find a sink this stack doesn't manage, by
+ * its id or its name.
+ */
+export type SinkLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing sink.
+       */
+      sinkId: string;
+    }
+  | {
+      /**
+       * The name of the existing sink.
+       */
+      name: string;
+    };
+
+export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers, SinkLookup>;
 
 /**
  * A Cloudflare Pipelines sink — the destination of the Pipelines product
@@ -366,6 +384,20 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers>
  * });
  * ```
  *
+ * ### Looking up an existing Sink
+ * `Sink.lookup` reads a sink Alchemy doesn't manage (created with wrangler
+ * or by another stack), found by `sinkId` or `name`, so a pipeline can
+ * write to it. It is read during plan/deploy and never created, replaced
+ * or deleted.
+ *
+ * **Example:** A pipeline into an existing sink
+ * ```typescript
+ * const sink = Cloudflare.Basin.Sink.lookup({ name: "events_archive" });
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("etl", {
+ *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/pipelines/
  *
  * @resource
@@ -406,6 +438,14 @@ export const SinkProvider = () =>
       return { action: "noop" } as const;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "sinkId" in props
+          ? yield* getSink(accountId, props.sinkId)
+          : yield* findSinkByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

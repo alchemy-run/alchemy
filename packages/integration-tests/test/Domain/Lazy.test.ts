@@ -81,12 +81,12 @@ const deposit = (id: string, amount: number) =>
 const amounts = (id: string) =>
   Effect.gen(function* () {
     const view = yield* Deposits;
-    return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+    return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
   });
 
 const history = [deposit("a-1", 1), deposit("a-1", 2), deposit("a-2", 5)];
 
-describe("Domain lazy views", () => {
+describe("Domain lazy views", { tags: ["unit", "local"] }, () => {
   it.live("a lazy view's key reads its history the first time it is read", () =>
     Effect.gen(function* () {
       const bank = platform();

@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle, serviceAccountEmailOf } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -96,6 +97,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BeyondCorp.AppConnector.lookup({
+          appConnectorId: created.appConnectorId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/appConnectors/");

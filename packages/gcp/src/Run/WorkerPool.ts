@@ -1,3 +1,5 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -6,7 +8,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -21,7 +23,12 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -30,6 +37,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -215,9 +223,16 @@ export type WorkerPoolProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
+  /**
+   * Environment image for `main`: a Dockerfile path, or inline content
+   * (`{ content }`), the bundled program is layered on top of. Use it to
+   * install packages the bundle keeps external.
+   * @default a bun base image
+   */
+  dockerfile?: string | InlineDockerfile;
 };
 
 export type WorkerPool = Resource<
@@ -276,8 +291,34 @@ export type WorkerPool = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  WorkerPoolLookup
 >;
+
+/**
+ * Props for {@link WorkerPool.lookup}: find a worker pool this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface WorkerPoolLookup {
+  /**
+   * Worker pool id (the `{workerPool}` segment of
+   * `projects/{project}/locations/{location}/workerPools/{workerPool}`).
+   * Must begin with a letter, not end with a hyphen, and be fewer than 50
+   * characters.
+   */
+  workerPoolId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type WorkerPoolRuntimeContext = HostRuntimeContext;
 export type WorkerPoolServices = Credentials | GcpEnvironment | ServerHost;
@@ -348,6 +389,19 @@ export type WorkerPoolShape =
  * ) {}
  * ```
  *
+ * ### Looking up an existing worker pool
+ * `WorkerPool.lookup` references a worker pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * worker pool.
+ *
+ * **Example:** Reference an existing worker pool
+ * ```typescript
+ * const workerPool = GCP.Run.WorkerPool.lookup({
+ *   workerPoolId: "my-worker-pool",
+ * });
+ * ```
+ *
  * @resource
  * @category Run
  */
@@ -356,7 +410,8 @@ export const WorkerPool: Platform<
   WorkerPoolServices,
   WorkerPoolShape,
   WorkerPoolRuntimeContext
-> = Platform("GCP.Run.WorkerPool", {
+> &
+  LookupMethod<WorkerPool> = Platform("GCP.Run.WorkerPool", {
   createRuntimeContext: createContainerRuntimeContext("GCP.Run.WorkerPool") as (
     id: string,
   ) => WorkerPoolRuntimeContext,
@@ -832,7 +887,12 @@ export const WorkerPoolProvider = () =>
       if (output !== undefined && news.main !== undefined) {
         const images = yield* makeImageSource;
         const hash = yield* images.hash({
-          source: { main: news.main, handler: news.handler, build: news.build },
+          source: {
+            main: news.main,
+            handler: news.handler,
+            build: news.build,
+            dockerfile: news.dockerfile,
+          },
           isExternal: news.isExternal,
           bootstrap: bootstrapFor(news),
         });
@@ -842,6 +902,23 @@ export const WorkerPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workerPoolId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, workerPoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -907,6 +984,7 @@ export const WorkerPoolProvider = () =>
               main: news.main,
               handler: news.handler ?? "default",
               build: news.build,
+              dockerfile: news.dockerfile,
             },
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,

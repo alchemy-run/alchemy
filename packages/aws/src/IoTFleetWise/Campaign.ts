@@ -304,8 +304,18 @@ export interface Campaign extends Resource<
     targetArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CampaignLookup
 > {}
+
+/**
+ * Props for {@link Campaign.lookup}: find a campaign this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CampaignLookup {
+  /** The campaign name of the existing campaign. */
+  campaignName: string;
+}
 
 /**
  * An AWS IoT FleetWise campaign — the orchestration of data-collection
@@ -354,6 +364,16 @@ export interface Campaign extends Resource<
  *     { s3Config: { bucketArn: bucket.bucketArn } },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing campaign
+ * `Campaign.lookup` references a campaign Alchemy doesn't manage (created in the
+ * console or by another stack), found by `campaignName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing campaign
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.Campaign.lookup({ campaignName: "my-campaign" });
  * ```
  *
  * @resource
@@ -442,6 +462,13 @@ export const CampaignProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ campaignName: name }) {
+          const found = yield* readCampaign(name);
+          if (found?.arn === undefined) return undefined;
+          const attrs = yield* toAttrs(found);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.campaignName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readCampaign(name);
@@ -470,8 +497,16 @@ export const CampaignProvider = () =>
                 collectionScheme: toWireCollectionScheme(news.collectionScheme),
                 signalsToCollect: toWireSignalsToCollect(news.signalsToCollect),
                 dataDestinationConfigs: news.dataDestinationConfigs,
-                startTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
-                expiryTime: news.expiryTime !== undefined ? new Date(news.expiryTime) : undefined,
+                startTime:
+                  news.startTime !== undefined
+                    ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                      new Date(news.startTime)
+                    : undefined,
+                expiryTime:
+                  news.expiryTime !== undefined
+                    ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                      new Date(news.expiryTime)
+                    : undefined,
                 postTriggerCollectionDuration: toWireSeconds(news.postTriggerCollectionDuration),
                 diagnosticsMode: news.diagnosticsMode,
                 spoolingMode: news.spoolingMode,

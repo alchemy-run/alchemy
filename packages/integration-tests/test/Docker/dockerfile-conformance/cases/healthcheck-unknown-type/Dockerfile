@@ -1,0 +1,2 @@
+FROM alpine
+HEALTHCHECK RUN true

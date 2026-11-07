@@ -1,0 +1,73 @@
+---
+title: Kubernetes
+description: Run a Rivet control plane and pools of nodes on any Kubernetes cluster — EKS, GKE, kind or your own.
+---
+
+Host your Durable Objects on any Kubernetes cluster you can reach: EKS, GKE, kind on your machine, or your own. The control plane runs as a StatefulSet with a volume per engine, and each pool is a Deployment beside it.
+
+```typescript title="src/cluster.ts"
+import * as RivetKubernetes from "@alchemy.run/rivet/Kubernetes";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", { cluster: Eks });
+
+export const Default = RivetKubernetes.DeploymentPool("Default").pipe(Layer.provide(Cluster));
+```
+
+Install `@alchemy.run/kubernetes`. `cluster` takes a cluster resource or a kubeconfig. See [Connecting to a cluster](/kubernetes/clusters/connecting).
+
+## The control plane
+
+One engine keeps its data on its volume:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
+  cluster: Eks,
+  diskSize: "20Gi",
+});
+```
+
+More engines share object storage, so `objectStorage` is required:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
+  cluster: Eks,
+  instances: 3,
+  objectStorage: { kind: "s3", bucket: "my-rivet-data", region: "us-west-2" },
+});
+```
+
+`kind: "gcs"` uses a Cloud Storage bucket instead. The bucket must be reachable over HTTPS.
+
+## Expose it
+
+By default the control plane gets a `LoadBalancer` Service. On a cluster without load balancers, use a node port:
+
+```typescript title="src/cluster.ts"
+export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
+  cluster: Kind,
+  expose: { type: "NodePort", nodePort: 30642, endpoint: "http://localhost:16450" },
+});
+```
+
+Or use `{ type: "ClusterIP", endpoint }` behind your own ingress.
+
+## The pool
+
+```typescript title="src/cluster.ts"
+export const Default = RivetKubernetes.DeploymentPool("Default", { replicas: 3 }).pipe(
+  Layer.provide(Cluster),
+);
+```
+
+The pool runs on the control plane's cluster unless you pass `cluster`.
+
+## Rivet Services
+
+`ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a Deployment on the control plane's cluster:
+
+```typescript title="src/cluster.ts"
+export const Services = RivetKubernetes.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Every option, with its default, is in the reference: [StatefulSetControlPlane](/providers/rivet/kubernetes#statefulsetcontrolplane), [DeploymentPool](/providers/rivet/kubernetes#deploymentpool) and [ServicesPool](/providers/rivet/kubernetes#servicespool).

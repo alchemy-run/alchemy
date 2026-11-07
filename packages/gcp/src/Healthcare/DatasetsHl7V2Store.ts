@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -103,8 +104,37 @@ export type DatasetsHl7V2Store = Resource<
     notificationConfigs: Hl7V2NotificationConfig[] | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatasetsHl7V2StoreLookup
 >;
+
+/**
+ * Props for {@link DatasetsHl7V2Store.lookup}: find a datasets hl7 v2 store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DatasetsHl7V2StoreLookup {
+  /**
+   * HL7v2 store id. Must match letters, numbers, underscores, hyphens, and
+   * periods; 1-256 characters.
+   */
+  hl7V2StoreId: string;
+  /**
+   * Region used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent dataset. Full name
+   * `projects/{project}/locations/{location}/datasets/{dataset}` or the
+   * dataset id (combined with `location`).
+   */
+  dataset: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare HL7v2 store inside a dataset.
@@ -128,6 +158,20 @@ export type DatasetsHl7V2Store = Resource<
  *   dataset: dataset.name,
  *   hl7V2StoreId: "clinic-adt",
  *   rejectDuplicateMessage: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing datasets hl7 v2 store
+ * `DatasetsHl7V2Store.lookup` references a datasets hl7 v2 store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared datasets hl7 v2 store.
+ *
+ * **Example:** Reference an existing datasets hl7 v2 store
+ * ```typescript
+ * const datasetsHl7V2Store = GCP.Healthcare.DatasetsHl7V2Store.lookup({
+ *   hl7V2StoreId: "my-hl7-v2-store",
+ *   dataset: "my-dataset",
  * });
  * ```
  *
@@ -204,6 +248,21 @@ export const DatasetsHl7V2StoreProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      hl7V2StoreId,
+      location: lookupLocation,
+      dataset: lookupDataset,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataset =
+        lookupDataset !== undefined ? datasetOf(lookupDataset, env.project, location) : "";
+      const name = dataset.length > 0 ? resourceName(dataset, hl7V2StoreId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -101,6 +102,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { router, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InterconnectAttachment.lookup({
+          interconnectAttachmentName: created.attachment.interconnectAttachmentName,
+          region: created.attachment.region,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.interconnectAttachmentName).toEqual(expect.any(String));

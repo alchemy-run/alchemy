@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -84,8 +85,37 @@ export type FolderLogScope = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderLogScopeLookup
 >;
+
+/**
+ * Props for {@link FolderLogScope.lookup}: find a folder log scope this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderLogScopeLookup {
+  /**
+   * Log scope id (the `{logScope}` segment of
+   * `{parent}/locations/{location}/logScopes/{logScope}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  logScopeId: string;
+  /**
+   * Folder id (`folders/{folder}` or the numeric id).
+   */
+  folderId?: string;
+  /**
+   * Location of the log scope. Log scopes are only available in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log scope grouping projects and views to read together.
@@ -111,6 +141,19 @@ export type FolderLogScope = Resource<
  * const scope = yield* GCP.Logging.FolderLogScope("App", {
  *   resourceNames: ["projects/my-project"],
  *   description: "updated application logs",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder log scope
+ * `FolderLogScope.lookup` references a folder log scope Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder log scope.
+ *
+ * **Example:** Reference an existing folder log scope
+ * ```typescript
+ * const folderLogScope = GCP.Logging.FolderLogScope.lookup({
+ *   logScopeId: "my-log-scope",
  * });
  * ```
  *
@@ -177,6 +220,16 @@ export const FolderLogScopeProvider = () =>
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ logScopeId, folderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = scopeParent(env.project, folderId);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(parent, location, logScopeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, parent, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

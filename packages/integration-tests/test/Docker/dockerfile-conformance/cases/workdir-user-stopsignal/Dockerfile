@@ -1,0 +1,4 @@
+FROM alpine
+WORKDIR /app
+USER node:node
+STOPSIGNAL SIGTERM

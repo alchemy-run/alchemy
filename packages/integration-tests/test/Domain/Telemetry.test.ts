@@ -16,16 +16,11 @@ import { Activity } from "effect/workflow";
 
 // A wallet whose debits a policy audits on a second aggregate, and reminds later.
 class Opened extends Domain.Event("Opened", { balance: Schema.Number }) {}
-class Debited extends Domain.Event(
-  "Debited",
-  { amount: Schema.Number, note: Schema.Redacted(Schema.String) },
-  { attributes: (e) => ({ "wallet.amount": e.amount, "wallet.note": e.note }) },
-) {}
-class Insufficient extends Domain.Rejection(
-  "Insufficient",
-  { balance: Schema.Number },
-  { attributes: (r) => ({ "wallet.balance": r.balance }) },
-) {}
+class Debited extends Domain.Event("Debited", {
+  amount: Schema.Number,
+  note: Schema.Redacted(Schema.String),
+}) {}
+class Insufficient extends Domain.Rejection("Insufficient", { balance: Schema.Number }) {}
 
 class Open extends Domain.Command("Open", {
   target: Schema.String,
@@ -37,7 +32,6 @@ class Debit extends Domain.Command("Debit", {
   input: { amount: Schema.Number, note: Schema.Redacted(Schema.String) },
   events: [Debited],
   rejects: [Insufficient],
-  attributes: (cmd) => ({ "wallet.amount": cmd.amount }),
 }) {}
 
 class Wallet extends Domain.Aggregate("Wallet", {
@@ -47,10 +41,14 @@ class Wallet extends Domain.Aggregate("Wallet", {
   commands: [Open, Debit],
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
-    Debit: Effect.fn(function* (s, cmd) {
-      yield* Effect.annotateCurrentSpan("wallet.checked", true);
-      return s.balance < cmd.amount
-        ? yield* new Insufficient({ balance: s.balance })
+    // The handler records what it wants on the engine's span; nothing else from the payload is.
+    Debit: Effect.fn(function* (wallet, cmd) {
+      yield* Effect.annotateCurrentSpan({
+        "wallet.amount": cmd.amount,
+        "wallet.balance": wallet.balance,
+      });
+      return wallet.balance < cmd.amount
+        ? yield* new Insufficient({ balance: wallet.balance })
         : [new Debited({ amount: cmd.amount, note: cmd.note })];
     }),
   },
@@ -89,9 +87,7 @@ const AuditDebitsLive = AuditDebits.toLayer(
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
       yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers
-        .schedule("main", new Remind(), { after: "1 hour" })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
     });
   }),
 );
@@ -227,7 +223,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  it.effect("records only the attributes a declaration returns, and never a Redacted value", () =>
+  it.effect("records only what a handler annotates on the engine's span", () =>
     Effect.gen(function* () {
       const { tracer, one } = recording();
       yield* story(
@@ -239,14 +235,13 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
 
       const debit = one("Domain.decide Wallet.Debit");
       expect(debit.attributes.get("wallet.amount")).toBe(40);
-      expect(debit.attributes.get("wallet.checked")).toBe(true); // annotated inside decide
       expect(debit.attributes.get("domain.outcome")).toBe("accepted");
-      // The event's own attributes ride on its span event; its note is Redacted.
+      // Each event is a span event, carrying its position and nothing from its payload.
       const [name, , attributes] = debit.events[0]!;
       expect(name).toBe("Debited");
-      expect(attributes).toMatchObject({ "wallet.amount": 40, "wallet.note": "<redacted>" });
+      expect(attributes).toEqual({ "domain.seq": 2 });
 
-      // Nothing from a payload is recorded unless a declaration asks for it.
+      // Nothing from a payload is recorded unless a handler annotates it.
       const audit = one("Domain.decide Ledger.Audit");
       const keys = [...audit.attributes.keys()];
       expect(keys.every((key) => key.startsWith("domain."))).toBe(true);

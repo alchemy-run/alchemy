@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,8 +93,34 @@ export type Service = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must
+   * start with a letter, contain only lowercase letters, digits, and
+   * hyphens, and be at most 63 characters.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Firebase Data Connect service — the parent of a GraphQL schema and
@@ -125,6 +152,18 @@ export type Service = Resource<
  * const service = yield* GCP.FirebaseDataConnect.Service("App", {
  *   displayName: "movie tracker v2",
  *   labels: { env: "prod", team: "data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.FirebaseDataConnect.Service.lookup({
+ *   serviceId: "my-service",
  * });
  * ```
  *
@@ -193,6 +232,15 @@ export const ServiceProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

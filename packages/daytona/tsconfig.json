@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "outDir": "./lib",
+    "rootDir": "./src",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "references": [
+    {
+      "path": "../../submodules/distilled/packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/core/tsconfig.json"
+    },
+    {
+      "path": "../alchemy/tsconfig.json"
+    },
+    {
+      "path": "../docker/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/aws/tsconfig.json"
+    }
+  ]
+}

@@ -4,11 +4,12 @@ description: Build a typed RPC API with Effect's Rpc module, deploy it to Cloud 
 sidebar:
   order: 3
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Effect RPC gives you procedures instead of URLs, and a typed client
 with no codegen. Every request is checked against a schema, so use it
 where a web app or another service calls into yours. The concept lives
-at [Effect RPC](/apis/effect-rpc). This page wires it onto Cloud Run.
+at [Effect RPC](/apis/effect-rpc).
 
 ## Define the schemas
 
@@ -132,9 +133,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ## Call it from a typed client
 

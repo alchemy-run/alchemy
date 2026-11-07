@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -197,8 +198,20 @@ export interface KxCluster extends Resource<
     azMode: KxAzMode | undefined;
   },
   never,
-  Providers
+  Providers,
+  KxClusterLookup
 > {}
+
+/**
+ * Props for {@link KxCluster.lookup}: find a kdb cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KxClusterLookup {
+  /** The environment the cluster runs in. */
+  environmentId: string;
+  /** The name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * A kdb cluster inside an Amazon FinSpace Managed kdb environment — the
@@ -229,6 +242,16 @@ export interface KxCluster extends Resource<
  *   },
  *   databases: [{ databaseName: db.databaseName }],
  * });
+ * ```
+ *
+ * ### Looking up an existing kdb cluster
+ * `KxCluster.lookup` references a kdb cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId` and `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing kdb cluster
+ * ```typescript
+ * const hdb = AWS.FinSpace.KxCluster.lookup({ environmentId, clusterName: "hdb" });
  * ```
  *
  * @resource
@@ -343,6 +366,10 @@ export const KxClusterProvider = () =>
         // Clusters are keyed by their parent kdb environment — there is no
         // account-wide enumeration without an environment id.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ environmentId, clusterName }) {
+          const cluster = yield* readCluster(environmentId, clusterName);
+          return cluster ? toAttributes(cluster, environmentId, clusterName) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const environmentId = output?.environmentId ?? olds?.environmentId;
           if (environmentId === undefined) return undefined;
@@ -392,7 +419,8 @@ export const KxClusterProvider = () =>
           const clusterName = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
           // One idempotency token per reconcile.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
 
           // Observe — cloud state is authoritative.
           let cluster = yield* readCluster(environmentId, clusterName);

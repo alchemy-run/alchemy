@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/gcp/accesscontextmanager_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { lastSegment, logLevel, projectContext, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -67,6 +68,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { policy, desc };
         }),
+      );
+      yield* expectFound(
+        GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDesc.lookup({
+          authorizedOrgsDescId: created.desc.authorizedOrgsDescId,
+          policy: created.desc.policy,
+        }),
+        created.desc,
       );
 
       expect(created.desc.name).toContain("/authorizedOrgsDescs/");
