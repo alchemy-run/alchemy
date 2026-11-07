@@ -200,10 +200,13 @@ A provider whose local emulator serves TLS with its own certificate
 authority lists the CA's PEM file as `devTrust`:
 
 ```diff lang="typescript"
+ export default Contributions.make({
+   name: "emulator",
 +  devTrust: Contributions.lazy(
 +    () => import("./DevTrust.ts"),
 +    (module) => module.devTrust,
 +  ),
+ });
 ```
 
 ```typescript

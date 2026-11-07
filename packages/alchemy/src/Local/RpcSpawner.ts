@@ -89,9 +89,20 @@ export type RpcSpawnerOptions = Pick<RpcServerEnvironment, "profile" | "envFile"
    * process's entire environment.
    */
   readonly omitEnv?: ReadonlyArray<string>;
+  /**
+   * Variables every sidecar process gets on top of what it inherits, e.g.
+   * the CAs `alchemy dev` trusts. This process's own environment is left as
+   * it is.
+   */
+  readonly env?: Readonly<Record<string, string>>;
 };
 
-export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: RpcSpawnerOptions) {
+export const make = Effect.fn(function* ({
+  profile,
+  envFile,
+  omitEnv = [],
+  env = {},
+}: RpcSpawnerOptions) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
@@ -167,6 +178,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         // (workerd, emulators) instead of orphaning them.
         env: {
           ...(omitEnv.length > 0 ? yield* inheritedEnv(omitEnv) : {}),
+          ...env,
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
           // Its startup joins the trace of the call that spawned it; each
           // provider call then carries its caller's span (RpcSerialization).
