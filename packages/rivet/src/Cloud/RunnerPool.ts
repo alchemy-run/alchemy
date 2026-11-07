@@ -52,10 +52,19 @@ export interface RunnerPoolProps {
    * @default "default"
    */
   name?: string;
-  /** The bundled node program, a single ES module run with Bun. */
-  main: string;
+  /**
+   * The bundled node program, a single ES module run with Bun. Set this or
+   * {@link context}.
+   */
+  main?: string;
   /** The RivetKit release installed beside {@link main}. */
-  rivetkitVersion: string;
+  rivetkitVersion?: string;
+  /**
+   * A node program that is an image of its own: a directory whose
+   * `Dockerfile` builds it for `linux/amd64`. Its start command sources
+   * `/etc/rivet-env`, where {@link env} is written. Set this or {@link main}.
+   */
+  context?: string;
   /**
    * Environment baked into the image. Rivet Cloud runner pools take no
    * environment of their own, so every value here, secrets included, is in
@@ -145,6 +154,13 @@ COPY node.mjs env.json start.mjs ./
 CMD ["bun", "start.mjs"]
 `;
 
+/** The environment, as a POSIX shell file an image's start command sources. */
+const envFile = (env: Record<string, string>) =>
+  Object.keys(env)
+    .sort()
+    .map((name) => `${name}='${String(env[name]).replaceAll("'", `'\\''`)}'\n`)
+    .join("");
+
 /** Load the baked environment, then start the node program. */
 const START = `import env from "./env.json" with { type: "json" };
 Object.assign(process.env, env);
@@ -192,20 +208,54 @@ export const RunnerPoolProvider = () =>
         return stdout.trim();
       }, Effect.scoped);
 
+      /** Every file under `dir`, keyed by its path relative to it. */
+      const readTree = (
+        dir: string,
+        prefix = "",
+      ): Effect.Effect<Record<string, Uint8Array>, unknown> =>
+        Effect.gen(function* () {
+          const files: Record<string, Uint8Array> = {};
+          for (const entry of (yield* fs.readDirectory(path.join(dir, prefix))).sort()) {
+            const relative = prefix === "" ? entry : `${prefix}/${entry}`;
+            const info = yield* fs.stat(path.join(dir, relative));
+            if (info.type === "Directory") Object.assign(files, yield* readTree(dir, relative));
+            else if (info.type === "File")
+              files[relative] = yield* fs.readFile(path.join(dir, relative));
+          }
+          return files;
+        });
+
       /** The files the image is built from, and a digest of them. */
       const imageFiles = Effect.fn(function* (props: RunnerPoolProps) {
-        const program = yield* fs.readFileString(props.main);
-        const env = JSON.stringify(props.env, Object.keys(props.env).sort());
-        const files = {
-          Dockerfile: dockerfile(props.rivetkitVersion),
-          "node.mjs": program,
-          "env.json": env,
-          "start.mjs": START,
-        };
+        let files: Record<string, string | Uint8Array>;
+        if (props.context !== undefined) {
+          const tree = yield* readTree(props.context).pipe(
+            Effect.mapError(
+              (cause) =>
+                new RivetCloudApiError({
+                  message: `Cannot read ${props.context}: ${String(cause)}`,
+                }),
+            ),
+          );
+          const base =
+            tree.Dockerfile === undefined ? "" : new TextDecoder().decode(tree.Dockerfile);
+          files = {
+            ...tree,
+            Dockerfile: `${base}\nCOPY rivet-env /etc/rivet-env\n`,
+            "rivet-env": envFile(props.env),
+          };
+        } else {
+          files = {
+            Dockerfile: dockerfile(props.rivetkitVersion ?? "3.0.0"),
+            "node.mjs": yield* fs.readFileString(props.main ?? ""),
+            "env.json": JSON.stringify(props.env, Object.keys(props.env).sort()),
+            "start.mjs": START,
+          };
+        }
         const digest = yield* Effect.sync(() => {
           const hash = createHash("sha256");
-          for (const [name, text] of Object.entries(files))
-            hash.update(name).update("\0").update(text);
+          for (const name of Object.keys(files).sort())
+            hash.update(name).update("\0").update(files[name]!);
           return hash.digest("hex");
         });
         return { files, digest };
@@ -214,7 +264,7 @@ export const RunnerPoolProvider = () =>
       /** The build for this image, uploaded unless one is on the cluster, once Rivet has it ready. */
       const uploadImage = Effect.fn(function* (
         props: RunnerPoolProps,
-        files: Record<string, string>,
+        files: Record<string, string | Uint8Array>,
         digest: string,
         note: (message: string) => Effect.Effect<void>,
       ) {
@@ -235,13 +285,16 @@ export const RunnerPoolProvider = () =>
       const upload = Effect.fn(function* (
         cluster: string,
         image: string,
-        files: Record<string, string>,
+        files: Record<string, string | Uint8Array>,
         note: (message: string) => Effect.Effect<void>,
       ) {
         const { token } = yield* credentials;
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "rivet-cloud-build-" });
-        for (const [name, text] of Object.entries(files)) {
-          yield* fs.writeFileString(path.join(dir, name), text);
+        for (const [name, content] of Object.entries(files)) {
+          const file = path.join(dir, name);
+          yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+          if (typeof content === "string") yield* fs.writeFileString(file, content);
+          else yield* fs.writeFile(file, content);
         }
         yield* note(`Building image ${image}...`);
         yield* docker(["build", "--platform", "linux/amd64", "-t", image, dir]);

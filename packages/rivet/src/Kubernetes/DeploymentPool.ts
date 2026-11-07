@@ -2,6 +2,7 @@ import * as Kubernetes from "@alchemy.run/kubernetes";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import {
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   NODE_DOCKERFILE,
@@ -89,10 +90,12 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
         const endpoint =
           network.kind === "external" ? nodes.cluster.endpoint : nodes.environment.RIVET_ENDPOINT;
         // Every class the pool hosts is bundled into its node image.
+        // A Rust program is its own image, built from its staged crate.
         yield* Kubernetes.Deployment(`${id}Nodes`, {
-          ...nodes.program,
+          ...(isImageProgram(nodes.program)
+            ? nodes.program
+            : { ...nodes.program, dockerfile: { content: NODE_DOCKERFILE } }),
           cluster,
-          dockerfile: { content: NODE_DOCKERFILE },
           namespace: options.namespace ?? network.namespace ?? "default",
           replicas: options.replicas ?? 1,
           serviceType: "ClusterIP",
