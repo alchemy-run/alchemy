@@ -32,6 +32,7 @@
     "./AWS": "./src/AWS/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
     "./Docker": "./src/Docker/index.ts",
+    "./Domain": "./src/Domain/index.ts",
     "./Fly": "./src/Fly/index.ts",
     "./GCP": "./src/GCP/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
@@ -64,6 +65,12 @@
         "bun": "./src/Docker/index.ts",
         "worker": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
+      },
+      "./Domain": {
+        "types": "./lib/Domain/index.d.ts",
+        "bun": "./src/Domain/index.ts",
+        "worker": "./src/Domain/index.ts",
+        "default": "./lib/Domain/index.js"
       },
       "./Fly": {
         "types": "./lib/Fly/index.d.ts",
@@ -114,6 +121,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
@@ -125,6 +133,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/fly": "workspace:*",
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
@@ -152,6 +161,9 @@
       "optional": true
     },
     "@alchemy.run/kubernetes": {
+      "optional": true
+    },
+    "@alchemy.run/domain": {
       "optional": true
     }
   }

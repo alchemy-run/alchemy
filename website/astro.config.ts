@@ -1865,14 +1865,31 @@ export default defineConfig({
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
-                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Cloudflare", link: "/domain/cloudflare" },
+                { label: "Rivet", link: "/domain/rivet" },
+                { label: "Effect Cluster", link: "/domain/effect-cluster" },
+                { label: "In memory", link: "/domain/in-memory" },
               ],
             },
             {
               label: "Testing",
               items: [
+                { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Clients",
+              items: [
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
+                { label: "Agents over MCP", link: "/domain/mcp" },
               ],
             },
             {
@@ -1884,10 +1901,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Agents",
-              items: [{ label: "MCP", link: "/domain/mcp" }],
-            },
-            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1896,20 +1909,16 @@ export default defineConfig({
               ],
             },
             {
-              label: "Consistency patterns",
+              label: "Patterns",
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
               ],
             },
             {
-              label: "Hosting",
+              label: "Operations",
               items: [
-                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
-                { label: "In memory", link: "/domain/in-memory" },
-                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
-                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },
