@@ -42,6 +42,6 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
 
-    conformance({ test, url: () => url, kind: "local" });
+    conformance({ test, url: Effect.succeed(url), kind: "local" });
   },
 );

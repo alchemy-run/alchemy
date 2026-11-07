@@ -16,8 +16,8 @@ type TestFn = (
 
 export interface ConformanceOptions {
   readonly test: TestFn;
-  /** The front's base URL. */
-  readonly url: () => string;
+  /** The front's base URL, once it is deployed. */
+  readonly url: Effect.Effect<string, any, any>;
   /** Where the platform runs: on this machine, or in a cloud. */
   readonly kind: "local" | "live";
   /** How long a case waits for asynchronous work (deliveries, sagas, timers). */
@@ -48,8 +48,10 @@ export const waitForReady = (url: string) =>
 
 export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOptions) => {
   const options = { timeout: 120_000, tags: [kind] };
+  /** GET a route of the front. */
+  const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
   const eventually = <T>(path: string, until: (value: T) => boolean) =>
-    get<T>(url(), path).pipe(
+    call<T>(path).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("500 millis"),
         until,
@@ -61,9 +63,9 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a command commits and replies with the new state",
     Effect.gen(function* () {
       const id = fresh("commit");
-      expect(yield* get(url(), `/increment/${id}?by=2`)).toMatchObject({ accepted: 2 });
-      expect(yield* get(url(), `/increment/${id}?by=3`)).toMatchObject({ accepted: 5 });
-      expect(yield* get(url(), `/counter/${id}`)).toEqual({ total: 5 });
+      expect(yield* call(`/increment/${id}?by=2`)).toMatchObject({ accepted: 2 });
+      expect(yield* call(`/increment/${id}?by=3`)).toMatchObject({ accepted: 5 });
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
     }),
     options,
   );
@@ -72,8 +74,8 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a rejected command commits nothing",
     Effect.gen(function* () {
       const id = fresh("reject");
-      expect(yield* get(url(), `/increment/${id}?by=11`)).toEqual({ rejected: "TooBig" });
-      expect(yield* get(url(), `/counter/${id}`)).toEqual({ total: 0 });
+      expect(yield* call(`/increment/${id}?by=11`)).toEqual({ rejected: "TooBig" });
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 0 });
     }),
     options,
   );
@@ -82,12 +84,11 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a command sent twice under one id commits once",
     Effect.gen(function* () {
       const id = fresh("dedupe");
-      const { first, second } = yield* get<{ first: unknown; second: unknown }>(
-        url(),
+      const { first, second } = yield* call<{ first: unknown; second: unknown }>(
         `/again/${id}?by=4`,
       );
       expect(first).toEqual(second);
-      expect(yield* get(url(), `/counter/${id}`)).toEqual({ total: 4 });
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 4 });
     }),
     options,
   );
@@ -98,10 +99,10 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const id = fresh("serial");
       yield* Effect.forEach(
         Array.from({ length: 10 }, (_, i) => i),
-        () => get(url(), `/increment/${id}?by=1`),
+        () => call(`/increment/${id}?by=1`),
         { concurrency: "unbounded", discard: true },
       );
-      expect(yield* get(url(), `/counter/${id}`)).toEqual({ total: 10 });
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 10 });
     }),
     options,
   );
@@ -110,7 +111,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a view applies every event once, in order",
     Effect.gen(function* () {
       const id = fresh("view");
-      for (const by of [1, 2, 3]) yield* get(url(), `/increment/${id}?by=${by}`);
+      for (const by of [1, 2, 3]) yield* call(`/increment/${id}?by=${by}`);
       const total = yield* eventually<{ total: number; increments: number }>(
         `/total/${id}`,
         (view) => view.increments >= 3,
@@ -124,9 +125,9 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a policy starts a saga, and the saga's step commits",
     Effect.gen(function* () {
       const id = fresh("saga");
-      yield* get(url(), `/increment/${id}?by=7`);
+      yield* call(`/increment/${id}?by=7`);
       // One run per counter: a second increment starts nothing new.
-      yield* get(url(), `/increment/${id}?by=1`);
+      yield* call(`/increment/${id}?by=1`);
       const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
       expect(echo).toEqual({ total: 7 });
     }),
@@ -137,7 +138,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a scheduled command runs when it is due",
     Effect.gen(function* () {
       const id = fresh("expire");
-      expect(yield* get(url(), `/place/${id}`)).toEqual({ status: "held" });
+      expect(yield* call(`/place/${id}`)).toEqual({ status: "held" });
       const hold = yield* eventually<{ status: string }>(
         `/hold/${id}`,
         (h) => h.status === "expired",
@@ -151,11 +152,11 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     "a cancelled command never runs",
     Effect.gen(function* () {
       const id = fresh("release");
-      yield* get(url(), `/place/${id}`);
-      expect(yield* get(url(), `/release/${id}`)).toEqual({ status: "released" });
+      yield* call(`/place/${id}`);
+      expect(yield* call(`/release/${id}`)).toEqual({ status: "released" });
       // Past the hold's window, and the policy's delivery.
       yield* Effect.sleep("10 seconds");
-      expect(yield* get(url(), `/hold/${id}`)).toEqual({ status: "released" });
+      expect(yield* call(`/hold/${id}`)).toEqual({ status: "released" });
     }),
     options,
   );
