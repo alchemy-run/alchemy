@@ -102,7 +102,7 @@ The binding is the same one a Worker uses. A Server sits behind proxy auth even 
 
 ## Callers without a binding
 
-Any caller with a webhook token for the workspace can reach the Server's `fetch` routes. Only callers whose binding issued a key can call its methods: everyone else gets `401`.
+Any caller with a proxy auth token Modal accepts for the Server can reach the Server's `fetch` routes. Only callers whose binding issued a key can call its methods: everyone else gets `401`.
 
 ## Serve the public
 
