@@ -11,19 +11,16 @@ Take one small app: chat rooms. Each room is an Actor, and an API calls a room b
 
 <Tree
   nodes={[
-    { id: "stage", label: "dev", type: "stage" },
-    { id: "cp", label: "Control plane", type: "Rivet", parent: "stage", wide: true, icon: "brand:rivet" },
-    { id: "gateway", label: "Gateway", type: "HTTPS", parent: "cp", tone: "accent", icon: "door-open" },
-    { id: "engine", label: "Engine", type: "routes calls", parent: "cp", icon: "route" },
-    { id: "data", label: "Instance data", type: "namespace dev", parent: "cp", icon: "database" },
-    { id: "default", label: "Default", type: "pool · 2 nodes on AWS", parent: "stage", icon: "brand:aws" },
+    { id: "cp", label: "Control plane", type: "Rivet", icon: "brand:rivet" },
+    { id: "gateway", label: "Gateway", type: "HTTPS + token", parent: "cp", wide: true, tone: "accent", icon: "shield-check" },
+    { id: "ns", label: "dev", type: "namespace", parent: "cp", dashed: true, wide: true, icon: "folder" },
+    { id: "default", label: "Default", type: "pool · 2 nodes on AWS", parent: "ns", icon: "brand:aws" },
     { id: "lobby", label: "lobby", type: "Room", parent: "default", icon: "circle-user-round" },
     { id: "kitchen", label: "kitchen", type: "Room", parent: "default", icon: "circle-user-round" },
-    { id: "media", label: "Media", type: "pool · 1 node on Fly", parent: "stage", icon: "brand:fly" },
+    { id: "media", label: "Media", type: "pool · 1 node on Fly", parent: "ns", icon: "brand:fly" },
     { id: "studio", label: "studio", type: "Transcoder", parent: "media", icon: "circle-user-round" },
-    { id: "api", label: "Api", type: "Worker or Lambda", parent: "stage", icon: "globe" },
   ]}
-  caption="The Api calls the control plane's gateway with a token. Each pool runs its classes on any cloud and connects out to the control plane, which keeps every instance's data in the stage's namespace and routes each call to the node running it."
+  caption="Your Api calls a room through the gateway, with a token. The dev namespace holds the stage's pools and the actors they run. Each pool's nodes run on its own cloud and connect out to the control plane, which keeps every actor's data and routes each call to the node running it."
 />
 
 ## Durable Objects: a class and its instances
