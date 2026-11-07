@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -109,8 +110,34 @@ export type AssessmentRule = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AssessmentRuleLookup
 >;
+
+/**
+ * Props for {@link AssessmentRule.lookup}: find an assessment rule this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AssessmentRuleLookup {
+  /**
+   * Assessment rule id (the `{assessment_rule}` segment of
+   * `projects/{projec
+   * t}/locations/{location}/assessmentRules/{assessment_rule}`). Must match
+   * `^[A-Za-z0-9]{4,64}$` (no dashes).
+   */
+  assessmentRuleId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Insights assessment rule that samples conversations
@@ -128,6 +155,19 @@ export type AssessmentRule = Resource<
  *   active: false,
  *   sampleRule: { samplePercentage: 0.1 },
  *   scheduleInfo: { schedule: "every 1 hours", timeZone: "UTC" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing assessment rule
+ * `AssessmentRule.lookup` references an assessment rule Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * assessment rule.
+ *
+ * **Example:** Reference an existing assessment rule
+ * ```typescript
+ * const assessmentRule = GCP.ContactCenterInsights.AssessmentRule.lookup({
+ *   assessmentRuleId: "my-assessment-rule",
  * });
  * ```
  *
@@ -243,6 +283,15 @@ export const AssessmentRuleProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ assessmentRuleId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, assessmentRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

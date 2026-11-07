@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -103,8 +104,31 @@ export type RegionTargetHttpsProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionTargetHttpsProxyLookup
 >;
+
+/**
+ * Props for {@link RegionTargetHttpsProxy.lookup}: find a region target
+ * https proxy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionTargetHttpsProxyLookup {
+  /**
+   * TargetHttpsProxy name (RFC1035, 1-63 characters).
+   */
+  targetHttpsProxyName: string;
+  /**
+   * Region the proxy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine target HTTPS proxy.
@@ -139,6 +163,19 @@ export type RegionTargetHttpsProxy = Resource<
  *   region: "us-central1",
  *   urlMap: map.urlMapName,
  *   sslCertificates: [cert.sslCertificateName],
+ * });
+ * ```
+ *
+ * ### Looking up an existing region target https proxy
+ * `RegionTargetHttpsProxy.lookup` references a region target https proxy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared region target https proxy.
+ *
+ * **Example:** Reference an existing region target https proxy
+ * ```typescript
+ * const regionTargetHttpsProxy = GCP.Compute.RegionTargetHttpsProxy.lookup({
+ *   targetHttpsProxyName: "my-target-https-proxy",
  * });
  * ```
  *
@@ -286,6 +323,14 @@ export const RegionTargetHttpsProxyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ targetHttpsProxyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpsProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

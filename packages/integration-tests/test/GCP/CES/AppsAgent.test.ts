@@ -6,6 +6,7 @@ import * as ces from "@distilled.cloud/gcp/ces_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,14 @@ test.provider(
           });
           return { app, agent };
         }),
+      );
+      yield* expectFound(
+        GCP.CES.AppsAgent.lookup({
+          agentId: created.agent.agentId,
+          location: created.agent.location,
+          app: created.agent.app,
+        }),
+        created.agent,
       );
 
       expect(created.agent.name).toContain("/agents/");

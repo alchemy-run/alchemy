@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -43,6 +44,13 @@ test.provider(
             namedPorts: [{ name: "http", port: 80 }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InstanceGroup.lookup({
+          instanceGroupName: created.instanceGroupName,
+          zone: created.zone,
+        }),
+        created,
       );
 
       expect(created.instanceGroupName).toEqual(expect.any(String));

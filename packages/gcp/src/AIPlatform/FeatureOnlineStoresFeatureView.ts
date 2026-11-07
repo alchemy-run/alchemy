@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -176,8 +177,35 @@ export type FeatureOnlineStoresFeatureView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureOnlineStoresFeatureViewLookup
 >;
+
+/**
+ * Props for {@link FeatureOnlineStoresFeatureView.lookup}: find a feature
+ * online stores feature view this stack doesn't manage by its identifiers,
+ * in the ambient project unless `project` names another.
+ */
+export interface FeatureOnlineStoresFeatureViewLookup {
+  /**
+   * Feature View id. Valid characters `[a-z0-9_]`, must start with a
+   * letter, max 60.
+   */
+  featureViewId: string;
+  /**
+   * Region used when `featureOnlineStore` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Feature Online Store resource name or id.
+   */
+  featureOnlineStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Feature View — the serving projection of a Feature Online Store.
@@ -194,6 +222,20 @@ export type FeatureOnlineStoresFeatureView = Resource<
  *     featureGroups: [{ featureGroupId: group.featureGroupId, featureIds: ["age"] }],
  *   },
  *   syncConfig: { cron: "0 * * * *" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing feature online stores feature view
+ * `FeatureOnlineStoresFeatureView.lookup` references a feature online
+ * stores feature view Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared feature online stores feature view.
+ *
+ * **Example:** Reference an existing feature online stores feature view
+ * ```typescript
+ * const featureOnlineStoresFeatureView = GCP.AIPlatform.FeatureOnlineStoresFeatureView.lookup({
+ *   featureViewId: "my-feature-view",
+ *   featureOnlineStore: "my-feature-online-store",
  * });
  * ```
  *
@@ -322,6 +364,20 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ featureViewId, location: lookupLocation, featureOnlineStore }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A create interrupted before its parent resolved has nothing to find.
+      if (typeof featureOnlineStore !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, featureOnlineStore ?? "");
+      const name = resourceName(parent, featureViewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

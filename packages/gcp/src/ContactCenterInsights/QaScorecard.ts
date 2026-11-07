@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -81,8 +82,33 @@ export type QaScorecard = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QaScorecardLookup
 >;
+
+/**
+ * Props for {@link QaScorecard.lookup}: find a qa scorecard this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface QaScorecardLookup {
+  /**
+   * Scorecard id (the `{qa_scorecard}` segment of
+   * `projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
+   * Must match `^[a-z0-9-]{4,64}$`.
+   */
+  qaScorecardId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Insights QA scorecard — a collection of questions
@@ -99,6 +125,19 @@ export type QaScorecard = Resource<
  * const card = yield* GCP.ContactCenterInsights.QaScorecard("Quality", {
  *   displayName: "quality",
  *   description: "call quality",
+ * });
+ * ```
+ *
+ * ### Looking up an existing qa scorecard
+ * `QaScorecard.lookup` references a qa scorecard Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * qa scorecard.
+ *
+ * **Example:** Reference an existing qa scorecard
+ * ```typescript
+ * const qaScorecard = GCP.ContactCenterInsights.QaScorecard.lookup({
+ *   qaScorecardId: "my-qa-scorecard",
  * });
  * ```
  *
@@ -174,6 +213,15 @@ export const QaScorecardProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ qaScorecardId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, qaScorecardId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

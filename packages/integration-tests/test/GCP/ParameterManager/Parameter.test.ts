@@ -5,6 +5,7 @@ import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -33,6 +34,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ParameterManager.Parameter.lookup({
+          parameterId: created.parameterId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/parameters/");

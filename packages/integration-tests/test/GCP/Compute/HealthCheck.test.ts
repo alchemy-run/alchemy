@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -34,6 +35,10 @@ test.provider(
             httpHealthCheck: { port: 80, requestPath: "/health" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.HealthCheck.lookup({ healthCheckName: created.healthCheckName }),
+        created,
       );
 
       expect(created.healthCheckName).toEqual(expect.any(String));
