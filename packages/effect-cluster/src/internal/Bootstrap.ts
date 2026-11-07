@@ -45,6 +45,7 @@ import type { HostedCron } from "../Cron.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
+import { clusterLayers } from "./ClusterLayers.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
@@ -325,6 +326,8 @@ export const bootstrap = (
         ...(entityLayers as [Layer.Layer<never>]),
         ...(workflowLayers as Layer.Layer<never, never, any>[]),
         ...(scheduled as Layer.Layer<never, never, any>[]),
+        // What the classes' Construction phases handed the runner.
+        ...(clusterLayers() as Layer.Layer<never, never, any>[]),
         gateway,
       ).pipe(
         // Workflows run on Effect Cluster's own engine, over the cluster.

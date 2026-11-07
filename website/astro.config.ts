@@ -1847,9 +1847,16 @@ export default defineConfig({
               ],
             },
             {
+              label: "Platforms",
+              items: [
+                { label: "Cloudflare", link: "/domain/cloudflare" },
+                { label: "Rivet", link: "/domain/rivet" },
+                { label: "Effect Cluster", link: "/domain/effect-cluster" },
+              ],
+            },
+            {
               label: "Hosting",
               items: [
-                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
                 { label: "In memory", link: "/domain/in-memory" },
                 { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },

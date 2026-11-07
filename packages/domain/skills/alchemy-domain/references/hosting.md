@@ -49,6 +49,35 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
+## Hosting on Rivet or Effect Cluster
+
+The same model runs on Rivet Durable Objects or Effect Cluster entities. One class (or entity) hosts the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. The class's phase builds the model with `host`. Every runtime that serves an Api provides `layer(Class)` as the platform.
+
+```ts
+// Rivet: one Durable Object class, on a pool
+export default class BankObjects extends Rivet.DurableObject<BankObjects>()(
+  "Bank",
+  { main: import.meta.url },
+  DomainRivet.host(Bank.layer(BankHandlers)).pipe(Effect.provide(Default)),
+) {}
+
+// Effect Cluster: one entity, on a pool; calls between objects need unbounded concurrency
+export default class BankObjects extends Cluster.Entity<BankObjects>()(
+  DomainCluster.entity("Bank"),
+  { main: import.meta.url, concurrency: "unbounded" },
+  DomainCluster.host(Bank.layer(BankHandlers)).pipe(Effect.provide(Default)),
+) {}
+
+// Any caller (Worker, container, Lambda)
+const BankLive = Bank.layer(BankHandlers).pipe(Layer.provide(DomainRivet.layer(BankObjects)));
+```
+
+- Callers build the same model Layer, so they need the handlers' services too.
+- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
+
+More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
+
 ## Calling the Api in process
 
 Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with the middleware of everything it serves. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:

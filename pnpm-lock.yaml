@@ -10023,6 +10023,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly
@@ -11792,6 +11795,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly

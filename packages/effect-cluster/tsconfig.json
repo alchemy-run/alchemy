@@ -36,6 +36,9 @@
     },
     {
       "path": "../kubernetes/tsconfig.json"
+    },
+    {
+      "path": "../domain/tsconfig.json"
     }
   ]
 }
