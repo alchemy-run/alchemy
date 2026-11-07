@@ -888,6 +888,50 @@ Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and sc
 
 - [Telemetry, webhooks and audit](https://alchemy.run/daytona/observability/telemetry) — Send a Daytona organization's sandbox logs, traces and metrics to your backend, get webhooks for sandbox events, and read usage and the audit log from a Worker.
 
+## Modal
+
+Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.
+
+- [Modal](https://alchemy.run/modal) — Run functions, servers and agent sandboxes on Modal, and keep files there, from your Workers and Lambdas.
+- [Setup](https://alchemy.run/modal/setup) — Log in to Modal, or give Alchemy a Modal token.
+- [Concepts](https://alchemy.run/modal/concepts) — How Modal environments, apps and objects map to your Stack.
+
+## Modal — Tutorial
+
+- [Part 1: Your First Stack](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, app and image.
+- [Part 2: Add a Sandbox](https://alchemy.run/modal/tutorial/part-2) — Create a sandbox from a Worker and give each user a volume.
+- [Part 3: Testing](https://alchemy.run/modal/tutorial/part-3) — Test the deployed API against real Modal sandboxes.
+- [Part 4: Stages](https://alchemy.run/modal/tutorial/part-4) — Deploy separate dev, staging and prod copies, each in its own Modal environment.
+- [Part 5: CI/CD](https://alchemy.run/modal/tutorial/part-5) — Deploy from GitHub Actions with a Modal token in repository secrets.
+
+## Modal — Sandboxes
+
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One sandbox whose filesystem outlives its sessions.
+- [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
+- [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a sandbox's files or memory and start new sandboxes from it.
+
+## Modal — Storage
+
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
+- [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
+
+## Modal — Security
+
+- [Access control](https://alchemy.run/modal/security/access-control) — Separate workloads with environments, member roles and scoped tokens.
+- [Network & secrets](https://alchemy.run/modal/security/network-and-secrets) — Limit what a sandbox can reach and give it credentials it can't read.
+
+## Modal — Services
+
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
+- [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
+- [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
+- [Servers](https://alchemy.run/modal/services/servers) — Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
+- [Web endpoints](https://alchemy.run/modal/services/web-endpoints) — Serve a Modal Function on the web at a modal.run URL.
+
 ## Better Auth
 
 Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.
@@ -1140,4 +1184,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~243 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~248 KB) — only fetch it when you need to locate a specific resource's reference page.

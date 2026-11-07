@@ -1,0 +1,85 @@
+---
+title: Modal
+description: Run functions, servers and agent sandboxes on Modal, and keep files there, from your Workers and Lambdas.
+---
+
+Modal runs your code in containers, with GPUs if you want them: functions and servers that scale with traffic, and sandboxes you create from code. Declare them with their images, volumes and secrets in your Stack, and call them from any Worker or Lambda.
+
+New here? [Set up credentials](/modal/setup) first, then [build the tutorial](/modal/tutorial/part-1).
+
+## Declare an image and a warm base
+
+```typescript
+// src/Sandbox.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Agents = Modal.Environment("Agents", {});
+
+export const Coder = Modal.App("Coder", { environment: Agents });
+
+export const Node = Modal.Image("Node", {
+  app: Coder,
+  image: "node:22-bookworm",
+  commands: ["RUN apt-get update && apt-get install -y git"],
+});
+
+export const Warm = Modal.Image("Warm", {
+  app: Coder,
+  from: Node,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work"],
+});
+```
+
+Modal builds images on its own builders, so deploying needs no Docker. `Warm` runs its setup once at deploy and saves the result, so every sandbox starts with the repo already cloned.
+
+## Run a sandbox from a Worker
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Agents, Warm } from "./Sandbox.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const sandboxes = yield* Modal.CreateSandbox(Warm);
+    const volumes = yield* Modal.CreateVolume(Agents);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const user = new URL(request.url, "http://api").searchParams.get("user") ?? "anonymous";
+        const home = yield* volumes.getOrCreate(`home-${user}`);
+        const sandbox = yield* sandboxes.create({
+          mounts: [{ volume: home, path: "/home/user" }],
+          timeout: "5 minutes",
+        });
+        const result = yield* sandbox
+          .exec(["ls", "/work"])
+          .pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Layer.mergeAll(Modal.CreateSandboxHttp, Modal.CreateVolumeHttp))),
+) {}
+```
+
+Each user gets their own volume, created by name the first time they call. The code is in [`examples/cloudflare-modal-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-modal-sandbox).
+
+## Where next
+
+- [Concepts](/modal/concepts): environments, apps, and objects you create at runtime
+- Sandboxes: [Sandboxes](/modal/sandboxes/sandboxes), [Programs](/modal/sandboxes/programs), [Images](/modal/sandboxes/images), [Snapshots](/modal/sandboxes/snapshots), [Persistent sandboxes](/modal/sandboxes/persistent)
+- Storage: [Volumes](/modal/storage/volumes), [Dicts](/modal/storage/dicts), [Queues](/modal/storage/queues)
+- Security: [Network & secrets](/modal/security/network-and-secrets), [Access control](/modal/security/access-control)
+- Services: [Functions](/modal/services/functions), [Web endpoints](/modal/services/web-endpoints), [Servers](/modal/services/servers), [Operate services](/modal/services/operating), [Call Python functions](/modal/services/calling-python), [Autoscaling](/modal/services/autoscaling)
+
+## Out of scope
+
+Alchemy deploys your JavaScript programs as Functions and Servers. It doesn't deploy Python source: deploy that with `modal deploy`, then call it with `Modal.InvokeFunction` and tune it with `Modal.FunctionAutoscaler`. Billing reports, audit logs, cluster reservations and Modal's internal container RPCs aren't modeled.
