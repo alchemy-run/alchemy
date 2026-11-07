@@ -73,7 +73,7 @@ const api = yield* Modal.FetchServer(Api);
 const greeting = yield* api.greet("modal");
 ```
 
-The client is typed from `Api`'s methods and goes through Modal's proxy auth like `fetch`. A method that returns a `Stream` streams to the caller as values are produced. See [schemaless RPC](/apis/schemaless/) for what methods can take and return.
+The client is typed from `Api`'s methods and goes through Modal's proxy auth like `fetch`. The binding also gives the Worker its own key, which the Server checks on every method call: callers without a binding get `401`. A method that returns a `Stream` streams to the caller as values are produced. See [schemaless RPC](/apis/schemaless/) for what methods can take and return.
 
 ## Serve the public
 

@@ -3,7 +3,7 @@ title: Access control
 description: Separate workloads with environments, member roles and scoped tokens.
 ---
 
-Every host gets its own scoped service user. A binding grants it `viewer` or `contributor` on the bound resource's environment, so keep workloads apart with environments.
+A Modal Function or Server calls Modal as its own container, over the API socket Modal gives every container. No token is stored in it. Every other host (a Worker, a Lambda, a Sandbox) gets its own scoped service user, and a binding grants it `viewer` or `contributor` on the bound resource's environment. Keep workloads apart with environments.
 
 ## Restrict an environment
 
@@ -59,6 +59,15 @@ export default Alchemy.Stack(
 ```
 
 Hosts then act with your token's workspace-wide access, not just the roles their bindings ask for.
+
+## Who may call RPC methods
+
+```typescript
+const embed = yield* Modal.InvokeFunction(Embed);
+const api = yield* Modal.FetchServer(Api);
+```
+
+Each binding mints its own key for that caller and target. The caller keeps the key as a secret, the target keeps only its SHA-256, and every RPC call carries the key. A Function or Server answers RPC calls only from callers whose binding issued a key, so anything else in the workspace, including code with Modal access, gets `401`.
 
 ## Share one port
 
