@@ -1,4 +1,4 @@
-import type { ConfigError } from "@distilled.cloud/core/errors";
+import { ConfigError } from "@distilled.cloud/core/errors";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { PrismaApiError } from "../Client.ts";
@@ -117,6 +117,14 @@ const logsQuery = (query: DeploymentLogsQuery | undefined): Record<string, unkno
   };
 };
 
+/**
+ * Log streams authenticate with a bearer token; credentials without one
+ * (an `HttpClient` that signs requests itself) can't open them.
+ */
+const missingToken = Effect.fail(
+  new ConfigError({ message: "Prisma log streams need an API token (PRISMA_API_TOKEN)" }),
+);
+
 export const getDeploymentLogsRequest = (
   deploymentId: string,
   query?: DeploymentLogsQuery,
@@ -124,6 +132,7 @@ export const getDeploymentLogsRequest = (
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
+    if (apiToken === undefined) return yield* missingToken;
     const url = yield* buildWebSocketUrl(
       apiBaseUrl,
       `/v1/deployments/${pathSegment(deploymentId)}/logs`,
@@ -144,6 +153,7 @@ export const getBuildLogsRequest = (
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
+    if (apiToken === undefined) return yield* missingToken;
     const url = yield* buildUrl(apiBaseUrl, `/v1/builds/${pathSegment(buildId)}/logs`, query);
     return {
       url,

@@ -62,7 +62,7 @@ type BindTarget = {
  */
 export const RpcCaller = Effect.gen(function* () {
   // Deploy only: a host bundle never creates the key.
-  const Key = globalThis.__ALCHEMY_RUNTIME__ ? undefined : Random;
+  const Key = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* Random;
   return Effect.fn(function* (target: { readonly LogicalId: string }) {
     // The host binding the target, read per call: one binding layer serves
     // every host in the Stack, so a host captured when the layer was built
