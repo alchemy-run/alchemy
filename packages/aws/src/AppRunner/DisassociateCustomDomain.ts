@@ -1,6 +1,7 @@
-import type * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeAppRunnerHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface DisassociateCustomDomainRequest extends Omit<
@@ -43,3 +44,19 @@ export interface DisassociateCustomDomain extends Binding.Service<
 export const DisassociateCustomDomain = Binding.Service<DisassociateCustomDomain>(
   "AWS.AppRunner.DisassociateCustomDomain",
 );
+
+/**
+ * HTTP implementation of the {@link DisassociateCustomDomain} binding.
+ * Calls `apprunner:DisassociateCustomDomain` with the Lambda's IAM role,
+ * scoped to the bound service.
+ */
+export const DisassociateCustomDomainHttp = makeAppRunnerHttpBinding(DisassociateCustomDomain, {
+  operation: apprunner.disassociateCustomDomain,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:DisassociateCustomDomain"],
+      resources: [service.serviceArn],
+    }),
+  }),
+});

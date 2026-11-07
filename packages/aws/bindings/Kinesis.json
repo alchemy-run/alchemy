@@ -1,0 +1,209 @@
+{
+  "tag": "AWS.Kinesis",
+  "module": "kinesis",
+  "alias": "Kinesis",
+  "resources": {
+    "Stream": {
+      "file": "Stream.ts"
+    },
+    "StreamConsumer": {
+      "file": "StreamConsumer.ts"
+    }
+  },
+  "builder": "makeStreamHttpBinding",
+  "builders": {
+    "makeConsumerHttpBinding": {
+      "grants": "resource"
+    },
+    "makeKinesisAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeStreamHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeAccountSettings": {
+      "operation": "describeAccountSettings",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAccountSettingsRequest",
+        "omit": []
+      },
+      "builder": "makeKinesisAccountHttpBinding"
+    },
+    "DescribeLimits": {
+      "operation": "describeLimits",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeLimitsRequest",
+        "omit": []
+      },
+      "builder": "makeKinesisAccountHttpBinding"
+    },
+    "DescribeStream": {
+      "operation": "describeStream",
+      "resource": "Stream",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeStreamRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "DescribeStreamConsumer": {
+      "operation": "describeStreamConsumer",
+      "resource": "StreamConsumer",
+      "param": "consumer",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeStreamConsumerRequest",
+        "omit": ["ConsumerARN", "StreamARN", "ConsumerName"]
+      },
+      "builder": "makeConsumerHttpBinding"
+    },
+    "DescribeStreamSummary": {
+      "operation": "describeStreamSummary",
+      "resource": "Stream",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeStreamSummaryRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "GetRecords": {
+      "operation": "getRecords",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "GetRecordsRequest",
+        "omit": ["StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "GetResourcePolicy": {
+      "operation": "getResourcePolicy",
+      "resource": "Stream",
+      "request": {
+        "mode": "optional",
+        "interface": "GetResourcePolicyRequest",
+        "omit": ["ResourceARN"]
+      },
+      "with": {
+        "key": "ResourceARN"
+      }
+    },
+    "GetShardIterator": {
+      "operation": "getShardIterator",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "GetShardIteratorRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "ListShards": {
+      "operation": "listShards",
+      "resource": "Stream",
+      "request": {
+        "mode": "optional",
+        "interface": "ListShardsRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "ListStreamConsumers": {
+      "operation": "listStreamConsumers",
+      "resource": "Stream",
+      "request": {
+        "mode": "optional",
+        "interface": "ListStreamConsumersRequest",
+        "omit": ["StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "ListStreams": {
+      "operation": "listStreams",
+      "request": {
+        "mode": "optional",
+        "interface": "ListStreamsRequest",
+        "omit": []
+      },
+      "builder": "makeKinesisAccountHttpBinding"
+    },
+    "MergeShards": {
+      "operation": "mergeShards",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "MergeShardsRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "PutRecord": {
+      "operation": "putRecord",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "PutRecordRequest",
+        "omit": ["StreamName"]
+      },
+      "with": {
+        "key": "StreamName"
+      }
+    },
+    "PutRecords": {
+      "operation": "putRecords",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "PutRecordsRequest",
+        "omit": ["StreamName"]
+      },
+      "with": {
+        "key": "StreamName"
+      }
+    },
+    "SplitShard": {
+      "operation": "splitShard",
+      "resource": "Stream",
+      "request": {
+        "mode": "required",
+        "interface": "SplitShardRequest",
+        "omit": ["StreamName", "StreamARN"]
+      },
+      "with": {
+        "key": "StreamARN"
+      }
+    },
+    "SubscribeToShard": {
+      "operation": "subscribeToShard",
+      "resource": "StreamConsumer",
+      "param": "consumer",
+      "request": {
+        "mode": "required",
+        "interface": "SubscribeToShardRequest",
+        "omit": ["ConsumerARN"]
+      },
+      "builder": "makeConsumerHttpBinding"
+    }
+  }
+}

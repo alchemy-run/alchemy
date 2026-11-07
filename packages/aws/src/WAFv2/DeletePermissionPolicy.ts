@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2RuleGroupHttpBinding } from "./BindingHttp.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 /**
@@ -35,4 +38,13 @@ export interface DeletePermissionPolicy extends Binding.Service<
 
 export const DeletePermissionPolicy = Binding.Service<DeletePermissionPolicy>(
   "AWS.WAFv2.DeletePermissionPolicy",
+);
+
+export const DeletePermissionPolicyHttp = Layer.effect(
+  DeletePermissionPolicy,
+  makeWafv2RuleGroupHttpBinding({
+    tag: "AWS.WAFv2.DeletePermissionPolicy",
+    operation: wafv2.deletePermissionPolicy,
+    actions: ["wafv2:DeletePermissionPolicy"],
+  }),
 );

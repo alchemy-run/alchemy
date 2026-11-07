@@ -1,6 +1,8 @@
-import type * as sagemaker from "@distilled.cloud/aws/sagemaker-runtime";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEndpointInvocationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `InvokeEndpointAsync` request with the binding-injected `EndpointName`
@@ -64,4 +66,13 @@ export interface InvokeEndpointAsync extends Binding.Service<
 > {}
 export const InvokeEndpointAsync = Binding.Service<InvokeEndpointAsync>(
   "AWS.SageMakerRuntime.InvokeEndpointAsync",
+);
+
+export const InvokeEndpointAsyncHttp = Layer.effect(
+  InvokeEndpointAsync,
+  makeEndpointInvocationHttpBinding({
+    tag: "AWS.SageMakerRuntime.InvokeEndpointAsync",
+    operation: sagemaker.invokeEndpointAsync,
+    actions: ["sagemaker:InvokeEndpointAsync"],
+  }),
 );

@@ -1,0 +1,159 @@
+{
+  "tag": "AWS.Forecast",
+  "module": "forecast",
+  "resources": {},
+  "builder": "makeForecastHttpBinding",
+  "builders": {
+    "makeForecastHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CreateAutoPredictor": {
+      "operation": "createAutoPredictor",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "CreateDatasetImportJob": {
+      "operation": "createDatasetImportJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "CreateForecast": {
+      "operation": "createForecast",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateForecastExportJob": {
+      "operation": "createForecastExportJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      },
+      "note": "Destination hands Forecast a role to write the export to S3."
+    },
+    "CreateWhatIfAnalysis": {
+      "operation": "createWhatIfAnalysis",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateWhatIfForecast": {
+      "operation": "createWhatIfForecast",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      },
+      "note": "TimeSeriesReplacementsDataSource hands Forecast a role to read S3."
+    },
+    "CreateWhatIfForecastExport": {
+      "operation": "createWhatIfForecastExport",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      },
+      "note": "Destination hands Forecast a role to write the export to S3."
+    },
+    "DeleteResourceTree": {
+      "operation": "deleteResourceTree",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeAutoPredictor": {
+      "operation": "describeAutoPredictor",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDatasetImportJob": {
+      "operation": "describeDatasetImportJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeForecast": {
+      "operation": "describeForecast",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeForecastExportJob": {
+      "operation": "describeForecastExportJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeWhatIfAnalysis": {
+      "operation": "describeWhatIfAnalysis",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeWhatIfForecast": {
+      "operation": "describeWhatIfForecast",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeWhatIfForecastExport": {
+      "operation": "describeWhatIfForecastExport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetAccuracyMetrics": {
+      "operation": "getAccuracyMetrics",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "QueryForecast": {
+      "operation": "queryForecast",
+      "request": {
+        "mode": "required"
+      },
+      "module": "forecastquery"
+    },
+    "QueryWhatIfForecast": {
+      "operation": "queryWhatIfForecast",
+      "request": {
+        "mode": "required"
+      },
+      "module": "forecastquery"
+    },
+    "ResumeResource": {
+      "operation": "resumeResource",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopResource": {
+      "operation": "stopResource",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

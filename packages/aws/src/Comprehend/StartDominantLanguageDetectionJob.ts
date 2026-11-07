@@ -1,7 +1,9 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeComprehendStartJobHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `StartDominantLanguageDetectionJob` request with `DataAccessRoleArn` defaulting to the role the
@@ -65,4 +67,13 @@ export interface StartDominantLanguageDetectionJob extends Binding.Service<
 > {}
 export const StartDominantLanguageDetectionJob = Binding.Service<StartDominantLanguageDetectionJob>(
   "AWS.Comprehend.StartDominantLanguageDetectionJob",
+);
+
+export const StartDominantLanguageDetectionJobHttp = Layer.effect(
+  StartDominantLanguageDetectionJob,
+  makeComprehendStartJobHttpBinding({
+    tag: "AWS.Comprehend.StartDominantLanguageDetectionJob",
+    operation: comprehend.startDominantLanguageDetectionJob,
+    actions: ["comprehend:StartDominantLanguageDetectionJob"],
+  }),
 );

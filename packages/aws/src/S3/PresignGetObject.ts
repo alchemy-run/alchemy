@@ -1,6 +1,12 @@
+import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Presign from "@distilled.cloud/aws/Presign";
 import type { PresignError } from "@distilled.cloud/aws/Presign";
+import type * as Region from "@distilled.cloud/aws/Region";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface PresignGetObjectRequest {
@@ -78,3 +84,41 @@ export interface PresignGetObject extends Binding.Service<
 > {}
 
 export const PresignGetObject = Binding.Service<PresignGetObject>("AWS.S3.PresignGetObject");
+
+export const PresignGetObjectHttp = Layer.effect(
+  PresignGetObject,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const services = yield* AWSBindings.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
+
+    return Effect.fn(function* (bucket: Bucket) {
+      const BucketName = yield* bucket.bucketName;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.S3.PresignGetObject(${bucket})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject", "s3:GetObjectVersion"],
+              Resource: [Output.interpolate`${bucket.bucketArn}/*`],
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.S3.PresignGetObject(${bucket.LogicalId})`)(function* (
+        request: PresignGetObjectRequest,
+      ) {
+        const bucketName = yield* BucketName;
+        return yield* Presign.presignS3Url({
+          method: "GET",
+          bucket: bucketName,
+          key: request.key,
+          versionId: request.versionId,
+          expiresIn: request.expiresIn,
+          responseContentType: request.contentType,
+        }).pipe(Effect.provideContext(services));
+      });
+    });
+  }),
+);

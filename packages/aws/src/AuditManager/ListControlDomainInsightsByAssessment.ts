@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `ListControlDomainInsightsByAssessment` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface ListControlDomainInsightsByAssessmentRequest extends Omit<
@@ -43,3 +45,12 @@ export const ListControlDomainInsightsByAssessment =
   Binding.Service<ListControlDomainInsightsByAssessment>(
     "AWS.AuditManager.ListControlDomainInsightsByAssessment",
   );
+
+export const ListControlDomainInsightsByAssessmentHttp = Layer.effect(
+  ListControlDomainInsightsByAssessment,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.ListControlDomainInsightsByAssessment",
+    operation: auditmanager.listControlDomainInsightsByAssessment,
+    actions: ["auditmanager:ListControlDomainInsightsByAssessment"],
+  }),
+);

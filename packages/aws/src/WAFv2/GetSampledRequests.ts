@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2WebAclHttpBinding } from "./BindingHttp.ts";
 import type { WebACL } from "./WebACL.ts";
 
 export interface GetSampledRequestsRequest extends Omit<
@@ -49,4 +52,14 @@ export interface GetSampledRequests extends Binding.Service<
 
 export const GetSampledRequests = Binding.Service<GetSampledRequests>(
   "AWS.WAFv2.GetSampledRequests",
+);
+
+export const GetSampledRequestsHttp = Layer.effect(
+  GetSampledRequests,
+  makeWafv2WebAclHttpBinding({
+    tag: "AWS.WAFv2.GetSampledRequests",
+    operation: wafv2.getSampledRequests,
+    actions: ["wafv2:GetSampledRequests"],
+    inject: (acl) => ({ WebAclArn: acl.arn, Scope: acl.scope }),
+  }),
 );

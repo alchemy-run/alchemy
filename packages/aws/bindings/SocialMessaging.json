@@ -1,0 +1,236 @@
+{
+  "tag": "AWS.SocialMessaging",
+  "module": "socialmessaging",
+  "resources": {
+    "LinkedWhatsAppBusinessAccount": {
+      "file": "LinkedWhatsAppBusinessAccount.ts"
+    }
+  },
+  "builder": "makeWabaScopedHttpBinding",
+  "builders": {
+    "makeWabaPhonePlaneHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeWabaScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateWhatsAppFlow": {
+      "operation": "createWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "CreateWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "CreateWhatsAppMessageTemplate": {
+      "operation": "createWhatsAppMessageTemplate",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "CreateWhatsAppMessageTemplateRequest",
+        "omit": ["id"]
+      }
+    },
+    "CreateWhatsAppMessageTemplateMedia": {
+      "operation": "createWhatsAppMessageTemplateMedia",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "CreateWhatsAppMessageTemplateMediaRequest",
+        "omit": ["id"]
+      }
+    },
+    "DeleteWhatsAppFlow": {
+      "operation": "deleteWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "DeleteWhatsAppMessageMedia": {
+      "operation": "deleteWhatsAppMessageMedia",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeWabaPhonePlaneHttpBinding"
+    },
+    "DeleteWhatsAppMessageTemplate": {
+      "operation": "deleteWhatsAppMessageTemplate",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteWhatsAppMessageTemplateRequest",
+        "omit": ["id"]
+      }
+    },
+    "DeprecateWhatsAppFlow": {
+      "operation": "deprecateWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "DeprecateWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "GetLinkedWhatsAppBusinessAccountPhoneNumber": {
+      "operation": "getLinkedWhatsAppBusinessAccountPhoneNumber",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeWabaPhonePlaneHttpBinding"
+    },
+    "GetWhatsAppFlow": {
+      "operation": "getWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "GetWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "GetWhatsAppFlowPreview": {
+      "operation": "getWhatsAppFlowPreview",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "GetWhatsAppFlowPreviewRequest",
+        "omit": ["id"]
+      }
+    },
+    "GetWhatsAppMessageMedia": {
+      "operation": "getWhatsAppMessageMedia",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeWabaPhonePlaneHttpBinding"
+    },
+    "GetWhatsAppMessageTemplate": {
+      "operation": "getWhatsAppMessageTemplate",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "GetWhatsAppMessageTemplateRequest",
+        "omit": ["id"]
+      }
+    },
+    "ListWhatsAppFlowAssets": {
+      "operation": "listWhatsAppFlowAssets",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "ListWhatsAppFlowAssetsRequest",
+        "omit": ["id"]
+      }
+    },
+    "ListWhatsAppFlows": {
+      "operation": "listWhatsAppFlows",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "optional",
+        "interface": "ListWhatsAppFlowsRequest",
+        "omit": ["id"]
+      }
+    },
+    "ListWhatsAppMessageTemplates": {
+      "operation": "listWhatsAppMessageTemplates",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "optional",
+        "interface": "ListWhatsAppMessageTemplatesRequest",
+        "omit": ["id"]
+      }
+    },
+    "ListWhatsAppTemplateLibrary": {
+      "operation": "listWhatsAppTemplateLibrary",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "optional",
+        "interface": "ListWhatsAppTemplateLibraryRequest",
+        "omit": ["id"]
+      }
+    },
+    "PostWhatsAppMessageMedia": {
+      "operation": "postWhatsAppMessageMedia",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeWabaPhonePlaneHttpBinding"
+    },
+    "PublishWhatsAppFlow": {
+      "operation": "publishWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "PublishWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "SendWhatsAppMessage": {
+      "operation": "sendWhatsAppMessage",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeWabaPhonePlaneHttpBinding"
+    },
+    "UpdateWhatsAppFlow": {
+      "operation": "updateWhatsAppFlow",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateWhatsAppFlowRequest",
+        "omit": ["id"]
+      }
+    },
+    "UpdateWhatsAppFlowAssets": {
+      "operation": "updateWhatsAppFlowAssets",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateWhatsAppFlowAssetsRequest",
+        "omit": ["id"]
+      }
+    },
+    "UpdateWhatsAppMessageTemplate": {
+      "operation": "updateWhatsAppMessageTemplate",
+      "resource": "LinkedWhatsAppBusinessAccount",
+      "param": "account",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateWhatsAppMessageTemplateRequest",
+        "omit": ["id"]
+      }
+    }
+  }
+}

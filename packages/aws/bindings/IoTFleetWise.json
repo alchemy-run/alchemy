@@ -1,0 +1,205 @@
+{
+  "tag": "AWS.IoTFleetWise",
+  "module": "iotfleetwise",
+  "resources": {
+    "Campaign": {
+      "file": "Campaign.ts"
+    },
+    "DecoderManifest": {
+      "file": "DecoderManifest.ts"
+    },
+    "Fleet": {
+      "file": "Fleet.ts"
+    },
+    "ModelManifest": {
+      "file": "ModelManifest.ts"
+    },
+    "SignalCatalog": {
+      "file": "SignalCatalog.ts"
+    },
+    "Vehicle": {
+      "file": "Vehicle.ts"
+    }
+  },
+  "builder": "makeFleetWiseResourceHttpBinding",
+  "builders": {
+    "makeFleetWiseAccountHttpBinding": {},
+    "makeFleetWiseResourceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AssociateVehicleFleet": {
+      "operation": "associateVehicleFleet",
+      "resource": "Fleet",
+      "request": {
+        "mode": "required",
+        "interface": "AssociateVehicleFleetRequest",
+        "omit": ["fleetId"]
+      },
+      "with": {
+        "requestKey": "fleetId"
+      },
+      "withTs": {
+        "identifier": "(fleet: Fleet) => fleet.fleetId",
+        "resources": "(fleet: Fleet) => [fleet.fleetArn, \"arn:aws:iotfleetwise:*:*:vehicle/*\"]"
+      },
+      "note": "The action authorizes on both the fleet and the vehicle; the vehicle is a runtime argument, so its grant is the account-wide pattern."
+    },
+    "BatchCreateVehicle": {
+      "operation": "batchCreateVehicle",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeFleetWiseAccountHttpBinding",
+      "note": "The vehicle ARNs only exist after the call; iot:CreateThing / iot:DescribeThing are dependent actions when the association behavior auto-creates the backing IoT thing."
+    },
+    "BatchUpdateVehicle": {
+      "operation": "batchUpdateVehicle",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeFleetWiseAccountHttpBinding",
+      "with": {
+        "resources": ["arn:aws:iotfleetwise:*:*:vehicle/*"]
+      },
+      "note": "The vehicle names are runtime arguments, so the grant is the account-wide vehicle pattern."
+    },
+    "DisassociateVehicleFleet": {
+      "operation": "disassociateVehicleFleet",
+      "resource": "Fleet",
+      "request": {
+        "mode": "required",
+        "interface": "DisassociateVehicleFleetRequest",
+        "omit": ["fleetId"]
+      },
+      "with": {
+        "requestKey": "fleetId"
+      },
+      "withTs": {
+        "identifier": "(fleet: Fleet) => fleet.fleetId",
+        "resources": "(fleet: Fleet) => [fleet.fleetArn, \"arn:aws:iotfleetwise:*:*:vehicle/*\"]"
+      }
+    },
+    "GetVehicleStatus": {
+      "operation": "getVehicleStatus",
+      "resource": "Vehicle",
+      "request": {
+        "mode": "optional",
+        "interface": "GetVehicleStatusRequest",
+        "omit": ["vehicleName"]
+      },
+      "with": {
+        "requestKey": "vehicleName"
+      },
+      "withTs": {
+        "identifier": "(vehicle: Vehicle) => vehicle.vehicleName",
+        "resources": "(vehicle: Vehicle) => [vehicle.vehicleArn, \"arn:aws:iotfleetwise:*:*:campaign/*\"]"
+      },
+      "note": "GetVehicleStatus authorizes on both the vehicle and its associated campaigns — the campaign ARNs are unknowable at deploy time."
+    },
+    "ListDecoderManifestSignals": {
+      "operation": "listDecoderManifestSignals",
+      "resource": "DecoderManifest",
+      "param": "decoder",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDecoderManifestSignalsRequest",
+        "omit": ["name"]
+      },
+      "with": {
+        "requestKey": "name"
+      },
+      "withTs": {
+        "identifier": "(decoder: DecoderManifest) => decoder.decoderManifestName",
+        "resources": "(decoder: DecoderManifest) => [decoder.decoderManifestArn]"
+      }
+    },
+    "ListFleetsForVehicle": {
+      "operation": "listFleetsForVehicle",
+      "resource": "Vehicle",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFleetsForVehicleRequest",
+        "omit": ["vehicleName"]
+      },
+      "with": {
+        "requestKey": "vehicleName"
+      },
+      "withTs": {
+        "identifier": "(vehicle: Vehicle) => vehicle.vehicleName",
+        "resources": "(vehicle: Vehicle) => [vehicle.vehicleArn]"
+      }
+    },
+    "ListModelManifestNodes": {
+      "operation": "listModelManifestNodes",
+      "resource": "ModelManifest",
+      "param": "model",
+      "request": {
+        "mode": "optional",
+        "interface": "ListModelManifestNodesRequest",
+        "omit": ["name"]
+      },
+      "with": {
+        "requestKey": "name"
+      },
+      "withTs": {
+        "identifier": "(model: ModelManifest) => model.modelManifestName",
+        "resources": "(model: ModelManifest) => [model.modelManifestArn]"
+      }
+    },
+    "ListSignalCatalogNodes": {
+      "operation": "listSignalCatalogNodes",
+      "resource": "SignalCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSignalCatalogNodesRequest",
+        "omit": ["name"]
+      },
+      "with": {
+        "requestKey": "name"
+      },
+      "withTs": {
+        "identifier": "(catalog: SignalCatalog) => catalog.signalCatalogName",
+        "resources": "(catalog: SignalCatalog) => [catalog.signalCatalogArn]"
+      }
+    },
+    "ListVehicles": {
+      "operation": "listVehicles",
+      "builder": "makeFleetWiseAccountHttpBinding"
+    },
+    "ListVehiclesInFleet": {
+      "operation": "listVehiclesInFleet",
+      "resource": "Fleet",
+      "request": {
+        "mode": "optional",
+        "interface": "ListVehiclesInFleetRequest",
+        "omit": ["fleetId"]
+      },
+      "with": {
+        "requestKey": "fleetId"
+      },
+      "withTs": {
+        "identifier": "(fleet: Fleet) => fleet.fleetId",
+        "resources": "(fleet: Fleet) => [fleet.fleetArn]"
+      }
+    },
+    "UpdateCampaign": {
+      "operation": "updateCampaign",
+      "resource": "Campaign",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateCampaignRequest",
+        "omit": ["name"]
+      },
+      "with": {
+        "requestKey": "name"
+      },
+      "withTs": {
+        "identifier": "(campaign: Campaign) => campaign.campaignName",
+        "resources": "(campaign: Campaign) => [campaign.campaignArn]"
+      }
+    }
+  }
+}

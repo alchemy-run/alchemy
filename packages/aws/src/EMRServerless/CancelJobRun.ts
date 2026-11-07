@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link CancelJobRun} runtime callable. The
@@ -37,3 +39,13 @@ export interface CancelJobRun extends Binding.Service<
   >
 > {}
 export const CancelJobRun = Binding.Service<CancelJobRun>("AWS.EMRServerless.CancelJobRun");
+
+export const CancelJobRunHttp = Layer.effect(
+  CancelJobRun,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.CancelJobRun",
+    operation: emr.cancelJobRun,
+    actions: ["emr-serverless:CancelJobRun"],
+    subresources: ["/jobruns/*"],
+  }),
+);

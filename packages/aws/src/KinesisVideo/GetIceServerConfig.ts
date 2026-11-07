@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvs from "@distilled.cloud/aws/kinesis-video-signaling";
+import * as kvs from "@distilled.cloud/aws/kinesis-video-signaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChannelSignalingHttpBinding } from "./BindingHttp.ts";
 import type { SignalingEndpointUnavailable } from "./internal.ts";
 import type { SignalingChannel } from "./SignalingChannel.ts";
 
@@ -69,4 +71,18 @@ export interface GetIceServerConfig extends Binding.Service<
 
 export const GetIceServerConfig = Binding.Service<GetIceServerConfig>(
   "AWS.KinesisVideo.GetIceServerConfig",
+);
+
+export const GetIceServerConfigHttp = Layer.effect(
+  GetIceServerConfig,
+  makeChannelSignalingHttpBinding({
+    tag: "AWS.KinesisVideo.GetIceServerConfig",
+    // GetIceServerConfig is served by the channel's HTTPS signaling
+    // endpoint; the MASTER role endpoint answers for either peer role.
+    protocol: "HTTPS",
+    role: "MASTER",
+    actions: ["kinesisvideo:GetIceServerConfig"],
+    key: "ChannelARN",
+    operation: kvs.getIceServerConfig,
+  }),
 );

@@ -2,7 +2,9 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAmpWorkspaceHttpBinding, toPromTime } from "./BindingHttp.ts";
 import type { PrometheusApiError, PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
@@ -62,3 +64,31 @@ export interface GetLabels extends Binding.Service<
   (workspace: Workspace) => Effect.Effect<GetLabelsClient>
 > {}
 export const GetLabels = Binding.Service<GetLabels>("AWS.AMP.GetLabels");
+
+const rangeParams = (request: GetLabelsRequest) => ({
+  "match[]": request.match,
+  start: request.start !== undefined ? toPromTime(request.start) : undefined,
+  end: request.end !== undefined ? toPromTime(request.end) : undefined,
+});
+
+export const GetLabelsHttp = Layer.effect(
+  GetLabels,
+  makeAmpWorkspaceHttpBinding({
+    name: "GetLabels",
+    iamActions: ["aps:GetLabels"],
+    makeClient: (send): GetLabelsClient => ({
+      labelNames: (request: GetLabelsRequest = {}) =>
+        send({
+          method: "GET",
+          path: "api/v1/labels",
+          query: rangeParams(request),
+        }).pipe(Effect.map((data) => data as string[])),
+      labelValues: (request: GetLabelValuesRequest) =>
+        send({
+          method: "GET",
+          path: `api/v1/label/${encodeURIComponent(request.label)}/values`,
+          query: rangeParams(request),
+        }).pipe(Effect.map((data) => data as string[])),
+    }),
+  }),
+);

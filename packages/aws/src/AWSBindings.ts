@@ -516,6 +516,49 @@ const withWebIdentity = Effect.fn(function* <Op>(
   );
 });
 
+/** The ARN partition of a region: `aws`, `aws-cn`, `aws-us-gov`, or an isolated one. */
+export const partitionOf = (region: string): string =>
+  region.startsWith("cn-")
+    ? "aws-cn"
+    : region.startsWith("us-gov-")
+      ? "aws-us-gov"
+      : region.startsWith("us-isob-")
+        ? "aws-iso-b"
+        : region.startsWith("us-iso-")
+          ? "aws-iso"
+          : region.startsWith("eu-isoe-")
+            ? "aws-iso-e"
+            : "aws";
+
+/**
+ * An ARN in the deploying account and region, from an ARN format in AWS's
+ * Service Authorization Reference: `${Partition}`, `${Region}`, and
+ * `${Account}` are filled in at deploy, so a grant on resources a host only
+ * names at runtime (`arn:${Partition}:batch:${Region}:${Account}:job/*`)
+ * stays inside this account and region instead of `*`.
+ */
+export const accountArn = (format: string): Output.Output<string> =>
+  Output.fromEffect(
+    AWSEnvironment.use((env) =>
+      Effect.map(env, ({ accountId, region }) =>
+        format
+          .replaceAll("${Partition}", partitionOf(region))
+          .replaceAll("${Region}", region)
+          .replaceAll("${Account}", accountId),
+      ),
+    ),
+  ) as Output.Output<string>;
+
+/**
+ * The `Resource` of a grant whose builder has no resource to name: the
+ * {@link accountArn}s of `arns` when given, `*` otherwise (for actions AWS
+ * authorizes only on `*`).
+ */
+export const grantResources = (
+  arns: readonly string[] | undefined,
+): (string | Output.Output<string>)[] =>
+  arns === undefined || arns.length === 0 ? ["*"] : arns.map(accountArn);
+
 /**
  * Resolve a distilled operation (or several, with `Effect.all`) with the
  * host's AWS credentials, once when the binding's layer is built: by

@@ -1,0 +1,44 @@
+{
+  "tag": "AWS.NotificationsContacts",
+  "module": "notificationscontacts",
+  "alias": "contacts",
+  "resources": {
+    "EmailContact": {
+      "file": "EmailContact.ts"
+    }
+  },
+  "builder": "makeEmailContactHttpBinding",
+  "builders": {
+    "makeEmailContactHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ActivateEmailContact": {
+      "operation": "activateEmailContact",
+      "resource": "EmailContact",
+      "param": "contact",
+      "request": {
+        "mode": "required",
+        "interface": "ActivateEmailContactRequest",
+        "omit": ["arn"]
+      }
+    },
+    "GetEmailContact": {
+      "operation": "getEmailContact",
+      "resource": "EmailContact",
+      "param": "contact",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "SendActivationCode": {
+      "operation": "sendActivationCode",
+      "resource": "EmailContact",
+      "param": "contact",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

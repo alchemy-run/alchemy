@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 
 export interface ListSubscriptionsRequest extends iotdata.ListSubscriptionsRequest {}
 
@@ -38,3 +40,17 @@ export interface ListSubscriptions extends Binding.Service<
 > {}
 
 export const ListSubscriptions = Binding.Service<ListSubscriptions>("AWS.IoT.ListSubscriptions");
+
+/**
+ * HTTP implementation of the {@link ListSubscriptions} capability — grants
+ * `iot:ListSubscriptions` on the bound client filter and calls the IoT
+ * data-plane `ListSubscriptions` API.
+ */
+export const ListSubscriptionsHttp = Layer.effect(
+  ListSubscriptions,
+  makeIotClientHttpBinding({
+    tag: "AWS.IoT.ListSubscriptions",
+    operation: iotdata.listSubscriptions,
+    actions: ["iot:ListSubscriptions"],
+  }),
+);

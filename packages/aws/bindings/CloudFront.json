@@ -1,0 +1,117 @@
+{
+  "tag": "AWS.CloudFront",
+  "module": "cloudfront-keyvaluestore",
+  "alias": "kvs",
+  "resources": {
+    "Distribution": {
+      "file": "Distribution.ts"
+    },
+    "KeyValueStore": {
+      "file": "KeyValueStore.ts"
+    }
+  },
+  "builder": "makeKeyValueStoreScopedHttpBinding",
+  "builders": {
+    "makeDistributionScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeKeyValueStoreScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateInvalidation": {
+      "operation": "createInvalidation",
+      "resource": "Distribution",
+      "request": {
+        "mode": "required",
+        "interface": "CreateInvalidationRequest",
+        "omit": ["DistributionId"]
+      },
+      "builder": "makeDistributionScopedHttpBinding",
+      "module": "cloudfront"
+    },
+    "DeleteKey": {
+      "operation": "deleteKey",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteKeyRequest",
+        "omit": ["KvsARN"]
+      }
+    },
+    "DescribeKeyValueStore": {
+      "operation": "describeKeyValueStore",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeKeyValueStoreRequest",
+        "omit": ["KvsARN"]
+      }
+    },
+    "GetInvalidation": {
+      "operation": "getInvalidation",
+      "resource": "Distribution",
+      "request": {
+        "mode": "required",
+        "interface": "GetInvalidationRequest",
+        "omit": ["DistributionId"]
+      },
+      "builder": "makeDistributionScopedHttpBinding",
+      "module": "cloudfront"
+    },
+    "GetKey": {
+      "operation": "getKey",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "GetKeyRequest",
+        "omit": ["KvsARN"]
+      }
+    },
+    "ListInvalidations": {
+      "operation": "listInvalidations",
+      "resource": "Distribution",
+      "request": {
+        "mode": "required",
+        "interface": "ListInvalidationsRequest",
+        "omit": ["DistributionId"]
+      },
+      "builder": "makeDistributionScopedHttpBinding",
+      "module": "cloudfront"
+    },
+    "ListKeys": {
+      "operation": "listKeys",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "ListKeysRequest",
+        "omit": ["KvsARN"]
+      }
+    },
+    "PutKey": {
+      "operation": "putKey",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "PutKeyRequest",
+        "omit": ["KvsARN"]
+      }
+    },
+    "UpdateKeys": {
+      "operation": "updateKeys",
+      "resource": "KeyValueStore",
+      "param": "store",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateKeysRequest",
+        "omit": ["KvsARN"]
+      }
+    }
+  }
+}

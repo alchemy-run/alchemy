@@ -1,6 +1,8 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEventBridgeRuleHttpBinding } from "./BindingHttp.ts";
 import type { Rule } from "./Rule.ts";
 
 export interface DescribeRuleRequest extends Omit<
@@ -39,3 +41,19 @@ export interface DescribeRule extends Binding.Service<
   >
 > {}
 export const DescribeRule = Binding.Service<DescribeRule>("AWS.EventBridge.DescribeRule");
+
+/**
+ * HTTP implementation of {@link DescribeRule}. At deploy time it grants
+ * `events:DescribeRule` on the bound rule; at runtime it calls the
+ * EventBridge API with the host Function's credentials. Provide this layer on
+ * the Function using the binding.
+ */
+export const DescribeRuleHttp = Layer.effect(
+  DescribeRule,
+  makeEventBridgeRuleHttpBinding({
+    tag: "AWS.EventBridge.DescribeRule",
+    operation: eventbridge.describeRule,
+    actions: ["events:DescribeRule"],
+    ruleNameKey: "Name",
+  }),
+);

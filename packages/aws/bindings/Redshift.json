@@ -1,0 +1,82 @@
+{
+  "tag": "AWS.Redshift",
+  "module": "redshift",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeRedshiftAccountHttpBinding",
+  "builders": {
+    "makeRedshiftAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeRedshiftClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CopyClusterSnapshot": {
+      "operation": "copyClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateClusterSnapshot": {
+      "operation": "createClusterSnapshot",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRedshiftClusterHttpBinding",
+      "withTs": {
+        "extraResources": "(clusterArn) => [clusterSnapshotArnPattern(clusterArn)]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["clusterSnapshotArnPattern"]
+      }
+    },
+    "DeleteClusterSnapshot": {
+      "operation": "deleteClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeClusterSnapshots": {
+      "operation": "describeClusterSnapshots"
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters"
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents"
+    },
+    "PauseCluster": {
+      "operation": "pauseCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRedshiftClusterHttpBinding"
+    },
+    "RebootCluster": {
+      "operation": "rebootCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRedshiftClusterHttpBinding"
+    },
+    "ResumeCluster": {
+      "operation": "resumeCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRedshiftClusterHttpBinding"
+    }
+  }
+}

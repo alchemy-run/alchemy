@@ -1,0 +1,90 @@
+{
+  "tag": "AWS.Budgets",
+  "module": "budgets",
+  "resources": {
+    "Budget": {
+      "file": "Budget.ts"
+    },
+    "BudgetAction": {
+      "file": "BudgetAction.ts"
+    }
+  },
+  "builder": "makeBudgetHttpBinding",
+  "builders": {
+    "makeBudgetActionHttpBinding": {
+      "grants": "resource"
+    },
+    "makeBudgetHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeBudget": {
+      "operation": "describeBudget",
+      "resource": "Budget",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeBudgetRequest",
+        "omit": ["AccountId", "BudgetName"]
+      }
+    },
+    "DescribeBudgetActionHistories": {
+      "operation": "describeBudgetActionHistories",
+      "resource": "BudgetAction",
+      "param": "action",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeBudgetActionHistoriesRequest",
+        "omit": ["AccountId", "BudgetName", "ActionId"]
+      },
+      "builder": "makeBudgetActionHttpBinding"
+    },
+    "DescribeBudgetActionsForBudget": {
+      "operation": "describeBudgetActionsForBudget",
+      "resource": "Budget",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeBudgetActionsForBudgetRequest",
+        "omit": ["AccountId", "BudgetName"]
+      }
+    },
+    "DescribeBudgetPerformanceHistory": {
+      "operation": "describeBudgetPerformanceHistory",
+      "resource": "Budget",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeBudgetPerformanceHistoryRequest",
+        "omit": ["AccountId", "BudgetName"]
+      }
+    },
+    "DescribeNotificationsForBudget": {
+      "operation": "describeNotificationsForBudget",
+      "resource": "Budget",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeNotificationsForBudgetRequest",
+        "omit": ["AccountId", "BudgetName"]
+      }
+    },
+    "DescribeSubscribersForNotification": {
+      "operation": "describeSubscribersForNotification",
+      "resource": "Budget",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeSubscribersForNotificationRequest",
+        "omit": ["AccountId", "BudgetName"]
+      }
+    },
+    "ExecuteBudgetAction": {
+      "operation": "executeBudgetAction",
+      "resource": "BudgetAction",
+      "param": "action",
+      "request": {
+        "mode": "required",
+        "interface": "ExecuteBudgetActionRequest",
+        "omit": ["AccountId", "BudgetName", "ActionId"]
+      },
+      "builder": "makeBudgetActionHttpBinding"
+    }
+  }
+}

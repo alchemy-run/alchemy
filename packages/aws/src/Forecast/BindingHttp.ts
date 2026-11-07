@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -39,6 +40,11 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
    * a `RoleArn`.
    */
   passRole?: boolean;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -46,12 +52,12 @@ export const makeForecastHttpBinding = <I, A, E, R>(options: {
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const policyStatements: PolicyStatement[] = [
+        const policyStatements: Input<PolicyStatement>[] = [
           {
             Effect: "Allow",
             Action: [...options.iamActions],
             // Runtime-created Forecast ARNs are unknowable at deploy time.
-            Resource: ["*"],
+            Resource: AWSBindings.grantResources(options.arns),
           },
         ];
         if (options.passRole) {

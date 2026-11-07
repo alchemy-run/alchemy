@@ -1,0 +1,56 @@
+{
+  "tag": "AWS.DAX",
+  "module": "dax",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeDaxClusterHttpBinding",
+  "builders": {
+    "makeDaxAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDaxClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DecreaseReplicationFactor": {
+      "operation": "decreaseReplicationFactor",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      }
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters",
+      "builder": "makeDaxAccountHttpBinding"
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents",
+      "builder": "makeDaxAccountHttpBinding"
+    },
+    "IncreaseReplicationFactor": {
+      "operation": "increaseReplicationFactor",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      }
+    },
+    "RebootNode": {
+      "operation": "rebootNode",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      }
+    }
+  }
+}

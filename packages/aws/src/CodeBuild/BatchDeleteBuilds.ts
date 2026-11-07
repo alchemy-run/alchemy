@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -32,4 +35,13 @@ export interface BatchDeleteBuilds extends Binding.Service<
 > {}
 export const BatchDeleteBuilds = Binding.Service<BatchDeleteBuilds>(
   "AWS.CodeBuild.BatchDeleteBuilds",
+);
+
+export const BatchDeleteBuildsHttp = Layer.effect(
+  BatchDeleteBuilds,
+  makeCodeBuildProjectHttpBinding({
+    tag: "AWS.CodeBuild.BatchDeleteBuilds",
+    operation: codebuild.batchDeleteBuilds,
+    actions: ["codebuild:BatchDeleteBuilds"],
+  }),
 );

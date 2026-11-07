@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -34,4 +37,13 @@ export interface GetKxConnectionString extends Binding.Service<
 > {}
 export const GetKxConnectionString = Binding.Service<GetKxConnectionString>(
   "AWS.FinSpace.GetKxConnectionString",
+);
+
+export const GetKxConnectionStringHttp = Layer.effect(
+  GetKxConnectionString,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.GetKxConnectionString",
+    operation: finspace.getKxConnectionString,
+    actions: ["finspace:GetKxConnectionString", "finspace:ConnectKxCluster"],
+  }),
 );

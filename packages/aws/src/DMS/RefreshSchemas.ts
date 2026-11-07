@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsConnectionScopedHttpBinding } from "./BindingHttp.ts";
 import type { Endpoint } from "./Endpoint.ts";
 import type { ReplicationInstance } from "./ReplicationInstance.ts";
 
@@ -35,3 +37,12 @@ export interface RefreshSchemas extends Binding.Service<
 > {}
 
 export const RefreshSchemas = Binding.Service<RefreshSchemas>("AWS.DMS.RefreshSchemas");
+
+export const RefreshSchemasHttp = Layer.effect(
+  RefreshSchemas,
+  makeDmsConnectionScopedHttpBinding({
+    tag: "AWS.DMS.RefreshSchemas",
+    actions: ["dms:RefreshSchemas"],
+    operation: dms.refreshSchemas,
+  }),
+);

@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallFirewallHttpBinding } from "./BindingHttp.ts";
 import type { Firewall } from "./Firewall.ts";
 
 export interface ListFlowOperationResultsRequest extends Omit<
@@ -44,4 +47,13 @@ export interface ListFlowOperationResults extends Binding.Service<
 
 export const ListFlowOperationResults = Binding.Service<ListFlowOperationResults>(
   "AWS.NetworkFirewall.ListFlowOperationResults",
+);
+
+export const ListFlowOperationResultsHttp = Layer.effect(
+  ListFlowOperationResults,
+  makeNetworkFirewallFirewallHttpBinding({
+    tag: "AWS.NetworkFirewall.ListFlowOperationResults",
+    operation: nfw.listFlowOperationResults,
+    actions: ["network-firewall:ListFlowOperationResults"],
+  }),
 );

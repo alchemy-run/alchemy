@@ -1,6 +1,8 @@
-import type * as dms from "@distilled.cloud/aws/database-migration-service";
+import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDmsConnectionScopedHttpBinding } from "./BindingHttp.ts";
 import type { Endpoint } from "./Endpoint.ts";
 import type { ReplicationInstance } from "./ReplicationInstance.ts";
 
@@ -35,3 +37,12 @@ export interface TestConnection extends Binding.Service<
 > {}
 
 export const TestConnection = Binding.Service<TestConnection>("AWS.DMS.TestConnection");
+
+export const TestConnectionHttp = Layer.effect(
+  TestConnection,
+  makeDmsConnectionScopedHttpBinding({
+    tag: "AWS.DMS.TestConnection",
+    actions: ["dms:TestConnection"],
+    operation: dms.testConnection,
+  }),
+);

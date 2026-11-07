@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface ExecuteStatementOptions {
   secret: Secret;
@@ -92,3 +94,22 @@ export interface ExecuteStatement extends Binding.Service<
 > {}
 
 export const ExecuteStatement = Binding.Service<ExecuteStatement>("AWS.RDSData.ExecuteStatement");
+
+export const ExecuteStatementHttp = Layer.effect(
+  ExecuteStatement,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.ExecuteStatement",
+    action: "rds-data:ExecuteStatement",
+    operation: rdsdata.executeStatement,
+    makeInput: (
+      request: ExecuteStatementRequest,
+      { resourceArn, secretArn, database, schema },
+    ): rdsdata.ExecuteStatementRequest => ({
+      ...request,
+      resourceArn,
+      secretArn,
+      database,
+      schema,
+    }),
+  }),
+);

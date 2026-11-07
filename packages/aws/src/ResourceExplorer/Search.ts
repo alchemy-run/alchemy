@@ -1,6 +1,8 @@
-import type * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
+import * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceExplorerViewHttpBinding } from "./BindingHttp.ts";
 import type { View } from "./View.ts";
 
 export interface SearchRequest extends Omit<RE2.SearchInput, "ViewArn"> {}
@@ -34,3 +36,12 @@ export interface Search extends Binding.Service<
   ) => Effect.Effect<(request: SearchRequest) => Effect.Effect<RE2.SearchOutput, RE2.SearchError>>
 > {}
 export const Search = Binding.Service<Search>("AWS.ResourceExplorer.Search");
+
+export const SearchHttp = Layer.effect(
+  Search,
+  makeResourceExplorerViewHttpBinding({
+    tag: "AWS.ResourceExplorer.Search",
+    operation: RE2.search,
+    actions: ["resource-explorer-2:Search"],
+  }),
+);

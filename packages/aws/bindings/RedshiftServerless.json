@@ -1,0 +1,158 @@
+{
+  "tag": "AWS.RedshiftServerless",
+  "module": "redshift-serverless",
+  "alias": "serverless",
+  "resources": {
+    "Namespace": {
+      "file": "Namespace.ts"
+    }
+  },
+  "builder": "makeServerlessAccountHttpBinding",
+  "builders": {
+    "makeServerlessAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeServerlessNamespaceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ConvertRecoveryPointToSnapshot": {
+      "operation": "convertRecoveryPointToSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "DeleteSnapshot": {
+      "operation": "deleteSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetIdentityCenterAuthToken": {
+      "operation": "getIdentityCenterAuthToken",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetRecoveryPoint": {
+      "operation": "getRecoveryPoint",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSnapshot": {
+      "operation": "getSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTableRestoreStatus": {
+      "operation": "getTableRestoreStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRecoveryPoints": {
+      "operation": "listRecoveryPoints"
+    },
+    "ListSnapshots": {
+      "operation": "listSnapshots"
+    },
+    "ListTableRestoreStatus": {
+      "operation": "listTableRestoreStatus"
+    },
+    "RestoreFromRecoveryPoint": {
+      "operation": "restoreFromRecoveryPoint",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreFromSnapshot": {
+      "operation": "restoreFromSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreTableFromRecoveryPoint": {
+      "operation": "restoreTableFromRecoveryPoint",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:recoverypoint/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "RestoreTableFromSnapshot": {
+      "operation": "restoreTableFromSnapshot",
+      "resource": "Namespace",
+      "request": {
+        "mode": "required",
+        "omit": ["namespaceName"],
+        "inline": true
+      },
+      "builder": "makeServerlessNamespaceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => {const prefix = serverlessArnPrefix(arn); return [`${prefix}:snapshot/*`, `${prefix}:workgroup/*`];}"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["serverlessArnPrefix"]
+      },
+      "note": "The operation authorizes against sibling resource ARNs (snapshots, recovery points, the serving workgroup) in addition to the namespace."
+    },
+    "UpdateSnapshot": {
+      "operation": "updateSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

@@ -1,7 +1,9 @@
-import type * as sdb from "@distilled.cloud/aws/simpledb";
+import * as sdb from "@distilled.cloud/aws/simpledb";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSimpleDbBinding } from "./Binding.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface GetAttributesRequest extends Omit<sdb.GetAttributesRequest, "DomainName"> {}
@@ -37,3 +39,11 @@ export interface GetAttributes extends Binding.Service<
   >
 > {}
 export const GetAttributes = Binding.Service<GetAttributes>("AWS.SimpleDB.GetAttributes");
+
+export const GetAttributesHttp = Layer.effect(
+  GetAttributes,
+  makeSimpleDbBinding({
+    operation: "GetAttributes",
+    method: sdb.getAttributes,
+  }),
+);

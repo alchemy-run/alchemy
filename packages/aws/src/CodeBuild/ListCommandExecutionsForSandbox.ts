@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -32,4 +35,14 @@ export interface ListCommandExecutionsForSandbox extends Binding.Service<
 > {}
 export const ListCommandExecutionsForSandbox = Binding.Service<ListCommandExecutionsForSandbox>(
   "AWS.CodeBuild.ListCommandExecutionsForSandbox",
+);
+
+export const ListCommandExecutionsForSandboxHttp = Layer.effect(
+  ListCommandExecutionsForSandbox,
+  makeCodeBuildProjectHttpBinding({
+    tag: "AWS.CodeBuild.ListCommandExecutionsForSandbox",
+    operation: codebuild.listCommandExecutionsForSandbox,
+    actions: ["codebuild:ListCommandExecutionsForSandbox"],
+    sandboxScoped: true,
+  }),
 );

@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface UpdateMicrovmImageVersionRequest extends Omit<
@@ -34,3 +35,12 @@ export interface UpdateMicrovmImageVersion extends Binding.Service<
 export const UpdateMicrovmImageVersion = Binding.Service<UpdateMicrovmImageVersion>(
   "AWS.Lambda.UpdateMicrovmImageVersion",
 );
+
+export const UpdateMicrovmImageVersionHttp = makeImageBinding({
+  binding: UpdateMicrovmImageVersion,
+  name: "UpdateMicrovmImageVersion",
+  actions: ["lambda:UpdateMicrovmImageVersion"],
+  operation: microvms.updateMicrovmImageVersion,
+  scope: "image",
+  injectImageIdentifier: true,
+});

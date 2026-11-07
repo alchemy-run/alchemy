@@ -1,0 +1,40 @@
+{
+  "tag": "AWS.ECRPublic",
+  "module": "ecr-public",
+  "resources": {},
+  "builder": "makePublicRegistryHttpBinding",
+  "builders": {
+    "makePublicRegistryHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeRegistries": {
+      "operation": "describeRegistries",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeRegistriesRequest",
+        "omit": []
+      }
+    },
+    "GetAuthorizationToken": {
+      "operation": "getAuthorizationToken",
+      "request": {
+        "mode": "none"
+      },
+      "note": "The API requires both permissions; see the GetAuthorizationToken docs."
+    },
+    "GetRegistryCatalogData": {
+      "operation": "getRegistryCatalogData",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

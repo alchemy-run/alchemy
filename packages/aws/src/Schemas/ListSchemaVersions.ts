@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasSchemaHttpBinding } from "./BindingHttp.ts";
 import type { Schema } from "./Schema.ts";
 
 /**
@@ -38,4 +40,13 @@ export interface ListSchemaVersions extends Binding.Service<
 > {}
 export const ListSchemaVersions = Binding.Service<ListSchemaVersions>(
   "AWS.Schemas.ListSchemaVersions",
+);
+
+export const ListSchemaVersionsHttp = Layer.effect(
+  ListSchemaVersions,
+  makeSchemasSchemaHttpBinding({
+    tag: "AWS.Schemas.ListSchemaVersions",
+    operation: schemas.listSchemaVersions,
+    actions: ["schemas:ListSchemaVersions"],
+  }),
 );

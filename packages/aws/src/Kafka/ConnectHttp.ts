@@ -1,9 +1,18 @@
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
+import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import { groupArnGlob, topicArnGlob, transactionalIdArnGlob } from "./BindingHttp.ts";
-import { connectEnvPrefix } from "./Connect.ts";
 import type { ServerlessCluster } from "./ServerlessCluster.ts";
+
+/**
+ * Environment variable prefix under which the connect bindings publish the
+ * cluster endpoint on the host Function, derived from the cluster's logical
+ * ID. A cluster with logical ID `Events` yields `MSK_EVENTS` and the
+ * variables `MSK_EVENTS_BROKERS` and `MSK_EVENTS_ARN`.
+ */
+export const connectEnvPrefix = (logicalId: string): string =>
+  makeConnectEnvPrefix("MSK", logicalId);
 
 /**
  * Shared scaffolding for the MSK connect bindings.

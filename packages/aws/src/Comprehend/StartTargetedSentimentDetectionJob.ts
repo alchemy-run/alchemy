@@ -1,7 +1,9 @@
-import type * as comprehend from "@distilled.cloud/aws/comprehend";
+import * as comprehend from "@distilled.cloud/aws/comprehend";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeComprehendStartJobHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `StartTargetedSentimentDetectionJob` request with `DataAccessRoleArn` defaulting to the role the
@@ -67,3 +69,12 @@ export const StartTargetedSentimentDetectionJob =
   Binding.Service<StartTargetedSentimentDetectionJob>(
     "AWS.Comprehend.StartTargetedSentimentDetectionJob",
   );
+
+export const StartTargetedSentimentDetectionJobHttp = Layer.effect(
+  StartTargetedSentimentDetectionJob,
+  makeComprehendStartJobHttpBinding({
+    tag: "AWS.Comprehend.StartTargetedSentimentDetectionJob",
+    operation: comprehend.startTargetedSentimentDetectionJob,
+    actions: ["comprehend:StartTargetedSentimentDetectionJob"],
+  }),
+);

@@ -1,0 +1,110 @@
+{
+  "tag": "AWS.EntityResolution",
+  "module": "entityresolution",
+  "resources": {
+    "IdMappingWorkflow": {
+      "file": "IdMappingWorkflow.ts"
+    },
+    "MatchingWorkflow": {
+      "file": "MatchingWorkflow.ts"
+    }
+  },
+  "builder": "makeWorkflowHttpBinding",
+  "builders": {
+    "makeWorkflowHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchDeleteUniqueId": {
+      "operation": "batchDeleteUniqueId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "GenerateMatchId": {
+      "operation": "generateMatchId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "GetIdMappingJob": {
+      "operation": "getIdMappingJob",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "GetMatchId": {
+      "operation": "getMatchId",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "GetMatchingJob": {
+      "operation": "getMatchingJob",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "ListIdMappingJobs": {
+      "operation": "listIdMappingJobs",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "ListMatchingJobs": {
+      "operation": "listMatchingJobs",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "StartIdMappingJob": {
+      "operation": "startIdMappingJob",
+      "resource": "IdMappingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    },
+    "StartMatchingJob": {
+      "operation": "startMatchingJob",
+      "resource": "MatchingWorkflow",
+      "param": "workflow",
+      "request": {
+        "mode": "required",
+        "omit": ["workflowName"],
+        "inline": true
+      }
+    }
+  }
+}

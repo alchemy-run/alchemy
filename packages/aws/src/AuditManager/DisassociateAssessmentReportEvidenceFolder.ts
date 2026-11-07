@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `DisassociateAssessmentReportEvidenceFolder` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface DisassociateAssessmentReportEvidenceFolderRequest extends Omit<
@@ -43,3 +45,12 @@ export const DisassociateAssessmentReportEvidenceFolder =
   Binding.Service<DisassociateAssessmentReportEvidenceFolder>(
     "AWS.AuditManager.DisassociateAssessmentReportEvidenceFolder",
   );
+
+export const DisassociateAssessmentReportEvidenceFolderHttp = Layer.effect(
+  DisassociateAssessmentReportEvidenceFolder,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.DisassociateAssessmentReportEvidenceFolder",
+    operation: auditmanager.disassociateAssessmentReportEvidenceFolder,
+    actions: ["auditmanager:DisassociateAssessmentReportEvidenceFolder"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as xray from "@distilled.cloud/aws/xray";
+import * as xray from "@distilled.cloud/aws/xray";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeXRayHttpBinding } from "./BindingHttp.ts";
 
 export interface GetTimeSeriesServiceStatisticsRequest
   extends xray.GetTimeSeriesServiceStatisticsRequest {}
@@ -50,4 +52,31 @@ export interface GetTimeSeriesServiceStatistics extends Binding.Service<
 > {}
 export const GetTimeSeriesServiceStatistics = Binding.Service<GetTimeSeriesServiceStatistics>(
   "AWS.XRay.GetTimeSeriesServiceStatistics",
+);
+
+/**
+ * HTTP implementation of the `XRay.GetTimeSeriesServiceStatistics` binding.
+ *
+ * At deploy time it grants `xray:GetTimeSeriesServiceStatistics` on `*` to the host Lambda
+ * Function (the action does not support resource-level permissions); at
+ * runtime it calls the X-Ray API with the function's execution role
+ * credentials.
+ *
+ * @example Provide on the Function effect
+ * ```typescript
+ * import * as XRay from "@alchemy.run/aws/XRay";
+ *
+ * Effect.gen(function* () {
+ *   const getTimeSeriesServiceStatistics = yield* XRay.GetTimeSeriesServiceStatistics();
+ *   // ...
+ * }).pipe(Effect.provide(XRay.GetTimeSeriesServiceStatisticsHttp));
+ * ```
+ */
+export const GetTimeSeriesServiceStatisticsHttp = Layer.effect(
+  GetTimeSeriesServiceStatistics,
+  makeXRayHttpBinding({
+    tag: "AWS.XRay.GetTimeSeriesServiceStatistics",
+    operation: xray.getTimeSeriesServiceStatistics,
+    actions: ["xray:GetTimeSeriesServiceStatistics"],
+  }),
 );

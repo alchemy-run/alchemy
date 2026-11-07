@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildReportGroupArnHttpBinding } from "./BindingHttp.ts";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
@@ -29,4 +32,13 @@ export interface ListReportsForReportGroup extends Binding.Service<
 > {}
 export const ListReportsForReportGroup = Binding.Service<ListReportsForReportGroup>(
   "AWS.CodeBuild.ListReportsForReportGroup",
+);
+
+export const ListReportsForReportGroupHttp = Layer.effect(
+  ListReportsForReportGroup,
+  makeCodeBuildReportGroupArnHttpBinding({
+    tag: "AWS.CodeBuild.ListReportsForReportGroup",
+    operation: codebuild.listReportsForReportGroup,
+    actions: ["codebuild:ListReportsForReportGroup"],
+  }),
 );

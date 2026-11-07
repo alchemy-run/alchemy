@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface RollbackTransactionOptions {
   secret: Secret;
@@ -59,4 +61,22 @@ export interface RollbackTransaction extends Binding.Service<
 
 export const RollbackTransaction = Binding.Service<RollbackTransaction>(
   "AWS.RDSData.RollbackTransaction",
+);
+
+export const RollbackTransactionHttp = Layer.effect(
+  RollbackTransaction,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.RollbackTransaction",
+    action: "rds-data:RollbackTransaction",
+    operation: rdsdata.rollbackTransaction,
+    // rollback is transaction-scoped — no database/schema on the wire
+    makeInput: (
+      request: RollbackTransactionRequest,
+      { resourceArn, secretArn },
+    ): rdsdata.RollbackTransactionRequest => ({
+      ...request,
+      resourceArn,
+      secretArn,
+    }),
+  }),
 );

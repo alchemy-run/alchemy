@@ -1,6 +1,8 @@
-import type * as mq from "@distilled.cloud/aws/mq";
+import * as mq from "@distilled.cloud/aws/mq";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMqBrokerHttpBinding } from "./BindingHttp.ts";
 import type { Broker } from "./Broker.ts";
 
 /**
@@ -33,3 +35,16 @@ export interface DescribeUser extends Binding.Service<
   >
 > {}
 export const DescribeUser = Binding.Service<DescribeUser>("AWS.MQ.DescribeUser");
+
+export const DescribeUserHttp = Layer.effect(
+  DescribeUser,
+  makeMqBrokerHttpBinding<
+    Omit<mq.DescribeUserRequest, "BrokerId">,
+    mq.DescribeUserResponse,
+    mq.DescribeUserError
+  >({
+    capability: "DescribeUser",
+    operation: mq.describeUser,
+    iamActions: ["mq:DescribeUser"],
+  }),
+);

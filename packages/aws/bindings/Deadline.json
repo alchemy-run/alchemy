@@ -1,0 +1,211 @@
+{
+  "tag": "AWS.Deadline",
+  "module": "deadline",
+  "resources": {
+    "Farm": {
+      "file": "Farm.ts"
+    },
+    "Queue": {
+      "file": "Queue.ts"
+    }
+  },
+  "builder": "makeDeadlineQueueHttpBinding",
+  "builders": {
+    "makeDeadlineFarmHttpBinding": {
+      "grants": "resource"
+    },
+    "makeDeadlineQueueHttpBinding": {
+      "grants": "resource"
+    },
+    "makeDeadlineQueueSearchHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateJob": {
+      "operation": "createJob",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "GetSession": {
+      "operation": "getSession",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "GetSessionAction": {
+      "operation": "getSessionAction",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "GetSessionsStatisticsAggregation": {
+      "operation": "getSessionsStatisticsAggregation",
+      "resource": "Farm",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId"],
+        "inline": true
+      },
+      "builder": "makeDeadlineFarmHttpBinding"
+    },
+    "GetStep": {
+      "operation": "getStep",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "GetTask": {
+      "operation": "getTask",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListJobParameterDefinitions": {
+      "operation": "listJobParameterDefinitions",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "resource": "Queue",
+      "request": {
+        "mode": "optional",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListSessionActions": {
+      "operation": "listSessionActions",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListSessions": {
+      "operation": "listSessions",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListSteps": {
+      "operation": "listSteps",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "ListTasks": {
+      "operation": "listTasks",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "SearchJobs": {
+      "operation": "searchJobs",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueIds"],
+        "inline": true
+      },
+      "builder": "makeDeadlineQueueSearchHttpBinding"
+    },
+    "SearchSteps": {
+      "operation": "searchSteps",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueIds"],
+        "inline": true
+      },
+      "builder": "makeDeadlineQueueSearchHttpBinding"
+    },
+    "SearchTasks": {
+      "operation": "searchTasks",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueIds"],
+        "inline": true
+      },
+      "builder": "makeDeadlineQueueSearchHttpBinding"
+    },
+    "StartSessionsStatisticsAggregation": {
+      "operation": "startSessionsStatisticsAggregation",
+      "resource": "Farm",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId"],
+        "inline": true
+      },
+      "builder": "makeDeadlineFarmHttpBinding"
+    },
+    "UpdateJob": {
+      "operation": "updateJob",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "UpdateStep": {
+      "operation": "updateStep",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    },
+    "UpdateTask": {
+      "operation": "updateTask",
+      "resource": "Queue",
+      "request": {
+        "mode": "required",
+        "omit": ["farmId", "queueId"],
+        "inline": true
+      }
+    }
+  }
+}

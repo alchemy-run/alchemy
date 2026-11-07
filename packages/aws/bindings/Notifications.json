@@ -1,0 +1,98 @@
+{
+  "tag": "AWS.Notifications",
+  "module": "notifications",
+  "resources": {
+    "NotificationConfiguration": {
+      "file": "NotificationConfiguration.ts"
+    }
+  },
+  "builder": "makeNotificationsHttpBinding",
+  "builders": {
+    "makeNotificationConfigurationHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    },
+    "makeNotificationsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GetManagedNotificationChildEvent": {
+      "operation": "getManagedNotificationChildEvent",
+      "request": {
+        "mode": "required",
+        "interface": "GetManagedNotificationChildEventRequest",
+        "omit": []
+      }
+    },
+    "GetManagedNotificationConfiguration": {
+      "operation": "getManagedNotificationConfiguration",
+      "request": {
+        "mode": "required",
+        "interface": "GetManagedNotificationConfigurationRequest",
+        "omit": []
+      }
+    },
+    "GetManagedNotificationEvent": {
+      "operation": "getManagedNotificationEvent",
+      "request": {
+        "mode": "required",
+        "interface": "GetManagedNotificationEventRequest",
+        "omit": []
+      }
+    },
+    "GetNotificationEvent": {
+      "operation": "getNotificationEvent",
+      "request": {
+        "mode": "required",
+        "interface": "GetNotificationEventRequest",
+        "omit": []
+      }
+    },
+    "ListChannels": {
+      "operation": "listChannels",
+      "resource": "NotificationConfiguration",
+      "param": "configuration",
+      "request": {
+        "mode": "optional",
+        "interface": "ListChannelsRequest",
+        "omit": ["notificationConfigurationArn"]
+      },
+      "builder": "makeNotificationConfigurationHttpBinding"
+    },
+    "ListManagedNotificationChildEvents": {
+      "operation": "listManagedNotificationChildEvents",
+      "request": {
+        "mode": "required",
+        "interface": "ListManagedNotificationChildEventsRequest",
+        "omit": []
+      }
+    },
+    "ListManagedNotificationEvents": {
+      "operation": "listManagedNotificationEvents",
+      "request": {
+        "mode": "optional",
+        "interface": "ListManagedNotificationEventsRequest",
+        "omit": []
+      }
+    },
+    "ListNotificationEvents": {
+      "operation": "listNotificationEvents",
+      "request": {
+        "mode": "optional",
+        "interface": "ListNotificationEventsRequest",
+        "omit": []
+      }
+    }
+  }
+}

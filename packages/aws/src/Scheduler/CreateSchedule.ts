@@ -1,7 +1,9 @@
-import type * as scheduler from "@distilled.cloud/aws/scheduler";
+import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeScheduleWriteHttpBinding } from "./BindingHttp.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 /**
@@ -108,3 +110,12 @@ export interface CreateSchedule extends Binding.Service<
   >
 > {}
 export const CreateSchedule = Binding.Service<CreateSchedule>("AWS.Scheduler.CreateSchedule");
+
+export const CreateScheduleHttp = Layer.effect(
+  CreateSchedule,
+  makeScheduleWriteHttpBinding({
+    tag: "AWS.Scheduler.CreateSchedule",
+    operation: scheduler.createSchedule,
+    actions: ["scheduler:CreateSchedule"],
+  }),
+);

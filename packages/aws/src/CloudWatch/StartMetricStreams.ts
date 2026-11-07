@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchResourceSetHttpBinding } from "./BindingHttp.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
 type MetricStreams = [MetricStream, ...MetricStream[]];
@@ -35,4 +37,16 @@ export interface StartMetricStreams extends Binding.Service<
 
 export const StartMetricStreams = Binding.Service<StartMetricStreams>(
   "AWS.CloudWatch.StartMetricStreams",
+);
+
+export const StartMetricStreamsHttp = Layer.effect(
+  StartMetricStreams,
+  makeCloudWatchResourceSetHttpBinding({
+    tag: "AWS.CloudWatch.StartMetricStreams",
+    operation: cloudwatch.startMetricStreams,
+    action: "cloudwatch:StartMetricStreams",
+    namesKey: "Names",
+    name: (metricStream: MetricStream) => metricStream.metricStreamName,
+    arn: (metricStream: MetricStream) => metricStream.metricStreamArn,
+  }),
 );

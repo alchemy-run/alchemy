@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `wafv2:CheckCapacity` — compute the web ACL capacity
@@ -35,3 +38,12 @@ export interface CheckCapacity extends Binding.Service<
 > {}
 
 export const CheckCapacity = Binding.Service<CheckCapacity>("AWS.WAFv2.CheckCapacity");
+
+export const CheckCapacityHttp = Layer.effect(
+  CheckCapacity,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.CheckCapacity",
+    operation: wafv2.checkCapacity,
+    actions: ["wafv2:CheckCapacity"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as bda from "@distilled.cloud/aws/bedrock-data-automation";
+import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBdaLibraryHttpBinding } from "./BindingHttp.ts";
 import type { DataAutomationLibrary } from "./DataAutomationLibrary.ts";
 
 /**
@@ -54,3 +56,15 @@ export const GetDataAutomationLibraryIngestionJob =
   Binding.Service<GetDataAutomationLibraryIngestionJob>(
     "AWS.BedrockDataAutomation.GetDataAutomationLibraryIngestionJob",
   );
+
+export const GetDataAutomationLibraryIngestionJobHttp = Layer.effect(
+  GetDataAutomationLibraryIngestionJob,
+  makeBdaLibraryHttpBinding({
+    tag: "AWS.BedrockDataAutomation.GetDataAutomationLibraryIngestionJob",
+    operation: bda.getDataAutomationLibraryIngestionJob,
+    actions: ["bedrock:GetDataAutomationLibraryIngestionJob"],
+    // The action authorizes against the ingestion-job resource (minted at
+    // runtime), not the library ARN.
+    additionalResources: ["arn:aws:bedrock:*:*:data-automation-library-ingestion-job/*"],
+  }),
+);

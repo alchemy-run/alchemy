@@ -1,0 +1,259 @@
+{
+  "tag": "AWS.LicenseManager",
+  "module": "license-manager",
+  "resources": {
+    "LicenseConfiguration": {
+      "file": "LicenseConfiguration.ts"
+    }
+  },
+  "builder": "makeLicenseManagerHttpBinding",
+  "builders": {
+    "makeLicenseConfigurationHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    },
+    "makeLicenseManagerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AcceptGrant": {
+      "operation": "acceptGrant",
+      "request": {
+        "mode": "required",
+        "interface": "AcceptGrantRequest",
+        "omit": []
+      }
+    },
+    "CheckInLicense": {
+      "operation": "checkInLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckInLicenseRequest",
+        "omit": []
+      }
+    },
+    "CheckoutBorrowLicense": {
+      "operation": "checkoutBorrowLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckoutBorrowLicenseRequest",
+        "omit": []
+      }
+    },
+    "CheckoutLicense": {
+      "operation": "checkoutLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CheckoutLicenseRequest",
+        "omit": []
+      }
+    },
+    "CreateGrant": {
+      "operation": "createGrant",
+      "request": {
+        "mode": "required",
+        "interface": "CreateGrantRequest",
+        "omit": []
+      }
+    },
+    "CreateGrantVersion": {
+      "operation": "createGrantVersion",
+      "request": {
+        "mode": "required",
+        "interface": "CreateGrantVersionRequest",
+        "omit": []
+      }
+    },
+    "CreateLicense": {
+      "operation": "createLicense",
+      "request": {
+        "mode": "required",
+        "interface": "CreateLicenseRequest",
+        "omit": []
+      }
+    },
+    "CreateLicenseVersion": {
+      "operation": "createLicenseVersion",
+      "request": {
+        "mode": "required",
+        "interface": "CreateLicenseVersionRequest",
+        "omit": []
+      }
+    },
+    "CreateToken": {
+      "operation": "createToken",
+      "request": {
+        "mode": "required",
+        "interface": "CreateTokenRequest",
+        "omit": []
+      }
+    },
+    "DeleteGrant": {
+      "operation": "deleteGrant",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteGrantRequest",
+        "omit": []
+      }
+    },
+    "DeleteLicense": {
+      "operation": "deleteLicense",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteLicenseRequest",
+        "omit": []
+      }
+    },
+    "DeleteToken": {
+      "operation": "deleteToken",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteTokenRequest",
+        "omit": []
+      }
+    },
+    "ExtendLicenseConsumption": {
+      "operation": "extendLicenseConsumption",
+      "request": {
+        "mode": "required",
+        "interface": "ExtendLicenseConsumptionRequest",
+        "omit": []
+      }
+    },
+    "GetAccessToken": {
+      "operation": "getAccessToken",
+      "request": {
+        "mode": "required",
+        "interface": "GetAccessTokenRequest",
+        "omit": []
+      }
+    },
+    "GetGrant": {
+      "operation": "getGrant",
+      "request": {
+        "mode": "required",
+        "interface": "GetGrantRequest",
+        "omit": []
+      }
+    },
+    "GetLicense": {
+      "operation": "getLicense",
+      "request": {
+        "mode": "required",
+        "interface": "GetLicenseRequest",
+        "omit": []
+      }
+    },
+    "GetLicenseConfiguration": {
+      "operation": "getLicenseConfiguration",
+      "resource": "LicenseConfiguration",
+      "param": "configuration",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeLicenseConfigurationHttpBinding"
+    },
+    "GetLicenseUsage": {
+      "operation": "getLicenseUsage",
+      "request": {
+        "mode": "required",
+        "interface": "GetLicenseUsageRequest",
+        "omit": []
+      }
+    },
+    "GetServiceSettings": {
+      "operation": "getServiceSettings",
+      "request": {
+        "mode": "optional",
+        "interface": "GetServiceSettingsRequest",
+        "omit": []
+      }
+    },
+    "ListDistributedGrants": {
+      "operation": "listDistributedGrants",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDistributedGrantsRequest",
+        "omit": []
+      }
+    },
+    "ListLicenseVersions": {
+      "operation": "listLicenseVersions",
+      "request": {
+        "mode": "required",
+        "interface": "ListLicenseVersionsRequest",
+        "omit": []
+      }
+    },
+    "ListLicenses": {
+      "operation": "listLicenses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListLicensesRequest",
+        "omit": []
+      }
+    },
+    "ListReceivedGrants": {
+      "operation": "listReceivedGrants",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReceivedGrantsRequest",
+        "omit": []
+      }
+    },
+    "ListReceivedLicenses": {
+      "operation": "listReceivedLicenses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListReceivedLicensesRequest",
+        "omit": []
+      }
+    },
+    "ListResourceInventory": {
+      "operation": "listResourceInventory",
+      "request": {
+        "mode": "optional",
+        "interface": "ListResourceInventoryRequest",
+        "omit": []
+      }
+    },
+    "ListTokens": {
+      "operation": "listTokens",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTokensRequest",
+        "omit": []
+      }
+    },
+    "ListUsageForLicenseConfiguration": {
+      "operation": "listUsageForLicenseConfiguration",
+      "resource": "LicenseConfiguration",
+      "param": "configuration",
+      "request": {
+        "mode": "optional",
+        "interface": "ListUsageForLicenseConfigurationRequest",
+        "omit": ["LicenseConfigurationArn"]
+      },
+      "builder": "makeLicenseConfigurationHttpBinding"
+    },
+    "RejectGrant": {
+      "operation": "rejectGrant",
+      "request": {
+        "mode": "required",
+        "interface": "RejectGrantRequest",
+        "omit": []
+      }
+    }
+  }
+}

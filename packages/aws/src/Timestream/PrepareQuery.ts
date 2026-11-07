@@ -1,6 +1,8 @@
-import type * as TSQ from "@distilled.cloud/aws/timestream-query";
+import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueryTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface PrepareQueryRequest extends TSQ.PrepareQueryRequest {}
@@ -47,3 +49,13 @@ export interface PrepareQuery extends Binding.Service<
 > {}
 
 export const PrepareQuery = Binding.Service<PrepareQuery>("AWS.Timestream.PrepareQuery");
+
+export const PrepareQueryHttp = Layer.effect(
+  PrepareQuery,
+  makeQueryTableHttpBinding({
+    tag: "AWS.Timestream.PrepareQuery",
+    operation: TSQ.prepareQuery,
+    // Preparing a query validates it against the tables the SQL references.
+    actions: ["timestream:PrepareQuery", "timestream:Select"],
+  }),
+);

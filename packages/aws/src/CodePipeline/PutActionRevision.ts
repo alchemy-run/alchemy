@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface PutActionRevisionRequest extends Omit<
@@ -43,4 +46,14 @@ export interface PutActionRevision extends Binding.Service<
 > {}
 export const PutActionRevision = Binding.Service<PutActionRevision>(
   "AWS.CodePipeline.PutActionRevision",
+);
+
+export const PutActionRevisionHttp = Layer.effect(
+  PutActionRevision,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.PutActionRevision",
+    operation: codepipeline.putActionRevision,
+    actions: ["codepipeline:PutActionRevision"],
+    subScoped: true,
+  }),
 );

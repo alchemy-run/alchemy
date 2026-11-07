@@ -1,6 +1,8 @@
-import type * as frauddetector from "@distilled.cloud/aws/frauddetector";
+import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Detector } from "./Detector.ts";
 
 /**
@@ -64,4 +66,40 @@ export interface ListEventPredictions extends Binding.Service<
 > {}
 export const ListEventPredictions = Binding.Service<ListEventPredictions>(
   "AWS.FraudDetector.ListEventPredictions",
+);
+
+/**
+ * Bespoke implementation — unlike the other detector-scoped operations, the
+ * detector is a `FilterCondition` (`{ value }`) rather than a plain
+ * `detectorId` field, and `frauddetector:ListEventPredictions` supports no
+ * resource-level IAM scoping, so the grant is on `*`.
+ */
+export const ListEventPredictionsHttp = Layer.effect(
+  ListEventPredictions,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(frauddetector.listEventPredictions);
+
+    return Effect.fn(function* (detector: Detector) {
+      // Output yields a DEFERRED effect — resolve again per invocation below.
+      const DetectorId = yield* detector.detectorId;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.FraudDetector.ListEventPredictions(${detector})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["frauddetector:ListEventPredictions"],
+              Resource: ["*"],
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.FraudDetector.ListEventPredictions(${detector.LogicalId})`)(function* (
+        request: Omit<frauddetector.ListEventPredictionsRequest, "detectorId">,
+      ) {
+        const detectorId = yield* DetectorId;
+        return yield* op({ ...request, detectorId: { value: detectorId } });
+      });
+    });
+  }),
 );

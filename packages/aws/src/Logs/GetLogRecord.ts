@@ -1,6 +1,8 @@
-import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLogGroupHttpBinding } from "./BindingHttp.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 export interface GetLogRecordRequest extends Logs.GetLogRecordRequest {}
@@ -36,3 +38,14 @@ export interface GetLogRecord extends Binding.Service<
   >
 > {}
 export const GetLogRecord = Binding.Service<GetLogRecord>("AWS.Logs.GetLogRecord");
+
+export const GetLogRecordHttp = Layer.effect(
+  GetLogRecord,
+  makeLogGroupHttpBinding({
+    tag: "AWS.Logs.GetLogRecord",
+    operation: Logs.getLogRecord,
+    actions: ["logs:GetLogRecord"],
+    // Scoped by the record pointer from a query-result row.
+    injectLogGroupName: false,
+  }),
+);

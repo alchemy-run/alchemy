@@ -1,7 +1,9 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AgentAlias } from "./AgentAlias.ts";
+import { makeAgentAliasScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `DeleteAgentMemory` request with the binding-injected `agentId` and
@@ -53,4 +55,13 @@ export interface DeleteAgentMemory extends Binding.Service<
 > {}
 export const DeleteAgentMemory = Binding.Service<DeleteAgentMemory>(
   "AWS.Bedrock.DeleteAgentMemory",
+);
+
+export const DeleteAgentMemoryHttp = Layer.effect(
+  DeleteAgentMemory,
+  makeAgentAliasScopedHttpBinding({
+    tag: "AWS.Bedrock.DeleteAgentMemory",
+    operation: bedrock.deleteAgentMemory,
+    actions: ["bedrock:DeleteAgentMemory"],
+  }),
 );

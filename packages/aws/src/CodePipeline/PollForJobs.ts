@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelineJobHttpBinding } from "./BindingHttp.ts";
 
 export interface PollForJobsRequest extends SVC.PollForJobsInput {}
 
@@ -40,3 +43,12 @@ export interface PollForJobs extends Binding.Service<
   >
 > {}
 export const PollForJobs = Binding.Service<PollForJobs>("AWS.CodePipeline.PollForJobs");
+
+export const PollForJobsHttp = Layer.effect(
+  PollForJobs,
+  makeCodePipelineJobHttpBinding({
+    tag: "AWS.CodePipeline.PollForJobs",
+    operation: codepipeline.pollForJobs,
+    actions: ["codepipeline:PollForJobs"],
+  }),
+);

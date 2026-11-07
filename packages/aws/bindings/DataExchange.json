@@ -1,0 +1,210 @@
+{
+  "tag": "AWS.DataExchange",
+  "module": "dataexchange",
+  "resources": {
+    "DataSet": {
+      "file": "DataSet.ts"
+    },
+    "Revision": {
+      "file": "Revision.ts"
+    }
+  },
+  "builder": "makeDataExchangeAccountHttpBinding",
+  "builders": {
+    "makeDataExchangeAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDataSetHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRevisionHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptDataGrant": {
+      "operation": "acceptDataGrant",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CancelJob": {
+      "operation": "cancelJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateDataGrant": {
+      "operation": "createDataGrant",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateJob": {
+      "operation": "createJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteAsset": {
+      "operation": "deleteAsset",
+      "resource": "Revision",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId", "RevisionId"],
+        "inline": true
+      },
+      "builder": "makeRevisionHttpBinding",
+      "withTs": {
+        "resources": "revisionAssetArns"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["revisionAssetArns"]
+      }
+    },
+    "DeleteDataGrant": {
+      "operation": "deleteDataGrant",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetAsset": {
+      "operation": "getAsset",
+      "resource": "Revision",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId", "RevisionId"],
+        "inline": true
+      },
+      "builder": "makeRevisionHttpBinding",
+      "withTs": {
+        "resources": "revisionAssetArns"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["revisionAssetArns"]
+      }
+    },
+    "GetDataGrant": {
+      "operation": "getDataGrant",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetDataSet": {
+      "operation": "getDataSet",
+      "resource": "DataSet",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDataSetHttpBinding"
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetReceivedDataGrant": {
+      "operation": "getReceivedDataGrant",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetRevision": {
+      "operation": "getRevision",
+      "resource": "Revision",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRevisionHttpBinding"
+    },
+    "ListDataGrants": {
+      "operation": "listDataGrants"
+    },
+    "ListDataSetRevisions": {
+      "operation": "listDataSetRevisions",
+      "resource": "DataSet",
+      "request": {
+        "mode": "optional",
+        "omit": ["DataSetId"],
+        "inline": true
+      },
+      "builder": "makeDataSetHttpBinding"
+    },
+    "ListDataSets": {
+      "operation": "listDataSets"
+    },
+    "ListEventActions": {
+      "operation": "listEventActions"
+    },
+    "ListJobs": {
+      "operation": "listJobs"
+    },
+    "ListReceivedDataGrants": {
+      "operation": "listReceivedDataGrants"
+    },
+    "ListRevisionAssets": {
+      "operation": "listRevisionAssets",
+      "resource": "Revision",
+      "request": {
+        "mode": "optional",
+        "omit": ["DataSetId", "RevisionId"],
+        "inline": true
+      },
+      "builder": "makeRevisionHttpBinding"
+    },
+    "RevokeRevision": {
+      "operation": "revokeRevision",
+      "resource": "Revision",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId", "RevisionId"],
+        "inline": true
+      },
+      "builder": "makeRevisionHttpBinding"
+    },
+    "SendApiAsset": {
+      "operation": "sendApiAsset",
+      "resource": "DataSet",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId"],
+        "inline": true
+      },
+      "builder": "makeDataSetHttpBinding",
+      "withTs": {
+        "resources": "dataSetAssetArns"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["dataSetAssetArns"]
+      }
+    },
+    "SendDataSetNotification": {
+      "operation": "sendDataSetNotification",
+      "resource": "DataSet",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId"],
+        "inline": true
+      },
+      "builder": "makeDataSetHttpBinding"
+    },
+    "UpdateAsset": {
+      "operation": "updateAsset",
+      "resource": "Revision",
+      "request": {
+        "mode": "required",
+        "omit": ["DataSetId", "RevisionId"],
+        "inline": true
+      },
+      "builder": "makeRevisionHttpBinding",
+      "withTs": {
+        "resources": "revisionAssetArns"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["revisionAssetArns"]
+      }
+    }
+  }
+}

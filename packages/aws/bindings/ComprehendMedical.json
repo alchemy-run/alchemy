@@ -1,0 +1,184 @@
+{
+  "tag": "AWS.ComprehendMedical",
+  "module": "comprehendmedical",
+  "resources": {},
+  "builder": "makeComprehendMedicalHttpBinding",
+  "builders": {
+    "makeComprehendMedicalHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeEntitiesDetectionV2Job": {
+      "operation": "describeEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeICD10CMInferenceJob": {
+      "operation": "describeICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribePHIDetectionJob": {
+      "operation": "describePHIDetectionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeRxNormInferenceJob": {
+      "operation": "describeRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeSNOMEDCTInferenceJob": {
+      "operation": "describeSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectEntitiesV2": {
+      "operation": "detectEntitiesV2",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectPHI": {
+      "operation": "detectPHI",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "InferICD10CM": {
+      "operation": "inferICD10CM",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "InferRxNorm": {
+      "operation": "inferRxNorm",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "InferSNOMEDCT": {
+      "operation": "inferSNOMEDCT",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListEntitiesDetectionV2Jobs": {
+      "operation": "listEntitiesDetectionV2Jobs",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListICD10CMInferenceJobs": {
+      "operation": "listICD10CMInferenceJobs",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPHIDetectionJobs": {
+      "operation": "listPHIDetectionJobs",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRxNormInferenceJobs": {
+      "operation": "listRxNormInferenceJobs",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListSNOMEDCTInferenceJobs": {
+      "operation": "listSNOMEDCTInferenceJobs",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartEntitiesDetectionV2Job": {
+      "operation": "startEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartICD10CMInferenceJob": {
+      "operation": "startICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartPHIDetectionJob": {
+      "operation": "startPHIDetectionJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartRxNormInferenceJob": {
+      "operation": "startRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "StartSNOMEDCTInferenceJob": {
+      "operation": "startSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "StopEntitiesDetectionV2Job": {
+      "operation": "stopEntitiesDetectionV2Job",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopICD10CMInferenceJob": {
+      "operation": "stopICD10CMInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopPHIDetectionJob": {
+      "operation": "stopPHIDetectionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopRxNormInferenceJob": {
+      "operation": "stopRxNormInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopSNOMEDCTInferenceJob": {
+      "operation": "stopSNOMEDCTInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

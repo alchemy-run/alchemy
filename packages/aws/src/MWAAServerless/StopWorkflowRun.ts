@@ -1,6 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
+import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMwaaServerlessHttpBinding } from "./BindingHttp.ts";
 import type { Workflow } from "./Workflow.ts";
 
 /**
@@ -40,4 +42,13 @@ export interface StopWorkflowRun extends Binding.Service<
 > {}
 export const StopWorkflowRun = Binding.Service<StopWorkflowRun>(
   "AWS.MWAAServerless.StopWorkflowRun",
+);
+
+export const StopWorkflowRunHttp = Layer.effect(
+  StopWorkflowRun,
+  makeMwaaServerlessHttpBinding({
+    tag: "AWS.MWAAServerless.StopWorkflowRun",
+    operation: mwaa.stopWorkflowRun,
+    actions: ["airflow-serverless:StopWorkflowRun"],
+  }),
 );

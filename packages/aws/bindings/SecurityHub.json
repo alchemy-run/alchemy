@@ -1,0 +1,161 @@
+{
+  "tag": "AWS.SecurityHub",
+  "module": "securityhub",
+  "resources": {},
+  "builder": "makeSecurityHubHttpBinding",
+  "builders": {
+    "makeSecurityHubHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AcceptAdministratorInvitation": {
+      "operation": "acceptAdministratorInvitation"
+    },
+    "BatchDisableStandards": {
+      "operation": "batchDisableStandards"
+    },
+    "BatchEnableStandards": {
+      "operation": "batchEnableStandards"
+    },
+    "BatchGetAutomationRules": {
+      "operation": "batchGetAutomationRules"
+    },
+    "BatchGetSecurityControls": {
+      "operation": "batchGetSecurityControls"
+    },
+    "BatchGetStandardsControlAssociations": {
+      "operation": "batchGetStandardsControlAssociations"
+    },
+    "BatchImportFindings": {
+      "operation": "batchImportFindings"
+    },
+    "BatchUpdateFindings": {
+      "operation": "batchUpdateFindings"
+    },
+    "BatchUpdateStandardsControlAssociations": {
+      "operation": "batchUpdateStandardsControlAssociations"
+    },
+    "CreateMembers": {
+      "operation": "createMembers"
+    },
+    "DeclineInvitations": {
+      "operation": "declineInvitations"
+    },
+    "DeleteInvitations": {
+      "operation": "deleteInvitations"
+    },
+    "DeleteMembers": {
+      "operation": "deleteMembers"
+    },
+    "DescribeActionTargets": {
+      "operation": "describeActionTargets"
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration"
+    },
+    "DescribeProducts": {
+      "operation": "describeProducts"
+    },
+    "DescribeStandards": {
+      "operation": "describeStandards"
+    },
+    "DescribeStandardsControls": {
+      "operation": "describeStandardsControls",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisableImportFindingsForProduct": {
+      "operation": "disableImportFindingsForProduct",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount"
+    },
+    "DisassociateFromAdministratorAccount": {
+      "operation": "disassociateFromAdministratorAccount"
+    },
+    "DisassociateMembers": {
+      "operation": "disassociateMembers"
+    },
+    "EnableImportFindingsForProduct": {
+      "operation": "enableImportFindingsForProduct"
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount"
+    },
+    "GetAdministratorAccount": {
+      "operation": "getAdministratorAccount"
+    },
+    "GetEnabledStandards": {
+      "operation": "getEnabledStandards"
+    },
+    "GetFindingHistory": {
+      "operation": "getFindingHistory"
+    },
+    "GetFindings": {
+      "operation": "getFindings"
+    },
+    "GetInsightResults": {
+      "operation": "getInsightResults",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetInsights": {
+      "operation": "getInsights"
+    },
+    "GetInvitationsCount": {
+      "operation": "getInvitationsCount"
+    },
+    "GetMembers": {
+      "operation": "getMembers"
+    },
+    "GetSecurityControlDefinition": {
+      "operation": "getSecurityControlDefinition"
+    },
+    "InviteMembers": {
+      "operation": "inviteMembers"
+    },
+    "ListAutomationRules": {
+      "operation": "listAutomationRules"
+    },
+    "ListEnabledProductsForImport": {
+      "operation": "listEnabledProductsForImport"
+    },
+    "ListFindingAggregators": {
+      "operation": "listFindingAggregators"
+    },
+    "ListInvitations": {
+      "operation": "listInvitations"
+    },
+    "ListMembers": {
+      "operation": "listMembers"
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts"
+    },
+    "ListSecurityControlDefinitions": {
+      "operation": "listSecurityControlDefinitions"
+    },
+    "ListStandardsControlAssociations": {
+      "operation": "listStandardsControlAssociations"
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration"
+    },
+    "UpdateSecurityControl": {
+      "operation": "updateSecurityControl"
+    },
+    "UpdateStandardsControl": {
+      "operation": "updateStandardsControl",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

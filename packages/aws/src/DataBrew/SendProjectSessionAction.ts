@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/databrew";
+import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataBrewProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 export interface SendProjectSessionActionRequest extends Omit<
@@ -41,4 +44,13 @@ export interface SendProjectSessionAction extends Binding.Service<
 > {}
 export const SendProjectSessionAction = Binding.Service<SendProjectSessionAction>(
   "AWS.DataBrew.SendProjectSessionAction",
+);
+
+export const SendProjectSessionActionHttp = Layer.effect(
+  SendProjectSessionAction,
+  makeDataBrewProjectHttpBinding({
+    tag: "AWS.DataBrew.SendProjectSessionAction",
+    operation: databrew.sendProjectSessionAction,
+    actions: ["databrew:SendProjectSessionAction"],
+  }),
 );

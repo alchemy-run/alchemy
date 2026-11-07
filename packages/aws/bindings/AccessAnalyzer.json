@@ -1,0 +1,221 @@
+{
+  "tag": "AWS.AccessAnalyzer",
+  "module": "accessanalyzer",
+  "alias": "aa",
+  "resources": {
+    "Analyzer": {
+      "file": "Analyzer.ts"
+    }
+  },
+  "builder": "makeAnalyzerScopedHttpBinding",
+  "builders": {
+    "makeAccessAnalyzerAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeAnalyzerScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyArchiveRule": {
+      "operation": "applyArchiveRule",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "ApplyArchiveRuleRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "CancelPolicyGeneration": {
+      "operation": "cancelPolicyGeneration",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "CheckAccessNotGranted": {
+      "operation": "checkAccessNotGranted",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "CheckNoNewAccess": {
+      "operation": "checkNoNewAccess",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "CheckNoPublicAccess": {
+      "operation": "checkNoPublicAccess",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "CreateAccessPreview": {
+      "operation": "createAccessPreview",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAccessPreviewRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GenerateFindingRecommendation": {
+      "operation": "generateFindingRecommendation",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateFindingRecommendationRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetAccessPreview": {
+      "operation": "getAccessPreview",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GetAccessPreviewRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetAnalyzedResource": {
+      "operation": "getAnalyzedResource",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GetAnalyzedResourceRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetFinding": {
+      "operation": "getFinding",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GetFindingRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetFindingRecommendation": {
+      "operation": "getFindingRecommendation",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GetFindingRecommendationRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetFindingV2": {
+      "operation": "getFindingV2",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "GetFindingV2Request",
+        "omit": ["analyzerArn"]
+      },
+      "note": "GetFinding and GetFindingV2 both use `access-analyzer:GetFinding`."
+    },
+    "GetFindingsStatistics": {
+      "operation": "getFindingsStatistics",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "optional",
+        "interface": "GetFindingsStatisticsRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "GetGeneratedPolicy": {
+      "operation": "getGeneratedPolicy",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "ListAccessPreviewFindings": {
+      "operation": "listAccessPreviewFindings",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "ListAccessPreviewFindingsRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "ListAccessPreviews": {
+      "operation": "listAccessPreviews",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAccessPreviewsRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "ListAnalyzedResources": {
+      "operation": "listAnalyzedResources",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAnalyzedResourcesRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "ListFindings": {
+      "operation": "listFindings",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFindingsRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "ListFindingsV2": {
+      "operation": "listFindingsV2",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFindingsV2Request",
+        "omit": ["analyzerArn"]
+      },
+      "note": "ListFindings and ListFindingsV2 both use `access-analyzer:ListFindings`."
+    },
+    "ListPolicyGenerations": {
+      "operation": "listPolicyGenerations",
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "StartPolicyGeneration": {
+      "operation": "startPolicyGeneration",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    },
+    "StartResourceScan": {
+      "operation": "startResourceScan",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "StartResourceScanRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "UpdateFindings": {
+      "operation": "updateFindings",
+      "resource": "Analyzer",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateFindingsRequest",
+        "omit": ["analyzerArn"]
+      }
+    },
+    "ValidatePolicy": {
+      "operation": "validatePolicy",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAccessAnalyzerAccountHttpBinding"
+    }
+  }
+}

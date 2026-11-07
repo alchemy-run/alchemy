@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSendScopedHttpBinding } from "./BindingHttp.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
 
@@ -77,3 +79,17 @@ export interface SendEmail extends Binding.Service<
   >
 > {}
 export const SendEmail = Binding.Service<SendEmail>("AWS.SES.SendEmail");
+
+export const SendEmailHttp = Layer.effect(
+  SendEmail,
+  makeSendScopedHttpBinding({
+    tag: "AWS.SES.SendEmail",
+    operation: sesv2.sendEmail,
+    actions: [
+      "ses:SendEmail",
+      "ses:SendRawEmail",
+      "ses:SendTemplatedEmail",
+      "ses:SendBulkTemplatedEmail",
+    ],
+  }),
+);

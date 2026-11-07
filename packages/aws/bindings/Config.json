@@ -1,0 +1,170 @@
+{
+  "tag": "AWS.Config",
+  "module": "config-service",
+  "alias": "config",
+  "resources": {
+    "ConfigRule": {
+      "file": "ConfigRule.ts"
+    },
+    "DeliveryChannel": {
+      "file": "DeliveryChannel.ts"
+    }
+  },
+  "builder": "makeConfigAccountHttpBinding",
+  "builders": {
+    "makeConfigAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeConfigResourceHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "BatchGetResourceConfig": {
+      "operation": "batchGetResourceConfig",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteResourceConfig": {
+      "operation": "deleteResourceConfig",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeliverConfigSnapshot": {
+      "operation": "deliverConfigSnapshot",
+      "resource": "DeliveryChannel",
+      "param": "channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeConfigResourceHttpBinding",
+      "with": {
+        "requestKey": "deliveryChannelName"
+      },
+      "withTs": {
+        "identifier": "(channel: DeliveryChannel) => channel.deliveryChannelName"
+      }
+    },
+    "DescribeComplianceByConfigRule": {
+      "operation": "describeComplianceByConfigRule"
+    },
+    "DescribeComplianceByResource": {
+      "operation": "describeComplianceByResource"
+    },
+    "DescribeConfigRuleEvaluationStatus": {
+      "operation": "describeConfigRuleEvaluationStatus"
+    },
+    "GetComplianceDetailsByConfigRule": {
+      "operation": "getComplianceDetailsByConfigRule",
+      "resource": "ConfigRule",
+      "param": "rule",
+      "request": {
+        "mode": "optional",
+        "interface": "GetComplianceDetailsByConfigRuleRequest",
+        "omit": ["ConfigRuleName"]
+      },
+      "builder": "makeConfigResourceHttpBinding",
+      "with": {
+        "requestKey": "ConfigRuleName"
+      },
+      "withTs": {
+        "identifier": "(rule: ConfigRule) => rule.configRuleName"
+      }
+    },
+    "GetComplianceDetailsByResource": {
+      "operation": "getComplianceDetailsByResource"
+    },
+    "GetComplianceSummaryByConfigRule": {
+      "operation": "getComplianceSummaryByConfigRule"
+    },
+    "GetComplianceSummaryByResourceType": {
+      "operation": "getComplianceSummaryByResourceType"
+    },
+    "GetDiscoveredResourceCounts": {
+      "operation": "getDiscoveredResourceCounts"
+    },
+    "GetResourceConfigHistory": {
+      "operation": "getResourceConfigHistory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourceEvaluationSummary": {
+      "operation": "getResourceEvaluationSummary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListDiscoveredResources": {
+      "operation": "listDiscoveredResources",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListResourceEvaluations": {
+      "operation": "listResourceEvaluations"
+    },
+    "PutEvaluations": {
+      "operation": "putEvaluations",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "PutExternalEvaluation": {
+      "operation": "putExternalEvaluation",
+      "resource": "ConfigRule",
+      "param": "rule",
+      "request": {
+        "mode": "required",
+        "interface": "PutExternalEvaluationRequest",
+        "omit": ["ConfigRuleName"]
+      },
+      "builder": "makeConfigResourceHttpBinding",
+      "with": {
+        "requestKey": "ConfigRuleName"
+      },
+      "withTs": {
+        "identifier": "(rule: ConfigRule) => rule.configRuleName"
+      }
+    },
+    "PutResourceConfig": {
+      "operation": "putResourceConfig",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SelectResourceConfig": {
+      "operation": "selectResourceConfig",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartConfigRulesEvaluation": {
+      "operation": "startConfigRulesEvaluation",
+      "resource": "ConfigRule",
+      "param": "rule",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeConfigResourceHttpBinding",
+      "with": {
+        "requestKey": "ConfigRuleNames",
+        "asList": true
+      },
+      "withTs": {
+        "identifier": "(rule: ConfigRule) => rule.configRuleName"
+      }
+    },
+    "StartResourceEvaluation": {
+      "operation": "startResourceEvaluation",
+      "request": {
+        "mode": "required"
+      },
+      "note": "cloudformation:DescribeType is a dependent action: Config validates the CFN_RESOURCE_SCHEMA resource type schema with the CALLER's permissions and rejects with AccessDeniedException without it (observed live; see the StartResourceEvaluation API reference)."
+    }
+  }
+}

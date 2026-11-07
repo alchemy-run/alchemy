@@ -1,6 +1,8 @@
-import type * as SD from "@distilled.cloud/aws/servicediscovery";
+import * as SD from "@distilled.cloud/aws/servicediscovery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudMapServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -49,4 +51,13 @@ export interface UpdateInstanceCustomHealthStatus extends Binding.Service<
 > {}
 export const UpdateInstanceCustomHealthStatus = Binding.Service<UpdateInstanceCustomHealthStatus>(
   "AWS.CloudMap.UpdateInstanceCustomHealthStatus",
+);
+
+export const UpdateInstanceCustomHealthStatusHttp = Layer.effect(
+  UpdateInstanceCustomHealthStatus,
+  makeCloudMapServiceHttpBinding({
+    tag: "AWS.CloudMap.UpdateInstanceCustomHealthStatus",
+    operation: SD.updateInstanceCustomHealthStatus,
+    actions: ["servicediscovery:UpdateInstanceCustomHealthStatus"],
+  }),
 );

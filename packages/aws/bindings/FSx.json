@@ -1,0 +1,137 @@
+{
+  "tag": "AWS.FSx",
+  "module": "fsx",
+  "resources": {
+    "FileSystem": {
+      "file": "FileSystem.ts"
+    }
+  },
+  "builder": "makeFSxAccountHttpBinding",
+  "builders": {
+    "makeFSxAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeFSxFileSystemHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelDataRepositoryTask": {
+      "operation": "cancelDataRepositoryTask",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CopyBackup": {
+      "operation": "copyBackup",
+      "request": {
+        "mode": "required"
+      },
+      "note": "CopyBackup tags the new backup it creates, so it needs TagResource alongside the copy itself."
+    },
+    "CopySnapshotAndUpdateVolume": {
+      "operation": "copySnapshotAndUpdateVolume",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateBackup": {
+      "operation": "createBackup",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "with": {
+        "extraResourceArns": ["arn:aws:fsx:*:*:backup/*"]
+      },
+      "note": "CreateBackup also authorizes on the new backup's own ARN, which is unknowable at deploy time."
+    },
+    "CreateDataRepositoryTask": {
+      "operation": "createDataRepositoryTask",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "required",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "with": {
+        "extraResourceArns": ["arn:aws:fsx:*:*:task/*"]
+      },
+      "note": "The operation also authorizes on the new task's own ARN, which is unknowable at deploy time."
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteBackup": {
+      "operation": "deleteBackup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteSnapshot": {
+      "operation": "deleteSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeBackups": {
+      "operation": "describeBackups"
+    },
+    "DescribeDataRepositoryAssociations": {
+      "operation": "describeDataRepositoryAssociations"
+    },
+    "DescribeDataRepositoryTasks": {
+      "operation": "describeDataRepositoryTasks"
+    },
+    "DescribeFileSystem": {
+      "operation": "describeFileSystems",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeFSxFileSystemHttpBinding",
+      "with": {
+        "requestKey": "FileSystemIds"
+      }
+    },
+    "DescribeSnapshots": {
+      "operation": "describeSnapshots"
+    },
+    "DescribeStorageVirtualMachines": {
+      "operation": "describeStorageVirtualMachines"
+    },
+    "DescribeVolumes": {
+      "operation": "describeVolumes"
+    },
+    "ReleaseFileSystemNfsV3Locks": {
+      "operation": "releaseFileSystemNfsV3Locks",
+      "resource": "FileSystem",
+      "request": {
+        "mode": "optional",
+        "omit": ["FileSystemId"],
+        "inline": true
+      },
+      "builder": "makeFSxFileSystemHttpBinding"
+    },
+    "RestoreVolumeFromSnapshot": {
+      "operation": "restoreVolumeFromSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateSnapshot": {
+      "operation": "updateSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

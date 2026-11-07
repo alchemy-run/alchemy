@@ -1,0 +1,88 @@
+{
+  "tag": "AWS.ServiceCatalog",
+  "module": "service-catalog",
+  "resources": {},
+  "builder": "makeServiceCatalogHttpBinding",
+  "builders": {
+    "makeServiceCatalogHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeProduct": {
+      "operation": "describeProduct"
+    },
+    "DescribeProvisionedProduct": {
+      "operation": "describeProvisionedProduct"
+    },
+    "DescribeProvisioningParameters": {
+      "operation": "describeProvisioningParameters"
+    },
+    "DescribeRecord": {
+      "operation": "describeRecord",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeServiceActionExecutionParameters": {
+      "operation": "describeServiceActionExecutionParameters",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ExecuteProvisionedProductServiceAction": {
+      "operation": "executeProvisionedProductServiceAction",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetProvisionedProductOutputs": {
+      "operation": "getProvisionedProductOutputs"
+    },
+    "ListLaunchPaths": {
+      "operation": "listLaunchPaths",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRecordHistory": {
+      "operation": "listRecordHistory"
+    },
+    "ListStackInstancesForProvisionedProduct": {
+      "operation": "listStackInstancesForProvisionedProduct",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ProvisionProduct": {
+      "operation": "provisionProduct",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchProducts": {
+      "operation": "searchProducts"
+    },
+    "SearchProvisionedProducts": {
+      "operation": "searchProvisionedProducts"
+    },
+    "TerminateProvisionedProduct": {
+      "operation": "terminateProvisionedProduct",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateProvisionedProduct": {
+      "operation": "updateProvisionedProduct",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

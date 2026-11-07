@@ -1,0 +1,90 @@
+{
+  "tag": "AWS.MediaConnect",
+  "module": "mediaconnect",
+  "resources": {
+    "Flow": {
+      "file": "Flow.ts"
+    }
+  },
+  "builder": "makeMediaConnectFlowHttpBinding",
+  "builders": {
+    "makeMediaConnectAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeMediaConnectFlowHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeFlow": {
+      "operation": "describeFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "DescribeFlowSourceMetadata": {
+      "operation": "describeFlowSourceMetadata",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "DescribeFlowSourceThumbnail": {
+      "operation": "describeFlowSourceThumbnail",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GrantFlowEntitlements": {
+      "operation": "grantFlowEntitlements",
+      "resource": "Flow",
+      "request": {
+        "mode": "required",
+        "omit": ["FlowArn"],
+        "inline": true
+      },
+      "with": {
+        "extraResources": ["arn:aws:mediaconnect:*:*:entitlement:*"]
+      },
+      "note": "The IAM resource types for GrantFlowEntitlements are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard."
+    },
+    "ListEntitlements": {
+      "operation": "listEntitlements",
+      "builder": "makeMediaConnectAccountHttpBinding"
+    },
+    "ListFlows": {
+      "operation": "listFlows",
+      "builder": "makeMediaConnectAccountHttpBinding"
+    },
+    "RevokeFlowEntitlement": {
+      "operation": "revokeFlowEntitlement",
+      "resource": "Flow",
+      "request": {
+        "mode": "required",
+        "omit": ["FlowArn"],
+        "inline": true
+      },
+      "with": {
+        "extraResources": ["arn:aws:mediaconnect:*:*:entitlement:*"]
+      },
+      "note": "The IAM resource types for RevokeFlowEntitlement are the flow AND the entitlement; entitlement ARNs are siblings of (not derived from) the flow ARN, so they are granted by wildcard."
+    },
+    "StartFlow": {
+      "operation": "startFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "StopFlow": {
+      "operation": "stopFlow",
+      "resource": "Flow",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

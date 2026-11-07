@@ -1,7 +1,10 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
+import { toWireSeconds } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 export interface StartCodeInterpreterSessionRequest extends Omit<
@@ -66,4 +69,40 @@ export interface StartCodeInterpreterSession extends Binding.Service<
 > {}
 export const StartCodeInterpreterSession = Binding.Service<StartCodeInterpreterSession>(
   "AWS.BedrockAgentCore.StartCodeInterpreterSession",
+);
+
+// Bespoke (not the shared scaffold): converts the ergonomic `sessionTimeout`
+// Duration.Input to the wire `sessionTimeoutSeconds` field.
+export const StartCodeInterpreterSessionHttp = Layer.effect(
+  StartCodeInterpreterSession,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const startCodeInterpreterSession = yield* AWSBindings.withCredentials(
+      agentcore.startCodeInterpreterSession,
+    );
+
+    return Effect.fn(function* <R extends CodeInterpreter>(codeInterpreter: R) {
+      const Identifier = yield* codeInterpreter.codeInterpreterId;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["bedrock-agentcore:StartCodeInterpreterSession"],
+              Resource: [codeInterpreter.codeInterpreterArn],
+            },
+          ],
+        });
+      }
+      return Effect.fn(
+        `AWS.BedrockAgentCore.StartCodeInterpreterSession(${codeInterpreter.LogicalId})`,
+      )(function* ({ sessionTimeout, ...request }: StartCodeInterpreterSessionRequest) {
+        return yield* startCodeInterpreterSession({
+          ...request,
+          sessionTimeoutSeconds: toWireSeconds(sessionTimeout),
+          codeInterpreterIdentifier: yield* Identifier,
+        });
+      });
+    });
+  }),
 );

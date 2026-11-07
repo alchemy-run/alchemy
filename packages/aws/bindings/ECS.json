@@ -1,0 +1,223 @@
+{
+  "tag": "AWS.ECS",
+  "module": "ecs",
+  "alias": "ECS",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    },
+    "Service": {
+      "file": "Service.ts"
+    }
+  },
+  "builder": "makeEcsClusterHttpBinding",
+  "builders": {
+    "makeEcsClusterHttpBinding": {},
+    "makeEcsServiceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ContinueServiceDeployment": {
+      "operation": "continueServiceDeployment",
+      "resource": "Service",
+      "request": {
+        "mode": "required",
+        "interface": "ContinueServiceDeploymentRequest",
+        "omit": []
+      },
+      "builder": "makeEcsServiceHttpBinding",
+      "with": {
+        "resources": ["service-deployment"]
+      },
+      "note": "Authorizes against the service-deployment resource: arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*"
+    },
+    "DescribeContainerInstances": {
+      "operation": "describeContainerInstances",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeContainerInstancesRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["container-instance"]
+      },
+      "note": "Authorizes against the container-instance resource: arn:aws:ecs:{region}:{account}:container-instance/{clusterName}/*"
+    },
+    "DescribeServiceDeployments": {
+      "operation": "describeServiceDeployments",
+      "resource": "Service",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeServiceDeploymentsRequest",
+        "omit": []
+      },
+      "builder": "makeEcsServiceHttpBinding",
+      "with": {
+        "resources": ["service-deployment"]
+      },
+      "note": "Authorizes against the service-deployment resource: arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*"
+    },
+    "DescribeServiceRevisions": {
+      "operation": "describeServiceRevisions",
+      "resource": "Service",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeServiceRevisionsRequest",
+        "omit": []
+      },
+      "builder": "makeEcsServiceHttpBinding",
+      "with": {
+        "resources": ["service-revision"]
+      },
+      "note": "Authorizes against the service-revision resource: arn:aws:ecs:{region}:{account}:service-revision/{cluster}/{service}/*"
+    },
+    "DescribeServices": {
+      "operation": "describeServices",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeServicesRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["service"]
+      },
+      "note": "`ecs:DescribeServices` authorizes against the service resource: arn:aws:ecs:{region}:{account}:service/{clusterName}/*"
+    },
+    "DescribeTasks": {
+      "operation": "describeTasks",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeTasksRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["task"]
+      },
+      "note": "`ecs:DescribeTasks` authorizes against the task resource: arn:aws:ecs:{region}:{account}:task/{clusterName}/*"
+    },
+    "ExecuteCommand": {
+      "operation": "executeCommand",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "ExecuteCommandRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["cluster", "task"]
+      },
+      "note": "`ecs:ExecuteCommand` authorizes against both the cluster and the task."
+    },
+    "GetTaskProtection": {
+      "operation": "getTaskProtection",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "GetTaskProtectionRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["task"]
+      },
+      "note": "Authorizes against the task resource: arn:aws:ecs:{region}:{account}:task/{clusterName}/*"
+    },
+    "ListContainerInstances": {
+      "operation": "listContainerInstances",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "ListContainerInstancesRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["cluster"]
+      },
+      "note": "`ecs:ListContainerInstances` authorizes against the cluster."
+    },
+    "ListServiceDeployments": {
+      "operation": "listServiceDeployments",
+      "resource": "Service",
+      "request": {
+        "mode": "required",
+        "interface": "ListServiceDeploymentsRequest",
+        "omit": ["service", "cluster"]
+      },
+      "builder": "makeEcsServiceHttpBinding",
+      "with": {
+        "resources": ["service"],
+        "inject": true
+      },
+      "note": "`ecs:ListServiceDeployments` authorizes against the service itself."
+    },
+    "ListServices": {
+      "operation": "listServices",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "ListServicesRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": "cluster-condition"
+      },
+      "note": "`ecs:ListServices` has no resource-level scoping — grant `*` conditioned on the bound cluster."
+    },
+    "ListTasks": {
+      "operation": "listTasks",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "ListTasksRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": "cluster-condition"
+      },
+      "note": "`ecs:ListTasks` has no useful resource-level scoping on Fargate (its resource type is container-instance), so grant `*` conditioned on the bound cluster."
+    },
+    "StopServiceDeployment": {
+      "operation": "stopServiceDeployment",
+      "resource": "Service",
+      "request": {
+        "mode": "required",
+        "interface": "StopServiceDeploymentRequest",
+        "omit": []
+      },
+      "builder": "makeEcsServiceHttpBinding",
+      "with": {
+        "resources": ["service-deployment"]
+      },
+      "note": "Authorizes against the service-deployment resource: arn:aws:ecs:{region}:{account}:service-deployment/{cluster}/{service}/*"
+    },
+    "StopTask": {
+      "operation": "stopTask",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "StopTaskRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["task"]
+      },
+      "note": "`ecs:StopTask` authorizes against the task resource: arn:aws:ecs:{region}:{account}:task/{clusterName}/*"
+    },
+    "UpdateContainerInstancesState": {
+      "operation": "updateContainerInstancesState",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateContainerInstancesStateRequest",
+        "omit": ["cluster"]
+      },
+      "with": {
+        "resources": ["container-instance"]
+      },
+      "note": "Authorizes against the container-instance resource: arn:aws:ecs:{region}:{account}:container-instance/{clusterName}/*"
+    }
+  }
+}

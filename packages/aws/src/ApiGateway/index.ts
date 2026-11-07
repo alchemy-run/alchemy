@@ -51,31 +51,31 @@ export { VpcLink, VpcLinkProvider, type VpcLinkProps } from "./VpcLink.ts";
 // Runtime bindings (capabilities). The shared scaffolding in
 // `BindingHttp.ts` is intentionally NOT exported.
 export { CreateApiKey, type CreateApiKeyRequest } from "./CreateApiKey.ts";
-export { CreateApiKeyHttp } from "./CreateApiKeyHttp.ts";
+export { CreateApiKeyHttp } from "./CreateApiKey.ts";
 export { GetApiKey, type GetApiKeyRequest } from "./GetApiKey.ts";
-export { GetApiKeyHttp } from "./GetApiKeyHttp.ts";
+export { GetApiKeyHttp } from "./GetApiKey.ts";
 export { GetApiKeys, type GetApiKeysRequest } from "./GetApiKeys.ts";
-export { GetApiKeysHttp } from "./GetApiKeysHttp.ts";
+export { GetApiKeysHttp } from "./GetApiKeys.ts";
 export { UpdateApiKey, type UpdateApiKeyRequest } from "./UpdateApiKey.ts";
-export { UpdateApiKeyHttp } from "./UpdateApiKeyHttp.ts";
+export { UpdateApiKeyHttp } from "./UpdateApiKey.ts";
 export { DeleteApiKey, type DeleteApiKeyRequest } from "./DeleteApiKey.ts";
-export { DeleteApiKeyHttp } from "./DeleteApiKeyHttp.ts";
+export { DeleteApiKeyHttp } from "./DeleteApiKey.ts";
 export { CreateUsagePlanKey, type CreateUsagePlanKeyRequest } from "./CreateUsagePlanKey.ts";
-export { CreateUsagePlanKeyHttp } from "./CreateUsagePlanKeyHttp.ts";
+export { CreateUsagePlanKeyHttp } from "./CreateUsagePlanKey.ts";
 export { DeleteUsagePlanKey, type DeleteUsagePlanKeyRequest } from "./DeleteUsagePlanKey.ts";
-export { DeleteUsagePlanKeyHttp } from "./DeleteUsagePlanKeyHttp.ts";
+export { DeleteUsagePlanKeyHttp } from "./DeleteUsagePlanKey.ts";
 export { GetUsagePlanKey, type GetUsagePlanKeyRequest } from "./GetUsagePlanKey.ts";
-export { GetUsagePlanKeyHttp } from "./GetUsagePlanKeyHttp.ts";
+export { GetUsagePlanKeyHttp } from "./GetUsagePlanKey.ts";
 export { GetUsagePlanKeys, type GetUsagePlanKeysRequest } from "./GetUsagePlanKeys.ts";
-export { GetUsagePlanKeysHttp } from "./GetUsagePlanKeysHttp.ts";
+export { GetUsagePlanKeysHttp } from "./GetUsagePlanKeys.ts";
 export { GetUsage, type GetUsageRequest } from "./GetUsage.ts";
-export { GetUsageHttp } from "./GetUsageHttp.ts";
+export { GetUsageHttp } from "./GetUsage.ts";
 export { UpdateUsage, type UpdateUsageRequest } from "./UpdateUsage.ts";
-export { UpdateUsageHttp } from "./UpdateUsageHttp.ts";
+export { UpdateUsageHttp } from "./UpdateUsage.ts";
 export { FlushStageCache } from "./FlushStageCache.ts";
-export { FlushStageCacheHttp } from "./FlushStageCacheHttp.ts";
+export { FlushStageCacheHttp } from "./FlushStageCache.ts";
 export { FlushStageAuthorizersCache } from "./FlushStageAuthorizersCache.ts";
-export { FlushStageAuthorizersCacheHttp } from "./FlushStageAuthorizersCacheHttp.ts";
+export { FlushStageAuthorizersCacheHttp } from "./FlushStageAuthorizersCache.ts";
 // Event source contract (implemented by `Lambda.RestApiEventSource`).
 export {
   RestApiEventSource,

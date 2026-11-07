@@ -23,6 +23,11 @@ export const makeGeoPlacesHttpBinding = <I extends object, A, E, R>(options: {
   iamActions: readonly string[];
   /** The distilled operation implementing the capability. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -38,7 +43,7 @@ export const makeGeoPlacesHttpBinding = <I extends object, A, E, R>(options: {
               // geo-places is a standalone, account-wide pay-per-call API
               // scoped through the singleton `provider/default`; the
               // operations have no per-resource ARN.
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

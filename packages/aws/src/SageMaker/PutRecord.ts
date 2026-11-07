@@ -1,6 +1,8 @@
-import type * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
+import * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFeatureGroupHttpBinding } from "./BindingHttp.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
 export interface PutRecordRequest extends Omit<featurestore.PutRecordRequest, "FeatureGroupName"> {}
@@ -43,3 +45,16 @@ export interface PutRecord extends Binding.Service<
   >
 > {}
 export const PutRecord = Binding.Service<PutRecord>("AWS.SageMaker.PutRecord");
+
+export const PutRecordHttp = Layer.effect(
+  PutRecord,
+  makeFeatureGroupHttpBinding({
+    tag: "AWS.SageMaker.PutRecord",
+    operation: featurestore.putRecord,
+    actions: ["sagemaker:PutRecord"],
+    prepare: (request: PutRecordRequest, featureGroupName) => ({
+      ...request,
+      FeatureGroupName: featureGroupName,
+    }),
+  }),
+);

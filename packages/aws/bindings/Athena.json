@@ -1,0 +1,138 @@
+{
+  "tag": "AWS.Athena",
+  "module": "athena",
+  "resources": {
+    "DataCatalog": {
+      "file": "DataCatalog.ts"
+    },
+    "WorkGroup": {
+      "file": "WorkGroup.ts"
+    }
+  },
+  "builder": "makeWorkGroupScopedHttpBinding",
+  "builders": {
+    "makeDataCatalogScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeWorkGroupScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetQueryExecution": {
+      "operation": "batchGetQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetDatabase": {
+      "operation": "getDatabase",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding"
+    },
+    "GetQueryExecution": {
+      "operation": "getQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetQueryResults": {
+      "operation": "getQueryResults",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetQueryRuntimeStatistics": {
+      "operation": "getQueryRuntimeStatistics",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTableMetadata": {
+      "operation": "getTableMetadata",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding"
+    },
+    "ListDatabases": {
+      "operation": "listDatabases",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding"
+    },
+    "ListNamedQueries": {
+      "operation": "listNamedQueries",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListPreparedStatements": {
+      "operation": "listPreparedStatements",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListQueryExecutions": {
+      "operation": "listQueryExecutions",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required",
+        "omit": ["WorkGroup"],
+        "inline": true
+      },
+      "with": {
+        "injectWorkGroup": true
+      }
+    },
+    "ListTableMetadata": {
+      "operation": "listTableMetadata",
+      "resource": "DataCatalog",
+      "param": "catalog",
+      "request": {
+        "mode": "required",
+        "omit": ["CatalogName"],
+        "inline": true
+      },
+      "builder": "makeDataCatalogScopedHttpBinding"
+    },
+    "StopQueryExecution": {
+      "operation": "stopQueryExecution",
+      "resource": "WorkGroup",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

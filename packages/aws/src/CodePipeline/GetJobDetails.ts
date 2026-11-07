@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelineJobHttpBinding } from "./BindingHttp.ts";
 
 export interface GetJobDetailsRequest extends SVC.GetJobDetailsInput {}
 
@@ -32,3 +35,12 @@ export interface GetJobDetails extends Binding.Service<
   >
 > {}
 export const GetJobDetails = Binding.Service<GetJobDetails>("AWS.CodePipeline.GetJobDetails");
+
+export const GetJobDetailsHttp = Layer.effect(
+  GetJobDetails,
+  makeCodePipelineJobHttpBinding({
+    tag: "AWS.CodePipeline.GetJobDetails",
+    operation: codepipeline.getJobDetails,
+    actions: ["codepipeline:GetJobDetails"],
+  }),
+);

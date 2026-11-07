@@ -1,0 +1,44 @@
+{
+  "tag": "AWS.IVSChat",
+  "module": "ivschat",
+  "resources": {
+    "Room": {
+      "file": "Room.ts"
+    }
+  },
+  "builder": "makeIvsChatRoomHttpBinding",
+  "builders": {
+    "makeIvsChatRoomHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DeleteMessage": {
+      "operation": "deleteMessage",
+      "resource": "Room",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteMessageRequest",
+        "omit": ["roomIdentifier"]
+      }
+    },
+    "DisconnectUser": {
+      "operation": "disconnectUser",
+      "resource": "Room",
+      "request": {
+        "mode": "required",
+        "interface": "DisconnectUserRequest",
+        "omit": ["roomIdentifier"]
+      }
+    },
+    "SendEvent": {
+      "operation": "sendEvent",
+      "resource": "Room",
+      "request": {
+        "mode": "required",
+        "interface": "SendEventRequest",
+        "omit": ["roomIdentifier"]
+      }
+    }
+  }
+}

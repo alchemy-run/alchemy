@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `schemas:GetDiscoveredSchema`.
@@ -39,4 +41,13 @@ export interface GetDiscoveredSchema extends Binding.Service<
 > {}
 export const GetDiscoveredSchema = Binding.Service<GetDiscoveredSchema>(
   "AWS.Schemas.GetDiscoveredSchema",
+);
+
+export const GetDiscoveredSchemaHttp = Layer.effect(
+  GetDiscoveredSchema,
+  makeSchemasAccountHttpBinding({
+    tag: "AWS.Schemas.GetDiscoveredSchema",
+    operation: schemas.getDiscoveredSchema,
+    actions: ["schemas:GetDiscoveredSchema"],
+  }),
 );

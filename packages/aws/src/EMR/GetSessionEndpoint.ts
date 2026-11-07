@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -29,3 +32,12 @@ export interface GetSessionEndpoint extends Binding.Service<
   >
 > {}
 export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>("AWS.EMR.GetSessionEndpoint");
+
+export const GetSessionEndpointHttp = Layer.effect(
+  GetSessionEndpoint,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.GetSessionEndpoint",
+    operation: emr.getSessionEndpoint,
+    actions: ["elasticmapreduce:GetSessionEndpoint"],
+  }),
+);

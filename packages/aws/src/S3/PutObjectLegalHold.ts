@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface PutObjectLegalHoldRequest extends Omit<S3.PutObjectLegalHoldRequest, "Bucket"> {}
@@ -43,3 +45,12 @@ export interface PutObjectLegalHold extends Binding.Service<
   >
 > {}
 export const PutObjectLegalHold = Binding.Service<PutObjectLegalHold>("AWS.S3.PutObjectLegalHold");
+
+export const PutObjectLegalHoldHttp = Layer.effect(
+  PutObjectLegalHold,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.PutObjectLegalHold",
+    operation: S3.putObjectLegalHold,
+    actions: ["s3:PutObjectLegalHold"],
+  }),
+);
