@@ -19,7 +19,11 @@ import {
 } from "../../Callback.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
-import { fromDurableObjectState, type WorkerdDurableObjectState } from "./DurableObjectState.ts";
+import {
+  fromDurableObjectState,
+  type NativeDurableObjectState,
+  type WorkerdDurableObjectState,
+} from "./DurableObjectState.ts";
 import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 import { inStorageTransaction } from "./internal/StorageTransaction.ts";
@@ -146,7 +150,9 @@ export const makeDurableObjectCallbackFactory = (
   stateTag: Context.Key<any, any>,
   random: SecureRandom.SecureRandom["Service"],
 ): CallbackFactory => {
-  const state = fromDurableObjectState(raw);
+  // `unknown` skips comparing the native state's two declarations, which
+  // hangs (see `NativeDurableObjectState`).
+  const state = fromDurableObjectState(raw as unknown as NativeDurableObjectState);
   return (name, handler, options) =>
     makeAlarmCallback(state, stateTag, random, name, handler, options);
 };

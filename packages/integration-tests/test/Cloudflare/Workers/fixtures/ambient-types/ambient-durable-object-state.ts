@@ -6,7 +6,10 @@ const describe = (ctx: DurableObjectState): string => ctx.id.toString();
 
 export class Counter extends Cloudflare.DurableObject<
   Counter,
-  { readonly id: () => Effect.Effect<string> }
+  {
+    readonly id: () => Effect.Effect<string>;
+    readonly copy: () => Effect.Effect<unknown>;
+  }
 >()("Counter") {}
 
 export default Counter.make(
@@ -14,6 +17,8 @@ export default Counter.make(
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.sync(() => ({
       id: () => Effect.succeed(describe(state.raw)),
+      // `raw` round-trips through alchemy's converter.
+      copy: () => Effect.succeed(Cloudflare.fromDurableObjectState(state.raw)),
     }));
   }),
 );

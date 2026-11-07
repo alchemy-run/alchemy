@@ -106,38 +106,48 @@ export interface WorkerdDurableObjectState {
   ): Effect.Effect<void, never, RuntimeContext>;
 }
 
+/**
+ * Wrap a native `DurableObjectState` in its Effect view. Takes the same
+ * declaration `raw` has, so `fromDurableObjectState(state.raw)` round-trips
+ * without TypeScript comparing the two declarations (see
+ * {@link NativeDurableObjectState}). A union of both would not help:
+ * TypeScript compares an argument against the conditional member.
+ */
 export const fromDurableObjectState = (
-  state: cf.DurableObjectState,
-): WorkerdDurableObjectState => ({
-  id: state.id,
-  container: state.container,
-  storage: fromDurableObjectStorage(state.storage),
+  native: NativeDurableObjectState,
+): WorkerdDurableObjectState => {
   // The same object either way; `unknown` skips comparing the two
-  // declarations, which is what hangs (see `NativeDurableObjectState`).
-  raw: state as unknown as NativeDurableObjectState,
-  waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
-  blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // The failure is typed away as before: a rejected gate is the
-      // platform resetting the object, not a value a caller handles.
-      return yield* Effect.promise(() =>
-        state.blockConcurrencyWhile(() => Effect.runPromiseWith(context)(callback())),
-      );
-    }),
-  acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
-    Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
-  getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
-  setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
-    Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
-  getWebSocketAutoResponse: () => Effect.sync(() => state.getWebSocketAutoResponse()),
-  getWebSocketAutoResponseTimestamp: (ws: cf.WebSocket) =>
-    Effect.sync(() => state.getWebSocketAutoResponseTimestamp(ws)),
-  setHibernatableWebSocketEventTimeout: (timeoutMs?: number) =>
-    Effect.sync(() => state.setHibernatableWebSocketEventTimeout(timeoutMs)),
-  getHibernatableWebSocketEventTimeout: () =>
-    Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
-  getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
-  abort: (reason?: string, options?: DurableObjectAbortOptions) =>
-    Effect.sync(() => state.abort(reason, options)),
-});
+  // declarations, which is what hangs.
+  const state = native as unknown as cf.DurableObjectState;
+  return {
+    id: state.id,
+    container: state.container,
+    storage: fromDurableObjectStorage(state.storage),
+    raw: native,
+    waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
+    blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
+      Effect.gen(function* () {
+        const context = yield* Effect.context<R>();
+        // The failure is typed away as before: a rejected gate is the
+        // platform resetting the object, not a value a caller handles.
+        return yield* Effect.promise(() =>
+          state.blockConcurrencyWhile(() => Effect.runPromiseWith(context)(callback())),
+        );
+      }),
+    acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
+      Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
+    getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
+    setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
+      Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
+    getWebSocketAutoResponse: () => Effect.sync(() => state.getWebSocketAutoResponse()),
+    getWebSocketAutoResponseTimestamp: (ws: cf.WebSocket) =>
+      Effect.sync(() => state.getWebSocketAutoResponseTimestamp(ws)),
+    setHibernatableWebSocketEventTimeout: (timeoutMs?: number) =>
+      Effect.sync(() => state.setHibernatableWebSocketEventTimeout(timeoutMs)),
+    getHibernatableWebSocketEventTimeout: () =>
+      Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
+    getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
+    abort: (reason?: string, options?: DurableObjectAbortOptions) =>
+      Effect.sync(() => state.abort(reason, options)),
+  };
+};
