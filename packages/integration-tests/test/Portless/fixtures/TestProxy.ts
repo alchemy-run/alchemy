@@ -42,7 +42,7 @@ export interface TestProxy {
   readonly stop: Effect.Effect<void>;
 }
 
-// `DevTrust.publish` sets ALCHEMY_DEV_TRUST on the test process, which every file shares and
+// The test sets ALCHEMY_DEV_TRUST (from `DevTrust.trustEnv`) on the test process, which every file shares and
 // the shared sidecar inherits when it starts. Only a file that needs its proxy's CA trusted
 // publishes it, with a sidecar of its own; the variable goes back when its proxy stops.
 let trustBefore: { readonly value: string | undefined } | undefined;
@@ -87,7 +87,8 @@ export const make = (
               Effect.gen(function* () {
                 trustBefore ??= { value: process.env.ALCHEMY_DEV_TRUST };
                 trustProxies += 1;
-                yield* DevTrust.publish();
+                const trust = yield* DevTrust.trustEnv();
+                Object.assign(process.env, trust);
               }).pipe(
                 Effect.provideService(ConfigProvider.ConfigProvider, settings),
                 Effect.provide(PlatformServices),
