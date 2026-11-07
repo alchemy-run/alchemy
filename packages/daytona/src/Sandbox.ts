@@ -5,7 +5,7 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import type { MountCapability } from "alchemy/Mount";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import type { Resource, ResourceBinding } from "alchemy/Resource";
+import type { Resource, ResourceBinding, LookupMethod } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -258,8 +258,18 @@ export type Sandbox = Resource<
   SandboxProps,
   SandboxAttributes,
   SandboxBinding,
-  Providers
+  Providers,
+  SandboxLookup
 >;
+
+/**
+ * Props for {@link Sandbox.lookup}: find a sandbox this stack
+ * doesn't manage by its name or id.
+ */
+export interface SandboxLookup {
+  /** Sandbox name or id. */
+  name: string;
+}
 
 export type SandboxServices = ServerHost;
 
@@ -375,44 +385,56 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * });
  * ```
  *
+ * ### Looking up an existing sandbox
+ * `Sandbox.lookup` references a sandbox Alchemy doesn't manage (created in
+ * the Daytona dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * `url` and `program` are `undefined`: they come from the deploy that started
+ * the sandbox's program.
+ *
+ * **Example:** Reference an existing sandbox
+ * ```typescript
+ * const box = Daytona.Sandbox.lookup({ name: "research" });
+ * ```
+ *
  * @resource
  * @product Sandbox
  */
-export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> =
-  Platform("Daytona.Sandbox", {
-    createRuntimeContext: createHostRuntimeContext("Daytona.Sandbox"),
-    // A declaration passed as a prop (`snapshot: Base`) is an Effect until
-    // yielded. Yield it here so it is registered and the prop resolves to
-    // its attributes, as with `yield* Snapshot(...)` inside Effect.gen.
-    transformProps: (_id, props: SandboxProps) =>
-      Effect.gen(function* () {
-        if (globalThis.__ALCHEMY_RUNTIME__) return props;
-        const ref = <T>(value: T) =>
-          Effect.isEffect(value)
-            ? (value as unknown as Effect.Effect<T, never, Providers>)
-            : Effect.succeed(value);
-        return {
-          ...props,
-          snapshot: props.snapshot === undefined ? undefined : yield* ref(props.snapshot),
-          linkedSandbox:
-            props.linkedSandbox === undefined ? undefined : yield* ref(props.linkedSandbox),
-          secrets:
-            props.secrets === undefined
-              ? undefined
-              : Object.fromEntries(
-                  yield* Effect.forEach(Object.entries(props.secrets), ([key, value]) =>
-                    Effect.map(ref(value), (resolved) => [key, resolved] as const),
-                  ),
+export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> &
+  LookupMethod<Sandbox> = Platform("Daytona.Sandbox", {
+  createRuntimeContext: createHostRuntimeContext("Daytona.Sandbox"),
+  // A declaration passed as a prop (`snapshot: Base`) is an Effect until
+  // yielded. Yield it here so it is registered and the prop resolves to
+  // its attributes, as with `yield* Snapshot(...)` inside Effect.gen.
+  transformProps: (_id, props: SandboxProps) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__) return props;
+      const ref = <T>(value: T) =>
+        Effect.isEffect(value)
+          ? (value as unknown as Effect.Effect<T, never, Providers>)
+          : Effect.succeed(value);
+      return {
+        ...props,
+        snapshot: props.snapshot === undefined ? undefined : yield* ref(props.snapshot),
+        linkedSandbox:
+          props.linkedSandbox === undefined ? undefined : yield* ref(props.linkedSandbox),
+        secrets:
+          props.secrets === undefined
+            ? undefined
+            : Object.fromEntries(
+                yield* Effect.forEach(Object.entries(props.secrets), ([key, value]) =>
+                  Effect.map(ref(value), (resolved) => [key, resolved] as const),
                 ),
-          mounts:
-            props.mounts === undefined
-              ? undefined
-              : yield* Effect.forEach(props.mounts, (mount) =>
-                  Effect.map(ref(mount.volume), (volume) => ({ ...mount, volume })),
-                ),
-        };
-      }),
-  });
+              ),
+        mounts:
+          props.mounts === undefined
+            ? undefined
+            : yield* Effect.forEach(props.mounts, (mount) =>
+                Effect.map(ref(mount.volume), (volume) => ({ ...mount, volume })),
+              ),
+      };
+    }),
+});
 
 const resolveRef = <T>(ref: Ref<T>) => Effect.succeed(resolved(ref));
 
@@ -730,6 +752,18 @@ export const SandboxProvider = () =>
             }
           }
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* getSandbox(name);
+          return found === undefined
+            ? undefined
+            : {
+                ...toSandboxAttributes(found),
+                url: undefined,
+                program: undefined,
+                derivedSnapshot: undefined,
+              };
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = yield* getSandbox(
             output?.sandboxId ?? (yield* resolveName(id, olds?.name, output?.name)),
