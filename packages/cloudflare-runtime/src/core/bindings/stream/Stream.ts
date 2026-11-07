@@ -13,6 +13,7 @@ import { DEFAULT_COMPATIBILITY_DATE, SOCKET_USER_ENTRY } from "../../internal/co
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -136,25 +137,41 @@ export const StreamLive = Layer.effect(
       Effect.gen(function* () {
         const { worker } = yield* PluginContext;
         let used = false;
+        let hosting = false;
         let loopbackService: WorkerdConfig.ServiceDesignator | undefined;
+        // The `StreamBinding` entrypoint, reached through the storage owner
+        // (see `SharedStorage`). `videos` and `watermarks` return RPC
+        // targets, which the registry proxy terminates and forwards.
+        let streamService: WorkerdConfig.ServiceDesignator = {
+          name: SERVICE_STREAM,
+          entrypoint: STREAM_BINDING_ENTRYPOINT,
+        };
 
         return {
           api: {
             register: () =>
               Plugin.use(Loopback.Loopback, (loopback) =>
-                Effect.map(loopback.api.route(LOOPBACK_TARGET_STREAM, handler), (service) => {
-                  used = true;
-                  loopbackService = service;
-                  return {
-                    name: SERVICE_STREAM,
-                    entrypoint: STREAM_BINDING_ENTRYPOINT,
-                  };
-                }),
+                Effect.all([
+                  loopback.api.route(LOOPBACK_TARGET_STREAM, handler),
+                  SharedStorage.route(
+                    { name: SERVICE_STREAM, entrypoint: STREAM_BINDING_ENTRYPOINT },
+                    {
+                      rpcProperties: ["videos", "watermarks"],
+                    },
+                  ),
+                ]).pipe(
+                  Effect.map(([service, stream]) => {
+                    used = true;
+                    loopbackService = service;
+                    streamService = stream;
+                    return stream;
+                  }),
+                ),
               ),
           },
           start: (ports) =>
             Effect.sync(() => {
-              if (!used) return;
+              if (!used && !hosting) return;
               const port = ports[SOCKET_USER_ENTRY];
               if (worker.publicUrl !== undefined) {
                 entryUrl = worker.publicUrl;
@@ -163,9 +180,22 @@ export const StreamLive = Layer.effect(
               }
             }),
           defer: Effect.gen(function* () {
-            if (!used || loopbackService === undefined) return {};
+            // A candidate storage owner hosts the simulator even unbound, so
+            // it can serve other runtimes' videos (see `SharedStorage`).
+            hosting = !used && (yield* SharedStorage.hosting);
+            if (hosting && loopbackService === undefined) {
+              // The simulator resolves its public URL over the loopback. The
+              // Loopback plugin's services are static, so routing here is safe.
+              loopbackService = yield* PluginContext.use((context) =>
+                context.get(Loopback.Loopback),
+              ).pipe(
+                Effect.flatMap((loopback) => loopback.api.route(LOOPBACK_TARGET_STREAM, handler)),
+                Effect.orElseSucceed(() => undefined),
+              );
+            }
+            if ((!used && !hosting) || loopbackService === undefined) return {};
             const storageService = yield* makeStorageService;
-            const streamService: WorkerdConfig.Service = {
+            const streamSimulator: WorkerdConfig.Service = {
               name: SERVICE_STREAM,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
@@ -205,8 +235,11 @@ export const StreamLive = Layer.effect(
                 ],
               },
             };
+            // The router serves preview URLs on this runtime's entry. A
+            // hosting-only owner needs it too: the simulator builds preview
+            // URLs from the owner's entry URL.
             return {
-              services: [storageService, streamService],
+              services: [storageService, streamSimulator],
               middlewares: [
                 {
                   name: "stream:router",
@@ -218,15 +251,7 @@ export const StreamLive = Layer.effect(
                         esModule: STREAM_ROUTER_SCRIPT,
                       },
                     ],
-                    bindings: [
-                      {
-                        name: "STREAM",
-                        service: {
-                          name: SERVICE_STREAM,
-                          entrypoint: STREAM_BINDING_ENTRYPOINT,
-                        },
-                      },
-                    ],
+                    bindings: [{ name: "STREAM", service: streamService }],
                   },
                   upstreamBindingName: "USER_WORKER",
                   // After the entry middleware (order 0), before the user worker.

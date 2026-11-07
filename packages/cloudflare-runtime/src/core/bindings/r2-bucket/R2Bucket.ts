@@ -15,7 +15,8 @@ import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
-import type { BindingHook } from "../../PluginContext.ts";
+import type { BindingHook, PluginContext } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -51,7 +52,7 @@ export class R2Bucket extends Plugin.Service<
     readonly register: (
       props: R2ServiceProps,
       options?: { readonly s3Credentials?: S3Credentials },
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator, never, PluginContext>;
   }
 >()("cloudflare-runtime/plugin/R2Bucket") {}
 
@@ -101,15 +102,20 @@ export const R2BucketLive = Layer.effect(
      * Each exposed bucket is an ordinary `r2Bucket` binding onto the shared
      * `r2` service.
      */
-    const makeS3Middleware = (s3Buckets: ReadonlyMap<string, S3Credentials>) =>
+    const makeS3Middleware = (
+      s3Buckets: ReadonlyMap<
+        string,
+        { credentials: S3Credentials; service: WorkerdConfig.ServiceDesignator }
+      >,
+    ) =>
       Effect.gen(function* () {
         const buckets: Record<string, R2S3Bucket> = {};
         const bindings: Array<WorkerdConfig.Worker_Binding> = [];
         let index = 0;
-        for (const [bucketName, credentials] of s3Buckets) {
+        for (const [bucketName, { credentials, service }] of s3Buckets) {
           const binding = `BUCKET_${index++}`;
           buckets[bucketName] = { binding, credentials };
-          bindings.push({ name: binding, r2Bucket: r2Designator({ bucketName }) });
+          bindings.push({ name: binding, r2Bucket: service });
         }
         return {
           name: "r2:s3",
@@ -126,31 +132,41 @@ export const R2BucketLive = Layer.effect(
     return R2Bucket.of(
       Effect.sync(() => {
         let used = false;
-        const s3Buckets = new Map<string, S3Credentials>();
+        const s3Buckets = new Map<
+          string,
+          { credentials: S3Credentials; service: WorkerdConfig.ServiceDesignator }
+        >();
         const s3Conflicts = new Set<string>();
 
         return {
           api: {
             register: (props, options) =>
-              Effect.sync(() => {
-                used = true;
-                const credentials = options?.s3Credentials;
-                if (credentials !== undefined) {
-                  const existing = s3Buckets.get(props.bucketName);
-                  if (
-                    existing !== undefined &&
-                    (existing.accessKeyId !== credentials.accessKeyId ||
-                      existing.secretAccessKey !== credentials.secretAccessKey)
-                  ) {
-                    s3Conflicts.add(props.bucketName);
-                  }
-                  s3Buckets.set(props.bucketName, credentials);
-                }
-                return r2Designator(props);
-              }),
+              // Routed while binding hooks run: the S3 middleware is built in
+              // `defer`, too late to subscribe to the registry proxy.
+              SharedStorage.route(r2Designator(props)).pipe(
+                Effect.tap((service) =>
+                  Effect.sync(() => {
+                    used = true;
+                    const credentials = options?.s3Credentials;
+                    if (credentials !== undefined) {
+                      const existing = s3Buckets.get(props.bucketName)?.credentials;
+                      if (
+                        existing !== undefined &&
+                        (existing.accessKeyId !== credentials.accessKeyId ||
+                          existing.secretAccessKey !== credentials.secretAccessKey)
+                      ) {
+                        s3Conflicts.add(props.bucketName);
+                      }
+                      s3Buckets.set(props.bucketName, { credentials, service });
+                    }
+                  }),
+                ),
+              ),
           },
           defer: Effect.gen(function* () {
-            if (!used) return {};
+            // A candidate storage owner hosts the simulator even unbound, so
+            // it can serve other runtimes' buckets (see `SharedStorage`).
+            if (!used && !(yield* SharedStorage.hosting)) return {};
             if (s3Conflicts.size > 0) {
               return yield* ConfigError.make({
                 subtag: "R2Bucket",
