@@ -118,7 +118,9 @@ export interface PostgresProps {
    */
   name?: string;
   /**
-   * Postgres image. Default is the official SSL image tag 16.
+   * Postgres image. A new database uses the official SSL image tag 16.
+   * If omitted, an existing database keeps its current image, so
+   * adopting one never switches its Postgres major version.
    *
    * @default "ghcr.io/railwayapp-templates/postgres-ssl:16"
    */
@@ -295,6 +297,7 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  *
  * ### Image
  * Default is Postgres 16 with SSL. Pass `image` to pin another tag.
+ * Without `image`, an adopted database keeps the image it runs.
  *
  * **Example:** Postgres 17
  * ```typescript
@@ -991,13 +994,21 @@ export const PostgresProvider = () =>
       let needsDeploy = false;
 
       const observedImage = instance?.source?.image ?? undefined;
-      const imageChanged = sourceImage !== undefined && !sameImage(observedImage, sourceImage);
+      // Without `image`, keep the observed one: an adopted database may run a
+      // newer major than the default, and Postgres won't start an older server
+      // on its data directory.
+      const desiredImage =
+        props.image ??
+        (observedImage === undefined || observedImage.length === 0
+          ? DEFAULT_POSTGRES_IMAGE
+          : undefined);
+      const imageChanged = desiredImage !== undefined && !sameImage(observedImage, desiredImage);
       const observedRegion = instance?.region ?? undefined;
       const regionChanged = props.region !== undefined && props.region !== observedRegion;
       const sleepOn = instance?.sleepApplication !== false;
       if (imageChanged || regionChanged || sleepOn) {
         yield* serviceInstanceUpdate(environmentId, current.id, {
-          ...(imageChanged ? { source: { image: sourceImage } } : {}),
+          ...(imageChanged ? { source: { image: desiredImage } } : {}),
           ...(regionChanged ? { region: props.region } : {}),
           ...(sleepOn ? { sleepApplication: false } : {}),
         });
@@ -1049,9 +1060,6 @@ export const PostgresProvider = () =>
           resourceName: volumeName,
           serviceId: current.id,
         });
-      }
-      if (volume.volume.name !== volumeName) {
-        yield* stampVolumeName(volume.volumeId, volumeName);
       }
       const observedMount = volume.mountPath;
       const observedServiceId = volume.serviceId ?? undefined;
