@@ -60,12 +60,15 @@ describe.skipIf(process.platform === "win32" || process.env.FAST)(
 
           const seen = JSON.parse(yield* fs.readFileString(out)) as {
             contributed: string | undefined;
+            execContributed: string | undefined;
             bundle: string | undefined;
             certificates: string | undefined;
           };
-          // The sidecar inherited what the CLI published (other providers may
-          // add their own files)...
-          expect(seen.contributed?.split(delimiter)).toContain(path.join(home, ".floci", "ca.pem"));
+          // The CLI handed the exec child and the sidecar the contributed
+          // files (other providers may add their own)...
+          const floci = path.join(home, ".floci", "ca.pem");
+          expect(seen.execContributed?.split(delimiter)).toContain(floci);
+          expect(seen.contributed?.split(delimiter)).toContain(floci);
           // ...and the child's one bundle holds both CAs.
           expect(seen.bundle).not.toBe(caller);
           expect(seen.certificates).toContain(CALLER_CA.trim());

@@ -399,7 +399,10 @@ if (testDev) {
   // The CAs `alchemy dev` trusts. Local workerd ignores
   // NODE_TLS_REJECT_UNAUTHORIZED (it's C++, not Node), so a test that reaches
   // a provider's emulator over TLS needs the emulator's CA, exactly as in dev.
-  await Effect.runPromise(DevTrust.publish().pipe(Effect.provide(PlatformServices)));
+  Object.assign(
+    process.env,
+    await Effect.runPromise(DevTrust.trustEnv().pipe(Effect.provide(PlatformServices))),
+  );
 }
 
 /** The test services' layers, closest wins over the stack's own. */
