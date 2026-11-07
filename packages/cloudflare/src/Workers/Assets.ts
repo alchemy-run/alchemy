@@ -13,6 +13,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import picomatch from "picomatch";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -80,6 +81,31 @@ export interface AssetsConfig {
   redirects?: string;
 }
 
+/**
+ * An upload manifest: served path → content hash and size.
+ */
+export type AssetManifest = Record<string, { hash: string; size: number }>;
+
+/**
+ * Keep the previous build's content-hashed files served after a deploy.
+ * See {@link AssetsProps.retainPrevious}.
+ */
+export interface RetainPreviousAssets {
+  /**
+   * Globs, relative to the assets directory, selecting the files to keep
+   * served after a deploy of a different build (e.g. `["assets/**"]`).
+   * Only match content-hashed build output: a retained path stays served
+   * while the next build is live, even though that build no longer has it.
+   */
+  paths: string[];
+  /**
+   * How many previous builds to keep files from. Only `1` is supported.
+   *
+   * @default 1
+   */
+  generations?: 1;
+}
+
 export interface AssetReadResult {
   directory: string;
   /**
@@ -90,7 +116,7 @@ export interface AssetReadResult {
    */
   pathPrefix: string;
   config: AssetsConfig | undefined;
-  manifest: Record<string, { hash: string; size: number }>;
+  manifest: AssetManifest;
   _headers: string | undefined;
   _redirects: string | undefined;
   hash: string;
@@ -122,7 +148,126 @@ export interface AssetsProps extends AssetsConfig {
    * @see https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/
    */
   base?: string;
+  /**
+   * Keep serving the previous build's files matching `paths` after a
+   * deploy, so a page loaded before the deploy can still fetch the
+   * content-hashed chunks it references (e.g. a lazily loaded route).
+   *
+   * Each deploy records the current build's entries matching `paths` in the
+   * Worker's state. These entries identify the build: they are
+   * content-hashed, so equal entries mean the same build. A deploy of a
+   * different build adds the recorded entries whose paths the new build
+   * lacks to its upload manifest. A redeploy of the same build (e.g. a
+   * Worker-only change) carries the same files again. So a build's files
+   * stay served while the next build is live and are dropped when the
+   * build after that is deployed. Only a build's own files are recorded,
+   * never files that were themselves carried, so the served set spans at
+   * most two builds.
+   *
+   * Carrying moves no bytes: Cloudflare's upload session is
+   * content-addressed and does not ask for files it still stores. A carried
+   * file Cloudflare no longer stores is dropped from the manifest with a
+   * warning instead of failing the deploy.
+   *
+   * `_headers`, `_redirects` and `.assetsignore` are never uploaded, so
+   * they are never retained.
+   *
+   * @example
+   * ```ts
+   * assets: { retainPrevious: { paths: ["assets/**"] } }
+   * ```
+   */
+  retainPrevious?: RetainPreviousAssets;
 }
+
+/**
+ * Select the manifest entries matching `retain.paths`: the entries a
+ * deploy records so the next deploy can carry them. Globs match the path
+ * relative to the assets directory, i.e. the manifest key without the
+ * `base` prefix and leading slash. Entries outside the prefix (the SPA
+ * `/index.html` alias) never match.
+ */
+export const selectRetainedAssets = (
+  manifest: AssetManifest,
+  retain: RetainPreviousAssets,
+  pathPrefix = "",
+): AssetManifest => {
+  const matches = picomatch(retain.paths, { dot: true });
+  return Object.fromEntries(
+    Object.entries(manifest).filter(
+      ([name]) => name.startsWith(`${pathPrefix}/`) && matches(name.slice(pathPrefix.length + 1)),
+    ),
+  );
+};
+
+/**
+ * The entries a deploy carries: the previous build's. A deploy of a build
+ * other than the recorded one carries the recorded build's entries. A
+ * redeploy of the recorded build carries what the recorded deploy carried,
+ * so the build before it stays served.
+ *
+ * @param current the current build's retained entries
+ * @param recorded the Worker's state from the last deploy
+ */
+export const previousBuildAssets = (
+  current: AssetManifest,
+  recorded: { retainedAssets?: AssetManifest; carriedAssets?: AssetManifest } | undefined,
+): AssetManifest | undefined =>
+  recorded?.retainedAssets !== undefined && sameAssets(current, recorded.retainedAssets)
+    ? recorded.carriedAssets
+    : recorded?.retainedAssets;
+
+const sameAssets = (a: AssetManifest, b: AssetManifest): boolean => {
+  const names = Object.keys(a);
+  return (
+    names.length === Object.keys(b).length &&
+    names.every((name) => Object.hasOwn(b, name) && b[name].hash === a[name].hash)
+  );
+};
+
+/**
+ * Merge the previous build's retained entries into the current upload
+ * manifest. A path the current build also has keeps the current entry;
+ * every other retained path is added and reported in `carried`.
+ */
+export const mergeRetainedAssets = (
+  manifest: AssetManifest,
+  retained: AssetManifest | undefined,
+): { manifest: AssetManifest; carried: string[] } => {
+  if (retained === undefined) {
+    return { manifest, carried: [] };
+  }
+  const carried = Object.keys(retained)
+    .filter((name) => !Object.hasOwn(manifest, name))
+    .sort();
+  if (carried.length === 0) {
+    return { manifest, carried };
+  }
+  const merged: AssetManifest = { ...manifest };
+  for (const name of carried) {
+    merged[name] = retained[name];
+  }
+  return {
+    manifest: Object.fromEntries(Object.entries(merged).sort((a, b) => a[0].localeCompare(b[0]))),
+    carried,
+  };
+};
+
+/**
+ * The carried paths an upload session asked for: their hash is in the
+ * session's buckets and no current file has it, so there is nothing to
+ * upload. The caller drops them from the manifest.
+ */
+export const requestedCarriedAssets = (
+  manifest: AssetManifest,
+  carried: readonly string[],
+  requested: ReadonlySet<string>,
+  uploadable: ReadonlySet<string>,
+): string[] =>
+  carried.filter((name) => {
+    const hash = manifest[name]?.hash;
+    return hash !== undefined && requested.has(hash) && !uploadable.has(hash);
+  });
 
 /**
  * `base` → manifest path prefix. Only a root-relative base names a path
@@ -276,7 +421,14 @@ export const mergeAssetsConfigFiles = (
   };
 };
 
-export const readAssets = Effect.fn(function* ({ directory, base, ...config }: AssetsProps) {
+export const readAssets = Effect.fn(function* ({
+  directory,
+  base,
+  // Deploy behaviour, not asset content or router config: the Worker
+  // provider reads it from props, and it must not reach Cloudflare.
+  retainPrevious: _retainPrevious,
+  ...config
+}: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // `base` nests the *manifest* paths (what Cloudflare matches request
@@ -451,6 +603,12 @@ export const uploadAssets = Effect.fn(function* (
   assets: AssetReadResult,
   { note }: ScopedPlanStatusSession,
   dispatchNamespace?: string,
+  /**
+   * The previous build's retained entries (see
+   * {@link previousBuildAssets}). Paths the current build lacks are added
+   * to the upload manifest.
+   */
+  retained?: AssetManifest,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -469,6 +627,11 @@ export const uploadAssets = Effect.fn(function* (
   for (const [name, { hash }] of Object.entries(assets.manifest)) {
     assetsByHash.set(hash, toDiskPath(name));
   }
+  // Carried entries have no file on disk. Cloudflare keeps recently
+  // uploaded content and does not ask for it again; a carried hash it does
+  // ask for is dropped from `manifest` and the session restarts without
+  // it. Hoisted so a session retry keeps the reduced manifest.
+  let { manifest, carried } = mergeRetainedAssets(assets.manifest, retained);
   // Anchored: `assets.directory` may be relative to the initial cwd (a
   // `Command.Build` outdir), and a live `process.cwd()` read can race a
   // concurrent tool's transient chdir (framework source builds).
@@ -542,20 +705,42 @@ export const uploadAssets = Effect.fn(function* (
   // not re-bucketed, so a retry resumes where the last session
   // stopped, and a fresh session with nothing left to upload returns
   // the completion JWT directly.
-  const runSession = Effect.fn(function* () {
-    yield* note("Checking assets...", { kind: "status" });
-    const session = dispatchNamespace
-      ? yield* wfp.createDispatchNamespaceScriptAssetUpload({
+  const createSession = () =>
+    dispatchNamespace
+      ? wfp.createDispatchNamespaceScriptAssetUpload({
           accountId,
           dispatchNamespace,
           scriptName: workerName,
-          manifest: assets.manifest,
+          manifest,
         })
-      : yield* workers.createScriptAssetUpload({
+      : workers.createScriptAssetUpload({
           accountId,
           scriptName: workerName,
-          manifest: assets.manifest,
+          manifest,
         });
+
+  const runSession = Effect.fn(function* () {
+    yield* note("Checking assets...", { kind: "status" });
+    let session = yield* createSession();
+    // Each pass drops at least one carried path, so this ends.
+    while (true) {
+      const unavailable = requestedCarriedAssets(
+        manifest,
+        carried,
+        new Set(session.buckets?.flat()),
+        new Set(assetsByHash.keys()),
+      );
+      if (unavailable.length === 0) {
+        break;
+      }
+      yield* Effect.logWarning(
+        `Asset upload for worker ${workerName}: ${unavailable.length} retained asset(s) of the previous deploy are no longer stored and are not carried: ${unavailable.join(", ")}`,
+      );
+      const drop = new Set(unavailable);
+      manifest = Object.fromEntries(Object.entries(manifest).filter(([name]) => !drop.has(name)));
+      carried = carried.filter((name) => !drop.has(name));
+      session = yield* createSession();
+    }
     if (!session.buckets?.length) {
       if (!session.jwt) {
         return yield* new AssetUploadSessionError({
@@ -608,5 +793,5 @@ export const uploadAssets = Effect.fn(function* (
       times: 3,
     }),
   );
-  return { jwt };
+  return { jwt, carried };
 });

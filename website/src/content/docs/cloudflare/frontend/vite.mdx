@@ -113,6 +113,10 @@ const site = yield* Cloudflare.Website.Vite("Website", {
   request through the Worker, for handlers that intercept asset
   requests. The built asset directory is supplied by the build, so
   unlike a plain Worker there is no `directory` to configure.
+  `retainPrevious: { paths: ["assets/**"] }` keeps the previous
+  build's hashed chunks served after a deploy, so a page loaded before
+  the deploy can still lazily load them (see
+  [Keep the previous build's chunks](/cloudflare/compute/workers#keep-the-previous-builds-chunks)).
 - Everything else is inherited from the Worker — `domain`, `env`,
   `compatibility`, `crons`, and so on. See
   [Workers](/cloudflare/compute/workers).
