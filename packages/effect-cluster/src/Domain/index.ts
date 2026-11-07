@@ -357,7 +357,7 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
 );
 
 /** Options for {@link layerEntities}. */
-export interface LayerOptions<PoolReq> {
+export interface EntitiesOptions<PoolReq> {
   /** The entity that hosts the model: its type in the cluster. */
   readonly name: string;
   /**
@@ -436,7 +436,7 @@ export interface LayerOptions<PoolReq> {
  * @provides WorkflowEngine
  */
 export const layerEntities = <PoolReq>(
-  options: LayerOptions<PoolReq>,
+  options: EntitiesOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,

@@ -203,7 +203,7 @@ const multiplexed = (
 };
 
 /** Options for {@link layerDurableObjects}. */
-export interface LayerOptions<PoolReq> {
+export interface DurableObjectsOptions<PoolReq> {
   /** The Rivet Durable Object class that hosts the model: its actors' name. */
   readonly name: string;
   /**
@@ -324,7 +324,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  * @provides WorkflowEngine
  */
 export const layerDurableObjects = <PoolReq>(
-  options: LayerOptions<PoolReq>,
+  options: DurableObjectsOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
