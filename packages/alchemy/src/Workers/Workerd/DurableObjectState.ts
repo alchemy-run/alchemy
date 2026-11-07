@@ -1,12 +1,22 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
-import type {} from "../../Phase.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { runInBackground } from "../EventLifetime.ts";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
+
+declare global {
+  /**
+   * Merges with workerd's ambient `DurableObjectState`, the one a project
+   * gets from tsconfig `"types": ["@cloudflare/workers-types"]`. Empty on
+   * its own: it adds no members, so `NativeDurableObjectState` can tell
+   * whether the ambient declaration is loaded. Declared here, not in
+   * `Phase.ts`, so it is emitted in the same `.d.ts` as the type that reads it.
+   */
+  interface DurableObjectState<Props = unknown> {}
+}
 
 /**
  * The native workerd `DurableObjectState` that `raw` exposes: the ambient

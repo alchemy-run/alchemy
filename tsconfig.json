@@ -193,6 +193,12 @@
       "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/tsconfig.json"
     },
     {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.ambient.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.module.json"
+    },
+    {
       "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2

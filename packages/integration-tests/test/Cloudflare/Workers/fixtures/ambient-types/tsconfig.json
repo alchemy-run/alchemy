@@ -4,7 +4,7 @@
   // assignable to helpers written against the ambient `DurableObjectState`
   // (#3119); a regression hangs the checker rather than failing it.
   "extends": "../../../../../../../tsconfig.base.json",
-  "include": ["*.ts"],
+  "include": ["ambient-durable-object-state.ts"],
   "compilerOptions": {
     "noEmit": true,
     "declaration": false,
