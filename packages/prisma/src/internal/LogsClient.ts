@@ -8,7 +8,6 @@ import type {
   DeploymentLogsQuery,
   DeploymentLogsRequest,
 } from "../Types.ts";
-import { authorizationHeader } from "./Authorization.ts";
 import { Credentials } from "./Credentials.ts";
 
 /**
