@@ -1,0 +1,289 @@
+import * as Portless from "@alchemy.run/portless";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Ingress from "alchemy/Local/Ingress";
+import { Stage } from "alchemy/Stage";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
+import { listener } from "./fixtures/Listener.ts";
+import { routeOf } from "./fixtures/Processes.ts";
+import * as TestProxy from "./fixtures/TestProxy.ts";
+
+// The router, through the call a resource's local provider makes: `Ingress.attach` imports the
+// module the value names and builds its Router. The consumers (a Worker, a `Website.Server`) call
+// exactly this.
+const proxy = TestProxy.make();
+const { test, afterAll } = Test.make({
+  providers: proxy.providers(),
+  dev: true,
+  stage: "dev_alice",
+  sidecar: false,
+});
+afterAll(proxy.stop);
+
+const program = Effect.gen(function* () {
+  return yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
+});
+
+/** The target a resource's provider builds for a resource of this id. */
+const targetOf = (id: string, stack = "ingress-test"): Ingress.Target => ({
+  stack,
+  stage: "dev_alice",
+  fqn: id,
+  id,
+  type: "Test.Web",
+});
+
+/** Routes a target to a listener in a scope the test closes itself. */
+const attach = (config: Ingress.Ingress, id: string, url: string, stack?: string) =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const close = Scope.close(scope, Exit.void);
+    // A failed assertion must not leave a claim behind for the next test.
+    yield* Effect.addFinalizer(() => close);
+    const origin = yield* Ingress.attach(config, targetOf(id, stack), new URL(url)).pipe(
+      Scope.provide(scope),
+    );
+    return { origin, close };
+  });
+
+test.provider(
+  "Ingress names a resource like Origin does, and routes it to its listener until the scope closes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // The config is made from the Proxy resource, and its Outputs resolve to the proxy's settings.
+      const { proxy: deployed, ingress } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
+          return { proxy, ingress: Portless.Ingress(proxy) };
+        }),
+      );
+      const config = Portless.Ingress(deployed);
+      expect(ingress).toEqual(config);
+      expect(config).toEqual({
+        module: "@alchemy.run/portless/IngressLive",
+        domain: "ingress-adapter",
+        tld: "localhost",
+        port: deployed.port,
+        stateDirectory: deployed.stateDirectory,
+      });
+
+      // The name is known before the listener exists, and is the one Origin gives the same id.
+      const expected = yield* Portless.Origin("Web", { proxy: deployed }).pipe(
+        Effect.provideService(Stage, "dev_alice"),
+      );
+      expect(expected).toBe(`https://dev-alice.web.ingress-adapter.localhost:${deployed.port}`);
+
+      const web = yield* listener("web");
+      const attached = yield* attach(config, "Web", web.url);
+      expect(attached.origin).toBe(expected);
+
+      const response = yield* TestProxy.serving(expected, deployed);
+      expect(JSON.parse(response.body)).toEqual({ listener: "web" });
+      const hostname = new URL(expected).hostname;
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toMatchObject({
+        port: web.port,
+        pid: process.pid,
+      });
+
+      // Closing the scope removes the route, and the proxy stops serving the name.
+      yield* attached.close;
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toBeUndefined();
+      yield* TestProxy.answers(expected, deployed, 404);
+    }).pipe(Effect.scoped),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+test.provider(
+  "Ingress follows the attach rules: the same listener changes nothing, a new one replaces, the latest owns the route",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(program);
+      const config = Portless.Ingress(deployed);
+      const other = yield* attach(config, "Other", (yield* listener("other")).url);
+      const first = yield* listener("first");
+      const second = yield* listener("second");
+      const hostname = `dev-alice.web.ingress-adapter.localhost`;
+      const answers = (origin: string) =>
+        TestProxy.serving(origin, deployed).pipe(Effect.map((r) => JSON.parse(r.body).listener));
+
+      // The same resource and listener again changes nothing.
+      const a = yield* attach(config, "Web", first.url);
+      const before = yield* routeOf(deployed.stateDirectory, hostname);
+      const b = yield* attach(config, "Web", first.url);
+      expect(b.origin).toBe(a.origin);
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toEqual(before);
+
+      // A new listener replaces the route.
+      const c = yield* attach(config, "Web", second.url);
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toMatchObject({
+        port: second.port,
+      });
+      expect(yield* answers(a.origin)).toBe("second");
+
+      // Closing an earlier attach removes nothing: a later one took the route over.
+      yield* a.close;
+      yield* b.close;
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toMatchObject({
+        port: second.port,
+      });
+      expect(yield* answers(a.origin)).toBe("second");
+
+      // The same id in another stack of this process gets the same name, and is refused rather
+      // than taking the route over.
+      const elsewhere = yield* Effect.flip(attach(config, "Web", first.url, "other-stack"));
+      expect(elsewhere.message).toContain("already routed");
+      expect(yield* answers(a.origin)).toBe("second");
+
+      // Closing the latest removes its route and nothing else.
+      yield* c.close;
+      expect(yield* routeOf(deployed.stateDirectory, hostname)).toBeUndefined();
+      expect(
+        yield* routeOf(deployed.stateDirectory, "dev-alice.other.ingress-adapter.localhost"),
+      ).toBeDefined();
+      yield* other.close;
+    }).pipe(Effect.scoped),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+test.provider(
+  "Ingress takes its name from the name it was given",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(program);
+      const config = Portless.Ingress(deployed, { name: "Site" });
+      expect(config.name).toBe("Site");
+      const site = yield* attach(config, "Website", (yield* listener("site")).url);
+      expect(site.origin).toBe(`https://dev-alice.site.ingress-adapter.localhost:${deployed.port}`);
+    }).pipe(Effect.scoped),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+test.provider(
+  "Ingress refuses what it can't route, naming why, and routes nothing",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
+          // The name another resource of this process already routes.
+          const taken = yield* Portless.Dev("Web", {
+            proxy,
+            command:
+              'node -e \'require("http").createServer((_, r) => r.end("ok")).listen(process.env.PORT, "127.0.0.1")\'',
+          });
+          return { proxy, taken };
+        }),
+      );
+      const config = Portless.Ingress(deployed.proxy);
+      const failure = (id: string, url: string) =>
+        Effect.flip(Ingress.attach(config, targetOf(id), new URL(url)).pipe(Effect.scoped));
+
+      const claimed = yield* failure("Web", "http://localhost:4000");
+      expect(claimed._tag).toBe("IngressError");
+      expect(claimed.message).toContain("already routed");
+
+      // Portless forwards plain HTTP to a port on this machine.
+      const secure = yield* failure("Secure", "https://localhost:4000");
+      expect(secure._tag).toBe("IngressError");
+      expect(secure.message).toContain("plain HTTP");
+      const remote = yield* failure("Remote", "http://example.com:4000");
+      expect(remote.message).toContain("loopback");
+      // A value naming the module but not the proxy it routes through.
+      const unproxied = yield* Effect.flip(
+        Ingress.attach(
+          { module: "@alchemy.run/portless/IngressLive" },
+          targetOf("Unproxied"),
+          new URL("http://localhost:4000"),
+        ).pipe(Effect.scoped),
+      );
+      expect(unproxied.message).toContain("Portless.Ingress(proxy)");
+
+      expect(
+        yield* routeOf(deployed.proxy.stateDirectory, "dev-alice.secure.ingress-adapter.localhost"),
+      ).toBeUndefined();
+      yield* stack.destroy();
+    }),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+// With PORTLESS=0 there is no proxy to name anything.
+const off = TestProxy.make({ PORTLESS: "0" });
+afterAll(off.stop);
+
+test.provider(
+  "Ingress with PORTLESS=0 routes nothing and answers with the listener's own address",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const config = Portless.Ingress({
+        domain: "ingress-adapter",
+        tld: "localhost",
+        port: 443,
+        stateDirectory: yield* off.stateDirectory,
+      });
+      const web = yield* listener("web");
+      const origin = yield* Ingress.attach(config, targetOf("Web"), new URL(web.url)).pipe(
+        Effect.scoped,
+        Effect.provide(off.config),
+      );
+      expect(origin).toBe(`${web.url}/`);
+    }),
+  { tags: ["local"], timeout: 120_000 },
+);
+
+// A LAN proxy serves `.local` names, and only those. It publishes them with a tool of the platform;
+// without it LAN mode never starts. The proxy pins `127.0.0.1` as its address, so nothing here
+// depends on, or advertises, this machine's network.
+
+const lan = TestProxy.make({ PORTLESS_LAN_IP: "127.0.0.1" }, { lan: true });
+const lanFile = Test.make({
+  providers: lan.providers(),
+  dev: true,
+  stage: "dev_alice",
+  sidecar: false,
+});
+lanFile.afterAll(lan.stop);
+
+lanFile.test.provider.skipIf(!TestProxy.hasMdnsTool)(
+  "Ingress under a LAN proxy routes a .local name, the one Origin gives",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { proxy: deployed, ingress } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const proxy = yield* Portless.Proxy("Proxy", { domain: "ingress-adapter" });
+          return { proxy, ingress: Portless.Ingress(proxy) };
+        }),
+      );
+      expect(deployed.tld).toBe("local");
+      const config = Portless.Ingress(deployed);
+      expect(ingress).toEqual(config);
+      expect(config).toMatchObject({ tld: "local" });
+
+      const expected = yield* Portless.Origin("Web", { proxy: deployed }).pipe(
+        Effect.provideService(Stage, "dev_alice"),
+      );
+      expect(expected).toBe(`https://dev-alice.web.ingress-adapter.local:${deployed.port}`);
+
+      const web = yield* listener("web");
+      const attached = yield* attach(config, "Web", web.url);
+      expect(attached.origin).toBe(expected);
+
+      const response = yield* TestProxy.serving(expected, deployed);
+      expect(JSON.parse(response.body)).toEqual({ listener: "web" });
+      expect(yield* routeOf(deployed.stateDirectory, new URL(expected).hostname)).toMatchObject({
+        port: web.port,
+      });
+
+      yield* attached.close;
+      yield* TestProxy.answers(expected, deployed, 404);
+      yield* stack.destroy();
+    }).pipe(Effect.scoped),
+  { tags: ["local"], timeout: 120_000 },
+);
