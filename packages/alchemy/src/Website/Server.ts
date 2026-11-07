@@ -6,10 +6,12 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../Diff.ts";
+import * as Ingress from "../Local/Ingress.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { Stack } from "../Stack.ts";
 import { initialCwd, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
@@ -95,6 +97,24 @@ export type ServerDevProps =
        * @default false
        */
       strictPort?: boolean;
+      /**
+       * Route this site's dev URL through an ingress router, for example
+       * `Portless.Ingress(proxy)`, so `url` is a stable HTTPS name instead of
+       * `http://localhost:<port>`.
+       *
+       * Under `alchemy dev`, `url` becomes the router's origin and
+       * {@link Server.localUrl} keeps the framework server's own address, which
+       * everything inside the dev session (a Router's dev origin, for one)
+       * dials. The route is called the config's `name`, else this server's id;
+       * a site composite that builds its server as `"Build"` sets `name` to the
+       * site's id when you give an `ingress` without one. Changing `ingress`
+       * restarts the dev server.
+       *
+       * `alchemy dev` fails to start the server when the router's module can't
+       * be loaded or can't route, instead of advertising a URL that isn't
+       * routed. Inert on deploy.
+       */
+      ingress?: Ingress.Ingress;
     }
   | {
       /**
@@ -183,10 +203,18 @@ export interface Server extends Resource<
      */
     serverEntry: string | undefined;
     /**
-     * The framework dev server's local URL (e.g. `http://localhost:3000`)
-     * during `alchemy dev`. `undefined` on deploys.
+     * The URL the site is reachable at during `alchemy dev`: the framework
+     * dev server's local URL (e.g. `http://localhost:3000`), or its
+     * `dev.ingress` origin when it has one. `undefined` on deploys.
      */
     url: string | undefined;
+    /**
+     * The framework dev server's own URL (e.g. `http://localhost:3000`) during
+     * `alchemy dev`, whether or not `dev.ingress` routes {@link url}. Use it
+     * where something must dial the server itself rather than a routed name.
+     * `undefined` on deploys.
+     */
+    localUrl: string | undefined;
     hash: {
       /**
        * Hash of the input files (plus framework/target/options) that
@@ -232,6 +260,26 @@ export interface Server extends Resource<
 export const Server = Resource<Server>("Website.Server", {
   aliases: ["AWS.Website.Server", "AWS.Website.FrameworkBuild"],
 });
+
+/**
+ * The `dev` props a site composite passes to the `"Build"` server it declares
+ * inside its own namespace, with the dev ingress route called after the site
+ * (`id`) rather than the server. A route name must be distinct across a stack,
+ * and every composite's server is `"Build"`.
+ *
+ * Only a site whose user gave an `ingress` without a `name` changes; every
+ * other `dev` comes back as it is, so a deployed site sees no props change.
+ */
+export const withSiteRoute = (
+  id: string,
+  dev: ServerDevProps | undefined,
+): ServerDevProps | undefined =>
+  dev === undefined ||
+  dev.mode === "external" ||
+  dev.ingress === undefined ||
+  dev.ingress.name !== undefined
+    ? dev
+    : { ...dev, ingress: { ...dev.ingress, name: id } };
 
 const importFrameworkModule = (specifier: string) =>
   Effect.tryPromise({
@@ -358,6 +406,7 @@ export const ServerProviderLive = () =>
               ? path.relative(initialCwd, path.join(distDir, entryName))
               : undefined,
           url: undefined,
+          localUrl: undefined,
           hash:
             props.memo === false
               ? { input: undefined, output: undefined }
@@ -486,8 +535,9 @@ export const ServerProviderLocal = () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
+      const stack = yield* Stack;
       return {
-        start: Effect.fn(function* ({ news: props }) {
+        start: Effect.fn(function* ({ id, fqn, news: props }) {
           // External mode: an external dev server (run out-of-band by the
           // user) serves the site — don't import the framework or spawn
           // anything, just surface the external URL as the attribute.
@@ -497,6 +547,7 @@ export const ServerProviderLocal = () =>
               clientDir: undefined,
               serverEntry: undefined,
               url: props.dev.url,
+              localUrl: props.dev.url,
               hash: { input: undefined, output: undefined },
             };
           }
@@ -547,14 +598,31 @@ export const ServerProviderLocal = () =>
                 cause,
               }),
           );
+          const localUrl = normalizeAdvertisedUrl(url);
+          // The route lives in the instance scope, so a restart or delete
+          // removes it. Fails when the router can't route: never advertise an
+          // origin nothing answers on.
+          const origin =
+            dev?.ingress === undefined
+              ? localUrl
+              : yield* Ingress.attach(
+                  dev.ingress,
+                  { stack: stack.name, stage: stack.stage, fqn, id, type: Server.Type },
+                  new URL(localUrl),
+                );
           return {
             distDir: undefined,
             clientDir: undefined,
             serverEntry: undefined,
-            url: normalizeAdvertisedUrl(url),
+            url: origin,
+            localUrl,
             hash: { input: undefined, output: undefined },
           };
         }),
-      } satisfies LocalProvider.LocalProviderSpec<Server>;
+      } satisfies LocalProvider.LocalProviderSpec<
+        Server,
+        LocalProvider.DefaultLocalConfig<Server>,
+        Effect.Services<ReturnType<typeof Ingress.attach>>
+      >;
     }),
   );

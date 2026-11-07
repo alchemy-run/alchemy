@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { flociServices } from "@alchemy.run/aws/Local/FlociServices";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { getRouted } from "@alchemy.run/test/IngressForwarder";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Output from "alchemy/Output";
@@ -431,6 +432,54 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
     // 300s like the sibling cases: fixture clone + `bun install` + vite dev
     // boot through the emulated edge stack up under whole-suite concurrency
     // (the test itself runs in ~6s in isolation).
+    { tags: ["local"], timeout: 300_000 },
+  );
+
+  /**
+   * A site with `dev.ingress` advertises the routed origin as its `url`, but
+   * the emulated edge runs in a container and dials its origin over plain
+   * HTTP, where a routed `*.localhost` name resolves to nothing. The Router
+   * must keep dialing the dev server's own listener (`build.localUrl`).
+   */
+  test.provider(
+    "a routed Vite site still serves its mount through the Router",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const app = yield* makeViteFixture("routed", "ROUTER_VITE_ROUTED");
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const router = yield* AWS.Website.Router("RoutedRouter", {});
+            const site = yield* AWS.Website.Vite("RoutedSite", {
+              rootDir: app.cwd,
+              domain: { router },
+              dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } },
+            });
+            return { routerUrl: router.url, siteUrl: site.url };
+          }),
+        );
+
+        // The site's own URL is the forwarder's origin, named after the site.
+        const siteUrl = deployed.siteUrl as string;
+        expect(siteUrl).toMatch(/^http:\/\/[a-z0-9-]+\.routedsite\.[a-z0-9-]+\.localhost:\d+$/);
+        const routed = yield* getRouted(siteUrl).pipe(
+          Effect.flatMap((response) =>
+            response.status === 200 ? Effect.succeed(response) : Effect.fail(response),
+          ),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 20 }),
+          Effect.orDie,
+        );
+        expect(routed.body).toContain("ROUTER_VITE_ROUTED_PAGE");
+
+        // The edge reaches the same dev server through its listener.
+        yield* expectRouterBody(deployed.routerUrl as string, "/", {
+          includes: ["ROUTER_VITE_ROUTED_PAGE"],
+        });
+
+        yield* stack.destroy();
+      }),
     { tags: ["local"], timeout: 300_000 },
   );
 
