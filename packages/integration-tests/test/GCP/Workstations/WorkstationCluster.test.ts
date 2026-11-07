@@ -56,7 +56,7 @@ test.provider.skipIf(!runLifecycle)(
           Effect.gen(function* () {
             return yield* GCP.Workstations.WorkstationCluster("Dev", {
               network: `projects/${project}/global/networks/alchemy-missing-vpc`,
-              subnetwork: `projects/${project}/regions/us-east1/subnetworks/alchemy-missing-subnet`,
+              subnetwork: `projects/${project}/regions/us-central1/subnetworks/alchemy-missing-subnet`,
               displayName: "alchemy-test-cluster",
               labels: { env: "test" },
             });

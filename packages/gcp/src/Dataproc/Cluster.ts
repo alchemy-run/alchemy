@@ -647,6 +647,12 @@ const isSubnetNotReady = (error: { readonly _tag: string }) =>
 const isGrantNotPropagated = (error: { readonly _tag: string; readonly message?: string }) =>
   error._tag === "BadRequest" && (error.message ?? "").includes("Permissions are missing for the");
 
+// A RUNNING cluster can still be finishing an operation of its own:
+// `BadRequest: Cannot update cluster '…' while it has other pending update
+// operations.`
+const isUpdatePending = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" && (error.message ?? "").includes("other pending update operations");
+
 /**
  * Create the cluster and wait for the create operation. A create that fails
  * on a busy subnet leaves the cluster in `ERROR`; it is deleted and the
@@ -1049,9 +1055,9 @@ export const ClusterProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (error) => error._tag === "Conflict",
-              times: 8,
-              schedule: Schedule.spaced("5 seconds"),
+              while: (error) => error._tag === "Conflict" || isUpdatePending(error),
+              times: 12,
+              schedule: Schedule.spaced("15 seconds"),
             }),
           );
         yield* waitForOperation(patched);
