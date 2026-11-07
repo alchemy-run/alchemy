@@ -64,6 +64,24 @@ layer(BunServices.layer)("Docker image source hash", (test) => {
     { tags: ["unit", "provider:docker", "local"] },
   );
 
+  // Docker receives a lockfile inside the context, so it is hashed like any
+  // other context file.
+  test.effect(
+    "a lockfile inside the build context still changes the tag",
+    () =>
+      Effect.gen(function* () {
+        const { fs, path, context } = yield* makeProject();
+        yield* fs.writeFileString(path.join(context, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+        const before = yield* computeStaticSourceHash({ context }, "linux/amd64");
+        yield* fs.writeFileString(
+          path.join(context, "pnpm-lock.yaml"),
+          "lockfileVersion: '9.0'\nsettings: {}\n",
+        );
+        expect(yield* computeStaticSourceHash({ context }, "linux/amd64")).not.toBe(before);
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
+
   // A project-root context (`context: "."`) also holds `.alchemy`, which every
   // deploy writes to. Hashing it would give the image a new tag on every plan.
   test.effect(
