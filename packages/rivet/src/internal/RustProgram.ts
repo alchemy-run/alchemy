@@ -70,9 +70,9 @@ export const rustBinaryName = (manifest: string): string | undefined => {
   const sections = manifest.split(/^\s*\[/m);
   const nameIn = (section: string | undefined) =>
     section?.match(/^\s*name\s*=\s*["']([^"']+)["']/m)?.[1];
-  const pkg = nameIn(sections.find((section) => /^package\]/.test(section)));
+  const pkg = nameIn(sections.find((section) => section.startsWith("package]")));
   const bins = sections
-    .filter((section) => /^\[bin\]\]/.test(section))
+    .filter((section) => section.startsWith("[bin]]"))
     .map(nameIn)
     .filter((name): name is string => name !== undefined);
   if (bins.length === 1 && bins[0] !== pkg) return bins[0];
@@ -90,10 +90,8 @@ export const stageRustProgram = Effect.fn(function* (label: string, manifestPath
   const manifest = yield* fs
     .readFileString(manifestPath)
     .pipe(
-      Effect.catch(() =>
-        Effect.fail(
-          new InvalidRustCrate({ message: `Cannot read the crate manifest ${manifestPath}.` }),
-        ),
+      Effect.mapError(
+        () => new InvalidRustCrate({ message: `Cannot read the crate manifest ${manifestPath}.` }),
       ),
     );
   const binary = rustBinaryName(manifest);

@@ -283,12 +283,12 @@ export const makePoolLayer = <Network, Req>(options: {
 
       return {
         deployExternal: ({ id, main, resource }) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
           Effect.gen(function* () {
             // A crate's manifest: its binary is the node, built into an image.
             const image = isRustManifest(main)
               ? yield* stageRustProgram(yield* stackDnsLabel(id), main)
               : undefined;
-            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
             yield* deploy(
               { name: id, module: main, handler: "", external: true },
               {},
@@ -305,7 +305,7 @@ export const makePoolLayer = <Network, Req>(options: {
                     },
                   },
                 },
-            ) as Effect.Effect<void, never, Stack | Providers | Req>;
+            );
           }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
       } satisfies PoolHost["Service"];
     }),
