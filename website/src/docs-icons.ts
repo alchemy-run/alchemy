@@ -34,13 +34,10 @@ const b = (name: string): string | undefined => brandMarks[name];
 
 /**
  * An icon for a diagram node: a lucide name (`database`, `server`), or a
- * brand mark as `brand:<name>` (`brand:docker`, `brand:postgresql`), from
- * the custom marks first and then simple-icons.
+ * vendored brand mark as `brand:<name>` (`brand:docker`, `brand:postgresql`).
  */
 export function diagramIcon(name: string): string | undefined {
-  if (!name.startsWith("brand:")) return l(name);
-  const brand = name.slice("brand:".length);
-  return c(brand) ?? b(brand);
+  return name.startsWith("brand:") ? b(name.slice("brand:".length)) : l(name);
 }
 
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
