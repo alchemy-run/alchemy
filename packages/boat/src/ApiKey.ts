@@ -71,9 +71,10 @@ export interface ApiKeyProps {
   environmentIds?: string[];
   /**
    * How long the key works: `90d`, `24h`, a number of seconds, up to
-   * `365d`, or `never` for a key that works until it is revoked. Changing
-   * it replaces the key.
-   * @default "never"
+   * `365d`, or `never` for a key that works until it is revoked. A key
+   * can't outlive the key that creates it: omitted, the key never expires
+   * when the deployer's key doesn't, and otherwise expires with it.
+   * Changing it replaces the key.
    */
   ttl?: string;
 }
@@ -112,6 +113,8 @@ export interface ApiKey extends Resource<
  * Creating a key needs a key with `account.admin`, such as the one
  * `alchemy profile edit --add Boat` signs in with. A new key cannot have
  * more actions, more sandboxes or a later expiry than the key creating it.
+ * The key a browser sign-in gets lasts a year, so keys it creates expire
+ * with it. An expired key is minted again on the next deploy.
  *
  * ### Creating an API key
  * **Example:** A key for CI that manages the sandboxes it creates
@@ -162,6 +165,18 @@ const attributesOf = (key: boat.ApiKey, secret: Redacted.Redacted<string>): ApiK
   expiresAt: key.expiresAt ?? undefined,
 });
 
+/**
+ * Seconds until the signing key expires, from Boat's refusal ("…signed
+ * with an API key that expires 2027-11-07T16:21:12.757Z…"), less a minute;
+ * Boat's 90-day default when the message names no date.
+ */
+const ttlUntilSignerExpires = (message: string | undefined) => {
+  const expires = /expires (\S+?Z)/.exec(message ?? "")?.[1];
+  const seconds =
+    expires === undefined ? Number.NaN : (Date.parse(expires) - Date.now()) / 1000 - 60;
+  return Number.isFinite(seconds) && seconds > 60 ? String(Math.floor(seconds)) : "90d";
+};
+
 /** Revoke a key; revoking one that is gone succeeds. */
 export const revokeApiKey = (apiKeyId: string) =>
   boat.revokeApiKey({ apiKeyId }).pipe(
@@ -200,14 +215,24 @@ export const ApiKeyProvider = () =>
 
           // Ensure
           yield* session.note(`Creating API key ${name}...`);
-          const created = yield* boat.createScopedApiKey({
-            name,
-            ttl: news.ttl ?? "never",
-            ...(news.preset === undefined ? {} : { preset: news.preset }),
-            ...(news.actions === undefined ? {} : { actions: news.actions }),
-            ...(news.sandboxIds === undefined ? {} : { sandboxIds: news.sandboxIds }),
-            ...(news.environmentIds === undefined ? {} : { environmentIds: news.environmentIds }),
-          });
+          const create = (ttl: string) =>
+            boat.createScopedApiKey({
+              name,
+              ttl,
+              ...(news.preset === undefined ? {} : { preset: news.preset }),
+              ...(news.actions === undefined ? {} : { actions: news.actions }),
+              ...(news.sandboxIds === undefined ? {} : { sandboxIds: news.sandboxIds }),
+              ...(news.environmentIds === undefined ? {} : { environmentIds: news.environmentIds }),
+            });
+          const created = yield* create(news.ttl ?? "never").pipe(
+            // Without a `ttl`, the longest Boat allows: as long as the key
+            // signing the request, whose expiry Boat names in the refusal.
+            Effect.catchTag("ApiKeyOutlivesSigner", (error) =>
+              news.ttl === undefined
+                ? Effect.suspend(() => create(ttlUntilSignerExpires(error.message)))
+                : Effect.fail(error),
+            ),
+          );
           return attributesOf(created.apiKey, redact(created.secret));
         }),
         delete: Effect.fn(function* ({ output }) {
