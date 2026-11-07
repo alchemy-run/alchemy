@@ -31,6 +31,7 @@ An entity is declared from an Effect Cluster entity, made with Effect's `Entity.
 ```typescript title="src/Room.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { Entity } from "effect/cluster";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
@@ -50,13 +51,14 @@ export default class Room extends Cluster.Entity<Room>()(
   Rooms,
   { main: import.meta.url },
   Effect.gen(function* () {
+    const capacity = yield* Config.Int("ROOM_CAPACITY");
     return Effect.gen(function* () {
       const members = yield* Ref.make(new Set<string>());
       return Rooms.of({
         Join: ({ payload }) =>
           Effect.gen(function* () {
             const all = yield* Ref.get(members);
-            if (all.size >= 10) return yield* new RoomFull({ capacity: 10 });
+            if (all.size >= capacity) return yield* new RoomFull({ capacity });
             const next = new Set(all).add(payload.name);
             yield* Ref.set(members, next);
             return next.size;
@@ -76,7 +78,7 @@ Providing the pool, `Default`, is what deploys it. `yield* Room` returns the ent
 
 ## Two phases
 
-The implementation is two Effects, one inside the other.
+The implementation in `src/Room.ts` above is two Effects, one inside the other.
 
 The outer Effect runs once per runner, when it starts. Resolve what every instance shares there: bindings to other entities, secrets, Config values. The inner Effect runs once per instance, on its first message, and holds that instance's state:
 
@@ -122,7 +124,7 @@ Every room on a runner reads the same `capacity`. Each room gets its own `member
   caption="The runner builds the outer Effect once. Each room builds the inner Effect on its first message, then handles every later message with the state it made."
 />
 
-Inside the inner Effect, `Entity.CurrentAddress` holds the instance's id and shard:
+Inside the inner Effect, `Entity.CurrentAddress`, from `effect/cluster`, holds the instance's id and shard:
 
 ```typescript
 const { entityId } = yield* Entity.CurrentAddress;
@@ -207,7 +209,7 @@ export default Room.make(
 
 ## Messages
 
-Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations and helpers work unchanged:
+Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations, in `ClusterSchema`, and its helpers work unchanged:
 
 ```typescript title="src/Room.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";

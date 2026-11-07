@@ -164,7 +164,7 @@ A run's `status` is `NotStarted`, `Running`, `Completed` with its result, `Faile
 
 ## Sleep durably
 
-In a workflow's handler, `DurableClock.sleep` waits without holding a runner: the wake-up is a persisted message, delivered when it's due.
+In a workflow's handler, `DurableClock.sleep` from `effect/workflow` waits without holding a runner: the wake-up is a persisted message, delivered when it's due. Here is the handler of a `Reminder` workflow, declared like `Invite` with a `room` in its payload:
 
 ```typescript
 Effect.fn(function* ({ room }) {
@@ -177,7 +177,7 @@ Runners pick up due messages every 10 seconds, so a sleep wakes up to 10 seconds
 
 ## Undo a step
 
-`withCompensation` attaches an undo to an activity. If the workflow fails later, the compensations run, newest first:
+A workflow class's `withCompensation` attaches an undo to an activity. If the workflow fails later, the compensations run, newest first. Here is the handler of a `Checkout` workflow, with an `orderId` in its payload:
 
 ```typescript
 Effect.fn(function* ({ orderId }) {
@@ -192,7 +192,7 @@ Effect.fn(function* ({ orderId }) {
 
 ## Child workflows
 
-Inside a workflow, `execute` runs another workflow as a child and waits for it:
+Inside a workflow, the other workflow class's `execute` runs it as a child and waits for it. Here an `Onboard` workflow, with a `guest` in its payload, runs `Invite` for the lobby:
 
 ```typescript
 Effect.fn(function* ({ guest }) {

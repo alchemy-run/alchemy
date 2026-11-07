@@ -27,10 +27,14 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
 
 ## Entities: a class and its instances
 
-An entity starts from the messages it accepts, as Effect RPC schemas, the same arguments Effect's `Entity.make` takes:
+An entity starts from the messages it accepts, as Effect RPC schemas, passed to Effect's `Entity.make`:
 
-```typescript
-const Rooms = Entity.make("Room", [
+```typescript title="src/Rooms.ts"
+import { Entity } from "effect/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export const Rooms = Entity.make("Room", [
   Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
   Rpc.make("Members", { success: Schema.Array(Schema.String) }),
 ]);
@@ -42,9 +46,10 @@ See [Entities](/cluster/entities).
 
 ## One instance per id, one message at a time
 
-You never create an instance. Every id exists from the start, and the first message to an id brings its instance to life. A caller gets a room by its name and sends it messages:
+You never create an instance. Every id exists from the start, and the first message to an id brings its instance to life. Inside any runtime's Effect, `yield* Room` (the class [below](#an-instances-code-and-its-state)) returns the entity's client. A caller gets a room by its name and sends it messages:
 
 ```typescript
+const rooms = yield* Room;
 const lobby = yield* rooms.getByName("lobby");
 yield* lobby.Join({ name: "sam" });
 ```
@@ -70,27 +75,38 @@ That's what lets a room keep its members in a plain `Ref` without locks: nothing
 
 ## An instance's code and its state
 
-An entity's code comes in two phases. The outer Effect runs once per runner and resolves what every room shares, here a capacity from config. The inner one runs once per instance, on its first message: it creates that room's own members and returns the handlers for its messages:
+`Cluster.Entity` makes the entity a class, from its messages and its code. The code comes in two phases. The outer Effect runs once per runner and resolves what every room shares, here a capacity from config. The inner one runs once per instance, on its first message: it creates that room's own members and returns the handlers for its messages:
 
-```typescript
-Effect.gen(function* () {
-  const capacity = yield* Config.Int("ROOM_CAPACITY");
-  return Effect.gen(function* () {
-    const members = yield* Ref.make(new Set<string>());
-    return Rooms.of({
-      Join: ({ payload }) =>
-        Ref.modify(members, (all) => {
-          if (all.size >= capacity) return [all.size, all];
-          const next = new Set(all).add(payload.name);
-          return [next.size, next];
-        }),
-      Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Rooms } from "./Rooms.ts";
+
+export default class Room extends Cluster.Entity<Room>()(
+  Rooms,
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const capacity = yield* Config.Int("ROOM_CAPACITY");
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Rooms.of({
+        Join: ({ payload }) =>
+          Ref.modify(members, (all) => {
+            if (all.size >= capacity) return [all.size, all];
+            const next = new Set(all).add(payload.name);
+            return [next.size, next];
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
     });
-  });
-});
+  }).pipe(Effect.provide(Default)),
+) {}
 ```
 
-`Cluster.Entity` takes this with the messages, as a class. See [Entities](/cluster/entities#two-phases) for the whole file.
+`Rooms.of` types the handlers against the messages. `Default` is the pool the room runs on, [next](#runners-run-the-instances).
 
 An instance's state lives in memory. When it sits idle (a minute, by default), when its runner restarts, or when a deploy replaces the runners, the instance stops and its state is gone. The next message starts it fresh. Keep anything that must survive in a database the instance reads on its first message.
 
@@ -136,10 +152,14 @@ See [Databases](/cluster/databases).
 
 ## Persisted messages
 
-By default a message travels straight to its runner. Mark an RPC **persisted**, and the message is written to the database first, delivered at least once, and handled once per primary key:
+By default a message travels straight to its runner. Mark an RPC **persisted** with the `Persisted` annotation from `ClusterSchema`, Effect Cluster's RPC annotations, and the message is written to the database first, delivered at least once, and handled once per primary key:
 
-```typescript
-const Rooms = Entity.make("Room", [
+```typescript title="src/Rooms.ts"
+import { ClusterSchema, Entity } from "effect/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export const Rooms = Entity.make("Room", [
   Rpc.make("Post", {
     payload: { messageId: Schema.String, text: Schema.String },
     primaryKey: ({ messageId }) => messageId,
