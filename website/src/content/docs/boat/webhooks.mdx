@@ -1,0 +1,49 @@
+---
+title: Webhooks
+description: Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — at your own endpoint, signed with a secret.
+---
+
+import StateMachine from "../../../components/diagrams/StateMachine.astro";
+
+A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you subscribe to. Every event is about one sandbox:
+
+<StateMachine
+  states={[
+    { id: "error", label: "sandbox.error", type: "failed", col: 1, row: 0, end: true, tone: "danger" },
+    { id: "ready", label: "sandbox.ready", col: 0, row: 1, start: true, tone: "accent" },
+    { id: "hydrated", label: "sandbox.hydrated", type: "files restored", col: 1, row: 1 },
+    { id: "archived", label: "sandbox.archived", type: "stopped", col: 2, row: 1, end: true },
+    { id: "degraded", label: "sandbox.degraded", type: "unreachable", col: 0, row: 2, tone: "warn" },
+    { id: "recovered", label: "sandbox.recovered", col: 1, row: 2 },
+  ]}
+  transitions={[
+    { from: "ready", to: "error" },
+    { from: "ready", to: "hydrated", label: "resumed, forked" },
+    { from: "hydrated", to: "archived", label: "stop" },
+    { from: "ready", to: "degraded" },
+    { from: "degraded", to: "recovered" },
+  ]}
+  caption="sandbox.ready fires when a sandbox can take commands, and sandbox.hydrated once a resumed or forked sandbox has all its files back. sandbox.archived fires when it stops, and sandbox.error when it fails. A sandbox Boat can't reach fires sandbox.degraded, then sandbox.recovered."
+/>
+
+## Declare a webhook
+
+Point it at a Worker of yours:
+
+```typescript title="alchemy.run.ts"
+const receiver = yield* Receiver;
+const hook = yield* Boat.Webhook("Events", {
+  url: Output.interpolate`${receiver.url}/boat`,
+  events: ["sandbox.ready", "sandbox.archived"],
+});
+```
+
+The URL must be public HTTPS, on port 443. Changing it, or the events, updates the webhook in place.
+
+## Check the signature
+
+Boat signs each delivery with the webhook's secret. `hook.secret` is that secret, as a `Redacted` value: Boat shows it only when it's created, so Alchemy keeps it in state. Bind it into the receiver to check each delivery before acting on it.
+
+## Next
+
+See every resource and binding in the [API reference](/providers).

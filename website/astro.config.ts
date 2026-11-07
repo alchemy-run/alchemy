@@ -46,6 +46,7 @@ function providersSidebarEntry() {
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
+      { label: "Boat", link: "/boat" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1597,6 +1598,37 @@ export default defineConfig({
               ]),
             },
             providerResourcesEntry("Archil"),
+          ],
+        },
+        {
+          label: "Boat",
+          items: [
+            { label: "Overview", link: "/boat" },
+            { label: "What is Boat?", link: "/boat/what-is-boat" },
+            { label: "Setup", link: "/boat/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "boat/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Account & API keys", link: "/boat/account-and-keys" }],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/boat/sandboxes" },
+                { label: "Programs", link: "/boat/programs" },
+                { label: "Snapshots & forks", link: "/boat/snapshots" },
+                { label: "Environments", link: "/boat/environments" },
+                { label: "Ports", link: "/boat/ports" },
+              ],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Webhooks", link: "/boat/webhooks" }],
+            },
+            providerResourcesEntry("Boat"),
           ],
         },
         {
