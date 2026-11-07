@@ -1,7 +1,7 @@
 import type { BundleConfig } from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
-import type { Resource } from "alchemy/Resource";
+import type { LookupMethod, Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { BranchScope } from "./BranchScope.ts";
@@ -104,8 +104,25 @@ export interface Function extends Resource<
   FunctionProps,
   FunctionAttributes,
   FunctionBinding,
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a Function this stack
+ * doesn't manage by its project, branch and slug.
+ */
+export interface FunctionLookup {
+  /** Neon project id. */
+  projectId: string;
+  /**
+   * Branch id.
+   * @default the project's default branch
+   */
+  branchId?: string;
+  /** Function slug. */
+  slug: string;
+}
 
 /**
  * Node.js 24 Fetch function, with native and Effect entrypoints.
@@ -148,6 +165,19 @@ export interface Function extends Resource<
  * const site = yield* Neon.Function("Site", { branch, artifact: { directory: "./dist" } });
  * ```
  *
+ * ### Looking up an existing Function
+ * `Function.lookup` references a Function Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * `codeHash` and `environmentHash` are `undefined`: the deployment isn't
+ * Alchemy's.
+ *
+ * **Example:** Reference an existing Function
+ * ```typescript
+ * const api = Neon.Function.lookup({ projectId: "plain-wave-12345678", slug: "api" });
+ * const url = api.url;
+ * ```
+ *
  * @resource
  * @product Function
  */
@@ -156,7 +186,8 @@ export const Function: Platform<
   FunctionEnvironment,
   Main<FunctionEnvironment | FunctionRequest>,
   FunctionRuntimeContext
-> = Platform<Function>("Neon.Function", {
+> &
+  LookupMethod<Function> = Platform<Function>("Neon.Function", {
   createRuntimeContext: makeFunctionRuntimeContext,
   // `{ branch: Main }` at module scope is an Effect. Yield it here so the
   // branch (or project) is registered and resolved at reconcile (same as
