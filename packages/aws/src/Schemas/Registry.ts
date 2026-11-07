@@ -53,8 +53,18 @@ export interface Registry extends Resource<
     registryArn: string;
   },
   never,
-  Providers
+  Providers,
+  RegistryLookup
 > {}
+
+/**
+ * Props for {@link Registry.lookup}: find a registry this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RegistryLookup {
+  /** The registry name of the existing registry. */
+  registryName: string;
+}
 
 /**
  * An EventBridge Schema Registry — a named collection of event schemas.
@@ -107,6 +117,16 @@ export interface Registry extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing registry
+ * `Registry.lookup` references a registry Alchemy doesn't manage (created in the
+ * console or by another stack), found by `registryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing registry
+ * ```typescript
+ * const existing = AWS.Schemas.Registry.lookup({ registryName: "my-registry" });
+ * ```
+ *
  * @resource
  */
 export const Registry = Resource<Registry>("AWS.Schemas.Registry");
@@ -144,6 +164,16 @@ export const RegistryProvider = () =>
               ),
             ),
           ),
+
+        lookup: Effect.fn(function* ({ registryName }) {
+          const found = yield* describe(registryName);
+          if (!found) return undefined;
+          const attrs = {
+            registryName,
+            registryArn: found.RegistryArn!,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const registryName = output?.registryName ?? (yield* createName(id, olds ?? {}));

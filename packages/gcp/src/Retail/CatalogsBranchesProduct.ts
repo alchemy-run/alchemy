@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   MAX_PRODUCT_ID_LENGTH,
@@ -174,8 +175,36 @@ export type CatalogsBranchesProduct = Resource<
     gtin: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CatalogsBranchesProductLookup
 >;
+
+/**
+ * Props for {@link CatalogsBranchesProduct.lookup}: find a catalogs
+ * branches product this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CatalogsBranchesProductLookup {
+  /**
+   * Product id (max 128 characters).
+   */
+  productId: string;
+  /**
+   * Parent catalog resource name
+   * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
+   * catalog id (combined with `location`).
+   */
+  catalog?: string;
+  /**
+   * Branch id.
+   */
+  branchId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Retail product under a catalog branch.
@@ -192,6 +221,19 @@ export type CatalogsBranchesProduct = Resource<
  *   title: "Cotton tee",
  *   categories: ["Apparel > T-Shirts"],
  *   priceInfo: { currencyCode: "USD", price: 20 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing catalogs branches product
+ * `CatalogsBranchesProduct.lookup` references a catalogs branches product
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared catalogs branches product.
+ *
+ * **Example:** Reference an existing catalogs branches product
+ * ```typescript
+ * const catalogsBranchesProduct = GCP.Retail.CatalogsBranchesProduct.lookup({
+ *   productId: "my-product",
  * });
  * ```
  *
@@ -327,6 +369,23 @@ export const CatalogsBranchesProductProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ productId, catalog, branchId: lookupBranchId }) {
+      const env = yield* GcpEnvironment.current;
+      const branchId = normalizeBranch(lookupBranchId);
+      const name =
+        catalog !== undefined
+          ? resourceName(
+              expandCatalog(catalog, env.project, normalizeLocation(undefined)),
+              branchId,
+              productId,
+            )
+          : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

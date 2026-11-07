@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -73,6 +74,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { vpc, endpoint, association };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.FirewallEndpointAssociation.lookup({
+          firewallEndpointAssociationId: created.association.firewallEndpointAssociationId,
+          location: created.association.location,
+        }),
+        created.association,
       );
 
       expect(created.association.name).toContain("/firewallEndpointAssociations/");

@@ -183,8 +183,18 @@ export type Project = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 >;
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Neon project id, e.g. `"plain-wave-12345678"`. */
+  projectId: string;
+}
 
 type ProjectAttributes = Project["Attributes"];
 
@@ -232,6 +242,18 @@ type ProjectAttributes = Project["Attributes"];
  * ```
  *
  * @see https://neon.tech/docs/manage/projects/
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Its connection URIs point at the default branch's first database.
+ *
+ * **Example:** Connect to an existing project
+ * ```typescript
+ * const db = Neon.Project.lookup({ projectId: "plain-wave-12345678" });
+ * const url = db.connectionUri;
+ * ```
  *
  * @resource
  * @product Project
@@ -303,6 +325,14 @@ export const ProjectProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ projectId }) {
+      const found = yield* getProject({ project_id: projectId }).pipe(
+        Effect.map(({ project }) => project),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+      return found === undefined ? undefined : yield* hydrateProjectAttributes(found);
+    }),
+
     read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.projectId) {
         return yield* getProject({ project_id: output.projectId }).pipe(

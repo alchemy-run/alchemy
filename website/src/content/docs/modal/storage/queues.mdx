@@ -1,0 +1,40 @@
+---
+title: Queues
+description: Hand work between Workers, sandboxes and Python functions.
+---
+
+## Create a queue
+
+```typescript
+// src/Storage.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Jobs = Modal.Queue("Jobs", {});
+```
+
+## Put work on it
+
+```typescript
+const jobs = yield* Modal.WriteQueue(Jobs);
+yield* jobs.put({ repo: "alchemy-run/alchemy", command: "pnpm test" });
+```
+
+Provide `Modal.WriteQueueHttp`.
+
+## Take work off it
+
+```typescript
+const jobs = yield* Modal.ReadQueue(Jobs);
+const batch = yield* jobs.take({ count: 10, timeout: "5 seconds" });
+```
+
+`take` removes items. `peek` reads them without removing.
+
+## Use partitions
+
+```typescript
+yield* jobs.put(task, { partition: user });
+const mine = yield* jobs.take({ partition: user });
+```
+
+Items are JSON and expire 24 hours after they're put.

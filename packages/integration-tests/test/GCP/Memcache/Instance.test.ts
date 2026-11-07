@@ -6,6 +6,7 @@ import * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 import { CacheNetwork } from "./fixtures/network.ts";
 
@@ -96,6 +97,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Memcache.Instance.lookup({
+          instanceId: created.instanceId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/instances/");

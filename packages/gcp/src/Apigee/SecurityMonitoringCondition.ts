@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 
@@ -102,8 +103,31 @@ export type SecurityMonitoringCondition = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityMonitoringConditionLookup
 >;
+
+/**
+ * Props for {@link SecurityMonitoringCondition.lookup}: find a security
+ * monitoring condition this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SecurityMonitoringConditionLookup {
+  /**
+   * Condition id (the `{security_monitoring_condition}` segment of
+   * `organizations/{org}/securityMonitoringConditions/{id}`).
+   */
+  securityMonitoringConditionId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Advanced API Security monitoring condition (risk assessment v2).
@@ -122,6 +146,19 @@ export type SecurityMonitoringCondition = Resource<
  *   profile: profile.name,
  *   scope: "eval",
  *   includeAllResources: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing security monitoring condition
+ * `SecurityMonitoringCondition.lookup` references a security monitoring
+ * condition Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared security monitoring condition.
+ *
+ * **Example:** Reference an existing security monitoring condition
+ * ```typescript
+ * const securityMonitoringCondition = GCP.Apigee.SecurityMonitoringCondition.lookup({
+ *   securityMonitoringConditionId: "my-security-monitoring-condition",
  * });
  * ```
  *
@@ -234,6 +271,18 @@ export const SecurityMonitoringConditionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({
+      securityMonitoringConditionId,
+      organization: lookupOrganization,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, securityMonitoringConditionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

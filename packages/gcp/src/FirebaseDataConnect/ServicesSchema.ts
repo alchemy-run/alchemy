@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -176,8 +177,36 @@ export type ServicesSchema = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServicesSchemaLookup
 >;
+
+/**
+ * Props for {@link ServicesSchema.lookup}: find a services schema this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServicesSchemaLookup {
+  /**
+   * Schema id. The API currently only accepts `main`.
+   */
+  schemaId?: string;
+  /**
+   * Region used when `service` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Data Connect service. Full name
+   * `projects/{project}/locations/{location}/services/{service}` or the
+   * service id (combined with `location`).
+   */
+  service: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * The application schema of a Firebase Data Connect service. Only
@@ -239,6 +268,19 @@ export type ServicesSchema = Resource<
  *   },
  *   datasources: [{ postgresql: { unlinked: true } }],
  *   displayName: "notes v2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing services schema
+ * `ServicesSchema.lookup` references a services schema Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * services schema.
+ *
+ * **Example:** Reference an existing services schema
+ * ```typescript
+ * const servicesSchema = GCP.FirebaseDataConnect.ServicesSchema.lookup({
+ *   service: "my-service",
  * });
  * ```
  *
@@ -353,6 +395,24 @@ export const ServicesSchemaProvider = () =>
         nextParent,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      schemaId: lookupSchemaId,
+      location: lookupLocation,
+      service: lookupService,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const schemaId = schemaIdOf(lookupSchemaId);
+      const location = normalizeLocation(lookupLocation, env.region);
+      const service = lookupService
+        ? expandParent(lookupService, env.project, location, "services")
+        : undefined;
+      const name = service ? resourceName(service, schemaId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

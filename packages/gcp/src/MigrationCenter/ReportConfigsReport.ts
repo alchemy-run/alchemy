@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -95,8 +96,36 @@ export type ReportConfigsReport = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ReportConfigsReportLookup
 >;
+
+/**
+ * Props for {@link ReportConfigsReport.lookup}: find a report configs
+ * report this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ReportConfigsReportLookup {
+  /**
+   * Report id (the `{report}` segment).
+   */
+  reportId: string;
+  /**
+   * Region used when `reportConfig` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent report config. Full name
+   * `projects/{project}/locations/{location}/reportConfigs/{reportConfig}`
+   * or the report config id (combined with `location`).
+   */
+  reportConfig: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A point-in-time Migration Center report rendered from a report config
@@ -114,6 +143,20 @@ export type ReportConfigsReport = Resource<
  *   reportConfig: config.name,
  *   type: "TOTAL_COST_OF_OWNERSHIP",
  *   displayName: "q1-tco",
+ * });
+ * ```
+ *
+ * ### Looking up an existing report configs report
+ * `ReportConfigsReport.lookup` references a report configs report Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared report configs report.
+ *
+ * **Example:** Reference an existing report configs report
+ * ```typescript
+ * const reportConfigsReport = GCP.MigrationCenter.ReportConfigsReport.lookup({
+ *   reportId: "my-report",
+ *   reportConfig: "my-report-config",
  * });
  * ```
  *
@@ -245,6 +288,20 @@ export const ReportConfigsReportProvider = () =>
         extra: payloadChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      reportId,
+      location: lookupLocation,
+      reportConfig: lookupReportConfig,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const reportConfig = configNameOf(lookupReportConfig ?? "", env.project, location);
+      const name = reportConfig.length > 0 ? resourceName(reportConfig, reportId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

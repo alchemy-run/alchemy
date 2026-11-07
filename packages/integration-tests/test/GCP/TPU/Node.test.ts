@@ -6,6 +6,7 @@ import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { nodeCapacity } from "./fixtures/bindings-host.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -68,6 +69,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.TPU.Node.lookup({ nodeId: created.nodeId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/nodes/");

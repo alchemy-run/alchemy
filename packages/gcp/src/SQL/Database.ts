@@ -18,6 +18,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { ALCHEMY_LABEL_PREFIX, createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { runDatabaseMigrations, type MigrationsTransport } from "./Migrations.ts";
@@ -156,8 +157,33 @@ export type Database = Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatabaseLookup {
+  /**
+   * Database name inside the instance. Must start with a letter and contain
+   * only letters, numbers, and underscores (1–60 characters).
+   */
+  databaseName: string;
+  /**
+   * Cloud SQL instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Full resource names are
+   * accepted and reduced to the last path segment.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A logical database inside a Cloud SQL instance.
@@ -245,6 +271,19 @@ export type Database = Resource<
  *   migrations: schema,
  *   migrationsUser: user.userName,
  *   migrationsPassword: password.text,
+ * });
+ * ```
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared database.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const database = GCP.SQL.Database.lookup({
+ *   databaseName: "my-database",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -413,6 +452,15 @@ export const DatabaseProvider = () =>
         deleteFirst: false,
       };
     }),
+
+    lookup: Effect.fn(function* ({ databaseName, instance: lookupInstance }) {
+      const env = yield* GcpEnvironment.current;
+      const instance = instanceIdOf(lookupInstance ?? "");
+      if (instance.length === 0) return undefined;
+      const existing = yield* getByName(env.project, instance, databaseName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, instance, undefined);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

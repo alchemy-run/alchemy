@@ -564,6 +564,180 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/what-is-e2b",
+        "e2b/setup",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/api-keys",
+        "e2b/network-and-secrets",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
+    heading: "Archil — start here",
+    intro:
+      "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
+    pages: { slugs: ["archil/index", "archil/what-is-archil", "archil/setup"] },
+  },
+  {
+    heading: "Archil — Tutorial",
+    pages: { directory: "archil/tutorial" },
+  },
+  {
+    heading: "Archil — Accounts & access",
+    pages: {
+      slugs: [
+        "archil/organization-and-keys",
+        "archil/security/credentials",
+        "archil/security/network",
+      ],
+    },
+  },
+  {
+    heading: "Archil — Compute",
+    pages: { directory: "archil/compute" },
+  },
+  {
+    heading: "Archil — Frontend",
+    pages: { directory: "archil/frontend" },
+  },
+  {
+    heading: "Archil — Storage",
+    pages: { directory: "archil/storage" },
+  },
+  {
+    heading: "Rivet",
+    intro:
+      "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",
+    pages: {
+      slugs: [
+        "rivet/index",
+        "rivet/what-is-rivet",
+        "rivet/setup",
+        "rivet/namespaces",
+        "rivet/tokens-and-networks",
+        "rivet/secrets",
+        "rivet/tutorial/part-1",
+        "rivet/tutorial/part-2",
+        "rivet/tutorial/part-3",
+        "rivet/tutorial/part-4",
+        "rivet/actors",
+        "rivet/durable-objects",
+        "rivet/storage",
+        "rivet/concurrency",
+        "rivet/calling",
+        "rivet/rivetkit",
+        "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
+        "rivet/durable-streams",
+        "rivet/control-planes",
+        "rivet/pools",
+        "rivet/docker",
+        "rivet/aws",
+        "rivet/gcp",
+        "rivet/kubernetes",
+        "rivet/fly",
+        "rivet/hetzner",
+        "rivet/railway",
+        "rivet/rivet-cloud",
+      ],
+    },
+  },
+  {
+    heading: "Effect Cluster",
+    intro:
+      "Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.",
+    pages: {
+      slugs: [
+        "cluster/index",
+        "cluster/what-is-effect-cluster",
+        "cluster/setup",
+        "cluster/tutorial/part-1",
+        "cluster/tutorial/part-2",
+        "cluster/tutorial/part-3",
+        "cluster/tutorial/part-4",
+        "cluster/entities",
+        "cluster/calling",
+        "cluster/middleware",
+        "cluster/workflows",
+        "cluster/singletons",
+        "cluster/crons",
+        "cluster/existing-programs",
+        "cluster/databases",
+        "cluster/pools",
+        "cluster/docker",
+        "cluster/aws",
+        "cluster/gcp",
+        "cluster/kubernetes",
+        "cluster/fly",
+        "cluster/hetzner",
+        "cluster/cloudflare",
+      ],
+    },
+  },
+  {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
+  },
+  {
+    heading: "Modal",
+    intro:
+      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+    pages: {
+      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+    },
+  },
+  { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
+  { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
+  { heading: "Modal — Security", pages: { directory: "modal/security" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  {
     heading: "Better Auth",
     intro:
       "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",

@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "brimstone/ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "CMD",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "exec"
+          }
+        },
+        {
+          "tag": "ENTRYPOINT",
+          "line": 5,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "/usr/bin/consul",
+              "agent",
+              "-server",
+              "-data-dir=/consul",
+              "-client=0.0.0.0",
+              "-ui-dir=/webui"
+            ]
+          }
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 7,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 9,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update     \u0026\u0026 apt-get --no-install-recommends install -y unzip wget \t\u0026\u0026 apt-get clean \t\u0026\u0026 rm -rf /var/lib/apt/lists"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 14,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /tmp     \u0026\u0026 wget https://dl.bintray.com/mitchellh/consul/0.3.1_web_ui.zip        -O web_ui.zip     \u0026\u0026 unzip web_ui.zip     \u0026\u0026 mv dist /webui     \u0026\u0026 rm web_ui.zip"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 21,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \t\u0026\u0026 dpkg -l | awk '/^ii/ {print $2}' \u003e /tmp/dpkg.clean     \u0026\u0026 apt-get --no-install-recommends install -y unzip wget     \u0026\u0026 apt-get clean     \u0026\u0026 rm -rf /var/lib/apt/lists     \u0026\u0026 cd /tmp     \u0026\u0026 wget https://dl.bintray.com/mitchellh/consul/0.3.1_web_ui.zip        -O web_ui.zip     \u0026\u0026 unzip web_ui.zip     \u0026\u0026 mv dist /webui     \u0026\u0026 rm web_ui.zip \t\u0026\u0026 dpkg -l | awk '/^ii/ {print $2}' \u003e /tmp/dpkg.dirty \t\u0026\u0026 apt-get remove --purge -y $(diff /tmp/dpkg.clean /tmp/dpkg.dirty | awk '/^\u003e/ {print $2}') \t\u0026\u0026 rm /tmp/dpkg.*"
+          }
+        },
+        {
+          "tag": "ENV",
+          "line": 38,
+          "flags": [],
+          "vars": [
+            [
+              "GOPATH",
+              "/go"
+            ]
+          ]
+        },
+        {
+          "tag": "RUN",
+          "line": 40,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \t\u0026\u0026 dpkg -l | awk '/^ii/ {print $2}' \u003e /tmp/dpkg.clean     \u0026\u0026 apt-get --no-install-recommends install -y git golang ca-certificates build-essential     \u0026\u0026 apt-get clean     \u0026\u0026 rm -rf /var/lib/apt/lists \t\u0026\u0026 go get -v github.com/hashicorp/consul \t\u0026\u0026 mv $GOPATH/bin/consul /usr/bin/consul \t\u0026\u0026 dpkg -l | awk '/^ii/ {print $2}' \u003e /tmp/dpkg.dirty \t\u0026\u0026 apt-get remove --purge -y $(diff /tmp/dpkg.clean /tmp/dpkg.dirty | awk '/^\u003e/ {print $2}') \t\u0026\u0026 rm /tmp/dpkg.* \t\u0026\u0026 rm -rf $GOPATH"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -302,6 +302,21 @@ export interface AuthProviderImpl<
   readonly environment?: ReadonlyArray<EnvironmentVariable>;
 }
 
+// TODO(typescript>7.1.0): microsoft/TypeScript#64757 infers `R` through
+// `Effect<AuthProviderImpl<..., R>>` as just `Interaction`, dropping the impl's
+// own requirements (e.g. `ChildProcessSpawner`). `AuthProvider` and
+// `AuthProviderLayer` therefore infer the whole `Impl` and read `R` back with
+// this type. To revert, restore `<R = never, ImplReq = never>(name, impl:
+// AuthProviderImpl<Config, Credentials, R> | Effect.Effect<AuthProviderImpl<
+// Config, Credentials, R>, never, ImplReq>)` on both, drop this type and the
+// `service` cast below, and check that `pnpm exec tsrs -b` passes the
+// Cloudflare, GCP, PlanetScale and Railway `AuthProvider.ts` files.
+/**
+ * The services an {@link AuthProviderImpl}'s methods require.
+ */
+export type AuthProviderImplRequirements<Impl> =
+  Impl extends AuthProviderImpl<any, any, infer R> ? R : never;
+
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
@@ -345,11 +360,14 @@ export interface AuthProvider<
 
 export const AuthProvider =
   <Config extends { method: string }, Credentials>() =>
-  <R = never, ImplReq = never>(
+  <
+    // TODO(typescript>7.1.0): see AuthProviderImplRequirements.
+    Impl extends AuthProviderImpl<Config, Credentials, any>,
+    ImplReq = never,
+    R = AuthProviderImplRequirements<Impl>,
+  >(
     name: string,
-    impl:
-      | AuthProviderImpl<Config, Credentials, R>
-      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
+    impl: Impl | Effect.Effect<Impl, never, ImplReq>,
   ) =>
     Effect.gen(function* () {
       // FileSystem/Path/SecureRandom back the cross-process credentials lock that wraps
@@ -385,7 +403,13 @@ export const AuthProvider =
       // SAFETY: as above, the assertion only restores the pre-omit type.
       const resolveCtx = Context.omit(ConfigProvider.ConfigProvider)(ctx) as typeof ctx;
       const providers = yield* AuthProviders;
-      const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
+      // TODO(typescript>7.1.0): see AuthProviderImplRequirements; the cast
+      // goes with the `Impl` signature.
+      // SAFETY: `R` is read back from `Impl` (see AuthProviderImplRequirements),
+      // so this only restores the requirement the constraint's `any` erased.
+      const service = (yield* Effect.isEffect(impl)
+        ? impl
+        : Effect.succeed(impl)) as AuthProviderImpl<Config, Credentials, R>;
       // Validate the declared environment contract at registration so a
       // malformed declaration fails at layer build (programmer error), not
       // when a CI run tries to render it.
@@ -513,13 +537,16 @@ export const AuthProvider =
  */
 export const AuthProviderLayer =
   <Config extends { method: string }, Credentials>() =>
-  <R = never, ImplReq = never>(
+  <
+    // TODO(typescript>7.1.0): see AuthProviderImplRequirements.
+    Impl extends AuthProviderImpl<Config, Credentials, any>,
+    ImplReq = never,
+    R = AuthProviderImplRequirements<Impl>,
+  >(
     name: string,
-    impl:
-      | AuthProviderImpl<Config, Credentials, R>
-      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
+    impl: Impl | Effect.Effect<Impl, never, ImplReq>,
   ) =>
-    Layer.effectDiscard(AuthProvider<Config, Credentials>()<R, ImplReq>(name, impl));
+    Layer.effectDiscard(AuthProvider<Config, Credentials>()<Impl, ImplReq, R>(name, impl));
 
 /**
  * Look up a registered {@link AuthProvider} by name. Fails with

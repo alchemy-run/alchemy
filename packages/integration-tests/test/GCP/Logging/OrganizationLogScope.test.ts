@@ -6,6 +6,7 @@ import * as logging from "@distilled.cloud/gcp/logging_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,14 @@ test.provider.skipIf(!organizationId)(
             description: "application logs",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Logging.OrganizationLogScope.lookup({
+          logScopeId: created.logScopeId,
+          organization: created.organization,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.logScopeId).toEqual(expect.any(String));

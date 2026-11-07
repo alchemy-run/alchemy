@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   AnalyticshubNotResolved,
@@ -118,8 +119,39 @@ export type DataExchangesQueryTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataExchangesQueryTemplateLookup
 >;
+
+/**
+ * Props for {@link DataExchangesQueryTemplate.lookup}: find a data
+ * exchanges query template this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface DataExchangesQueryTemplateLookup {
+  /**
+   * Query template id (the `{queryTemplate}` segment of
+   * `.../dataExchanges/{dataExchange}/queryTemplates/{queryTemplate}`).
+   * Letters, numbers, and underscores; max 100 bytes.
+   */
+  queryTemplateId: string;
+  /**
+   * Location used when `dataExchange` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent data exchange. Full name
+   * `projects/{project}/locations/{location}/dataExchanges/{dataExchange}`
+   * or the exchange id (combined with `location`). Query templates live in
+   * data clean room exchanges.
+   */
+  dataExchange: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Analytics Hub query template — a shared table-valued function
@@ -154,6 +186,20 @@ export type DataExchangesQueryTemplate = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing data exchanges query template
+ * `DataExchangesQueryTemplate.lookup` references a data exchanges query
+ * template Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared data exchanges query template.
+ *
+ * **Example:** Reference an existing data exchanges query template
+ * ```typescript
+ * const dataExchangesQueryTemplate = GCP.AnalyticsHub.DataExchangesQueryTemplate.lookup({
+ *   queryTemplateId: "my-query-template",
+ *   dataExchange: "my-data-exchange",
+ * });
  * ```
  *
  * @resource
@@ -249,6 +295,23 @@ export const DataExchangesQueryTemplateProvider = () =>
           (previousDocs !== undefined && nextDocs !== undefined && previousDocs !== nextDocs),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      queryTemplateId,
+      location: lookupLocation,
+      dataExchange: lookupDataExchange,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataExchange =
+        lookupDataExchange !== undefined
+          ? parentExchange(lookupDataExchange, env.project, location)
+          : "";
+      const name = dataExchange ? resourceName(dataExchange, queryTemplateId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

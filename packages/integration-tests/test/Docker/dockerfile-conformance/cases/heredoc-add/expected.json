@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ADD",
+          "line": 2,
+          "flags": [],
+          "heredocs": [
+            {
+              "name": "EOF",
+              "content": "welcome\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ],
+          "sources": [
+            "\u003c\u003cEOF"
+          ],
+          "destination": "/etc/motd"
+        }
+      ]
+    }
+  ]
+}

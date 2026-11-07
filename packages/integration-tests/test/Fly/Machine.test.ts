@@ -11,6 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -83,6 +84,10 @@ describe.concurrent("Machine", () => {
               guest: { cpus: 1, memoryMb: 256 },
             });
           }),
+        );
+        yield* expectFound(
+          Fly.Machine.lookup({ appName: created.appName, name: created.baseName ?? created.name }),
+          created,
         );
 
         expect(created.machineId).toEqual(expect.any(String));

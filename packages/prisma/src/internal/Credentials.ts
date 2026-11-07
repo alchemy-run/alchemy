@@ -13,7 +13,7 @@ const toConfigError = (cause: { readonly message: string }) =>
   ConfigError.make({ message: `Invalid Prisma Management API URL: ${cause.message}` });
 
 /**
- * Bridge an already-resolved {@link PrismaEnvironment} into the distilled
+ * Bridge a caller-provided {@link PrismaEnvironment} into the distilled
  * `Credentials` service. Use this when the environment is provided by the
  * caller (tests, standalone operation helpers).
  */
@@ -21,11 +21,11 @@ export const fromEnvironment = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const env = yield* PrismaEnvironment;
-      return Effect.succeed({
+      const environment = yield* PrismaEnvironment;
+      return Effect.map(environment, (env) => ({
         apiToken: env.serviceToken,
         apiBaseUrl: env.baseUrl,
-      });
+      }));
     }),
   );
 

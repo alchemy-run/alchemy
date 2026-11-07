@@ -628,7 +628,8 @@ const makeCore = Effect.gen(function* () {
     // A plain async writer, like the clone pump: writes settle only as the
     // response is read, and the open stream keeps this invocation alive
     // until the part's upload has finished.
-    const partDone = upload.pipe(Fiber.join, Effect.runPromise);
+    const context = yield* Effect.context<never>();
+    const partDone = upload.pipe(Fiber.join, Effect.runPromiseWith(context));
     yield* Effect.sync(() => {
       void (async () => {
         const writer = writable.getWriter();

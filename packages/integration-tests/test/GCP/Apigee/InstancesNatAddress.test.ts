@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -66,6 +67,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { runtime, nat };
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.InstancesNatAddress.lookup({
+          natAddressId: created.nat.natAddressId,
+          organization: created.nat.organization,
+          instance: created.nat.instanceId,
+        }),
+        created.nat,
       );
 
       expect(created.nat.natAddressId).toEqual(expect.any(String));

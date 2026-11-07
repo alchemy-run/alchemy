@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({
@@ -78,6 +79,7 @@ test.provider.skipIf(!runLifecycle)(
           });
         }),
       );
+      yield* expectFound(GCP.SQL.Instance.lookup({ instanceName: created.instanceName }), created);
 
       expect(created.instanceName).toEqual(expect.any(String));
       expect(created.region).toEqual("us-central1");

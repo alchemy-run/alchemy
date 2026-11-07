@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -107,6 +108,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Config.Preview.lookup({ previewId: created.previewId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/previews/");

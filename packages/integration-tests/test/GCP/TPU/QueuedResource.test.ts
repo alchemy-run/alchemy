@@ -6,6 +6,7 @@ import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -74,6 +75,13 @@ test.provider.skipIf(!runLifecycle)(
         });
       });
       const created = yield* stack.deploy(trainer);
+      yield* expectFound(
+        GCP.TPU.QueuedResource.lookup({
+          queuedResourceId: created.queuedResourceId,
+          location: created.location,
+        }),
+        created,
+      );
 
       expect(created.name).toContain("/queuedResources/");
       expect(created.queuedResourceId).toEqual(expect.any(String));

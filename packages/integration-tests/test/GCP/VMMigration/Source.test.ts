@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as vmmigration from "@distilled.cloud/gcp/vmmigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { dummyAws, logLevel, currentProject, runSourceLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -45,6 +46,10 @@ test.provider.skipIf(!runSourceLifecycle)(
             aws: dummyAws,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.VMMigration.Source.lookup({ sourceId: created.sourceId, location: created.location }),
+        created,
       );
 
       expect(created.sourceId).toEqual(expect.any(String));

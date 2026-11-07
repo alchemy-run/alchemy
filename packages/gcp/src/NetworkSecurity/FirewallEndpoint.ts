@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,33 @@ export type FirewallEndpoint = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FirewallEndpointLookup
 >;
+
+/**
+ * Props for {@link FirewallEndpoint.lookup}: find a firewall endpoint this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FirewallEndpointLookup {
+  /**
+   * FirewallEndpoint id (the `{firewallEndpoint}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/firewallEndpoints/{firewallEndpoint}`).
+   */
+  firewallEndpointId: string;
+  /**
+   * Zone of the endpoint (`us-central1-a`, …). `US-CENTRAL1-A` is accepted
+   * and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Cloud NGFW firewall endpoint. Endpoints terminate
@@ -126,6 +152,19 @@ export type FirewallEndpoint = Resource<
  *   firewallEndpointId: "app-ngfw",
  *   location: "us-central1-a",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing firewall endpoint
+ * `FirewallEndpoint.lookup` references a firewall endpoint Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * firewall endpoint.
+ *
+ * **Example:** Reference an existing firewall endpoint
+ * ```typescript
+ * const firewallEndpoint = GCP.NetworkSecurity.FirewallEndpoint.lookup({
+ *   firewallEndpointId: "my-firewall-endpoint",
  * });
  * ```
  *
@@ -201,6 +240,15 @@ export const FirewallEndpointProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ firewallEndpointId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, firewallEndpointId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

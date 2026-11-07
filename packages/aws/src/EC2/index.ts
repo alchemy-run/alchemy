@@ -9,6 +9,7 @@ export * from "./EgressOnlyInternetGateway.ts";
 export * from "./EIP.ts";
 export * from "./FlowLog.ts";
 export * from "./GetAmi.ts";
+export * from "./GetManagedPrefixList.ts";
 export * from "./Image.ts";
 export * from "./Instance.ts";
 export * from "./InstanceEventSource.ts";

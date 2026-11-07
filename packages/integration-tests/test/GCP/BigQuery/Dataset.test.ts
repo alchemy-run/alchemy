@@ -5,6 +5,7 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -37,6 +38,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.BigQuery.Dataset.lookup({ datasetId: created.datasetId }), created);
 
       expect(created.datasetId).toEqual(expect.any(String));
       expect(created.datasetId).toMatch(/^[a-zA-Z0-9_]+$/);

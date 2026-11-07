@@ -1,0 +1,76 @@
+---
+title: Images
+description: Build Modal images from a registry image, a Dockerfile, or another image.
+---
+
+## From a registry image
+
+```typescript
+// src/Sandbox.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Node = Modal.Image("Node", {
+  app: Coder,
+  image: "node:22-bookworm",
+  commands: ["RUN apt-get update && apt-get install -y git ripgrep"],
+});
+```
+
+## From a Dockerfile
+
+```typescript
+// src/Sandbox.ts
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Python = Modal.Image("Python", {
+  app: Coder,
+  dockerfile: Dockerfile.inline`
+    FROM python:3.12-slim
+    RUN pip install pandas
+  `,
+});
+```
+
+Modal's builder isn't Docker. Multi-stage builds, BuildKit mounts, `EXPOSE`, `HEALTHCHECK`, `LABEL`, `ONBUILD`, `STOPSIGNAL` and `VOLUME` fail at plan, naming the line. `USER` is ignored: containers run as root.
+
+A Dockerfile path works too: `dockerfile: "./sandbox/Dockerfile"`. Files its `COPY` lines read are uploaded from the Dockerfile's directory, or from `context`.
+
+## A warm base
+
+```typescript
+// src/Sandbox.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Node = Modal.Image("Node", { app: Coder, image: "node:22-bookworm" });
+
+export const Warm = Modal.Image("Warm", {
+  app: Coder,
+  from: Node,
+  run: [
+    "git clone https://github.com/alchemy-run/alchemy /work",
+    "cd /work && corepack enable && pnpm install",
+  ],
+});
+```
+
+`run` executes in a sandbox at deploy, then saves its files as the image. Changing `run` or the base builds a new one.
+
+## Build at runtime
+
+```typescript
+const images = yield* Modal.CreateImage(Coder);
+const image = yield* images.build({
+  image: "node:22-bookworm",
+  commands: [`RUN git clone https://github.com/${repo} /work`],
+});
+const sandbox = yield* sandboxes.create({ image });
+```
+
+Modal caches builds by content, so the same inputs return the same image.

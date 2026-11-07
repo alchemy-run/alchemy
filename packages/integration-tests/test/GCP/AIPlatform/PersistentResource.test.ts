@@ -6,6 +6,7 @@ import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -30,7 +31,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const parent = `projects/${project}/locations/us-central1`;
+      const parent = `projects/${project}/locations/us-east1`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -64,7 +65,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.PersistentResource("Train", {
-            location: "us-central1",
+            location: "us-east1",
             displayName: "alchemy-persistent",
             resourcePools: [
               {
@@ -77,9 +78,16 @@ test.provider.skipIf(!runLifecycle)(
           });
         }),
       );
+      yield* expectFound(
+        GCP.AIPlatform.PersistentResource.lookup({
+          persistentResourceId: created.persistentResourceId,
+          location: created.location,
+        }),
+        created,
+      );
 
       expect(created.name).toContain("/persistentResources/");
-      expect(created.location).toEqual("us-central1");
+      expect(created.location).toEqual("us-east1");
       expect(created.labels).toMatchObject({ env: "test" });
 
       const fetched = yield* aiplatform.getProjectsLocationsPersistentResources({
@@ -92,7 +100,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.PersistentResource("Train", {
             persistentResourceId: created.persistentResourceId,
-            location: "us-central1",
+            location: "us-east1",
             displayName: "alchemy-persistent",
             resourcePools: [
               {

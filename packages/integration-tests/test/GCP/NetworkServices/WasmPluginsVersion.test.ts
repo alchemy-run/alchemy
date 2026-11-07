@@ -11,6 +11,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -129,6 +130,14 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { artifacts, plugin, version };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.WasmPluginsVersion.lookup({
+          wasmPluginVersionId: created.version.wasmPluginVersionId,
+          location: created.version.location,
+          wasmPlugin: created.version.wasmPlugin,
+        }),
+        created.version,
       );
 
       expect(created.version.name).toContain("/versions/");

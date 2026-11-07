@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "mount",
+              "value": "type=cache,target=/foo"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "\u003c\u003cMOUNT"
+          },
+          "heredocs": [
+            {
+              "name": "MOUNT",
+              "content": "echo hello\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

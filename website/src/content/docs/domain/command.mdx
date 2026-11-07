@@ -122,12 +122,14 @@ The target isn't part of the command's data. You pass it alongside the command w
 `input` lists the fields the caller provides, each as a schema. You create the command with them, and the aggregate reads them in `decide`.
 
 ```typescript title="src/Account.aggregate.ts"
-WithdrawMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : cmd.amount > s.balance
-      ? new InsufficientFunds({ balance: s.balance, requested: cmd.amount })
-      : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
+decide: {
+  WithdrawMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : cmd.amount > account.balance
+        ? new InsufficientFunds({ balance: account.balance, requested: cmd.amount })
+        : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: account.balance - cmd.amount })],
+},
 ```
 
 The schemas also decode the command when it arrives from a client, so `decide` only ever sees well-formed input. A command with no input, like a request to close an account, leaves `input` out.
@@ -217,12 +219,10 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DailyLimitExceeded],
   reply: { balance: Cents },
-  // Recorded on every span the withdrawal passes through; nothing else from it is.
-  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
 }) {}
 ```
 
-`attributes` chooses what its spans record; see [Observability](/domain/observability).
+Nothing from its input reaches a trace unless its `decide` annotates it; see [Observability](/domain/observability).
 
 Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
 

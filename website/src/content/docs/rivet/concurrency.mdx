@@ -1,0 +1,102 @@
+---
+title: Concurrency
+description: How a Rivet Durable Object runs calls in parallel, how a transaction keeps a read and a write together, and how Workers.InputGate gives code written for Cloudflare the same rule it has there.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A room runs in one place, but it takes its calls in parallel. Two calls that reach the lobby at once both run, and their storage reads and writes interleave.
+
+That's fast: a busy room never waits for one call to finish before starting the next. It also means a method that reads a value and writes it back can lose another call's write.
+
+## Two joins, one lost
+
+This `join` reads the visitor count, adds one, and writes it back:
+
+```typescript title="src/room.ts"
+join: () =>
+  Effect.gen(function* () {
+    const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+    yield* state.storage.put("visitors", visitors);
+    return visitors;
+  }),
+```
+
+When two joins reach a lobby with 3 visitors at once, both read 3, and both write 4:
+
+<Timeline
+  end={8}
+  lanes={[
+    { id: "a", label: "join A" },
+    { id: "b", label: "join B" },
+  ]}
+  bars={[
+    { lane: "a", start: 0, end: 2, label: "get → 3" },
+    { lane: "b", start: 1, end: 3, label: "get → 3" },
+    { lane: "a", start: 3, end: 5, label: "put 4", tone: "warn" },
+    { lane: "b", start: 4, end: 6, label: "put 4", tone: "warn" },
+  ]}
+  ticks={[{ at: 0, label: "visitors = 3" }, { at: 8, label: "visitors = 4" }]}
+  caption="Both calls read before either writes, so the second write repeats the first and one visitor is lost."
+/>
+
+## Keep a read and its write together
+
+Run the change as a transaction. No other call's storage interleaves with it, so the read and the write stay together:
+
+```typescript title="src/room.ts"
+join: () =>
+  state.storage.transaction(
+    Effect.gen(function* () {
+      const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+      yield* state.storage.put("visitors", visitors);
+      return visitors;
+    }),
+  ),
+```
+
+Fifty joins at once now count fifty visitors. The other calls' storage waits for the transaction, while the rest of their work keeps running. A transaction also commits all its writes together and rolls them all back if it fails; see [Storage](/rivet/storage#group-changes-in-a-transaction).
+
+A change that is one write, like setting a key to a value that doesn't depend on what was there, needs no transaction.
+
+## Run Cloudflare code unchanged
+
+Cloudflare's Durable Objects follow a different rule. An **input gate** holds other calls back while one call's storage runs, so a plain read-then-write never loses an update there. Code written for that rule, without transactions, loses updates on Rivet.
+
+Provide `Workers.InputGate` to the class, and its instances follow Cloudflare's rule:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Workers from "alchemy/Workers";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Default } from "./cluster.ts";
+
+export default class Counter extends Rivet.DurableObject<Counter>()(
+  "Counter",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        increment: () =>
+          Effect.gen(function* () {
+            const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+            yield* state.storage.put("count", count);
+            return count;
+          }),
+      };
+    });
+  }).pipe(Effect.provide(Layer.mergeAll(Default, Workers.InputGate))),
+) {}
+```
+
+Once a call starts using storage, no other call touches it until the first one waits on something else, like another Durable Object or an HTTP request. The `alarm` handler, work handed to `waitUntil`, and fibers the instance forks while it starts follow the same rule.
+
+The gate costs throughput: every storage operation in the instance waits its turn. Give it to code written for Cloudflare, and use transactions everywhere else.
+
+## Calls that would wait on themselves
+
+A transaction holds the instance's storage until it finishes. A call back into the same instance from inside one, directly or through other Durable Objects, would wait for the transaction while the transaction waits for it. Rivet spots that and fails the call back with HTTP 508, and the transaction sees the failure and rolls back. The same goes for an instance that calls itself while it starts.
+
+Next, [Calling a Durable Object](/rivet/calling): how callers reach a room.

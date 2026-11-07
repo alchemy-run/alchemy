@@ -6,6 +6,7 @@ import * as registry from "@distilled.cloud/gcp/agentregistry_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -202,6 +203,13 @@ test.provider(
             targetIdentifier: targetIdentifier!,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AgentRegistry.Binding.lookup({
+          bindingId: created.bindingId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.bindingId).toEqual(expect.any(String));

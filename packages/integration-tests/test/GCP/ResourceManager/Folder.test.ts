@@ -6,6 +6,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -96,6 +97,13 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "platform",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ResourceManager.Folder.lookup({
+          displayName: created.displayName,
+          parent: created.parent,
+        }),
+        created,
       );
 
       expect(created.name).toMatch(/^folders\//);

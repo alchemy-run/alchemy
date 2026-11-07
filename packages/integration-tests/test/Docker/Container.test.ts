@@ -10,6 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 import { findAvailablePort } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState(), adopt: true });
@@ -45,6 +46,7 @@ test.provider(
         });
 
       const first = yield* stack.deploy(deploy("2"));
+      yield* expectFound(Docker.Container.lookup({ name }), first);
       yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
       const info = yield* docker.container.inspect(name);
       expect(info.HostConfig.SecurityOpt).toContain("seccomp=builtin");

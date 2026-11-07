@@ -14,6 +14,7 @@ import { GcpEnvironment } from "../Environment.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
 import { projectNumber } from "../Host.ts";
 import { updateIamMembership } from "../IamPolicy.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -169,8 +170,28 @@ export type Secret = Resource<
     versionDestroyTtl: string | undefined;
   },
   SecretBinding,
-  Providers
+  Providers,
+  SecretLookup
 >;
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SecretLookup {
+  /**
+   * Secret id (the `{secret}` segment of
+   * `projects/{project}/secrets/{secret}`). Max 255 characters; letters,
+   * numbers, hyphens, and underscores.
+   */
+  secretId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Secret Manager secret (metadata and replication). Secret
@@ -213,6 +234,16 @@ export type Secret = Resource<
  * yield* addVersion({ payload: { data: btoa("hello") } });
  * const access = yield* GCP.SecretManager.AccessSecretVersion(secret);
  * const { payload } = yield* access();
+ * ```
+ *
+ * ### Looking up an existing secret
+ * `Secret.lookup` references a secret Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared secret.
+ *
+ * **Example:** Reference an existing secret
+ * ```typescript
+ * const secret = GCP.SecretManager.Secret.lookup({ secretId: "my-secret" });
  * ```
  *
  * @resource
@@ -437,6 +468,14 @@ export const SecretProvider = () =>
           replicationChanged && !idChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ secretId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, secretId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

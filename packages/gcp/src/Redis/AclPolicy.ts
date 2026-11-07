@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -70,8 +71,33 @@ export type AclPolicy = Resource<
     version: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AclPolicyLookup
 >;
+
+/**
+ * Props for {@link AclPolicy.lookup}: find an acl policy this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AclPolicyLookup {
+  /**
+   * ACL policy id (the `{acl_policy}` segment of
+   * `projects/{project}/locations/{location}/aclPolicies/{acl_policy}`).
+   * Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$` (1-63 characters).
+   */
+  aclPolicyId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Memorystore for Redis Cluster ACL policy.
@@ -114,6 +140,19 @@ export type AclPolicy = Resource<
  * const policy = yield* GCP.Redis.AclPolicy("AppAcl", {
  *   location: "us-central1",
  *   rules: [{ username: "app", rule: "on ~keys:* +get +set" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing acl policy
+ * `AclPolicy.lookup` references an acl policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * acl policy.
+ *
+ * **Example:** Reference an existing acl policy
+ * ```typescript
+ * const aclPolicy = GCP.Redis.AclPolicy.lookup({
+ *   aclPolicyId: "my-acl-policy",
  * });
  * ```
  *
@@ -335,6 +374,15 @@ export const AclPolicyProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ aclPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, aclPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

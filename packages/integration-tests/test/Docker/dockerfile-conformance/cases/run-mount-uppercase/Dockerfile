@@ -1,0 +1,2 @@
+FROM alpine
+RUN --mount=TYPE=CACHE,TARGET=/x,SHARING=PRIVATE true

@@ -1,0 +1,16 @@
+[package]
+name = "rust-actors"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+# Each increment counts twice: proves `build.features` reaches Cargo.
+double = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+rivetkit.workspace = true
+serde.workspace = true
+tokio.workspace = true

@@ -11,6 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import PostgresApi, { Db, MpgIp, MpgSite } from "./fixtures/postgres-api.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -111,6 +112,10 @@ describe.concurrent("Postgres", () => {
             return { app, db };
           }),
         );
+        yield* expectFound(Fly.Postgres.lookup({ name: created.db.name }), created.db, {
+          // Migrations are this stack's record, not Fly's.
+          ignore: ["migrationsDir", "migrationsTable", "migrationsHashes", "importHashes"],
+        });
 
         expect(created.db.clusterId).toEqual(expect.any(String));
         expect(created.db.clusterId.length).toBeGreaterThan(0);

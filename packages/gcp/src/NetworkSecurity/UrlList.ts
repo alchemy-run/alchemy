@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { normalizeLocation, parentOf, parseResourceName, resourceName, toId } from "./names.ts";
 import { waitForOperation } from "./operations.ts";
@@ -72,8 +73,33 @@ export type UrlList = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UrlListLookup
 >;
+
+/**
+ * Props for {@link UrlList.lookup}: find an url list this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface UrlListLookup {
+  /**
+   * UrlList id (the `{urlList}` segment of
+   * `projects/{project}/locations/{location}/urlLists/{urlList}`). Must
+   * match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  urlListId: string;
+  /**
+   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A reusable list of hosts, host patterns, URLs, and URL patterns used
@@ -109,6 +135,18 @@ export type UrlList = Resource<
  *   location: "us-central1",
  *   description: "denied destinations v2",
  *   values: ["malware.example.com", "c2.example.net"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing url list
+ * `UrlList.lookup` references an url list Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared url list.
+ *
+ * **Example:** Reference an existing url list
+ * ```typescript
+ * const urlList = GCP.NetworkSecurity.UrlList.lookup({
+ *   urlListId: "my-url-list",
  * });
  * ```
  *
@@ -209,6 +247,15 @@ export const UrlListProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ urlListId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, urlListId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -111,10 +111,12 @@ The caller gets a receipt with the stream and version the command committed at, 
 For a deposit into an open account, `decide` returns one `MoneyDeposited` event carrying the new balance:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: {
+  DepositMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+},
 ```
 
 ## Consumers catch up
@@ -140,7 +142,7 @@ In the bank, one `MoneyDeposited` reaches both views that read accounts:
 And a client that has just deposited reads the summary at that receipt, so it sees the new balance:
 
 ```typescript title="src/depositAndRead.ts"
-return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 ```
 
 ## Consumers added later receive the history
@@ -218,13 +220,13 @@ That gives a precise guarantee. Within a key, events from one source arrive in t
 
 All three consumers receive the same events. They differ in what they do with them.
 
-A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with `validate` and read-your-own-write. Reach for it first when clients need to read something.
+A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with a `validate` on its Layer and read-your-own-write. Reach for it first when clients need to read something.
 
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
-A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, with the same middleware, rejections and `validate` as the model's other reads.
+A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 
 ## Declare the model
 
@@ -341,11 +343,11 @@ export const depositAndRead = Effect.gen(function* () {
   const summaries = yield* AccountSummary;
   const accountId = AccountId.make("a-1");
   const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
-  return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+  return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 });
 ```
 
-Passing the receipt as `atLeast` is the read-your-own-write from earlier: `query` waits until the summary has applied the deposit.
+Passing the receipt as `atLeast` is the read-your-own-write from earlier: `get` waits until the summary has applied the deposit.
 
 Clients outside the model, a browser or another service, reach it through an [Api](/domain/api) instead, which decides what each kind of client may send and read.
 
