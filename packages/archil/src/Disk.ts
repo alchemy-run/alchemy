@@ -400,7 +400,8 @@ export const ensureDisk = Effect.fn(function* (
   const id = created ?? (yield* findDiskByName(name))?.id;
   if (!id) {
     return yield* new archil.DiskNotFound({
-      error: `Archil created disk ${name} but returned no id`,
+      code: "not_found",
+      message: `Archil created disk ${name} but returned no id`,
     });
   }
   return yield* waitForDisk(id);
