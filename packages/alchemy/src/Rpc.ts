@@ -92,11 +92,7 @@ export class RpcRemoteStreamError extends Data.TaggedError("RpcRemoteStreamError
 }> {}
 
 export const isRpcStreamErrorMarker = (value: unknown): value is RpcStreamErrorMarker =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  value._tag === StreamErrorTag &&
-  "error" in value;
+  typeof value === "object" && value !== null && "_tag" in value && value._tag === StreamErrorTag;
 
 export const isRpcErrorEnvelope = (value: unknown): value is RpcErrorEnvelope =>
   typeof value === "object" &&
