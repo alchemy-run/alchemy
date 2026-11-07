@@ -33,6 +33,9 @@
       "path": "./submodules/distilled/packages/archil/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/boat-dev/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/rivet/tsconfig.json"
     },
     {
@@ -131,6 +134,9 @@
     },
     {
       "path": "./packages/archil/tsconfig.json"
+    },
+    {
+      "path": "./packages/boat/tsconfig.json"
     },
     {
       "path": "./packages/rivet/tsconfig.json"

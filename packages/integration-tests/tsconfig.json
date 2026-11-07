@@ -108,6 +108,7 @@
     { "path": "../e2b/tsconfig.json" },
     { "path": "../daytona/tsconfig.json" },
     { "path": "../archil/tsconfig.json" },
+    { "path": "../boat/tsconfig.json" },
     { "path": "../modal/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },
