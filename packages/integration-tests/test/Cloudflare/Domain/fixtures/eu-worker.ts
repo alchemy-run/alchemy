@@ -10,9 +10,7 @@ export default class DomainCounterWorker extends Cloudflare.Worker<DomainCounter
   { main: import.meta.url },
   serve("eu").pipe(
     Effect.provide(
-      CountersLive.pipe(
-        Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
-      ),
+      CountersLive.pipe(Layer.provide(DomainCloudflare.layer({ jurisdiction: "eu" }))),
     ),
   ),
 ) {}

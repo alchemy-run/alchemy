@@ -18,11 +18,11 @@ import {
   type Stub,
 } from "@alchemy.run/domain/DurableObjects";
 import type { Platform } from "@alchemy.run/domain/Platform";
+import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
 import * as Config from "effect/Config";
-import type * as ConfigError from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
@@ -31,12 +31,16 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import type { WorkflowEngine } from "effect/workflow";
 import {
-  DurableObjectTypeId,
-  makeNamespace,
+  DurableObject,
   type DurableObjectNamespace,
-  type InstanceServices,
+  type DurableObjectRuntimeContext,
+  makeNamespace,
+  PlatformDeclaration,
 } from "../DurableObject.ts";
 import { DurableObjectState, type DurableObjectStorage } from "../DurableObjectState.ts";
+import { NodeHost } from "../internal/NodeHost.ts";
+import type { PoolHost } from "../internal/PoolHostService.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -197,82 +201,35 @@ const multiplexed = (
   );
 };
 
+/** Options for {@link layer}. */
+export interface LayerOptions<PoolReq> {
+  /** The Rivet Durable Object class that hosts the model: its actors' name. */
+  readonly name: string;
+  /**
+   * The module that exports the model's Layer (the one this platform is
+   * provided to), usually `import.meta.url`. The pool's nodes load it to run
+   * the model.
+   */
+  readonly main: string;
+  /**
+   * The export of {@link main} that holds the model's Layer.
+   * @default "default"
+   */
+  readonly handler?: string;
+  /** The pool whose nodes run the model, e.g. `RivetDocker.SwarmPool("Default")`. */
+  readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
+}
+
 /**
- * The class phase of a Rivet Durable Object that hosts a domain model: every
- * aggregate instance, view key, policy and saga run of the model is one
- * instance of this class, named after it (`Bank.AccountAggregate/a-1`).
- * Pass the model's Layer, with the services its policies and projections
- * need, and provide a pool Layer to the class as usual.
- *
- * Commands to one aggregate instance run one at a time. Events, state and
- * the outbox commit together in the instance's SQLite, and deliveries to
- * views, projections and policies are at least once and in order per source.
- * Scheduled commands and retries are the instance's alarm. Live reads are
- * streamed responses that poll the owning instance: Rivet 3 has no
- * hibernatable WebSockets.
- *
- * Callers reach the model through {@link layer}.
- *
- * ### Hosting a model on Rivet
- * **Example:** The class that runs the model on a pool
- * ```typescript
- * import * as Rivet from "@alchemy.run/rivet";
- * import * as RivetDocker from "@alchemy.run/rivet/Docker";
- * import * as DomainRivet from "@alchemy.run/rivet/Domain";
- * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankHandlers } from "./Bank.model.ts";
- *
- * export const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
- * export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
- *
- * export default class BankObjects extends Rivet.DurableObject<BankObjects>()(
- *   "Bank",
- *   { main: import.meta.url },
- *   DomainRivet.host(Bank.layer(BankHandlers)).pipe(Effect.provide(Default)),
- * ) {}
- * ```
- *
- * @primitive
+ * The class phase of the class that hosts a model: each instance builds the
+ * object its name says (`Bank.AccountAggregate/a-1`) from the classes the
+ * model declared on this node.
  */
-export const host = <ROut, E, RIn>(
-  model: Layer.Layer<ROut, E, RIn>,
-): Effect.Effect<
-  Effect.Effect<DomainShape, never, InstanceServices>,
-  ConfigError.ConfigError,
-  | Exclude<RIn, Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>
-  | RuntimeContext
-> =>
+const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild>) =>
   Effect.gen(function* () {
-    const ctx = yield* RuntimeContext;
-    if (ctx.Type !== DurableObjectTypeId) {
-      return yield* Effect.die(
-        new Error("DomainRivet.host is the class phase of a Rivet.DurableObject."),
-      );
-    }
-    const name = ctx.id;
-    // Calls between the model's objects go through the control plane, as
-    // any caller's do: the object they reach may run on another node.
-    const self = makeNamespace(
-      name,
-      yield* Config.all({
-        endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
-        token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
-        namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
-        pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
-      }),
-    );
-    const classes = new Map<string, InstanceBuild>();
-    // Lives as long as the node: the model's Layer is the class's.
-    const scope = yield* Scope.make();
     // Each instance gets Cloudflare's input gate: the objects' storage was
     // written for it.
-    yield* Layer.buildWithScope(InputGate, scope);
-    yield* Layer.buildWithScope(
-      model.pipe(Layer.provide(multiplexed(name, self, (cls, build) => classes.set(cls, build)))),
-      scope,
-    ).pipe(Effect.orDie);
-
+    yield* Layer.buildWithScope(InputGate, yield* Scope.make());
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       const parsed = parseMultiplexedName(state.id.name);
@@ -305,32 +262,46 @@ export const host = <ROut, E, RIn>(
       } = record;
       return { ...methods, alarm: () => callbacks.fire } satisfies DomainShape;
     });
-  }) as Effect.Effect<
-    Effect.Effect<DomainShape, never, InstanceServices>,
-    ConfigError.ConfigError,
-    | Exclude<RIn, Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>
-    | RuntimeContext
-  >;
+  });
 
 /**
- * The Domain platform for code that calls a model hosted by {@link host}:
- * a Worker, a Lambda, a container, another Durable Object. Provide it to the
- * model's Layer, as `Domain.InMemory` or `layerDurableObjects()` would be.
- * Commands, reads and saga runs go to the model's instances through the
- * control plane's gateway.
+ * Host a domain model on Rivet Durable Objects. Provide it to the model's
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layer()` would be, in
+ * every runtime that serves the model: a Worker, a Lambda, a container.
  *
- * ### Calling a model on Rivet
- * **Example:** A Worker serving an Api over the Rivet-hosted model
+ * The model's aggregate instances, view keys, policies and saga runs are
+ * instances of one Durable Object class, `name`, each named after what it
+ * holds (`Bank.AccountAggregate/a-1`). Built in a caller, the Layer deploys
+ * that class to `pool` and reaches it through the control plane's gateway.
+ * The pool's nodes load the model's Layer from `main`, and there the same
+ * Layer hosts the class.
+ *
+ * Commands to one aggregate instance run one at a time. Events, state and
+ * the outbox commit together in the instance's SQLite, and deliveries to
+ * views, projections and policies are at least once and in order per source.
+ * Scheduled commands and retries are the instance's alarm. Live reads are
+ * streamed responses that poll the owning instance: Rivet 3 has no
+ * hibernatable WebSockets.
+ *
+ * ### Hosting a model on Rivet
+ * **Example:** The model's Layer, served from a Worker
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as DomainRivet from "@alchemy.run/rivet/Domain";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";
- * import BankObjects from "./BankObjects.ts";
  * import { CustomerApi } from "./CustomerApi.api.ts";
  *
- * const BankLive = Bank.layer(BankHandlers).pipe(Layer.provide(DomainRivet.layer(BankObjects)));
+ * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+ * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+ *
+ * export const BankLive = Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(
+ *     DomainRivet.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+ *   ),
+ * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
  *   "BankWorker",
@@ -346,9 +317,49 @@ export const host = <ROut, E, RIn>(
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layer = <R>(
-  objects: Effect.Effect<DurableObjectNamespace<any>, never, R>,
-): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom, never, R> =>
+export const layer = <PoolReq>(
+  options: LayerOptions<PoolReq>,
+): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
+  never,
+  PoolReq | Providers
+> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the class is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
-    Effect.map(objects, (namespace) => multiplexed(namespace.name, namespace, () => undefined)),
-  ) as Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom, never, R>;
+    Effect.gen(function* () {
+      const classes = new Map<string, InstanceBuild>();
+      const Objects = (DurableObject as any)()(
+        options.name,
+        { main: options.main, handler: options.handler ?? "default" },
+        hostClassPhase(options.name, classes).pipe(Effect.provide(options.pool)),
+      );
+      if (NodeHost.active) {
+        // A node of the pool: host the class, as the bootstrap hosts an
+        // exported one, with the classes the model declares here.
+        const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
+        const hosted = (
+          Context.get(context, entrypointTag).RuntimeContext as DurableObjectRuntimeContext
+        ).hosted();
+        if (hosted !== undefined) NodeHost.hosted.push(hosted);
+        // Calls between the model's objects go through the control plane, as
+        // any caller's do: the object they reach may run on another node.
+        const self = makeNamespace(
+          options.name,
+          yield* Config.all({
+            endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
+            token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
+            namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
+            pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
+          }).pipe(Effect.orDie),
+        );
+        return multiplexed(options.name, self, (cls, build) => classes.set(cls, build));
+      }
+      // A caller: deploy the class, and reach it through the gateway.
+      const namespace = (yield* Objects) as DurableObjectNamespace<any>;
+      return multiplexed(options.name, namespace, () => undefined);
+    }),
+  ) as Layer.Layer<
+    Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
+    never,
+    PoolReq | Providers
+  >;

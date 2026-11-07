@@ -16,9 +16,7 @@ import {
   ReleaseHold,
 } from "./holds.ts";
 
-const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(
-  Layer.provide(DomainCloudflare.layerDurableObjects()),
-);
+const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(Layer.provide(DomainCloudflare.layer()));
 
 /**
  * `POST /place/<id>`, `POST /release/<id>`, `GET /state/<id>` on the Holds

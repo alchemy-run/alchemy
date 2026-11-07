@@ -65,7 +65,7 @@ export const upgradeWorker = ({
   readonly legacyData?: "Billing" | "Audit";
 }) =>
   Effect.gen(function* () {
-    const Platform = DomainCloudflare.layerDurableObjects();
+    const Platform = DomainCloudflare.layer();
     const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
       Effect.provide(
         Billing.layer(ApproveLive, { legacyData: legacyData === "Billing" }).pipe(

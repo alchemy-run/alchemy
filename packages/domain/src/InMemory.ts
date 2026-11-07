@@ -1155,7 +1155,7 @@ export const make = (
 /**
  * Host a domain model in the current process: aggregates, views and policies,
  * with nothing to deploy. Use it in tests and single-process apps; swap it
- * for `DomainCloudflare.layerDurableObjects()` and nothing else changes.
+ * for `DomainCloudflare.layer()` and nothing else changes.
  *
  * ### Hosting in memory
  * **Example:** A model with its policies

@@ -15,7 +15,7 @@ export default class DomainDuplicateWorker extends Cloudflare.Worker<DomainDupli
   { main: import.meta.url },
   Effect.gen(function* () {
     const accounts = Effect.map(Effect.all({ accounts: Account }), ({ accounts }) => accounts);
-    const Platform = DomainCloudflare.layerDurableObjects();
+    const Platform = DomainCloudflare.layer();
     yield* Effect.provide(accounts, Billing.layer(Layer.empty).pipe(Layer.provide(Platform)));
     yield* Effect.provide(accounts, OtherBilling.layer(Layer.empty).pipe(Layer.provide(Platform)));
     return { fetch: Effect.succeed(HttpServerResponse.text("unreachable")) };

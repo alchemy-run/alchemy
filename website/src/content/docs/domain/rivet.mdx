@@ -4,64 +4,45 @@ description: Host a domain model on Rivet Durable Objects, on nodes in any cloud
 ---
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-Host your model on [Rivet](/rivet), and every aggregate instance, view key and policy runs as a Rivet actor with its own SQLite. One Durable Object class holds the whole model, and its nodes run in the pool you give it.
+Host your model on [Rivet](/rivet), and every aggregate instance, view key and policy runs as a Rivet actor with its own SQLite. The nodes run in the pool you give it, and your Api runs wherever you like.
 
-## Host the model in one class
+## Host the model
 
-Pass the model's Layer to `DomainRivet.host` as the class phase of a `Rivet.DurableObject`. Provide what the policies need with it, and a pool to the class.
+Provide `DomainRivet.layer` to the model's Layer, as you would `DomainCloudflare.layer()` or `Domain.InMemory`. Name the class that holds the model, point `main` and `handler` at the export the nodes load, and give it a pool.
 
 ```typescript
-// packages/server/src/BankObjects.ts
-import * as Rivet from "@alchemy.run/rivet";
+// packages/server/src/BankLive.ts
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as DomainRivet from "@alchemy.run/rivet/Domain";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { Default } from "./Rivet.ts";
 
-export default class BankObjects extends Rivet.DurableObject<BankObjects>()(
-  "Bank",
-  { main: import.meta.url },
-  DomainRivet.host(Bank.layer(BankHandlers).pipe(Layer.provide(SiftFraudCheck))).pipe(
-    Effect.provide(Default),
+const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      DomainRivet.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+      SiftFraudCheck,
+    ),
   ),
-) {}
+);
 ```
 
-The pool decides where the nodes run. This one is a local Docker Swarm:
-
-```typescript
-// packages/server/src/Rivet.ts
-import * as RivetDocker from "@alchemy.run/rivet/Docker";
-import * as Layer from "effect/Layer";
-
-export const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
-export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
-```
-
-Swap it for `RivetAWS.EcsPool`, `RivetGCP.CloudRunPool` or another pool to run the nodes elsewhere. See [Pools](/rivet/pools).
+The pool decides where the nodes run. Swap `RivetDocker.SwarmPool` for `RivetAWS.EcsPool`, `RivetGCP.CloudRunPool` or another pool to run them elsewhere. See [Pools](/rivet/pools).
 
 ## Serve the Api from anywhere
 
-Provide `DomainRivet.layer(BankObjects)` as the platform wherever you serve the Api: a Cloudflare Worker, a Lambda, a container.
+Provide `BankLive` wherever you serve the Api: a Cloudflare Worker, a Lambda, a container.
 
 ```typescript
 // packages/server/src/BankWorker.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainRivet from "@alchemy.run/rivet/Domain";
-import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import BankObjects from "./BankObjects.ts";
-import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { SessionLive } from "./Session.ts";
-
-const BankLive = SessionLive.pipe(
-  Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(Layer.mergeAll(DomainRivet.layer(BankObjects), SiftFraudCheck)),
-);
+import { BankLive } from "./BankLive.ts";
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",
@@ -73,11 +54,11 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-Commands, reads and saga runs go to the actors through the control plane's gateway, so the Worker needs no RivetKit and no route to the nodes. Policies and sagas run on the nodes, but the Worker builds the same model Layer, so it needs their services too.
+In the Worker, the Layer reaches the actors through the control plane's gateway, so the Worker needs no RivetKit and no route to the nodes. On the nodes, the same Layer runs the model: its policies and sagas run there.
 
 ## Deploy it
 
-The Worker yields `BankObjects`, so deploying the Worker deploys the class, its pool and its control plane:
+The Worker provides `BankLive`, so deploying the Worker deploys the model's class, its pool and its control plane:
 
 ```typescript
 // alchemy.run.ts
@@ -106,7 +87,7 @@ export default Alchemy.Stack(
 
 ## Know what runs where
 
-Every object of the model is an actor of the one class, named after what it holds:
+Every object of the model is an actor of the `Bank` class, named after what it holds:
 
 | Your model | On Rivet |
 | --- | --- |

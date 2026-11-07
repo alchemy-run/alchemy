@@ -18,11 +18,13 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import {
   DurableObjectHasNoPool,
   PlatformDeclaration,
   type DurableObjectRuntimeContext,
 } from "../DurableObject.ts";
+import { NodeHost } from "./NodeHost.ts";
 import { runDurableObjects } from "./Runtime.ts";
 
 /** Build each entrypoint's class phase, then run the node until it is stopped. */
@@ -44,14 +46,18 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
 
   const program = Effect.gen(function* () {
     const hosted = [];
+    NodeHost.active = true;
     for (const entrypoint of entrypoints) {
       // A class's `yield*` is its namespace; the node builds its Platform.
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration));
-      const runtime = Context.get(context, entrypointTag)
-        .RuntimeContext as DurableObjectRuntimeContext;
+      // A Layer that hosts its classes itself (a Domain model's) provides
+      // none: they are in `NodeHost.hosted`.
+      const self = Context.getOption(context, entrypointTag);
+      if (Option.isNone(self)) continue;
+      const runtime = self.value.RuntimeContext as DurableObjectRuntimeContext;
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
@@ -62,6 +68,8 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
       }
       hosted.push(built);
     }
+    for (const built of NodeHost.hosted)
+      if (!hosted.some((other) => other.name === built.name)) hosted.push(built);
     return yield* runDurableObjects(hosted);
   }).pipe(Effect.provide(platform), Effect.scoped);
 

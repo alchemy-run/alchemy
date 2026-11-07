@@ -45,9 +45,9 @@ import type { HostedCron } from "../Cron.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
-import { clusterLayers } from "./ClusterLayers.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
+import { RunnerHost } from "./RunnerHost.ts";
 
 const env = (name: string) => process.env[name];
 
@@ -218,12 +218,17 @@ export const bootstrap = (
 
   const program = Effect.gen(function* () {
     const hosted: Array<HostedEntity | HostedWorkflow | HostedSingleton | HostedCron> = [];
+    RunnerHost.active = true;
     for (const entrypoint of entrypoints) {
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration));
-      const runtime = Context.get(context, entrypointTag).RuntimeContext as HostedRuntimeContext<
+      // A Layer that hosts its entities itself (a Domain model's) provides
+      // none: they are in `RunnerHost.hosted`.
+      const self = Context.getOption(context, entrypointTag);
+      if (Option.isNone(self)) continue;
+      const runtime = self.value.RuntimeContext as HostedRuntimeContext<
         HostedEntity | HostedWorkflow | HostedSingleton | HostedCron
       >;
       const built = runtime.hosted();
@@ -236,6 +241,11 @@ export const bootstrap = (
       }
       hosted.push(built);
     }
+    for (const built of RunnerHost.hosted)
+      if (
+        !hosted.some((other) => other.kind === "entity" && other.entity.type === built.entity.type)
+      )
+        hosted.push(built);
 
     const host = yield* runnerHost;
     const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
@@ -327,7 +337,7 @@ export const bootstrap = (
         ...(workflowLayers as Layer.Layer<never, never, any>[]),
         ...(scheduled as Layer.Layer<never, never, any>[]),
         // What the classes' Construction phases handed the runner.
-        ...(clusterLayers() as Layer.Layer<never, never, any>[]),
+        ...RunnerHost.layers,
         gateway,
       ).pipe(
         // Workflows run on Effect Cluster's own engine, over the cluster.

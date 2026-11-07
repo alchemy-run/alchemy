@@ -18,12 +18,12 @@ import type { Platform } from "@alchemy.run/domain/Platform";
  * @module
  */
 import { PgClient } from "@effect/sql-pg";
+import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
 import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
 import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
 import * as Config from "effect/Config";
-import type * as ConfigError from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
@@ -39,9 +39,16 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { SqlClient } from "effect/sql/SqlClient";
 import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
-import { EntityTypeId, type EntityNamespace, type InstanceServices } from "../Entity.ts";
-import { addClusterLayer } from "../internal/ClusterLayers.ts";
+import {
+  Entity,
+  type EntityNamespace,
+  type EntityRuntimeContext,
+  PlatformDeclaration,
+} from "../Entity.ts";
 import { makeNamespace } from "../internal/Gateway.ts";
+import { RunnerHost } from "../internal/RunnerHost.ts";
+import type { PoolLayer } from "../Pool.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Wake an instance at `at`: a persisted message delivered when it is due,
@@ -73,11 +80,10 @@ type DomainRpcs = (typeof rpcs)[number];
 /**
  * The entity a domain model runs on: every aggregate instance, view key,
  * policy and projection key is one entity id of it
- * (`Bank.AccountAggregate/a-1`). Declare the class with it.
+ * (`Bank.AccountAggregate/a-1`).
  */
-export const entity = <const Type extends string>(
-  type: Type,
-): EffectEntity.Entity<Type, DomainRpcs> => EffectEntity.make(type, rpcs);
+const entity = <const Type extends string>(type: Type): EffectEntity.Entity<Type, DomainRpcs> =>
+  EffectEntity.make(type, rpcs);
 
 /** Built for one entity id: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -343,13 +349,36 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
   address.entityId.slice(WORKFLOWS.length + 1),
 );
 
+/** Options for {@link layer}. */
+export interface LayerOptions<PoolReq> {
+  /** The entity that hosts the model: its type in the cluster. */
+  readonly name: string;
+  /**
+   * The module that exports the model's Layer (the one this platform is
+   * provided to), usually `import.meta.url`. The pool's runners load it to
+   * run the model.
+   */
+  readonly main: string;
+  /**
+   * The export of {@link main} that holds the model's Layer.
+   * @default "default"
+   */
+  readonly handler?: string;
+  /** The pool whose runners run the model, e.g. `ClusterDocker.SwarmPool("Default")`. */
+  readonly pool: PoolLayer<PoolReq>;
+}
+
 /**
- * The Construction phase of a `Cluster.Entity` that hosts a domain model:
- * every aggregate instance, view key, policy and projection key of the model
- * is one entity id of it, named after it (`Bank.AccountAggregate/a-1`).
- * Declare the class with {@link entity}, pass the model's Layer, with the
- * services its policies and projections need, and provide a pool Layer as
- * usual.
+ * Host a domain model on Effect Cluster entities. Provide it to the model's
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layer()` would be, in
+ * every runtime that serves the model: a container, a Lambda, a Worker.
+ *
+ * The model's aggregate instances, view keys, policies and projection keys
+ * are entity ids of one entity, `name`, each named after what it holds
+ * (`Bank.AccountAggregate/a-1`). Built in a caller, the Layer deploys that
+ * entity to `pool` and reaches it through the pool's gateway. The pool's
+ * runners load the model's Layer from `main`, and there the same Layer
+ * hosts the entity.
  *
  * Commands to one aggregate instance run one at a time, through each
  * instance's input gate. Every instance's events, state and outbox live in
@@ -358,245 +387,27 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
  * The model's sagas run on Effect Cluster's workflow engine. Live reads are
  * streamed responses that poll the owning instance.
  *
- * Calls between the model's instances may come back to the instance that
- * made them, so give the class `concurrency: "unbounded"`: each instance's
- * input gate keeps its storage consistent.
- *
- * Callers reach the model through {@link layer}.
- *
  * ### Hosting a model on Effect Cluster
- * **Example:** The entity that runs the model on a pool
+ * **Example:** The model's Layer, served from a container
  * ```typescript
- * import * as Cluster from "@alchemy.run/effect-cluster";
+ * import * as Docker from "@alchemy.run/docker";
  * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
  * import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";
+ * import { CustomerApi } from "./CustomerApi.api.ts";
  *
- * export const Database = ClusterDocker.Database("Cluster");
- * export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
+ * const Database = ClusterDocker.Database("Cluster");
+ * const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  *
- * export default class BankObjects extends Cluster.Entity<BankObjects>()(
- *   DomainCluster.entity("Bank"),
- *   { main: import.meta.url, concurrency: "unbounded" },
- *   DomainCluster.host(Bank.layer(BankHandlers)).pipe(Effect.provide(Default)),
- * ) {}
- * ```
- *
- * @primitive
- */
-export const host = <ROut, E, RIn>(
-  model: Layer.Layer<ROut, E, RIn>,
-): Effect.Effect<
-  Effect.Effect<EffectEntity.HandlersFrom<DomainRpcs>, never, InstanceServices>,
-  ConfigError.ConfigError,
-  | Exclude<RIn, Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>
-  | RuntimeContext
-> =>
-  Effect.gen(function* () {
-    const ctx = yield* RuntimeContext;
-    if (ctx.Type !== EntityTypeId) {
-      return yield* Effect.die(
-        new Error("DomainCluster.host is the Construction phase of a Cluster.Entity."),
-      );
-    }
-    // In this pool's shard group, as the runner registers its entities.
-    const shardGroup = () =>
-      (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env
-        .CLUSTER_SHARD_GROUPS ?? "default";
-    const objects = entity(ctx.id).annotate(ClusterSchema.ShardGroup, shardGroup);
-    // The sagas' runs too: a run is routed by its workflow's shard group.
-    const placed = <W extends Workflow.Any>(workflow: W): W =>
-      Object.create(workflow, {
-        annotations: {
-          value: Context.add(workflow.annotations, ClusterSchema.ShardGroup, shardGroup),
-          enumerable: true,
-        },
-      });
-    // Inside the cluster, calls route through Effect Cluster itself.
-    const self = remote(
-      makeNamespace(objects as never, { url: "", token: "", service: "" }) as never,
-    );
-    const classes = new Map<string, InstanceBuild>();
-    const workflows = new Map<string, Workflow.Any>();
-    const registrations: Array<
-      readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
-    > = [];
-    // Set once the runner has joined the cluster.
-    let engine: WorkflowEngine.WorkflowEngine["Service"] | undefined;
-    const started = () => {
-      if (engine === undefined)
-        throw new DomainEngineNotStarted({
-          message: "The cluster's workflow engine isn't running yet.",
-        });
-      return engine;
-    };
-    // Sagas register while the model's Layer builds, before the runner joins
-    // the cluster: hold them until then, and run every call on its engine.
-    const deferredEngine = WorkflowEngine.WorkflowEngine.of({
-      register: ((
-        workflow: Workflow.Any,
-        execute: (payload: any, id: string) => Effect.Effect<any, any, any>,
-      ) =>
-        Effect.sync(() => {
-          workflows.set(workflow._tag, placed(workflow));
-          registrations.push([placed(workflow), execute]);
-        })) as never,
-      execute: ((workflow: any, options: any) =>
-        Effect.suspend(() => started().execute(placed(workflow), options))) as never,
-      poll: ((workflow: any, id: string) =>
-        Effect.suspend(() => started().poll(placed(workflow), id))) as never,
-      interrupt: (workflow, id) => Effect.suspend(() => started().interrupt(placed(workflow), id)),
-      interruptUnsafe: (workflow, id) =>
-        Effect.suspend(() => started().interruptUnsafe(placed(workflow), id)),
-      resume: (workflow, id) => Effect.suspend(() => started().resume(placed(workflow), id)),
-      activityExecute: ((activity: any, attempt: number) =>
-        Effect.suspend(() => started().activityExecute(activity, attempt))) as never,
-      deferredResult: ((deferred: any) =>
-        Effect.suspend(() => started().deferredResult(deferred))) as never,
-      deferredDone: ((deferred: any, options: any) =>
-        Effect.suspend(() => started().deferredDone(deferred, options))) as never,
-      scheduleClock: (workflow, options) =>
-        Effect.suspend(() => started().scheduleClock(placed(workflow), options)),
-    });
-    classes.set(
-      WORKFLOWS,
-      workflowsObject(workflows, () => started()),
-    );
-    const objectHost: Host = {
-      declare: ({ modelName }, cls, impl: ObjectImpl) =>
-        Effect.sync(() => {
-          classes.set(className(modelName, cls), impl);
-          return self(className(modelName, cls));
-        }),
-      lookup: ({ modelName }, cls) => self(className(modelName, cls)),
-      claimKey: Effect.succeed(claimOf(ctx.id)),
-    };
-    const scope = yield* Scope.make();
-    yield* Layer.buildWithScope(
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform, engine and SecureRandom are provided here; the rest are the caller's
-      model.pipe(
-        Layer.provide(
-          Layer.merge(
-            makePlatform(objectHost),
-            Layer.succeed(WorkflowEngine.WorkflowEngine, deferredEngine),
-          ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto)),
-        ),
-      ) as Layer.Layer<ROut, E, never>,
-      scope,
-    ).pipe(Effect.orDie);
-
-    if (globalThis.__ALCHEMY_RUNTIME__) {
-      // Once the runner has joined the cluster: register the sagas with its engine.
-      addClusterLayer(
-        Effect.gen(function* () {
-          const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
-          for (const [workflow, execute] of registrations)
-            yield* clusterEngine.register(workflow as never, execute as never);
-          engine = clusterEngine;
-        }).pipe(Layer.effectDiscard),
-      );
-    }
-
-    // One Postgres pool per runner, opened on the first instance.
-    const sql = yield* Effect.cached(
-      Effect.gen(function* () {
-        const url = yield* Config.Redacted("CLUSTER_DATABASE_URL").pipe(Effect.orDie);
-        const context = yield* Layer.buildWithScope(PgClient.layer({ url }), scope).pipe(
-          Effect.orDie,
-        );
-        const client = Context.get(context, SqlClient);
-        yield* migrate(client);
-        return client;
-      }),
-    );
-
-    return Effect.gen(function* () {
-      const address = yield* EffectEntity.CurrentAddress;
-      const name = address.entityId;
-      const parsed = name.startsWith(`${WORKFLOWS}/`)
-        ? { className: WORKFLOWS, key: name.slice(WORKFLOWS.length + 1) }
-        : parseMultiplexedName(name);
-      const build = parsed === undefined ? undefined : classes.get(parsed.className);
-      if (build === undefined) {
-        return yield* Effect.die(
-          new DomainClassNotHosted({
-            message: `Cluster.Entity '${ctx.id}' hosts no Domain class for '${name}'.`,
-          }),
-        );
-      }
-      const client = yield* sql;
-      const gate = yield* makeInputGate;
-      const storage = objectStorage(client, `${ctx.id}/${name}`, gate);
-      const instanceScope = yield* Scope.Scope;
-      const wakes = yield* objects.client;
-      const callbacks = alarmCallbacks(storage, {
-        set: (at) =>
-          Effect.gen(function* () {
-            yield* storage.put("~alarm", at);
-            yield* wakes(name)
-              .Wake(Wake.make({ at, id: String(yield* Random.nextInt) }), { discard: true })
-              .pipe(Effect.orDie);
-          }),
-        get: storage.get<number>("~alarm").pipe(Effect.map((at) => at ?? null)),
-      });
-      const state: ObjectStateShape = {
-        storage,
-        exclusive: (effect) => gate.exclusive(effect),
-        // Background work stays part of the call that started it.
-        waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, instanceScope)),
-      };
-      const runtime = yield* RuntimeContext;
-      const record = yield* build.pipe(
-        Effect.provideService(ObjectState, state),
-        Effect.provideService(RuntimeContext, { ...runtime, makeCallback: callbacks.makeCallback }),
-      );
-      return objects.of({
-        Call: ({ payload }) =>
-          gate.call(
-            Effect.suspend(() => {
-              const method = record[payload.method];
-              return typeof method === "function"
-                ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
-                    ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
-                  )
-                : Effect.die(new Error(`${name} has no method ${payload.method}`));
-            }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
-          ),
-        Wake: ({ payload }) =>
-          gate.call(
-            Effect.gen(function* () {
-              const at = yield* storage.get<number>("~alarm");
-              if (at !== undefined && at <= payload.at) yield* storage.delete("~alarm");
-              yield* callbacks.fire;
-            }),
-          ),
-      });
-    }) as never;
-  }) as never;
-
-/**
- * The Domain platform for code that calls a model hosted by {@link host}:
- * a Worker, a Lambda, a container, another entity. Provide it to the
- * model's Layer, as `Domain.InMemory` would be. Commands, reads and saga
- * runs reach the model's entities through the pool's gateway, or through
- * Effect Cluster itself inside the cluster.
- *
- * ### Calling a model on Effect Cluster
- * **Example:** A container serving an Api over the cluster-hosted model
- * ```typescript
- * import * as Docker from "@alchemy.run/docker";
- * import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
- * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankHandlers } from "./Bank.model.ts";
- * import BankObjects from "./BankObjects.ts";
- * import { CustomerApi } from "./CustomerApi.api.ts";
- *
- * const BankLive = Bank.layer(BankHandlers).pipe(Layer.provide(DomainCluster.layer(BankObjects)));
+ * export const BankLive = Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(
+ *     DomainCluster.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+ *   ),
+ * );
  *
  * export default class BankApi extends Docker.Service<BankApi>()(
  *   "BankApi",
@@ -612,22 +423,221 @@ export const host = <ROut, E, RIn>(
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layer = <R>(
-  objects: Effect.Effect<EntityNamespace<DomainRpcs>, never, R>,
-): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom, never, R> =>
+export const layer = <PoolReq>(
+  options: LayerOptions<PoolReq>,
+): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
+  never,
+  PoolReq | Providers
+> =>
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the entity is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
     Effect.gen(function* () {
-      const namespace = yield* objects;
-      const self = remote(namespace);
-      // Callers of one host entity share a claim key: the entity's type is unknown here.
+      const name = options.name;
+      // In this pool's shard group, as the runner registers its entities.
+      const shardGroup = () =>
+        (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env
+          .CLUSTER_SHARD_GROUPS ?? "default";
+      const objects = entity(name).annotate(ClusterSchema.ShardGroup, shardGroup);
+      // The sagas' runs too: a run is routed by its workflow's shard group.
+      const placed = <W extends Workflow.Any>(workflow: W): W =>
+        Object.create(workflow, {
+          annotations: {
+            value: Context.add(workflow.annotations, ClusterSchema.ShardGroup, shardGroup),
+            enumerable: true,
+          },
+        });
+      const classes = new Map<string, InstanceBuild>();
+      const workflows = new Map<string, Workflow.Any>();
+      // Lives as long as the runner: the model's Layer is the entity's.
+      const scope = yield* Scope.make();
+      // One Postgres pool per runner, opened on the first instance.
+      const sql = yield* Effect.cached(
+        Effect.gen(function* () {
+          const url = yield* Config.Redacted("CLUSTER_DATABASE_URL").pipe(Effect.orDie);
+          const context = yield* Layer.buildWithScope(PgClient.layer({ url }), scope).pipe(
+            Effect.orDie,
+          );
+          const client = Context.get(context, SqlClient);
+          yield* migrate(client);
+          return client;
+        }),
+      );
+      // Set once the runner has joined the cluster.
+      let engine: WorkflowEngine.WorkflowEngine["Service"] | undefined;
+      const started = () => {
+        if (engine === undefined)
+          throw new DomainEngineNotStarted({
+            message: "The cluster's workflow engine isn't running yet.",
+          });
+        return engine;
+      };
+      classes.set(
+        WORKFLOWS,
+        workflowsObject(workflows, () => started()),
+      );
+
+      // Each instance builds the object its entity id says.
+      const instance = Effect.gen(function* () {
+        const address = yield* EffectEntity.CurrentAddress;
+        const id = address.entityId;
+        const parsed = id.startsWith(`${WORKFLOWS}/`)
+          ? { className: WORKFLOWS, key: id.slice(WORKFLOWS.length + 1) }
+          : parseMultiplexedName(id);
+        const build = parsed === undefined ? undefined : classes.get(parsed.className);
+        if (build === undefined) {
+          return yield* Effect.die(
+            new DomainClassNotHosted({
+              message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
+            }),
+          );
+        }
+        const client = yield* sql;
+        const gate = yield* makeInputGate;
+        const storage = objectStorage(client, `${name}/${id}`, gate);
+        const instanceScope = yield* Scope.Scope;
+        const wakes = yield* objects.client;
+        const callbacks = alarmCallbacks(storage, {
+          set: (at) =>
+            Effect.gen(function* () {
+              yield* storage.put("~alarm", at);
+              yield* wakes(id)
+                .Wake(Wake.make({ at, id: String(yield* Random.nextInt) }), { discard: true })
+                .pipe(Effect.orDie);
+            }),
+          get: storage.get<number>("~alarm").pipe(Effect.map((at) => at ?? null)),
+        });
+        const state: ObjectStateShape = {
+          storage,
+          exclusive: (effect) => gate.exclusive(effect),
+          // Background work stays part of the call that started it.
+          waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, instanceScope)),
+        };
+        const runtime = yield* RuntimeContext;
+        const record = yield* build.pipe(
+          Effect.provideService(ObjectState, state),
+          Effect.provideService(RuntimeContext, {
+            ...runtime,
+            makeCallback: callbacks.makeCallback,
+          }),
+        );
+        return objects.of({
+          Call: ({ payload }) =>
+            gate.call(
+              Effect.suspend(() => {
+                const method = record[payload.method];
+                return typeof method === "function"
+                  ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
+                      ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
+                    )
+                  : Effect.die(new Error(`${id} has no method ${payload.method}`));
+              }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
+            ),
+          Wake: ({ payload }) =>
+            gate.call(
+              Effect.gen(function* () {
+                const at = yield* storage.get<number>("~alarm");
+                if (at !== undefined && at <= payload.at) yield* storage.delete("~alarm");
+                yield* callbacks.fire;
+              }),
+            ),
+        });
+      });
+
+      const Objects = (Entity as any)()(
+        objects,
+        {
+          main: options.main,
+          handler: options.handler ?? "default",
+          // The model's objects call each other, and a call can come back to
+          // the instance that made it; each instance's input gate keeps its
+          // storage consistent.
+          concurrency: "unbounded",
+        },
+        Effect.succeed(instance).pipe(Effect.provide(options.pool)),
+      );
+
+      if (RunnerHost.active) {
+        // A runner of the pool: host the entity, as the bootstrap hosts an
+        // exported one, with the classes the model declares here.
+        const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
+        const hosted = (
+          Context.get(context, entrypointTag).RuntimeContext as EntityRuntimeContext
+        ).hosted();
+        if (hosted !== undefined) RunnerHost.hosted.push(hosted);
+        const registrations: Array<
+          readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
+        > = [];
+        // Sagas register while the model's Layer builds, before the runner
+        // joins the cluster: hold them until then, then run every call on its engine.
+        RunnerHost.layers.push(
+          Effect.gen(function* () {
+            const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
+            for (const [workflow, execute] of registrations)
+              yield* clusterEngine.register(workflow as never, execute as never);
+            engine = clusterEngine;
+          }).pipe(Layer.effectDiscard),
+        );
+        const deferredEngine = WorkflowEngine.WorkflowEngine.of({
+          register: ((
+            workflow: Workflow.Any,
+            execute: (payload: any, id: string) => Effect.Effect<any, any, any>,
+          ) =>
+            Effect.sync(() => {
+              workflows.set(workflow._tag, placed(workflow));
+              registrations.push([placed(workflow), execute]);
+            })) as never,
+          execute: ((workflow: any, opts: any) =>
+            Effect.suspend(() => started().execute(placed(workflow), opts))) as never,
+          poll: ((workflow: any, id: string) =>
+            Effect.suspend(() => started().poll(placed(workflow), id))) as never,
+          interrupt: (workflow, id) =>
+            Effect.suspend(() => started().interrupt(placed(workflow), id)),
+          interruptUnsafe: (workflow, id) =>
+            Effect.suspend(() => started().interruptUnsafe(placed(workflow), id)),
+          resume: (workflow, id) => Effect.suspend(() => started().resume(placed(workflow), id)),
+          activityExecute: ((activity: any, attempt: number) =>
+            Effect.suspend(() => started().activityExecute(activity, attempt))) as never,
+          deferredResult: ((deferred: any) =>
+            Effect.suspend(() => started().deferredResult(deferred))) as never,
+          deferredDone: ((deferred: any, opts: any) =>
+            Effect.suspend(() => started().deferredDone(deferred, opts))) as never,
+          scheduleClock: (workflow, opts) =>
+            Effect.suspend(() => started().scheduleClock(placed(workflow), opts)),
+        });
+        // Inside the cluster, calls route through Effect Cluster itself.
+        const self = remote(
+          makeNamespace(objects as never, { url: "", token: "", service: "" }) as never,
+        );
+        const host: Host = {
+          declare: ({ modelName }, cls, impl: ObjectImpl) =>
+            Effect.sync(() => {
+              classes.set(className(modelName, cls), impl);
+              return self(className(modelName, cls));
+            }),
+          lookup: ({ modelName }, cls) => self(className(modelName, cls)),
+          claimKey: Effect.succeed(claimOf(name)),
+        };
+        return Layer.merge(
+          makePlatform(host),
+          Layer.succeed(WorkflowEngine.WorkflowEngine, deferredEngine),
+        ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
+      }
+
+      // A caller: deploy the entity, and reach it through the gateway.
+      const self = remote((yield* Objects) as EntityNamespace<DomainRpcs>);
       const host: Host = {
         declare: ({ modelName }, cls) => Effect.succeed(self(className(modelName, cls))),
         lookup: ({ modelName }, cls) => self(className(modelName, cls)),
-        claimKey: Effect.succeed(namespace),
+        claimKey: Effect.succeed(claimOf(name)),
       };
       return Layer.merge(
         makePlatform(host),
         Layer.succeed(WorkflowEngine.WorkflowEngine, remoteEngine(self(WORKFLOWS))),
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),
-  ) as Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom, never, R>;
+  ) as Layer.Layer<
+    Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
+    never,
+    PoolReq | Providers
+  >;

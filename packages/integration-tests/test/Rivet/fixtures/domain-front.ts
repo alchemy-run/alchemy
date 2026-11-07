@@ -5,13 +5,10 @@
  */
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
-import * as DomainRivet from "@alchemy.run/rivet/Domain";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { app } from "../../Domain/conformance/app.ts";
-import { ConformanceLive } from "../../Domain/conformance/model.ts";
 import { DOMAIN_FRONT_PORT, DomainControlPlane } from "./domain-cluster.ts";
-import DomainObjects from "./domain-objects.ts";
+import { ConformanceRivetLive } from "./domain-live.ts";
 
 export default class DomainFront extends Docker.Service<DomainFront>()(
   "RivetDomainFront",
@@ -28,5 +25,5 @@ export default class DomainFront extends Docker.Service<DomainFront>()(
   }).pipe(Effect.provide(DomainControlPlane)),
   Effect.gen(function* () {
     return { fetch: yield* app };
-  }).pipe(Effect.provide(ConformanceLive.pipe(Layer.provide(DomainRivet.layer(DomainObjects))))),
+  }).pipe(Effect.provide(ConformanceRivetLive)),
 ) {}

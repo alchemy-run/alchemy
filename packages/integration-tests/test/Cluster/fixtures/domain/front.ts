@@ -5,13 +5,10 @@
  */
 import * as Docker from "@alchemy.run/docker";
 import * as Cluster from "@alchemy.run/effect-cluster";
-import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { app } from "../../../Domain/conformance/app.ts";
-import { ConformanceLive } from "../../../Domain/conformance/model.ts";
 import { DOMAIN_FRONT_PORT, DomainDatabase } from "./cluster.ts";
-import DomainObjects from "./objects.ts";
+import { ConformanceClusterLive } from "./live.ts";
 
 export default class DomainFront extends Docker.Service<DomainFront>()(
   "ClusterDomainFront",
@@ -26,5 +23,5 @@ export default class DomainFront extends Docker.Service<DomainFront>()(
   }).pipe(Effect.provide(DomainDatabase)),
   Effect.gen(function* () {
     return { fetch: yield* app };
-  }).pipe(Effect.provide(ConformanceLive.pipe(Layer.provide(DomainCluster.layer(DomainObjects))))),
+  }).pipe(Effect.provide(ConformanceClusterLive)),
 ) {}

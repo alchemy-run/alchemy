@@ -170,7 +170,7 @@ An Api is served from a Worker. The Api class is an Effect: `yield* BankApi` giv
 ```typescript title="src/BankWorker.ts"
 const BankLive = SessionLive.pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.layerDurableObjects()),
+  Layer.provide(DomainCloudflare.layer()),
 );
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(

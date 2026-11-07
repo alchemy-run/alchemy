@@ -6,68 +6,44 @@ import PackageManagers from "../../../components/PackageManagers.astro";
 
 Host your model on [Effect Cluster](/cluster), and every aggregate instance, view key and policy is an entity id of one entity. Its state lives in the cluster's Postgres, its sagas run on Effect Cluster's workflow engine, and its runners run in the pool you give it.
 
-## Host the model on one entity
+## Host the model
 
-Declare a `Cluster.Entity` from `DomainCluster.entity`, and pass the model's Layer to `DomainCluster.host` as its Construction phase. Provide what the policies need with it, and a pool to the entity.
+Provide `DomainCluster.layer` to the model's Layer, as you would `DomainCloudflare.layer()` or `Domain.InMemory`. Name the entity that holds the model, point `main` and `handler` at the export the runners load, and give it a pool.
 
 ```typescript
-// packages/server/src/BankObjects.ts
-import * as Cluster from "@alchemy.run/effect-cluster";
+// packages/server/src/BankLive.ts
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Default } from "./Cluster.ts";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 
-export default class BankObjects extends Cluster.Entity<BankObjects>()(
-  DomainCluster.entity("Bank"),
-  { main: import.meta.url, concurrency: "unbounded" },
-  DomainCluster.host(Bank.layer(BankHandlers).pipe(Layer.provide(SiftFraudCheck))).pipe(
-    Effect.provide(Default),
-  ),
-) {}
-```
-
-Give the entity `concurrency: "unbounded"`. The model's objects call each other, and a call can come back to the object that made it. Each object still runs its commands one at a time.
-
-The pool decides where the runners run, and the database is where the cluster keeps its state. This one is a local Docker Swarm with two runners:
-
-```typescript
-// packages/server/src/Cluster.ts
-import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
-import * as Layer from "effect/Layer";
-
 export const Database = ClusterDocker.Database("Cluster");
-export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
-  Layer.provide(Database),
+const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Database));
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      DomainCluster.layer({ name: "Bank", main: import.meta.url, handler: "BankLive", pool: Default }),
+      SiftFraudCheck,
+    ),
+  ),
 );
 ```
 
-Swap it for `ClusterAWS.EcsPool`, `ClusterFly.MachinePool` or another pool to run the runners elsewhere. See [Pools](/cluster/pools) and [Databases](/cluster/databases).
+The pool decides where the runners run, and the database is where the cluster keeps its state. Swap `ClusterDocker.SwarmPool` for `ClusterAWS.EcsPool`, `ClusterFly.MachinePool` or another pool to run them elsewhere. See [Pools](/cluster/pools) and [Databases](/cluster/databases).
 
 ## Serve the Api from anywhere
 
-Provide `DomainCluster.layer(BankObjects)` as the platform wherever you serve the Api: a container, a Lambda, a Cloudflare Worker.
+Provide `BankLive` wherever you serve the Api: a container, a Lambda, a Cloudflare Worker.
 
 ```typescript
 // packages/server/src/BankApi.ts
 import * as Docker from "@alchemy.run/docker";
 import * as Cluster from "@alchemy.run/effect-cluster";
-import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
-import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import BankObjects from "./BankObjects.ts";
-import { Database } from "./Cluster.ts";
-import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
-import { SessionLive } from "./Session.ts";
-
-const BankLive = SessionLive.pipe(
-  Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(Layer.mergeAll(DomainCluster.layer(BankObjects), SiftFraudCheck)),
-);
+import { BankLive, Database } from "./BankLive.ts";
 
 export default class BankApi extends Docker.Service<BankApi>()(
   "BankApi",
@@ -86,11 +62,11 @@ export default class BankApi extends Docker.Service<BankApi>()(
 ) {}
 ```
 
-Commands, reads and saga runs reach the entity through the pool's gateway, so the container needs no database access. Policies and sagas run on the runners, but the container builds the same model Layer, so it needs their services too.
+In the container, the Layer reaches the entity through the pool's gateway, so the container needs no database access. On the runners, the same Layer runs the model: its policies and sagas run there.
 
 ## Deploy it
 
-The container yields `BankObjects`, so deploying it deploys the entity, its pool and its database:
+The container provides `BankLive`, so deploying it deploys the model's entity, its pool and its database:
 
 ```typescript
 // alchemy.run.ts
@@ -118,7 +94,7 @@ export default Alchemy.Stack(
 
 ## Know what runs where
 
-Every object of the model is an entity id of the one entity, named after what it holds:
+Every object of the model is an entity id of the `Bank` entity, named after what it holds:
 
 | Your model | On Effect Cluster |
 | --- | --- |

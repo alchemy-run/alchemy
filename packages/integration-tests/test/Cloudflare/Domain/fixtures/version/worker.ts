@@ -61,4 +61,4 @@ export const bankWorker = (
 
 /** Host a model on Durable Objects. */
 export const hosted = <L extends Layer.Layer<any, any, any>>(model: L) =>
-  model.pipe(Layer.provide(DomainCloudflare.layerDurableObjects()));
+  model.pipe(Layer.provide(DomainCloudflare.layer()));

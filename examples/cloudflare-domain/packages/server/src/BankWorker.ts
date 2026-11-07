@@ -21,7 +21,7 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 /**
  * Everything the Worker serves: the middleware both Apis declare, and the
  * Bank hosted on Durable Objects, with the ledger in D1. Swap
- * `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes.
+ * `DomainCloudflare.layer()` for `Domain.InMemory` and nothing else changes.
  */
 const BankLive = Layer.mergeAll(
   SessionLive,
@@ -34,7 +34,7 @@ const BankLive = Layer.mergeAll(
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
     Layer.mergeAll(
-      DomainCloudflare.layerDurableObjects(),
+      DomainCloudflare.layer(),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,
