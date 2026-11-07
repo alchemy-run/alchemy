@@ -158,7 +158,7 @@ describe("Prisma deployment logs", { tags: ["unit", "provider:prisma", "local"] 
     ),
   );
 
-  it.effect("reconnects from retryable terminal cursors exactly once", () =>
+  it.live("reconnects from retryable terminal cursors exactly once", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
@@ -223,7 +223,7 @@ describe("Prisma deployment logs", { tags: ["unit", "provider:prisma", "local"] 
     ),
   );
 
-  it.effect("reconnects a transient close from the latest confirmed byte", () =>
+  it.live("reconnects a transient close from the latest confirmed byte", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
@@ -248,7 +248,7 @@ describe("Prisma deployment logs", { tags: ["unit", "provider:prisma", "local"] 
     ),
   );
 
-  it.effect("reconnects a retryable null-cursor terminal from the last byte", () =>
+  it.live("reconnects a retryable null-cursor terminal from the last byte", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
@@ -280,7 +280,7 @@ describe("Prisma deployment logs", { tags: ["unit", "provider:prisma", "local"] 
     ),
   );
 
-  it.effect("fails retry loops that alternate cursors without byte progress", () =>
+  it.live("fails retry loops that alternate cursors without byte progress", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
