@@ -120,6 +120,7 @@ export const DOCS_TABS: DocsTab[] = [
     "/providers/modal",
   ]),
   hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
+  hub("Boat", "boat", "Sandboxes", "sandboxes · snapshots · environments", ["/providers/boat"]),
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
