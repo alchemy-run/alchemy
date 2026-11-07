@@ -1208,7 +1208,10 @@ export const LiveContainerProvider = () =>
           news.affinities,
           configuration,
         );
-        if (existing.hash?.configuration === configurationHash) {
+        if (
+          existing.hash?.configuration === configurationHash &&
+          (news.instances === undefined || existing.instances === news.instances)
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
@@ -1233,7 +1236,11 @@ export const LiveContainerProvider = () =>
           Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
-            ...scaling,
+            maxInstances: scaling.maxInstances,
+            schedulingPolicy: scaling.schedulingPolicy,
+            constraints: scaling.constraints,
+            // Live capacity belongs to the runtime unless a count is declared.
+            ...(news.instances === undefined ? {} : { instances: news.instances }),
             affinities: news.affinities,
             configuration,
           }),
@@ -1267,7 +1274,10 @@ export const LiveContainerProvider = () =>
           ),
         );
         const updated = toAttributes(application);
-        if (!deepEqual(existing.configuration, configuration)) {
+        if (
+          existing.hash?.configuration !== configurationHash &&
+          !deepEqual(existing.configuration, configuration)
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
           );
@@ -1419,6 +1429,14 @@ export const LiveContainerProvider = () =>
             !hasUnresolvedAttachment
           ) {
             return { action: "update", stables: ["accountId"] } as const;
+          }
+
+          if (
+            application &&
+            news.instances !== undefined &&
+            toAttributes(application).instances !== news.instances
+          ) {
+            return { action: "update" } as const;
           }
 
           const { imageHash, dev } = yield* computeImage(

@@ -1508,6 +1508,109 @@ describe.concurrent(
       }).pipe(logLevel),
     );
 
+    test.provider(
+      "preserves runtime-owned capacity across redeploys and configuration updates",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const constraints = { jurisdiction: "eu", regions: ["WEUR", "EEUR"] };
+          const program = (revision = "first", image = "mendhak/http-https-echo:41") =>
+            Cloudflare.Container("RuntimeCapacity", {
+              image,
+              instanceType: "basic",
+              maxInstances: 2,
+              schedulingPolicy: "default",
+              constraints,
+              env: { SCALING_REVISION: revision },
+            }).Application;
+          const identity = yield* Effect.gen(function* () {
+            const first = yield* stack.deploy(program());
+            const identity = { accountId: first.accountId, applicationId: first.applicationId };
+            expect(first.instances).toBe(0);
+            yield* Containers.updateContainerApplication({ ...identity, instances: 1 });
+            const running = yield* Containers.getContainerApplication(identity).pipe(
+              Effect.map(scheduledApplication),
+            );
+            for (let i = 0; i < 2; i++) {
+              yield* stack.deploy(program());
+              const observed = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(observed.instances).toBe(1);
+              expect(observed.version).toBe(running.version);
+            }
+            const configured = yield* stack.deploy(program("changed"));
+            expect(configured.instances).toBe(1);
+            expect(configured.configuration.environmentVariables).toContainEqual({
+              name: "SCALING_REVISION",
+              value: "changed",
+            });
+            const changed = yield* stack.deploy(program("changed", "mendhak/http-https-echo:40"));
+            const observed = yield* Containers.getContainerApplication(identity).pipe(
+              Effect.map(scheduledApplication),
+            );
+            expect(observed.instances).toBe(1);
+            expect(observed.maxInstances).toBe(2);
+            expect(observed.schedulingPolicy).toBe("default");
+            expect(observed.constraints).toEqual(constraints);
+            expect(observed.configuration.image).toBe(changed.configuration.image);
+            expect(observed.configuration.image).not.toBe(first.configuration.image);
+            expect(observed.version).not.toBe(running.version);
+            return identity;
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+          expect(
+            yield* waitForApplicationDeleted(identity.accountId, identity.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "restores declared zero and positive counts without rolling out unchanged configuration",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (instances: number) =>
+            Cloudflare.Container("DeclaredCapacity", {
+              image: "mendhak/http-https-echo:41",
+              instanceType: "basic",
+              maxInstances: 2,
+              instances,
+              constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+            }).Application;
+          const identities = yield* Effect.forEach([0, 2], (instances) =>
+            Effect.gen(function* () {
+              const declared = yield* stack.deploy(program(instances));
+              const identity = {
+                accountId: declared.accountId,
+                applicationId: declared.applicationId,
+              };
+              expect(declared.instances).toBe(instances);
+              yield* Containers.updateContainerApplication({ ...identity, instances: 1 });
+              const drifted = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(drifted.instances).toBe(1);
+              yield* stack.deploy(program(instances));
+              const restored = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(restored.instances).toBe(instances);
+              expect(restored.version).toBe(drifted.version);
+              expect(restored.configuration).toEqual(drifted.configuration);
+              expect(restored.maxInstances).toBe(2);
+              return identity;
+            }),
+          ).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+          for (const identity of identities) {
+            expect(
+              yield* waitForApplicationDeleted(identity.accountId, identity.applicationId),
+            ).toBeUndefined();
+          }
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
     // Placement constraints pass through to Cloudflare unchanged and read back
     // stable, so an unchanged redeploy plans no update. Whether an instance
     // lands in the jurisdiction depends on account capacity; this pins the API
