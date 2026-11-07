@@ -79,6 +79,17 @@ const l = (name: string): string | undefined => lucide.icons[name]?.body;
 const b = (name: string): string | undefined => brands.icons[name]?.body;
 const c = (name: string): string | undefined => custom[name];
 
+/**
+ * An icon for a diagram node: a lucide name (`database`, `server`), or a
+ * brand mark as `brand:<name>` (`brand:docker`, `brand:postgresql`), from
+ * the custom marks first and then simple-icons.
+ */
+export function diagramIcon(name: string): string | undefined {
+  if (!name.startsWith("brand:")) return l(name);
+  const brand = name.slice("brand:".length);
+  return c(brand) ?? b(brand);
+}
+
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
 export const TAB_ICONS: Record<string, string | undefined> = {
   Core: l("book-open"),

@@ -13,14 +13,14 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
 
 <Tree
   nodes={[
-    { id: "swarm", label: "Docker swarm", type: "your cloud" },
-    { id: "pool", label: "Default", type: "pool", parent: "swarm" },
-    { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true },
-    { id: "lobby", label: "lobby", type: "Room", parent: "r1" },
-    { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true },
-    { id: "kitchen", label: "kitchen", type: "Room", parent: "r2" },
-    { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true },
-    { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true, specs: [["shard locks", "300"], ["messages", "persisted"]] },
+    { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker" },
+    { id: "pool", label: "Default", type: "pool", parent: "swarm", icon: "layers" },
+    { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true, icon: "server" },
+    { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "messages-square" },
+    { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "messages-square" },
+    { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true, icon: "globe" },
+    { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true, icon: "brand:postgresql", specs: [["shard locks", "300"], ["messages", "persisted"]] },
   ]}
   caption="Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
 />
