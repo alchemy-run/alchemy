@@ -58,8 +58,8 @@ export default {
     if (url.pathname.startsWith("/aws")) {
       // Cross-cloud hop: local workerd → the AWS Lambda's function URL,
       // which under `alchemy dev` is served by the floci emulator behind a
-      // self-signed cert. It only resolves because `alchemy dev` puts the
-      // emulator CA on NODE_EXTRA_CA_CERTS for every process it spawns.
+      // self-signed cert. It only resolves because `alchemy dev` adds the
+      // emulator CA to the trust store of every local Worker.
       const base = env.AWS_LAMBDA_URL;
       if (!base) return Response.json({ error: "no lambda url" }, { status: 503 });
       const target = new URL(url.pathname.slice("/aws".length) || "/", base);

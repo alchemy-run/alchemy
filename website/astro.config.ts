@@ -57,6 +57,7 @@ function providersSidebarEntry() {
       { label: "Effect Cluster", link: "/cluster" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "Portless", link: "/portless" },
       { label: "ACME", link: "/acme" },
       { label: "Domain", link: "/domain" },
     ],
@@ -2280,6 +2281,10 @@ export default defineConfig({
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
           ],
+        },
+        {
+          label: "Portless",
+          items: [{ label: "Overview", link: "/portless" }, providerResourcesEntry("Portless")],
         },
         {
           label: "ACME",

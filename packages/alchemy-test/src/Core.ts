@@ -13,6 +13,7 @@ import * as AlchemyDeploy from "alchemy/Deploy";
 import * as AlchemyDestroy from "alchemy/Destroy";
 import type { Input } from "alchemy/Input";
 import * as Interaction from "alchemy/Interaction";
+import * as DevTrust from "alchemy/Local/DevTrust";
 import * as RpcProviderProxy from "alchemy/Local/RpcProviderProxy";
 import * as RpcSpawner from "alchemy/Local/RpcSpawner";
 import { ALCHEMY_DEV } from "alchemy/Phase";
@@ -395,6 +396,13 @@ if (testDev) {
   for (const services of testServices) {
     for (const [key, value] of Object.entries(services.env ?? {})) process.env[key] ??= value;
   }
+  // The CAs `alchemy dev` trusts. Local workerd ignores
+  // NODE_TLS_REJECT_UNAUTHORIZED (it's C++, not Node), so a test that reaches
+  // a provider's emulator over TLS needs the emulator's CA, exactly as in dev.
+  Object.assign(
+    process.env,
+    await Effect.runPromise(DevTrust.trustEnv().pipe(Effect.provide(PlatformServices))),
+  );
 }
 
 /** The test services' layers, closest wins over the stack's own. */
