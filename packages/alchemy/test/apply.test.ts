@@ -1299,6 +1299,42 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
     }),
   );
 
+  // #3112: Auth reads Api through a ref, Api reads Auth directly. The ref
+  // closes a cycle through props, which deadlocked the plan once both
+  // existed. The deploy that closes it fails before touching either.
+  test.provider("a deploy whose ref closes a props cycle fails before any change", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* TestResource("Api", { string: "api" });
+        }),
+      );
+
+      const { events, record } = recorder();
+      const exit = yield* Effect.gen(function* () {
+        const apiRef = yield* TestResource.ref("Api");
+        const auth = yield* TestResource("Auth", {
+          string: "auth",
+          stringArray: [apiRef.string],
+        });
+        yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+      }).pipe(
+        stack.deploy,
+        hook({ create: record("create"), update: record("update") }),
+        Effect.timeout("10 seconds"),
+        Effect.exit,
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(Cause.pretty(exit.cause)).toContain("RefCycleError");
+      }
+      expect(events).toEqual([]);
+      expect((yield* getState("Api"))?.props).toEqual({ string: "api" });
+      expect(yield* getState("Auth")).toBeUndefined();
+    }),
+  );
+
   test.provider(
     "a resource's ref to itself reads its persisted state without waiting on itself",
     (stack) =>

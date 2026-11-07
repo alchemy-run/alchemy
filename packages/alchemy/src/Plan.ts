@@ -387,24 +387,79 @@ const bindSameStackRefs = (
   stack: StackSpec<any>,
   resources: ReadonlyArray<ResourceLike>,
   actions: ReadonlyArray<ActionLike>,
-) => {
+): ReadonlyArray<RefEdge> => {
   const byFqn = new Map(resources.map((resource) => [resource.FQN, resource]));
   const bind = (owner: string, value: unknown) => {
+    const edges: RefEdge[] = [];
     for (const ref of Output.collectRefs(value)) {
       if ((ref.stack ?? stack.name) !== stack.name) continue;
       if ((ref.stage ?? stack.stage) !== stack.stage) continue;
       if (ref.resourceId === owner) continue;
       const target = byFqn.get(ref.resourceId);
-      if (target !== undefined) Output.bindRef(ref, target);
+      if (target !== undefined) {
+        Output.bindRef(ref, target);
+        edges.push({ owner, target: target.FQN });
+      }
     }
+    return edges;
   };
+  const propEdges: RefEdge[] = [];
   for (const resource of resources) {
-    bind(resource.FQN, resource.Props);
+    propEdges.push(...bind(resource.FQN, resource.Props));
     bind(resource.FQN, stack.bindings[resource.FQN] ?? []);
   }
   for (const action of actions) {
     bind(action.FQN, [action.Input, action.Captures]);
   }
+  return propEdges;
+};
+
+/** A same-stack ref in `owner`'s props, bound to the declared `target`. */
+interface RefEdge {
+  readonly owner: string;
+  readonly target: string;
+}
+
+/**
+ * A same-stack ref in a resource's props closes a cycle through props: the
+ * ref's target depends, through props, on the resource holding the ref. A
+ * direct reference can't form this cycle (it needs the declaration first),
+ * so only a ref can, and neither resource can resolve its props before the
+ * other. The plan fails instead of waiting forever or deploying a stale
+ * value. The fix belongs to the provider whose props carry the ref: keep in
+ * props only what the provider can't move into a binding.
+ */
+export class RefCycleError extends Data.TaggedError("RefCycleError")<{
+  message: string;
+  owner: string;
+  target: string;
+}> {}
+
+/**
+ * The first ref edge whose target reaches its owner through props, if any
+ * (see {@link RefCycleError}).
+ */
+const findRefCycle = (
+  edges: ReadonlyArray<RefEdge>,
+  upstream: { readonly [fqn: string]: ReadonlyArray<string> },
+): { edge: RefEdge; path: string[] } | undefined => {
+  for (const edge of edges) {
+    // Depth-first from the target along prop dependencies, back to the owner.
+    const visited = new Set<string>();
+    const walk = (fqn: string, path: string[]): string[] | undefined => {
+      if (fqn === edge.owner) return path;
+      if (visited.has(fqn)) return undefined;
+      visited.add(fqn);
+      for (const next of upstream[fqn] ?? []) {
+        const found = walk(next, [...path, next]);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const path = walk(edge.target, [edge.target]);
+    if (path) return { edge, path: [edge.owner, ...path] };
+  }
+  return undefined;
 };
 
 const makePlan = <A>(
@@ -420,7 +475,7 @@ const makePlan = <A>(
     const declaredResources = Object.values(stack.resources);
     const declaredActions = Object.values(stack.actions ?? {});
     const declared = [...declaredResources, ...declaredActions];
-    bindSameStackRefs(stack, declaredResources, declaredActions);
+    const refPropEdges = bindSameStackRefs(stack, declaredResources, declaredActions);
     const upstream = (node: ResourceLike | ActionLike) =>
       Object.keys(
         Output.upstreamAny(
@@ -1179,6 +1234,28 @@ const makePlan = <A>(
           ] as const,
       ),
     ]);
+
+    // Fail before resolving anything: a ref that closes a cycle through
+    // props would leave both resources waiting on each other (#3112).
+    const refCycle = findRefCycle(
+      refPropEdges.filter((edge) => newResourceFqns.has(edge.owner)),
+      newUpstreamDependencies,
+    );
+    if (refCycle !== undefined) {
+      const { edge, path } = refCycle;
+      return yield* Effect.die(
+        new RefCycleError({
+          message:
+            `'${edge.owner}' references '${edge.target}' through a ref in its props, and ` +
+            `'${edge.target}' depends on '${edge.owner}' through props ` +
+            `(${path.join(" -> ")}). Neither can be planned before the other. ` +
+            `Bind the reference instead of passing it as a prop, so the cycle runs ` +
+            `through bindings.`,
+          owner: edge.owner,
+          target: edge.target,
+        }),
+      );
+    }
 
     // Map FQN -> list of upstream FQNs from bindings
     const bindingUpstreamDependencies: {
