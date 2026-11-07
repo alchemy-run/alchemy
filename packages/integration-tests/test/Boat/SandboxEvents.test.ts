@@ -41,13 +41,16 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { url } = yield* stack.deploy(
+      const { url, secretNames } = yield* stack.deploy(
         Effect.gen(function* () {
           const worker = yield* BoatEventsWorker;
-          return { url: worker.url.as<string>() };
+          return { url: worker.url.as<string>(), secretNames: worker.secretNames };
         }),
       );
       const deliveryUrl = `${url}${EVENTS_PATH}`;
+      // The signing secret and the Worker's Boat key deploy as Cloudflare secrets.
+      expect(secretNames).toContain(Boat.sandboxEventsSecretEnvName(EVENTS_PATH));
+      expect(secretNames).toContain("BOAT_EVENTS_KEY");
       const hook = (yield* boat.listWebhooks({})).webhooks.find((h) => h.url === deliveryUrl);
       expect([...(hook?.events ?? [])].sort()).toEqual(["sandbox.archived", "sandbox.ready"]);
 

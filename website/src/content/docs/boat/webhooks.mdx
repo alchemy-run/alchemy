@@ -49,7 +49,11 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-At deploy, Alchemy registers a webhook pointing at the Worker's `/__alchemy/boat/events`, and gives the Worker its signing secret. The Worker checks each delivery's signature, and refuses unsigned, forged or stale ones (over five minutes old) with 401 before your handler runs. Boat retries a delivery that fails, so make the handler safe to repeat, keyed on `event.id`. Destroying the Worker removes the webhook.
+At deploy, Alchemy registers a webhook pointing at the Worker's `/__alchemy/boat/events`, and gives the Worker its signing secret as a Cloudflare secret. Boat retries a delivery that fails, so make the handler safe to repeat, keyed on `event.id`. Destroying the Worker removes the webhook.
+
+## What reaches your handler
+
+The Worker checks every request before your handler runs. It refuses, with 401, a request without Boat's signature, one signed with another secret, one whose body was changed after signing, and one more than five minutes old, so a captured delivery can't be replayed later. The signature covers the delivery id, the timestamp and the body, and the event's `id` must be the signed delivery id. Requests over 1 MB are refused unread, and events you didn't subscribe to are acknowledged without running the handler.
 
 ## Only your stack's sandboxes
 
@@ -76,7 +80,7 @@ yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
 );
 ```
 
-To receive every sandbox's events, pass `scope: "account"`. The Worker then skips the lookup, and `labels` is undefined. A sandbox that was deleted before its event arrived can't be read, so `scope: "stack"` drops its events.
+The scope is a filter, not an access boundary: anyone in your Boat account who can create sandboxes can label one with your stack's labels. To receive every sandbox's events, pass `scope: "account"`. The Worker then skips the lookup, and `labels` is undefined. A sandbox that was deleted before its event arrived can't be read, so `scope: "stack"` drops its events. When Boat can't be reached for the lookup, the Worker answers 503 and Boat delivers the event again.
 
 ## Limits
 
