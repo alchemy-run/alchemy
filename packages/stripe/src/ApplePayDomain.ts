@@ -40,8 +40,18 @@ export type ApplePayDomain = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  ApplePayDomainLookup
 >;
+
+/**
+ * Props for {@link ApplePayDomain.lookup}: find an Apple Pay domain this stack
+ * doesn't manage by its id.
+ */
+export interface ApplePayDomainLookup {
+  /** Stripe Apple Pay domain id, e.g. `"apwc_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Apple Pay Domain — a hostname registered so Apple Pay can be
@@ -82,6 +92,16 @@ export type ApplePayDomain = Resource<
  * const pay = yield* Stripe.ApplePayDomain("checkout", {
  *   domainName: "pay.example.com",
  * });
+ * ```
+ *
+ * ### Looking up an existing Apple Pay domain
+ * `ApplePayDomain.lookup` references an Apple Pay domain Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Apple Pay domain
+ * ```typescript
+ * const ref = Stripe.ApplePayDomain.lookup({ id: "apwc_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -184,6 +204,11 @@ export const ApplePayDomainProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
