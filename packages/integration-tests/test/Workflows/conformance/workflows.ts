@@ -1,9 +1,10 @@
+import * as DurableQueues from "alchemy/DurableQueues";
 import * as Workflows from "alchemy/Workflows";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Activity, DurableClock, DurableDeferred, Workflow } from "effect/workflow";
+import { Activity, DurableClock, DurableDeferred, DurableQueue, Workflow } from "effect/workflow";
 import { Journal } from "./journal.ts";
 
 export class Declined extends Schema.TaggedError<Declined>()("Declined", {
@@ -150,10 +151,50 @@ export const Fanout = Workflow.make("Fanout", {
   idempotencyKey: ({ id }) => id,
 });
 
+/** Runs three branches at once, each two activities long, then sleeps so it replays. */
+export const FanoutSteps = Workflow.make("FanoutSteps", {
+  payload: { id: Schema.String },
+  success: Schema.Number,
+  idempotencyKey: ({ id }) => id,
+});
+
 /** Runs a declined Checkout as a child, and handles the child's typed failure. */
 export const ParentOfFailing = Workflow.make("ParentOfFailing", {
   payload: { id: Schema.String },
   success: Schema.String,
+  idempotencyKey: ({ id }) => id,
+});
+
+/**
+ * Items a worker charges, on the cloud's native queue. `outcome` makes the
+ * handler succeed, decline, or die.
+ */
+export const Charge = DurableQueue.make({
+  name: "ConformanceCharge",
+  payload: {
+    run: Schema.String,
+    item: Schema.String,
+    amount: Schema.Number,
+    outcome: Schema.Literals(["ok", "decline", "crash"]),
+  },
+  success: Schema.String,
+  error: Declined,
+  idempotencyKey: ({ item }) => item,
+});
+
+/** Charges one item through the queue, then sleeps, so a replay offers it again. */
+export const Queued = Workflow.make("Queued", {
+  payload: { id: Schema.String, outcome: Schema.Literals(["ok", "decline", "crash"]) },
+  success: Schema.String,
+  error: Declined,
+  idempotencyKey: ({ id }) => id,
+});
+
+/** Charges two items through the queue at once. */
+export const QueuedPair = Workflow.make("QueuedPair", {
+  payload: { id: Schema.String },
+  success: Schema.String,
+  error: Declined,
   idempotencyKey: ({ id }) => id,
 });
 
@@ -177,6 +218,9 @@ export const workflows = [
   Recover,
   Fanout,
   ParentOfFailing,
+  Queued,
+  QueuedPair,
+  FanoutSteps,
 ] as const;
 
 export const GreetLive = Workflows.layer(
@@ -511,6 +555,37 @@ export const FanoutLive = Workflows.layer(
   }),
 );
 
+export const FanoutStepsLive = Workflows.layer(
+  FanoutSteps,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id }) {
+      const parts = yield* Effect.all(
+        [1, 2, 3].map((part) =>
+          Effect.gen(function* () {
+            yield* Activity.make({
+              name: `first-${part}`,
+              execute: journal.append(id, `first:${part}`),
+            });
+            return yield* Activity.make({
+              name: `second-${part}`,
+              success: Schema.Number,
+              execute: journal.append(id, `second:${part}`).pipe(Effect.as(part)),
+            });
+          }),
+        ),
+        { concurrency: "unbounded" },
+      );
+      yield* DurableClock.sleep({
+        name: "after-fanout",
+        duration: "1 second",
+        inMemoryThreshold: 0,
+      });
+      return parts.reduce((sum, part) => sum + part, 0);
+    });
+  }),
+);
+
 export const ParentOfFailingLive = Workflows.layer(
   ParentOfFailing,
   Effect.gen(function* () {
@@ -524,6 +599,53 @@ export const ParentOfFailingLive = Workflows.layer(
       yield* Activity.make({ name: "parent", execute: journal.append(id, `parent:${outcome}`) });
       return outcome;
     });
+  }),
+);
+
+export const QueuedLive = Workflows.layer(
+  Queued,
+  Effect.gen(function* () {
+    const journal = yield* Journal;
+    return Effect.fn(function* ({ id, outcome }) {
+      const charged = yield* DurableQueue.process(Charge, {
+        run: id,
+        item: `${id}-item`,
+        amount: 42,
+        outcome,
+      });
+      yield* DurableClock.sleep({
+        name: "after-charge",
+        duration: "1 second",
+        inMemoryThreshold: 0,
+      });
+      yield* Activity.make({ name: "done", execute: journal.append(id, `done:${charged}`) });
+      return charged;
+    });
+  }),
+);
+
+export const QueuedPairLive = Workflows.layer(
+  QueuedPair,
+  Effect.fn(function* ({ id }) {
+    const charged = yield* Effect.all(
+      [1, 2].map((amount) =>
+        DurableQueue.process(Charge, { run: id, item: `${id}-${amount}`, amount, outcome: "ok" }),
+      ),
+      { concurrency: "unbounded" },
+    );
+    return charged.join(", ");
+  }),
+);
+
+/** The worker for {@link Charge}: records each item it runs in the run's journal. */
+export const ChargeHandler = DurableQueues.handler(
+  Charge,
+  Effect.fn(function* ({ run, item, amount, outcome }) {
+    const journal = yield* Journal;
+    yield* journal.append(run, `charged:${item}`);
+    if (outcome === "decline") return yield* new Declined({ reason: "card declined" });
+    if (outcome === "crash") return yield* Effect.die(new Error("card reader caught fire"));
+    return `charged ${amount}`;
   }),
 );
 
@@ -547,4 +669,7 @@ export const WorkflowsLive = Layer.mergeAll(
   RecoverLive,
   FanoutLive,
   ParentOfFailingLive,
+  QueuedLive,
+  QueuedPairLive,
+  FanoutStepsLive,
 );

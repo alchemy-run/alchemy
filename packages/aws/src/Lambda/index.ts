@@ -82,3 +82,4 @@ export * from "./WebFunctionPermission.ts";
 export * from "./WebSocketEventSource.ts";
 export * from "./WirelessDestinationEventSource.ts";
 export * from "./WorkflowFunction.ts";
+export * from "./DurableQueue.ts";

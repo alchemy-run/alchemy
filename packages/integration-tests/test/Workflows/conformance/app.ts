@@ -11,6 +11,7 @@ import {
   Checkout,
   Crash,
   Fanout,
+  FanoutSteps,
   Flaky,
   Greet,
   Guarded,
@@ -20,6 +21,8 @@ import {
   Parent,
   ParentOfFailing,
   ParentOfWaiting,
+  Queued,
+  QueuedPair,
   Race,
   Recover,
   Retry,
@@ -59,6 +62,9 @@ export const app = Effect.gen(function* () {
     Recover: yield* Workflows.RunWorkflow(Recover),
     Fanout: yield* Workflows.RunWorkflow(Fanout),
     ParentOfFailing: yield* Workflows.RunWorkflow(ParentOfFailing),
+    Queued: yield* Workflows.RunWorkflow(Queued),
+    QueuedPair: yield* Workflows.RunWorkflow(QueuedPair),
+    FanoutSteps: yield* Workflows.RunWorkflow(FanoutSteps),
   };
   return {
     fetch: Effect.gen(function* () {
@@ -79,6 +85,7 @@ export const app = Effect.gen(function* () {
         count: Number(url.searchParams.get("count") ?? "1"),
         decline: url.searchParams.get("decline") === "true",
         abandon: url.searchParams.get("abandon") === "true",
+        outcome: (url.searchParams.get("outcome") ?? "ok") as "ok" | "decline" | "crash",
       };
       const run = workflow.get(url.searchParams.get("executionId") ?? "");
       switch (operation) {

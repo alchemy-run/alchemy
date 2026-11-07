@@ -1,11 +1,16 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as SQS from "@alchemy.run/aws/SQS";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import path from "pathe";
 import { workflows, WorkflowsLive } from "../../../../Workflows/conformance/workflows.ts";
 import { JournalLive } from "./journal.ts";
 
 const main = path.resolve(import.meta.dirname, "host.ts");
+
+/** The queue the conformance workflows' items go to. Its worker runs for up to a minute. */
+export const Charges = SQS.Queue("ConformanceCharges", { visibilityTimeout: "2 minutes" });
 
 /** A Lambda durable function that runs the conformance workflows. */
 export class TestWorkflows extends Lambda.WorkflowFunction<TestWorkflows>()("TestWorkflows", {
@@ -21,5 +26,11 @@ export default TestWorkflows.make(
     // Runs start on the alias, not `$LATEST`.
     alias: "live",
   },
-  WorkflowsLive.pipe(Layer.provide(JournalLive)),
+  Layer.unwrap(
+    Effect.map(Charges, (charges) =>
+      WorkflowsLive.pipe(
+        Layer.provide(Layer.mergeAll(JournalLive, Lambda.DurableQueueProducer(charges))),
+      ),
+    ),
+  ),
 );
