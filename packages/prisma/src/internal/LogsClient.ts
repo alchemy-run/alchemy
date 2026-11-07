@@ -18,11 +18,22 @@ import { Credentials } from "./Credentials.ts";
  *
  * They read the token and base URL from the distilled {@link Credentials}
  * service — the same service every migrated operation authenticates with —
- * rather than from `PrismaEnvironment`. `Credentials` holds an *effect*, so a
- * stack layer can carry it without resolving credentials at build time;
- * `PrismaEnvironment` is a resolved value and therefore cannot appear in
- * `providers()`' output (see the lazy-auth note on `stackManagementApiLayer`).
+ * rather than from `PrismaEnvironment`. `providers()` resolves
+ * `PrismaEnvironment` lazily inside the management client (see the lazy-auth
+ * note on `stackManagementApiLayer`), so it isn't in the stack's context.
  */
+
+/**
+ * Log streams authenticate the request themselves (a WebSocket and a raw
+ * NDJSON stream), so they need a token even when distilled's `Credentials`
+ * leaves it out.
+ */
+const requireApiToken = (apiToken: Redacted.Redacted<string> | undefined) =>
+  apiToken === undefined
+    ? Effect.fail(
+        new ConfigError({ message: "Prisma log streams need an API token in Credentials." }),
+      )
+    : Effect.succeed(apiToken);
 
 const INVALID_PATH_SEGMENT = "__alchemy_invalid_prisma_path_segment__";
 
@@ -117,14 +128,6 @@ const logsQuery = (query: DeploymentLogsQuery | undefined): Record<string, unkno
   };
 };
 
-/**
- * Log streams authenticate with a bearer token; credentials without one
- * (an `HttpClient` that signs requests itself) can't open them.
- */
-const missingToken = Effect.fail(
-  new ConfigError({ message: "Prisma log streams need an API token (PRISMA_API_TOKEN)" }),
-);
-
 export const getDeploymentLogsRequest = (
   deploymentId: string,
   query?: DeploymentLogsQuery,
@@ -132,7 +135,7 @@ export const getDeploymentLogsRequest = (
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
-    if (apiToken === undefined) return yield* missingToken;
+    const token = yield* requireApiToken(apiToken);
     const url = yield* buildWebSocketUrl(
       apiBaseUrl,
       `/v1/deployments/${pathSegment(deploymentId)}/logs`,
@@ -141,7 +144,7 @@ export const getDeploymentLogsRequest = (
     return {
       url,
       headers: {
-        Authorization: Redacted.make(`Bearer ${Redacted.value(apiToken)}`),
+        Authorization: Redacted.make(`Bearer ${Redacted.value(token)}`),
       },
     };
   });
@@ -153,12 +156,12 @@ export const getBuildLogsRequest = (
   Effect.gen(function* () {
     const credentials = yield* Credentials;
     const { apiToken, apiBaseUrl } = yield* credentials;
-    if (apiToken === undefined) return yield* missingToken;
+    const token = yield* requireApiToken(apiToken);
     const url = yield* buildUrl(apiBaseUrl, `/v1/builds/${pathSegment(buildId)}/logs`, query);
     return {
       url,
       headers: {
-        Authorization: Redacted.make(`Bearer ${Redacted.value(apiToken)}`),
+        Authorization: Redacted.make(`Bearer ${Redacted.value(token)}`),
         Accept: "application/x-ndjson",
       },
     };
