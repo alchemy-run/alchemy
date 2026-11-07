@@ -42,6 +42,7 @@
  * per resource type.
  */
 
+import { pathToFileURL } from "node:url";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command, Flag } from "effect/cli";
@@ -380,27 +381,23 @@ const parseOperation = (source: string, fn: string): OperationTypes | undefined 
 };
 
 /**
- * The operation's `iam` (core `OperationIam`) as distilled emits it: the
- * permission the method checks and the predefined roles that grant it, set
- * by `patches/<module>/iam.json` in distilled.
+ * An operation's `iam` (core `OperationIam`) from the service's distilled
+ * meta module (`@distilled.cloud/gcp/meta/<module>`, data only): the
+ * permission the method checks and the predefined roles that grant it, set by
+ * `patches/<module>/iam.json` in distilled.
  */
-const parseIam = (
-  source: string,
-  fn: string,
-): { actions: string[]; roles: string[] } | undefined => {
-  const start = source.indexOf(`export const ${fn}: API.`);
-  if (start === -1) return undefined;
-  const end = source.indexOf("\nexport ", start + 1);
-  const block = source.slice(start, end === -1 ? undefined : end);
-  const iam = /\biam: \{([\s\S]*?)\},?\n/.exec(block)?.[1];
-  if (iam === undefined) return undefined;
-  const list = (key: string) =>
-    [...(new RegExp(`${key}: \\[([^\\]]*)\\]`).exec(iam)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map(
-      (m) => m[1]!,
-    );
-  const actions = list("actions");
-  const roles = list("roles");
-  return actions.length > 0 && roles.length > 0 ? { actions, roles } : undefined;
+const iamOf = (api: Api, fn: string): { actions: string[]; roles: string[] } | undefined => {
+  const iam = api.meta[fn]?.iam;
+  return iam?.actions.length && iam.roles?.length
+    ? { actions: [...iam.actions], roles: [...iam.roles] }
+    : undefined;
+};
+
+/** A distilled meta module's operations (core `OperationMeta`, by export name). */
+type OperationMetas = {
+  readonly [operation: string]: {
+    readonly iam?: { readonly actions: readonly string[]; readonly roles?: readonly string[] };
+  };
 };
 
 /**
@@ -509,6 +506,8 @@ interface Api extends ApiConfig {
   importPath: string;
   doc: DiscoveryResource & { name: string; rootUrl: string; documentationLink?: string };
   moduleSource: string;
+  /** The module's distilled metadata, by operation export name. */
+  meta: OperationMetas;
 }
 
 const classify = (options: {
@@ -772,7 +771,7 @@ const classify = (options: {
     // The method's own collection stays even when it shares a scope's name
     // (Cloud Storage `folders`).
     const scoped = cols.filter((c, i) => i === cols.length - 1 || !SCOPE_COLLECTIONS.has(c));
-    // The grant comes from distilled (`op.iam`); a method it has none for is
+    // The grant comes from distilled's meta module; a method it has none for is
     // derived from the naming convention and roles.json, and proposed as a
     // distilled patch.
     const types = parseOperation(moduleSource, fn);
@@ -781,7 +780,7 @@ const classify = (options: {
       results.push({ id, kind: "skip", reason: `no distilled operation ${fn}` });
       continue;
     }
-    const iam = parseIam(moduleSource, fn);
+    const iam = iamOf(api, fn);
     const permission =
       iam?.actions[0] ??
       [
@@ -1342,8 +1341,18 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
         `${api.module}.ts`,
       ),
     );
+    const metaFile = path.join(
+      distilled,
+      "src",
+      api.unstable ? "unstable-meta" : "meta",
+      `${api.module}.ts`,
+    );
+    const meta: OperationMetas = (yield* fs.exists(metaFile))
+      ? (yield* Effect.promise(() => import(pathToFileURL(metaFile).href))).operations
+      : {};
     apis.push({
       ...api,
+      meta,
       ns: api.module.replace(/_v.*$/, ""),
       importPath: `@distilled.cloud/gcp/${api.unstable ? "unstable/" : ""}${api.module}`,
       doc,

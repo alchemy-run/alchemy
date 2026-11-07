@@ -161,8 +161,9 @@ generator instead of repeating hand-written code.
 
 ## Loop D: least privilege (AWS)
 
-Grants come from distilled, never from a binding's config. Every distilled
-AWS operation carries `op.iam`: the actions AWS's Service Authorization
+Grants come from distilled, never from a binding's config. Each AWS
+service's meta module (`@distilled.cloud/aws/meta/<module>`, data only, apart
+from the SDK) gives every operation an `iam`: the actions AWS's Service Authorization
 Reference lists for it, the ARN formats a grant may name (only where every
 resource type an action accepts is required), and which actions only some
 requests need (`conditional`: `iam:PassRole` when a role is optional, tagging

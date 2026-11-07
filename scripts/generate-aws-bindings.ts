@@ -43,6 +43,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..");
 const bindingsDir = path.join(root, "packages/aws/bindings");
@@ -233,36 +234,26 @@ const literal = (v: Literal): string =>
 const iamCache = new Map<string, Map<string, OperationIam | null>>();
 
 /**
- * Load `iam` for every operation the given services bind, with one `bun`
- * process in packages/aws (which resolves `@distilled.cloud/aws` to source).
+ * Load `iam` for every operation the given services bind, from each
+ * module's distilled meta module (`@distilled.cloud/aws/meta/<module>`):
+ * plain data, so no SDK code is loaded.
  */
-const loadIam = (services: string[]) => {
-  const ops: Record<string, string[]> = {};
+const loadIam = async (services: string[]) => {
+  const modules = new Set<string>();
   for (const service of services) {
     const config = readConfig(service);
-    for (const binding of Object.values(config.bindings)) {
-      const module = binding.module ?? config.module;
-      (ops[module] ??= []).push(binding.operation);
-    }
+    for (const binding of Object.values(config.bindings))
+      modules.add(binding.module ?? config.module);
   }
-  const script = `const ops = ${JSON.stringify(ops)};
-const out = {};
-for (const [module, names] of Object.entries(ops)) {
-  const m = await import("@distilled.cloud/aws/" + module);
-  out[module] = Object.fromEntries(names.map((n) => [n, m[n]?.iam ?? null]));
-}
-console.log(JSON.stringify(out));`;
-  const out = execFileSync("bun", ["-e", script], {
-    cwd: path.join(root, "packages/aws"),
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  for (const [module, byOp] of Object.entries(
-    JSON.parse(out) as Record<string, Record<string, OperationIam | null>>,
-  )) {
-    const cached = iamCache.get(module) ?? new Map();
-    for (const [op, iam] of Object.entries(byOp)) cached.set(op, iam);
-    iamCache.set(module, cached);
+  for (const module of modules) {
+    const file = path.join(root, "submodules/distilled/packages/aws/src/meta", `${module}.ts`);
+    const operations: Record<string, { iam?: OperationIam }> = fs.existsSync(file)
+      ? (await import(pathToFileURL(file).href)).operations
+      : {};
+    iamCache.set(
+      module,
+      new Map(Object.entries(operations).map(([op, meta]) => [op, meta.iam ?? null])),
+    );
   }
 };
 
@@ -713,7 +704,7 @@ const all = fs
   .sort();
 const report = flags.has("--report");
 const services = named.length ? named : all;
-loadIam(services);
+await loadIam(services);
 const totals: Record<string, number> = {};
 for (const service of services) {
   for (const f of generateService(service, report)) totals[f.kind] = (totals[f.kind] ?? 0) + 1;
