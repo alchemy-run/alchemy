@@ -43,6 +43,7 @@ function providersSidebarEntry() {
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
       { label: "E2B", link: "/e2b" },
+      { label: "Daytona", link: "/daytona" },
       { label: "Archil", link: "/archil" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
@@ -1439,6 +1440,48 @@ export default defineConfig({
               items: [{ label: "Lifecycle events", link: "/e2b/lifecycle-events" }],
             },
             providerResourcesEntry("E2B"),
+          ],
+        },
+        {
+          label: "Daytona",
+          items: [
+            { label: "Overview", link: "/daytona" },
+            { label: "What is Daytona?", link: "/daytona/what-is-daytona" },
+            { label: "Setup", link: "/daytona/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "daytona/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations & API keys", link: "/daytona/organizations-and-keys" },
+                { label: "Members & roles", link: "/daytona/organization/organization" },
+                { label: "Secrets", link: "/daytona/security/secrets" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/daytona/sandboxes/sandboxes" },
+                { label: "Programs in a sandbox", link: "/daytona/sandboxes/programs" },
+                { label: "Snapshots", link: "/daytona/sandboxes/snapshots" },
+                { label: "Volumes", link: "/daytona/sandboxes/volumes" },
+                { label: "Toolbox", link: "/daytona/sandboxes/toolbox" },
+                { label: "Regions & runners", link: "/daytona/sandboxes/runners" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Network & previews", link: "/daytona/networking/network" }],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "Telemetry, webhooks & audit", link: "/daytona/observability/telemetry" },
+              ],
+            },
+            providerResourcesEntry("Daytona"),
           ],
         },
         {

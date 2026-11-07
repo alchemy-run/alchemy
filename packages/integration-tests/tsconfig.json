@@ -106,6 +106,7 @@
     },
     { "path": "../turso/tsconfig.json" },
     { "path": "../e2b/tsconfig.json" },
+    { "path": "../daytona/tsconfig.json" },
     { "path": "../archil/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },

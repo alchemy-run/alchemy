@@ -4797,6 +4797,25 @@ importers:
         specifier: 4.1.0
         version: 4.1.0
 
+  examples/daytona-sandboxes:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/daytona':
+        specifier: workspace:*
+        version: link:../../packages/daytona
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/dev-stress:
     dependencies:
       '@alchemy.run/aws':
@@ -9813,6 +9832,40 @@ importers:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/daytona:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/daytona':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/daytona
+      rolldown:
+        specifier: 1.2.16
+        version: 1.2.16
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
   packages/docker:
     dependencies:
       rolldown:
@@ -11032,6 +11085,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/daytona':
+        specifier: workspace:*
+        version: link:../daytona
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
@@ -11125,6 +11181,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/daytona':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/daytona
       '@distilled.cloud/e2b':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/e2b
@@ -11882,6 +11941,9 @@ importers:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../packages/cloudflare
+      '@alchemy.run/daytona':
+        specifier: workspace:*
+        version: link:../packages/daytona
       '@alchemy.run/e2b':
         specifier: workspace:*
         version: link:../packages/e2b

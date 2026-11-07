@@ -115,7 +115,9 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
 
   hub("E2B", "e2b", "Sandboxes", "sandboxes · templates · volumes", ["/providers/e2b"]),
+  hub("Daytona", "daytona", "Sandboxes", "sandboxes · snapshots · volumes", ["/providers/daytona"]),
   hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
+
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
     "/providers/cluster",

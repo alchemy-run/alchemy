@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/daytona/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/archil/tsconfig.json"
     },
     {
@@ -119,6 +122,9 @@
     },
     {
       "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/daytona/tsconfig.json"
     },
     {
       "path": "./packages/archil/tsconfig.json"
@@ -366,6 +372,9 @@
     },
     {
       "path": "./examples/e2b-program-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/daytona-sandboxes/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"

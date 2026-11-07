@@ -180,6 +180,8 @@ const REDIRECTS: Record<string, string> = {
   "/concepts/test-harness": "/testing/test-harness",
   "/concepts/testing": "/testing",
   "/fly/frontend": "/fly/frontend/websites",
+  "/daytona/security/api-keys": "/daytona/organizations-and-keys",
+  "/daytona/security/network-and-secrets": "/daytona/networking/network",
   "/fly/websites": "/fly/frontend/websites",
   "/gcp/guides/bindings": "/gcp/security/iam",
   "/gcp/guides/cloud-run-api": "/gcp/compute/cloud-run",
