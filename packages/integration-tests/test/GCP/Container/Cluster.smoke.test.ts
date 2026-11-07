@@ -41,12 +41,12 @@ import {
  * through `GCP.Storage.WriteBucket`. Every side effect is verified
  * out-of-band via distilled, and teardown is proven clean.
  *
- * Autopilot creation alone takes ~10 minutes, so the smoke only runs with
- * `GCP_TEST_SLOW=1` (and never under `--fast`). The images are built
+ * Autopilot creation alone takes ~10 minutes, so the smoke is skipped
+ * under `--fast`. The images are built
  * locally, so it also needs a Docker daemon.
  */
 
-const skip = !process.env.GCP_TEST_SLOW || !!process.env.FAST;
+const skip = !!process.env.FAST;
 
 const testOptions = {
   providers: Layer.mergeAll(GCP.providers(), Kubernetes.providers()),

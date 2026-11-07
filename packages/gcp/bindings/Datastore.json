@@ -1,0 +1,16 @@
+{
+  "discovery": "datastore-v1",
+  "module": "datastore_v1",
+  "resources": {
+    "Index": {
+      "pattern": "projects/*/indexes/*",
+      "attributes": ["project", "indexId"],
+      "file": "Indexes"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Index": "ProbeIndex"
+    }
+  }
+}

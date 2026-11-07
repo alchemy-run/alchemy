@@ -43,7 +43,7 @@ test.provider.skipIf(!entitled)(
 );
 
 test.provider.skipIf(entitled)(
-  "getProjectsLocationsCatalogsCatalogItems fails with ServiceDisabled while the API is disabled",
+  "getProjectsLocationsCatalogsCatalogItems fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
@@ -54,7 +54,7 @@ test.provider.skipIf(entitled)(
           name: missingNameOf(project),
         }),
       );
-      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

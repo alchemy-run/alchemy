@@ -51,7 +51,7 @@ test.provider(
           name: `${parent}/customModules/1234567890`,
         }),
       );
-      expect(["ServiceDisabled", "SecurityCommandCenterLegacyDisabled"]).toContain(error._tag);
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),

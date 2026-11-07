@@ -1,7 +1,11 @@
-import type * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
+import * as scheduler from "@distilled.cloud/gcp/cloudscheduler_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 export interface ResumeJobRequest extends Omit<
@@ -42,3 +46,28 @@ export interface ResumeJob extends Binding.Service<
 > {}
 
 export const ResumeJob = Binding.Service<ResumeJob>("GCP.CloudScheduler.ResumeJob");
+
+/**
+ * HTTP implementation of {@link ResumeJob}.
+ *
+ * Grants `roles/cloudscheduler.admin` on the project because it is the
+ * only predefined role with `cloudscheduler.jobs.enable`, and Cloud Scheduler
+ * supports neither per-job IAM policies nor IAM Conditions on
+ * `resource.name`.
+ *
+ * @layer
+ * @provides GCP.CloudScheduler.ResumeJob
+ */
+export const ResumeJobHttp: Layer.Layer<ResumeJob, never, Credentials | HttpClient.HttpClient> =
+  Layer.effect(
+    ResumeJob,
+    makeJobHttpBinding<
+      scheduler.ResumeProjectsLocationsJobsRequest,
+      scheduler.Job,
+      scheduler.ResumeProjectsLocationsJobsError
+    >({
+      tag: "GCP.CloudScheduler.ResumeJob",
+      iam: { role: "roles/cloudscheduler.admin" },
+      operation: scheduler.resumeProjectsLocationsJobs,
+    }),
+  );

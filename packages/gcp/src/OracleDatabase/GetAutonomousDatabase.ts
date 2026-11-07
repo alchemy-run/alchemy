@@ -1,8 +1,10 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutonomousDatabase } from "./AutonomousDatabase.ts";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 
 export interface GetAutonomousDatabaseRequest extends Omit<
   oracle.GetProjectsLocationsAutonomousDatabasesRequest,
@@ -40,4 +42,19 @@ export interface GetAutonomousDatabase extends Binding.Service<
 
 export const GetAutonomousDatabase = Binding.Service<GetAutonomousDatabase>(
   "GCP.OracleDatabase.GetAutonomousDatabase",
+);
+
+/**
+ * HTTP implementation of {@link GetAutonomousDatabase}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GetAutonomousDatabase
+ */
+export const GetAutonomousDatabaseHttp = Layer.effect(
+  GetAutonomousDatabase,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GetAutonomousDatabase",
+    operation: oracle.getProjectsLocationsAutonomousDatabases,
+    iam: { role: "roles/oracledatabase.autonomousDatabaseViewer" },
+  }),
 );

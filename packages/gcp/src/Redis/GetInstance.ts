@@ -1,7 +1,9 @@
-import type * as redis from "@distilled.cloud/gcp/redis_v1";
+import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRedisInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<
@@ -38,3 +40,18 @@ export interface GetInstance extends Binding.Service<
 > {}
 
 export const GetInstance = Binding.Service<GetInstance>("GCP.Redis.GetInstance");
+
+/**
+ * HTTP implementation of {@link GetInstance}.
+ *
+ * @layer
+ * @provides GCP.Redis.GetInstance
+ */
+export const GetInstanceHttp = Layer.effect(
+  GetInstance,
+  makeRedisInstanceHttpBinding({
+    tag: "GCP.Redis.GetInstance",
+    operation: redis.getProjectsLocationsInstances,
+    iam: { role: "roles/redis.viewer", scopeByCondition: true },
+  }),
+);

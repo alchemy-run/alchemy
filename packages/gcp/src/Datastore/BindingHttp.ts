@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { Database } from "../Firestore/Database.ts";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 
 /**
  * A Datastore request with the project and database filled in from the
@@ -47,7 +47,7 @@ export const makeDatastoreHttpBinding = <
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${database})`({
-          iam: [grantFor(options.iam, database.name)],
+          iam: grantsFor(options.iam, database.name),
         });
       }
       const project = yield* database.project;

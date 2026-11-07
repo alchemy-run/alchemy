@@ -1,7 +1,9 @@
-import type * as memcache from "@distilled.cloud/gcp/memcache_v1";
+import * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMemcacheInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<
@@ -42,3 +44,18 @@ export interface GetInstance extends Binding.Service<
 > {}
 
 export const GetInstance = Binding.Service<GetInstance>("GCP.Memcache.GetInstance");
+
+/**
+ * HTTP implementation of {@link GetInstance}.
+ *
+ * @layer
+ * @provides GCP.Memcache.GetInstance
+ */
+export const GetInstanceHttp = Layer.effect(
+  GetInstance,
+  makeMemcacheInstanceHttpBinding({
+    tag: "GCP.Memcache.GetInstance",
+    iam: { role: "roles/memcache.viewer" },
+    operation: memcache.getProjectsLocationsInstances,
+  }),
+);

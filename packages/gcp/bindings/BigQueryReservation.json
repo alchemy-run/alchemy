@@ -1,0 +1,34 @@
+{
+  "discovery": "bigqueryreservation-v1",
+  "module": "bigqueryreservation_v1",
+  "resources": {
+    "CapacityCommitment": {
+      "pattern": "projects/*/locations/*/capacityCommitments/*"
+    },
+    "Reservation": {
+      "pattern": "projects/*/locations/*/reservations/*"
+    },
+    "ReservationGroup": {
+      "pattern": "projects/*/locations/*/reservationGroups/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Reservation": "ProbeReservation",
+      "ReservationGroup": "ProbeReservationGroup"
+    },
+    "untestable": {
+      "CapacityCommitment": "Flex commitments are end of sale (create fails with BadRequest, asserted by the probe below) and any commitment bills slot-hours. Set (GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT)"
+    }
+  },
+  "permissionService": "bigquery",
+  "permissionCollections": {
+    "assignments": "reservationAssignments"
+  },
+  "verbPermissions": {
+    "move": "update",
+    "failoverReservation": "update",
+    "split": "update",
+    "merge": "update"
+  }
+}

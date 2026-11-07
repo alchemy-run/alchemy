@@ -35,10 +35,14 @@ import {
   Binding as AgentregistryBinding,
   BindingProvider as AgentregistryBindingProvider,
 } from "./AgentRegistry/Binding.ts";
+import {
+  Service as AgentregistryService,
+  ServiceProvider as AgentregistryServiceProvider,
+} from "./AgentRegistry/Service.ts";
 import { Agent, AgentProvider } from "./AIPlatform/Agent.ts";
 import { BatchPredictionJob, BatchPredictionJobProvider } from "./AIPlatform/BatchPredictionJob.ts";
 import { CachedContent, CachedContentProvider } from "./AIPlatform/CachedContent.ts";
-import { CancelTrainingPipelineHttp } from "./AIPlatform/CancelTrainingPipelineHttp.ts";
+import { CancelTrainingPipelineHttp } from "./AIPlatform/CancelTrainingPipeline.ts";
 import { CustomJob, CustomJobProvider } from "./AIPlatform/CustomJob.ts";
 import { DataLabelingJob, DataLabelingJobProvider } from "./AIPlatform/DataLabelingJob.ts";
 import {
@@ -79,11 +83,11 @@ import {
   FeaturestoresEntityTypesFeature,
   FeaturestoresEntityTypesFeatureProvider,
 } from "./AIPlatform/FeaturestoresEntityTypesFeature.ts";
-import { GenerateContentHttp } from "./AIPlatform/GenerateContentHttp.ts";
-import { GetReasoningEngineHttp } from "./AIPlatform/GetReasoningEngineHttp.ts";
-import { GetSandboxEnvironmentHttp } from "./AIPlatform/GetSandboxEnvironmentHttp.ts";
-import { GetSandboxEnvironmentTemplateHttp } from "./AIPlatform/GetSandboxEnvironmentTemplateHttp.ts";
-import { GetTrainingPipelineHttp } from "./AIPlatform/GetTrainingPipelineHttp.ts";
+import { GenerateContentHttp } from "./AIPlatform/GenerateContent.ts";
+import { GetReasoningEngineHttp } from "./AIPlatform/GetReasoningEngine.ts";
+import { GetSandboxEnvironmentHttp } from "./AIPlatform/GetSandboxEnvironment.ts";
+import { GetSandboxEnvironmentTemplateHttp } from "./AIPlatform/GetSandboxEnvironmentTemplate.ts";
+import { GetTrainingPipelineHttp } from "./AIPlatform/GetTrainingPipeline.ts";
 import {
   HyperparameterTuningJob,
   HyperparameterTuningJobProvider,
@@ -120,11 +124,12 @@ import {
   NotebookRuntimeTemplateProvider,
 } from "./AIPlatform/NotebookRuntimeTemplate.ts";
 import { OnlineEvaluator, OnlineEvaluatorProvider } from "./AIPlatform/OnlineEvaluator.ts";
-import { PauseSandboxEnvironmentHttp } from "./AIPlatform/PauseSandboxEnvironmentHttp.ts";
+import { PauseSandboxEnvironmentHttp } from "./AIPlatform/PauseSandboxEnvironment.ts";
 import { PersistentResource, PersistentResourceProvider } from "./AIPlatform/PersistentResource.ts";
 import { PipelineJob, PipelineJobProvider } from "./AIPlatform/PipelineJob.ts";
-import { QueryReasoningEngineHttp } from "./AIPlatform/QueryReasoningEngineHttp.ts";
+import { QueryReasoningEngineHttp } from "./AIPlatform/QueryReasoningEngine.ts";
 import { RagCorpora, RagCorporaProvider } from "./AIPlatform/RagCorpora.ts";
+import { RagEngineConfig, RagEngineConfigProvider } from "./AIPlatform/RagEngineConfig.ts";
 import { ReasoningEngine, ReasoningEngineProvider } from "./AIPlatform/ReasoningEngine.ts";
 import {
   ReasoningEnginesMemory,
@@ -142,7 +147,7 @@ import {
   ReasoningEnginesSession,
   ReasoningEnginesSessionProvider,
 } from "./AIPlatform/ReasoningEnginesSession.ts";
-import { ResumeSandboxEnvironmentHttp } from "./AIPlatform/ResumeSandboxEnvironmentHttp.ts";
+import { ResumeSandboxEnvironmentHttp } from "./AIPlatform/ResumeSandboxEnvironment.ts";
 import { Schedule, ScheduleProvider } from "./AIPlatform/Schedule.ts";
 import {
   SemanticGovernancePolicy,
@@ -178,11 +183,11 @@ import {
   ClustersUser as AlloyDbClustersUser,
   ClustersUserProvider as AlloyDbClustersUserProvider,
 } from "./AlloyDB/ClustersUser.ts";
-import { GetBackupHttp as GetAlloyDbBackupHttp } from "./AlloyDB/GetBackupHttp.ts";
-import { GetClusterHttp as GetAlloyDbClusterHttp } from "./AlloyDB/GetClusterHttp.ts";
-import { GetConnectionInfoHttp as GetAlloyDbConnectionInfoHttp } from "./AlloyDB/GetConnectionInfoHttp.ts";
-import { GetInstanceHttp as GetAlloyDbInstanceHttp } from "./AlloyDB/GetInstanceHttp.ts";
-import { GetUserHttp as GetAlloyDbUserHttp } from "./AlloyDB/GetUserHttp.ts";
+import { GetBackupHttp as GetAlloyDbBackupHttp } from "./AlloyDB/GetBackup.ts";
+import { GetClusterHttp as GetAlloyDbClusterHttp } from "./AlloyDB/GetCluster.ts";
+import { GetConnectionInfoHttp as GetAlloyDbConnectionInfoHttp } from "./AlloyDB/GetConnectionInfo.ts";
+import { GetInstanceHttp as GetAlloyDbInstanceHttp } from "./AlloyDB/GetInstance.ts";
+import { GetUserHttp as GetAlloyDbUserHttp } from "./AlloyDB/GetUser.ts";
 import {
   Instance as AlloyDbInstance,
   InstanceProvider as AlloyDbInstanceProvider,
@@ -228,7 +233,12 @@ import {
   MonetizationSubscriptionsBasePlansOffer,
   MonetizationSubscriptionsBasePlansOfferProvider,
 } from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
+import { Api, ApiProvider } from "./ApiGateway/Api.ts";
 import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
+import {
+  Gateway as ApiGatewayGateway,
+  GatewayProvider as ApiGatewayGatewayProvider,
+} from "./ApiGateway/Gateway.ts";
 import { AnalyticsDatastore, AnalyticsDatastoreProvider } from "./Apigee/AnalyticsDatastore.ts";
 import { Api as ApigeeApi, ApiProvider as ApigeeApiProvider } from "./Apigee/Api.ts";
 import {
@@ -350,7 +360,7 @@ import {
   RuntimeProjectAttachment,
   RuntimeProjectAttachmentProvider,
 } from "./ApiHub/RuntimeProjectAttachment.ts";
-import { GetKeyStringHttp } from "./ApiKeys/GetKeyStringHttp.ts";
+import { GetKeyStringHttp } from "./ApiKeys/GetKeyString.ts";
 import { Key, KeyProvider } from "./ApiKeys/Key.ts";
 import { ObservationJob, ObservationJobProvider } from "./Apim/ObservationJob.ts";
 import { ObservationSource, ObservationSourceProvider } from "./Apim/ObservationSource.ts";
@@ -385,7 +395,7 @@ import {
   ServiceProjectAttachment,
   ServiceProjectAttachmentProvider,
 } from "./AppHub/ServiceProjectAttachment.ts";
-import { ListDockerImagesHttp } from "./ArtifactRegistry/ListDockerImagesHttp.ts";
+import { ListDockerImagesHttp } from "./ArtifactRegistry/ListDockerImages.ts";
 import {
   RepositoriesAttachment,
   RepositoriesAttachmentProvider,
@@ -429,6 +439,7 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
+import { Job as BatchJob, JobProvider as BatchJobProvider } from "./Batch/Job.ts";
 import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
 import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
 import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
@@ -447,10 +458,10 @@ import {
   CatalogsDatabasesTableProvider,
 } from "./BigLake/CatalogsDatabasesTable.ts";
 import { Dataset, DatasetProvider } from "./BigQuery/Dataset.ts";
-import { InsertAllHttp } from "./BigQuery/InsertAllHttp.ts";
+import { InsertAllHttp } from "./BigQuery/InsertAll.ts";
 import { Job as BigQueryJob, JobProvider as BigQueryJobProvider } from "./BigQuery/Job.ts";
-import { ListTabledataHttp } from "./BigQuery/ListTabledataHttp.ts";
-import { QueryHttp } from "./BigQuery/QueryHttp.ts";
+import { ListTabledataHttp } from "./BigQuery/ListTabledata.ts";
+import { QueryHttp } from "./BigQuery/Query.ts";
 import { Routine, RoutineProvider } from "./BigQuery/Routine.ts";
 import { RowAccessPolicy, RowAccessPolicyProvider } from "./BigQuery/RowAccessPolicy.ts";
 import { Table, TableProvider } from "./BigQuery/Table.ts";
@@ -458,9 +469,9 @@ import {
   Connection as BigQueryConnection,
   ConnectionProvider as BigQueryConnectionProvider,
 } from "./BigQueryConnection/Connection.ts";
-import { GetConnectionHttp as BigQueryGetConnectionHttp } from "./BigQueryConnection/GetConnectionHttp.ts";
+import { GetConnectionHttp as BigQueryGetConnectionHttp } from "./BigQueryConnection/GetConnection.ts";
 import { DataPolicy, DataPolicyProvider } from "./BigQueryDataPolicy/DataPolicy.ts";
-import { StartManualRunsHttp } from "./BigQueryDataTransfer/StartManualRunsHttp.ts";
+import { StartManualRunsHttp } from "./BigQueryDataTransfer/StartManualRuns.ts";
 import { TransferConfig, TransferConfigProvider } from "./BigQueryDataTransfer/TransferConfig.ts";
 import { Assignment, AssignmentProvider } from "./BigQueryReservation/Assignment.ts";
 import {
@@ -480,9 +491,9 @@ import {
   Cluster as BigtableCluster,
   ClusterProvider as BigtableClusterProvider,
 } from "./Bigtable/Cluster.ts";
-import { GetClusterHttp as GetBigtableClusterHttp } from "./Bigtable/GetClusterHttp.ts";
-import { GetInstanceHttp as GetBigtableInstanceHttp } from "./Bigtable/GetInstanceHttp.ts";
-import { GetTableHttp as GetBigtableTableHttp } from "./Bigtable/GetTableHttp.ts";
+import { GetClusterHttp as GetBigtableClusterHttp } from "./Bigtable/GetCluster.ts";
+import { GetInstanceHttp as GetBigtableInstanceHttp } from "./Bigtable/GetInstance.ts";
+import { GetTableHttp as GetBigtableTableHttp } from "./Bigtable/GetTable.ts";
 import {
   Instance as BigtableInstance,
   InstanceProvider as BigtableInstanceProvider,
@@ -516,11 +527,11 @@ import {
   Attestor as BinaryauthorizationAttestor,
   AttestorProvider as BinaryauthorizationAttestorProvider,
 } from "./BinaryAuthorization/Attestor.ts";
-import { EvaluateGkePolicyHttp } from "./BinaryAuthorization/EvaluateGkePolicyHttp.ts";
-import { GetAttestorHttp } from "./BinaryAuthorization/GetAttestorHttp.ts";
-import { GetPlatformsPolicyHttp } from "./BinaryAuthorization/GetPlatformsPolicyHttp.ts";
+import { EvaluateGkePolicyHttp } from "./BinaryAuthorization/EvaluateGkePolicy.ts";
+import { GetAttestorHttp } from "./BinaryAuthorization/GetAttestor.ts";
+import { GetPlatformsPolicyHttp } from "./BinaryAuthorization/GetPlatformsPolicy.ts";
 import { PlatformsPolicy, PlatformsPolicyProvider } from "./BinaryAuthorization/PlatformsPolicy.ts";
-import { ValidateAttestationHttp } from "./BinaryAuthorization/ValidateAttestationHttp.ts";
+import { ValidateAttestationHttp } from "./BinaryAuthorization/ValidateAttestation.ts";
 import { BlockchainNode, BlockchainNodeProvider } from "./BlockchainNodeEngine/BlockchainNode.ts";
 import { Certificate, CertificateProvider } from "./CertificateManager/Certificate.ts";
 import {
@@ -557,13 +568,13 @@ import {
   SavedQuery as CloudassetSavedQuery,
   SavedQueryProvider as CloudassetSavedQueryProvider,
 } from "./CloudAsset/SavedQuery.ts";
-import { AccessReadTokenHttp as CloudBuildAccessReadTokenHttp } from "./CloudBuild/AccessReadTokenHttp.ts";
-import { AccessReadWriteTokenHttp as CloudBuildAccessReadWriteTokenHttp } from "./CloudBuild/AccessReadWriteTokenHttp.ts";
+import { AccessReadTokenHttp as CloudBuildAccessReadTokenHttp } from "./CloudBuild/AccessReadToken.ts";
+import { AccessReadWriteTokenHttp as CloudBuildAccessReadWriteTokenHttp } from "./CloudBuild/AccessReadWriteToken.ts";
 import {
   Connection as CloudBuildConnection,
   ConnectionProvider as CloudBuildConnectionProvider,
 } from "./CloudBuild/Connection.ts";
-import { FetchGitRefsHttp as CloudBuildFetchGitRefsHttp } from "./CloudBuild/FetchGitRefsHttp.ts";
+import { FetchGitRefsHttp as CloudBuildFetchGitRefsHttp } from "./CloudBuild/FetchGitRefs.ts";
 import {
   Repository as CloudBuildRepository,
   RepositoryProvider as CloudBuildRepositoryProvider,
@@ -600,8 +611,8 @@ import {
   TargetProvider as ClouddeployTargetProvider,
 } from "./CloudDeploy/Target.ts";
 import { Function as CloudFunction, FunctionProvider } from "./CloudFunctions/Function.ts";
-import { GenerateDownloadUrlHttp } from "./CloudFunctions/GenerateDownloadUrlHttp.ts";
-import { GetFunctionHttp } from "./CloudFunctions/GetFunctionHttp.ts";
+import { GenerateDownloadUrlHttp } from "./CloudFunctions/GenerateDownloadUrl.ts";
+import { GetFunctionHttp } from "./CloudFunctions/GetFunction.ts";
 import {
   Device as CloudidentityDevice,
   DeviceProvider as CloudidentityDeviceProvider,
@@ -628,9 +639,9 @@ import { IpamAdminScope, IpamAdminScopeProvider } from "./CloudNumberRegistry/Ip
 import { Realm, RealmProvider } from "./CloudNumberRegistry/Realm.ts";
 import { RegistryBook, RegistryBookProvider } from "./CloudNumberRegistry/RegistryBook.ts";
 import { Job, JobProvider } from "./CloudScheduler/Job.ts";
-import { PauseJobHttp } from "./CloudScheduler/PauseJobHttp.ts";
-import { ResumeJobHttp } from "./CloudScheduler/ResumeJobHttp.ts";
-import { RunJobHttp } from "./CloudScheduler/RunJobHttp.ts";
+import { PauseJobHttp } from "./CloudScheduler/PauseJob.ts";
+import { ResumeJobHttp } from "./CloudScheduler/ResumeJob.ts";
+import { RunJobHttp } from "./CloudScheduler/RunJob.ts";
 import {
   SettingsDatasource,
   SettingsDatasourceProvider,
@@ -643,7 +654,7 @@ import {
   SupportEventSubscription,
   SupportEventSubscriptionProvider,
 } from "./CloudSupport/SupportEventSubscription.ts";
-import { CreateTaskHttp } from "./CloudTasks/CreateTaskHttp.ts";
+import { CreateTaskHttp } from "./CloudTasks/CreateTask.ts";
 import { Queue, QueueProvider } from "./CloudTasks/Queue.ts";
 import {
   Environment as ComposerEnvironment,
@@ -657,10 +668,10 @@ import {
   EnvironmentsUserWorkloadsSecret,
   EnvironmentsUserWorkloadsSecretProvider,
 } from "./Composer/EnvironmentsUserWorkloadsSecret.ts";
-import { ExecuteAirflowCommandHttp } from "./Composer/ExecuteAirflowCommandHttp.ts";
-import { GetEnvironmentHttp } from "./Composer/GetEnvironmentHttp.ts";
-import { GetUserWorkloadsConfigMapHttp } from "./Composer/GetUserWorkloadsConfigMapHttp.ts";
-import { GetUserWorkloadsSecretHttp } from "./Composer/GetUserWorkloadsSecretHttp.ts";
+import { ExecuteAirflowCommandHttp } from "./Composer/ExecuteAirflowCommand.ts";
+import { GetEnvironmentHttp } from "./Composer/GetEnvironment.ts";
+import { GetUserWorkloadsConfigMapHttp } from "./Composer/GetUserWorkloadsConfigMap.ts";
+import { GetUserWorkloadsSecretHttp } from "./Composer/GetUserWorkloadsSecret.ts";
 import { Address, AddressProvider } from "./Compute/Address.ts";
 import { Autoscaler, AutoscalerProvider } from "./Compute/Autoscaler.ts";
 import { BackendBucket, BackendBucketProvider } from "./Compute/BackendBucket.ts";
@@ -672,7 +683,7 @@ import { Firewall, FirewallProvider } from "./Compute/Firewall.ts";
 import { FirewallPolicy, FirewallPolicyProvider } from "./Compute/FirewallPolicy.ts";
 import { ForwardingRule, ForwardingRuleProvider } from "./Compute/ForwardingRule.ts";
 import { FutureReservation, FutureReservationProvider } from "./Compute/FutureReservation.ts";
-import { GetInstanceHttp } from "./Compute/GetInstanceHttp.ts";
+import { GetInstanceHttp } from "./Compute/GetInstance.ts";
 import { GlobalAddress, GlobalAddressProvider } from "./Compute/GlobalAddress.ts";
 import {
   GlobalForwardingRule,
@@ -840,8 +851,8 @@ import { ServiceAttachment, ServiceAttachmentProvider } from "./Compute/ServiceA
 import { Snapshot, SnapshotProvider } from "./Compute/Snapshot.ts";
 import { SslCertificate, SslCertificateProvider } from "./Compute/SslCertificate.ts";
 import { SslPolicy, SslPolicyProvider } from "./Compute/SslPolicy.ts";
-import { StartInstanceHttp } from "./Compute/StartInstanceHttp.ts";
-import { StopInstanceHttp } from "./Compute/StopInstanceHttp.ts";
+import { StartInstanceHttp } from "./Compute/StartInstance.ts";
+import { StopInstanceHttp } from "./Compute/StopInstance.ts";
 import { StoragePool, StoragePoolProvider } from "./Compute/StoragePool.ts";
 import { Subnetwork, SubnetworkProvider } from "./Compute/Subnetwork.ts";
 import { TargetGrpcProxy, TargetGrpcProxyProvider } from "./Compute/TargetGrpcProxy.ts";
@@ -872,7 +883,7 @@ import {
   ConnectionsEntityTypesEntity,
   ConnectionsEntityTypesEntityProvider,
 } from "./Connectors/ConnectionsEntityTypesEntity.ts";
-import { GetEntityHttp } from "./Connectors/GetEntityHttp.ts";
+import { GetEntityHttp } from "./Connectors/GetEntity.ts";
 import { ContactCenter, ContactCenterProvider } from "./ContactCenterAIPlatform/ContactCenter.ts";
 import { AnalysisRule, AnalysisRuleProvider } from "./ContactCenterInsights/AnalysisRule.ts";
 import { AssessmentRule, AssessmentRuleProvider } from "./ContactCenterInsights/AssessmentRule.ts";
@@ -937,13 +948,13 @@ import {
 import { View, ViewProvider } from "./ContactCenterInsights/View.ts";
 import { Cluster, ClusterProvider } from "./Container/Cluster.ts";
 import { ClustersNodePool, ClustersNodePoolProvider } from "./Container/ClustersNodePool.ts";
-import { GetClusterHttp } from "./Container/GetClusterHttp.ts";
-import { GetClustersNodePoolHttp } from "./Container/GetClustersNodePoolHttp.ts";
-import { GetNodePoolHttp } from "./Container/GetNodePoolHttp.ts";
+import { GetClusterHttp } from "./Container/GetCluster.ts";
+import { GetClustersNodePoolHttp } from "./Container/GetClustersNodePool.ts";
+import { GetNodePoolHttp } from "./Container/GetNodePool.ts";
 import { GkeKubernetesAdapter } from "./Container/KubernetesAdapter.ts";
 import { NodePool, NodePoolProvider } from "./Container/NodePool.ts";
-import { GetNoteHttp } from "./ContainerAnalysis/GetNoteHttp.ts";
-import { GetOccurrenceHttp } from "./ContainerAnalysis/GetOccurrenceHttp.ts";
+import { GetNoteHttp } from "./ContainerAnalysis/GetNote.ts";
+import { GetOccurrenceHttp } from "./ContainerAnalysis/GetOccurrence.ts";
 import { LocationsNote, LocationsNoteProvider } from "./ContainerAnalysis/LocationsNote.ts";
 import {
   LocationsOccurrence,
@@ -965,10 +976,10 @@ import {
   DocumentSchema as ContentwarehouseDocumentSchema,
   DocumentSchemaProvider as ContentwarehouseDocumentSchemaProvider,
 } from "./ContentWarehouse/DocumentSchema.ts";
-import { GetDocumentHttp as GetContentwarehouseDocumentHttp } from "./ContentWarehouse/GetDocumentHttp.ts";
-import { GetDocumentSchemaHttp } from "./ContentWarehouse/GetDocumentSchemaHttp.ts";
-import { GetRuleSetHttp } from "./ContentWarehouse/GetRuleSetHttp.ts";
-import { GetSynonymSetHttp } from "./ContentWarehouse/GetSynonymSetHttp.ts";
+import { GetDocumentHttp as GetContentwarehouseDocumentHttp } from "./ContentWarehouse/GetDocument.ts";
+import { GetDocumentSchemaHttp } from "./ContentWarehouse/GetDocumentSchema.ts";
+import { GetRuleSetHttp } from "./ContentWarehouse/GetRuleSet.ts";
+import { GetSynonymSetHttp } from "./ContentWarehouse/GetSynonymSet.ts";
 import {
   RuleSet as ContentwarehouseRuleSet,
   RuleSetProvider as ContentwarehouseRuleSetProvider,
@@ -1009,6 +1020,10 @@ import {
   RepositoryProvider as DataformRepositoryProvider,
 } from "./Dataform/Repository.ts";
 import { Team, TeamProvider } from "./Dataform/Team.ts";
+import {
+  Instance as DataFusionInstance,
+  InstanceProvider as DataFusionInstanceProvider,
+} from "./DataFusion/Instance.ts";
 import {
   AnnotationSpecSet as DatalabelingAnnotationSpecSet,
   AnnotationSpecSetProvider as DatalabelingAnnotationSpecSetProvider,
@@ -1063,8 +1078,8 @@ import {
   Pipeline as DatapipelinesPipeline,
   PipelineProvider as DatapipelinesPipelineProvider,
 } from "./DataPipelines/Pipeline.ts";
-import { RunPipelineHttp } from "./DataPipelines/RunPipelineHttp.ts";
-import { StopPipelineHttp } from "./DataPipelines/StopPipelineHttp.ts";
+import { RunPipelineHttp } from "./DataPipelines/RunPipeline.ts";
+import { StopPipelineHttp } from "./DataPipelines/StopPipeline.ts";
 import { AspectType, AspectTypeProvider } from "./Dataplex/AspectType.ts";
 import { DataDomain, DataDomainProvider } from "./Dataplex/DataDomain.ts";
 import { DataDomainsBinding, DataDomainsBindingProvider } from "./Dataplex/DataDomainsBinding.ts";
@@ -1107,7 +1122,7 @@ import {
   Cluster as DataprocCluster,
   ClusterProvider as DataprocClusterProvider,
 } from "./Dataproc/Cluster.ts";
-import { GetClusterHttp as GetDataprocClusterHttp } from "./Dataproc/GetClusterHttp.ts";
+import { GetClusterHttp as GetDataprocClusterHttp } from "./Dataproc/GetCluster.ts";
 import {
   RegionsAutoscalingPolicy as DataprocRegionsAutoscalingPolicy,
   RegionsAutoscalingPolicyProvider as DataprocRegionsAutoscalingPolicyProvider,
@@ -1124,18 +1139,18 @@ import {
   SessionTemplate as DataprocSessionTemplate,
   SessionTemplateProvider as DataprocSessionTemplateProvider,
 } from "./Dataproc/SessionTemplate.ts";
-import { SubmitJobHttp as DataprocSubmitJobHttp } from "./Dataproc/SubmitJobHttp.ts";
+import { SubmitJobHttp as DataprocSubmitJobHttp } from "./Dataproc/SubmitJob.ts";
 import {
   WorkflowTemplate as DataprocWorkflowTemplate,
   WorkflowTemplateProvider as DataprocWorkflowTemplateProvider,
 } from "./Dataproc/WorkflowTemplate.ts";
-import { CommitHttp } from "./Datastore/CommitHttp.ts";
+import { CommitHttp } from "./Datastore/Commit.ts";
 import {
   Index as DatastoreIndex,
   IndexProvider as DatastoreIndexProvider,
 } from "./Datastore/Indexes.ts";
-import { LookupHttp } from "./Datastore/LookupHttp.ts";
-import { RunQueryHttp } from "./Datastore/RunQueryHttp.ts";
+import { LookupHttp } from "./Datastore/Lookup.ts";
+import { RunQueryHttp } from "./Datastore/RunQuery.ts";
 import {
   ConnectionProfile as DatastreamConnectionProfile,
   ConnectionProfileProvider as DatastreamConnectionProfileProvider,
@@ -1165,10 +1180,14 @@ import {
   ConnectionsGitRepositoryLink,
   ConnectionsGitRepositoryLinkProvider,
 } from "./DeveloperConnect/ConnectionsGitRepositoryLink.ts";
-import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./DeveloperConnect/FetchGitRefsHttp.ts";
-import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./DeveloperConnect/FetchReadTokenHttp.ts";
-import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./DeveloperConnect/FetchReadWriteTokenHttp.ts";
+import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./DeveloperConnect/FetchGitRefs.ts";
+import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./DeveloperConnect/FetchReadToken.ts";
+import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./DeveloperConnect/FetchReadWriteToken.ts";
 import { InsightsConfig, InsightsConfigProvider } from "./DeveloperConnect/InsightsConfig.ts";
+import {
+  Agent as DialogflowAgent,
+  AgentProvider as DialogflowAgentProvider,
+} from "./Dialogflow/Agent.ts";
 import { AgentsEntityType, AgentsEntityTypeProvider } from "./Dialogflow/AgentsEntityType.ts";
 import { AgentsEnvironment, AgentsEnvironmentProvider } from "./Dialogflow/AgentsEnvironment.ts";
 import {
@@ -1361,10 +1380,10 @@ import { Policy as DnsPolicy, PolicyProvider as DnsPolicyProvider } from "./DNS/
 import { ResourceRecordSet, ResourceRecordSetProvider } from "./DNS/ResourceRecordSet.ts";
 import { ResponsePolicy, ResponsePolicyProvider } from "./DNS/ResponsePolicy.ts";
 import { ResponsePolicyRule, ResponsePolicyRuleProvider } from "./DNS/ResponsePolicyRule.ts";
-import { GetProcessorHttp } from "./DocumentAI/GetProcessorHttp.ts";
-import { GetSchemaHttp as DocumentaiGetSchemaHttp } from "./DocumentAI/GetSchemaHttp.ts";
-import { GetSchemaVersionHttp } from "./DocumentAI/GetSchemaVersionHttp.ts";
-import { ProcessHttp as DocumentaiProcessHttp } from "./DocumentAI/ProcessHttp.ts";
+import { GetProcessorHttp } from "./DocumentAI/GetProcessor.ts";
+import { GetSchemaHttp as DocumentaiGetSchemaHttp } from "./DocumentAI/GetSchema.ts";
+import { GetSchemaVersionHttp } from "./DocumentAI/GetSchemaVersion.ts";
+import { ProcessHttp as DocumentaiProcessHttp } from "./DocumentAI/Process.ts";
 import {
   Processor as DocumentaiProcessor,
   ProcessorProvider as DocumentaiProcessorProvider,
@@ -1398,9 +1417,9 @@ import {
   Backup as FilestoreBackup,
   BackupProvider as FilestoreBackupProvider,
 } from "./Filestore/Backup.ts";
-import { GetBackupHttp as GetFilestoreBackupHttp } from "./Filestore/GetBackupHttp.ts";
-import { GetInstanceHttp as GetFilestoreInstanceHttp } from "./Filestore/GetInstanceHttp.ts";
-import { GetInstancesSnapshotHttp as GetFilestoreInstancesSnapshotHttp } from "./Filestore/GetInstancesSnapshotHttp.ts";
+import { GetBackupHttp as GetFilestoreBackupHttp } from "./Filestore/GetBackup.ts";
+import { GetInstanceHttp as GetFilestoreInstanceHttp } from "./Filestore/GetInstance.ts";
+import { GetInstancesSnapshotHttp as GetFilestoreInstancesSnapshotHttp } from "./Filestore/GetInstancesSnapshot.ts";
 import {
   Instance as FilestoreInstance,
   InstanceProvider as FilestoreInstanceProvider,
@@ -1411,7 +1430,7 @@ import {
 } from "./Filestore/InstancesSnapshot.ts";
 import { AndroidApp, AndroidAppProvider } from "./Firebase/AndroidApp.ts";
 import { AppsDebugToken, AppsDebugTokenProvider } from "./FirebaseAppCheck/AppsDebugToken.ts";
-import { ExchangeDebugTokenHttp } from "./FirebaseAppCheck/ExchangeDebugTokenHttp.ts";
+import { ExchangeDebugTokenHttp } from "./FirebaseAppCheck/ExchangeDebugToken.ts";
 import {
   ServicesResourcePolicy,
   ServicesResourcePolicyProvider,
@@ -1426,10 +1445,10 @@ import {
 } from "./FirebaseAppHosting/Backend.ts";
 import { BackendsBuild, BackendsBuildProvider } from "./FirebaseAppHosting/BackendsBuild.ts";
 import { BackendsDomain, BackendsDomainProvider } from "./FirebaseAppHosting/BackendsDomain.ts";
-import { ExecuteGraphqlHttp } from "./FirebaseDataConnect/ExecuteGraphqlHttp.ts";
-import { ExecuteGraphqlReadHttp } from "./FirebaseDataConnect/ExecuteGraphqlReadHttp.ts";
-import { ExecuteMutationHttp } from "./FirebaseDataConnect/ExecuteMutationHttp.ts";
-import { ExecuteQueryHttp } from "./FirebaseDataConnect/ExecuteQueryHttp.ts";
+import { ExecuteGraphqlHttp } from "./FirebaseDataConnect/ExecuteGraphql.ts";
+import { ExecuteGraphqlReadHttp } from "./FirebaseDataConnect/ExecuteGraphqlRead.ts";
+import { ExecuteMutationHttp } from "./FirebaseDataConnect/ExecuteMutation.ts";
+import { ExecuteQueryHttp } from "./FirebaseDataConnect/ExecuteQuery.ts";
 import {
   Service as FirebasedataconnectService,
   ServiceProvider as FirebasedataconnectServiceProvider,
@@ -1439,7 +1458,7 @@ import {
   ServicesConnectorProvider,
 } from "./FirebaseDataConnect/ServicesConnector.ts";
 import { ServicesSchema, ServicesSchemaProvider } from "./FirebaseDataConnect/ServicesSchema.ts";
-import { GetReleaseExecutableHttp } from "./FirebaseRules/GetReleaseExecutableHttp.ts";
+import { GetReleaseExecutableHttp } from "./FirebaseRules/GetReleaseExecutable.ts";
 import {
   Release as FirebaserulesRelease,
   ReleaseProvider as FirebaserulesReleaseProvider,
@@ -1448,7 +1467,7 @@ import {
   Ruleset as FirebaserulesRuleset,
   RulesetProvider as FirebaserulesRulesetProvider,
 } from "./FirebaseRules/Ruleset.ts";
-import { TestRulesetHttp } from "./FirebaseRules/TestRulesetHttp.ts";
+import { TestRulesetHttp } from "./FirebaseRules/TestRuleset.ts";
 import { Database, DatabaseProvider } from "./Firestore/Database.ts";
 import {
   DatabasesBackupSchedule,
@@ -1459,9 +1478,9 @@ import {
   DatabasesCollectionGroupsIndexProvider,
 } from "./Firestore/DatabasesCollectionGroupsIndex.ts";
 import { DatabasesUserCred, DatabasesUserCredProvider } from "./Firestore/DatabasesUserCred.ts";
-import { DeleteDocumentHttp } from "./Firestore/DeleteDocumentHttp.ts";
-import { GetDocumentHttp } from "./Firestore/GetDocumentHttp.ts";
-import { PatchDocumentHttp } from "./Firestore/PatchDocumentHttp.ts";
+import { DeleteDocumentHttp } from "./Firestore/DeleteDocument.ts";
+import { GetDocumentHttp } from "./Firestore/GetDocument.ts";
+import { PatchDocumentHttp } from "./Firestore/PatchDocument.ts";
 import {
   AchievementConfiguration,
   AchievementConfigurationProvider,
@@ -1479,6 +1498,10 @@ import {
   RestorePlansRestore,
   RestorePlansRestoreProvider,
 } from "./GKEBackup/RestorePlansRestore.ts";
+import {
+  Membership as GkeHubMembership,
+  MembershipProvider as GkeHubMembershipProvider,
+} from "./GKEHub/Membership.ts";
 import { MembershipsFeature, MembershipsFeatureProvider } from "./GKEHub/MembershipsFeature.ts";
 import { BareMetalCluster, BareMetalClusterProvider } from "./GKEOnPrem/BareMetalCluster.ts";
 import {
@@ -1550,6 +1573,10 @@ import {
   BrandsIdentityAwareProxyClientProvider,
 } from "./IAP/BrandsIdentityAwareProxyClient.ts";
 import { IapDestGroup, IapDestGroupProvider } from "./IAP/IapDestGroup.ts";
+import {
+  Endpoint as IDSEndpoint,
+  EndpointProvider as IDSEndpointProvider,
+} from "./IDS/Endpoint.ts";
 import { AuthConfig, AuthConfigProvider } from "./Integrations/AuthConfig.ts";
 import {
   IntegrationsVersion,
@@ -1593,8 +1620,8 @@ import { TenantsCompany, TenantsCompanyProvider } from "./Jobs/TenantsCompany.ts
 import { TenantsJob, TenantsJobProvider } from "./Jobs/TenantsJob.ts";
 import { CryptoKey, CryptoKeyProvider } from "./KMS/CryptoKey.ts";
 import { CryptoKeyVersion, CryptoKeyVersionProvider } from "./KMS/CryptoKeyVersion.ts";
-import { DecryptHttp } from "./KMS/DecryptHttp.ts";
-import { EncryptHttp } from "./KMS/EncryptHttp.ts";
+import { DecryptHttp } from "./KMS/Decrypt.ts";
+import { EncryptHttp } from "./KMS/Encrypt.ts";
 import { ImportJob, ImportJobProvider } from "./KMS/ImportJob.ts";
 import { KeyRing, KeyRingProvider } from "./KMS/KeyRing.ts";
 import {
@@ -1684,10 +1711,10 @@ import {
   ConnectClustersConnector,
   ConnectClustersConnectorProvider,
 } from "./ManagedKafka/ConnectClustersConnector.ts";
-import { GetClusterHttp as GetManagedKafkaClusterHttp } from "./ManagedKafka/GetClusterHttp.ts";
-import { GetConnectClusterHttp as GetManagedKafkaConnectClusterHttp } from "./ManagedKafka/GetConnectClusterHttp.ts";
-import { GetSchemaRegistryHttp as GetManagedKafkaSchemaRegistryHttp } from "./ManagedKafka/GetSchemaRegistryHttp.ts";
-import { GetTopicHttp as GetManagedKafkaTopicHttp } from "./ManagedKafka/GetTopicHttp.ts";
+import { GetClusterHttp as GetManagedKafkaClusterHttp } from "./ManagedKafka/GetCluster.ts";
+import { GetConnectClusterHttp as GetManagedKafkaConnectClusterHttp } from "./ManagedKafka/GetConnectCluster.ts";
+import { GetSchemaRegistryHttp as GetManagedKafkaSchemaRegistryHttp } from "./ManagedKafka/GetSchemaRegistry.ts";
+import { GetTopicHttp as GetManagedKafkaTopicHttp } from "./ManagedKafka/GetTopic.ts";
 import {
   SchemaRegistriesContextsSubjectsVersion,
   SchemaRegistriesContextsSubjectsVersionProvider,
@@ -1700,7 +1727,7 @@ import {
   SchemaRegistry as ManagedKafkaSchemaRegistry,
   SchemaRegistryProvider as ManagedKafkaSchemaRegistryProvider,
 } from "./ManagedKafka/SchemaRegistry.ts";
-import { GetInstanceHttp as GetMemcacheInstanceHttp } from "./Memcache/GetInstanceHttp.ts";
+import { GetInstanceHttp as GetMemcacheInstanceHttp } from "./Memcache/GetInstance.ts";
 import {
   Instance as MemcacheInstance,
   InstanceProvider as MemcacheInstanceProvider,
@@ -1755,11 +1782,11 @@ import {
   Source as MigrationcenterSource,
   SourceProvider as MigrationcenterSourceProvider,
 } from "./MigrationCenter/Source.ts";
-import { GetModelHttp as GetMlModelHttp } from "./ML/GetModelHttp.ts";
-import { GetVersionHttp as GetMlVersionHttp } from "./ML/GetVersionHttp.ts";
+import { GetModelHttp as GetMlModelHttp } from "./ML/GetModel.ts";
+import { GetVersionHttp as GetMlVersionHttp } from "./ML/GetVersion.ts";
 import { Model as MlModel, ModelProvider as MlModelProvider } from "./ML/Model.ts";
 import { ModelsVersion, ModelsVersionProvider } from "./ML/ModelsVersion.ts";
-import { PredictHttp as PredictMlHttp } from "./ML/PredictHttp.ts";
+import { PredictHttp as PredictMlHttp } from "./ML/Predict.ts";
 import { AlertPolicy, AlertPolicyProvider } from "./Monitoring/AlertPolicy.ts";
 import {
   Group as MonitoringGroup,
@@ -1993,6 +2020,10 @@ import {
   WasmPluginsVersionProvider,
 } from "./NetworkServices/WasmPluginsVersion.ts";
 import {
+  Instance as NotebooksInstance,
+  InstanceProvider as NotebooksInstanceProvider,
+} from "./Notebooks/Instance.ts";
+import {
   BucketsDatasetsLink,
   BucketsDatasetsLinkProvider,
 } from "./Observability/BucketsDatasetsLink.ts";
@@ -2012,18 +2043,18 @@ import {
   ExascaleDbStorageVault,
   ExascaleDbStorageVaultProvider,
 } from "./OracleDatabase/ExascaleDbStorageVault.ts";
-import { GenerateWalletHttp } from "./OracleDatabase/GenerateWalletHttp.ts";
-import { GetAutonomousDatabaseHttp } from "./OracleDatabase/GetAutonomousDatabaseHttp.ts";
-import { GetCloudExadataInfrastructureHttp } from "./OracleDatabase/GetCloudExadataInfrastructureHttp.ts";
-import { GetCloudVmClusterHttp } from "./OracleDatabase/GetCloudVmClusterHttp.ts";
-import { GetDbSystemHttp } from "./OracleDatabase/GetDbSystemHttp.ts";
-import { GetExadbVmClusterHttp } from "./OracleDatabase/GetExadbVmClusterHttp.ts";
-import { GetExascaleDbStorageVaultHttp } from "./OracleDatabase/GetExascaleDbStorageVaultHttp.ts";
-import { GetGoldengateConnectionAssignmentHttp } from "./OracleDatabase/GetGoldengateConnectionAssignmentHttp.ts";
-import { GetGoldengateConnectionHttp } from "./OracleDatabase/GetGoldengateConnectionHttp.ts";
-import { GetGoldengateDeploymentHttp } from "./OracleDatabase/GetGoldengateDeploymentHttp.ts";
-import { GetOdbNetworkHttp } from "./OracleDatabase/GetOdbNetworkHttp.ts";
-import { GetOdbNetworksOdbSubnetHttp } from "./OracleDatabase/GetOdbNetworksOdbSubnetHttp.ts";
+import { GenerateWalletHttp } from "./OracleDatabase/GenerateWallet.ts";
+import { GetAutonomousDatabaseHttp } from "./OracleDatabase/GetAutonomousDatabase.ts";
+import { GetCloudExadataInfrastructureHttp } from "./OracleDatabase/GetCloudExadataInfrastructure.ts";
+import { GetCloudVmClusterHttp } from "./OracleDatabase/GetCloudVmCluster.ts";
+import { GetDbSystemHttp } from "./OracleDatabase/GetDbSystem.ts";
+import { GetExadbVmClusterHttp } from "./OracleDatabase/GetExadbVmCluster.ts";
+import { GetExascaleDbStorageVaultHttp } from "./OracleDatabase/GetExascaleDbStorageVault.ts";
+import { GetGoldengateConnectionHttp } from "./OracleDatabase/GetGoldengateConnection.ts";
+import { GetGoldengateConnectionAssignmentHttp } from "./OracleDatabase/GetGoldengateConnectionAssignment.ts";
+import { GetGoldengateDeploymentHttp } from "./OracleDatabase/GetGoldengateDeployment.ts";
+import { GetOdbNetworkHttp } from "./OracleDatabase/GetOdbNetwork.ts";
+import { GetOdbNetworksOdbSubnetHttp } from "./OracleDatabase/GetOdbNetworksOdbSubnet.ts";
 import {
   GoldengateConnection,
   GoldengateConnectionProvider,
@@ -2041,9 +2072,9 @@ import {
   OdbNetworksOdbSubnet,
   OdbNetworksOdbSubnetProvider,
 } from "./OracleDatabase/OdbNetworksOdbSubnet.ts";
-import { RestartAutonomousDatabaseHttp } from "./OracleDatabase/RestartAutonomousDatabaseHttp.ts";
-import { StartAutonomousDatabaseHttp } from "./OracleDatabase/StartAutonomousDatabaseHttp.ts";
-import { StopAutonomousDatabaseHttp } from "./OracleDatabase/StopAutonomousDatabaseHttp.ts";
+import { RestartAutonomousDatabaseHttp } from "./OracleDatabase/RestartAutonomousDatabase.ts";
+import { StartAutonomousDatabaseHttp } from "./OracleDatabase/StartAutonomousDatabase.ts";
+import { StopAutonomousDatabaseHttp } from "./OracleDatabase/StopAutonomousDatabase.ts";
 import { CustomConstraint, CustomConstraintProvider } from "./OrgPolicy/CustomConstraint.ts";
 import { Policy, PolicyProvider } from "./OrgPolicy/Policy.ts";
 import {
@@ -2059,14 +2090,14 @@ import {
   ProjectsLocationsGlobalPolicyOrchestratorProvider,
 } from "./OSConfig/ProjectsLocationsGlobalPolicyOrchestrator.ts";
 import { UsersSshPublicKey, UsersSshPublicKeyProvider } from "./OSLogin/UsersSshPublicKey.ts";
-import { GetParameterHttp } from "./ParameterManager/GetParameterHttp.ts";
-import { GetParameterVersionHttp } from "./ParameterManager/GetParameterVersionHttp.ts";
+import { GetParameterHttp } from "./ParameterManager/GetParameter.ts";
+import { GetParameterVersionHttp } from "./ParameterManager/GetParameterVersion.ts";
 import { Parameter, ParameterProvider } from "./ParameterManager/Parameter.ts";
 import {
   ParametersVersion,
   ParametersVersionProvider,
 } from "./ParameterManager/ParametersVersion.ts";
-import { RenderParameterVersionHttp } from "./ParameterManager/RenderParameterVersionHttp.ts";
+import { RenderParameterVersionHttp } from "./ParameterManager/RenderParameterVersion.ts";
 import { CaPool, CaPoolProvider } from "./PrivateCA/CaPool.ts";
 import {
   CertificateAuthority,
@@ -2076,12 +2107,12 @@ import {
   CertificateTemplate,
   CertificateTemplateProvider,
 } from "./PrivateCA/CertificateTemplate.ts";
-import { FetchCaCertsHttp } from "./PrivateCA/FetchCaCertsHttp.ts";
-import { GetCertificateAuthorityHttp } from "./PrivateCA/GetCertificateAuthorityHttp.ts";
-import { AcknowledgeHttp } from "./PubSub/AcknowledgeHttp.ts";
-import { GetSchemaHttp } from "./PubSub/GetSchemaHttp.ts";
-import { PublishHttp } from "./PubSub/PublishHttp.ts";
-import { PullHttp } from "./PubSub/PullHttp.ts";
+import { FetchCaCertsHttp } from "./PrivateCA/FetchCaCerts.ts";
+import { GetCertificateAuthorityHttp } from "./PrivateCA/GetCertificateAuthority.ts";
+import { AcknowledgeHttp } from "./PubSub/Acknowledge.ts";
+import { GetSchemaHttp } from "./PubSub/GetSchema.ts";
+import { PublishHttp } from "./PubSub/Publish.ts";
+import { PullHttp } from "./PubSub/Pull.ts";
 import { Schema, SchemaProvider } from "./PubSub/Schema.ts";
 import {
   Snapshot as PubSubSnapshot,
@@ -2089,28 +2120,28 @@ import {
 } from "./PubSub/Snapshot.ts";
 import { Subscription, SubscriptionProvider } from "./PubSub/Subscription.ts";
 import { Topic, TopicProvider } from "./PubSub/Topic.ts";
-import { ValidateMessageHttp } from "./PubSub/ValidateMessageHttp.ts";
+import { ValidateMessageHttp } from "./PubSub/ValidateMessage.ts";
 import { AdminReservation, AdminReservationProvider } from "./PubSubLite/AdminReservation.ts";
 import { AdminSubscription, AdminSubscriptionProvider } from "./PubSubLite/AdminSubscription.ts";
 import { AdminTopic, AdminTopicProvider } from "./PubSubLite/AdminTopic.ts";
-import { CommitCursorHttp } from "./PubSubLite/CommitCursorHttp.ts";
-import { ComputeHeadCursorHttp } from "./PubSubLite/ComputeHeadCursorHttp.ts";
-import { GetPartitionsHttp } from "./PubSubLite/GetPartitionsHttp.ts";
-import { GetReservationHttp as GetPubsubliteReservationHttp } from "./PubSubLite/GetReservationHttp.ts";
-import { GetSubscriptionHttp as GetPubsubliteSubscriptionHttp } from "./PubSubLite/GetSubscriptionHttp.ts";
-import { GetTopicHttp as GetPubsubliteTopicHttp } from "./PubSubLite/GetTopicHttp.ts";
+import { CommitCursorHttp } from "./PubSubLite/CommitCursor.ts";
+import { ComputeHeadCursorHttp } from "./PubSubLite/ComputeHeadCursor.ts";
+import { GetPartitionsHttp } from "./PubSubLite/GetPartitions.ts";
+import { GetReservationHttp as GetPubsubliteReservationHttp } from "./PubSubLite/GetReservation.ts";
+import { GetSubscriptionHttp as GetPubsubliteSubscriptionHttp } from "./PubSubLite/GetSubscription.ts";
+import { GetTopicHttp as GetPubsubliteTopicHttp } from "./PubSubLite/GetTopic.ts";
 import {
   Collector as RapidmigrationassessmentCollector,
   CollectorProvider as RapidmigrationassessmentCollectorProvider,
 } from "./RapidMigrationAssessment/Collector.ts";
-import { PauseCollectorHttp } from "./RapidMigrationAssessment/PauseCollectorHttp.ts";
-import { RegisterCollectorHttp } from "./RapidMigrationAssessment/RegisterCollectorHttp.ts";
-import { ResumeCollectorHttp } from "./RapidMigrationAssessment/ResumeCollectorHttp.ts";
+import { PauseCollectorHttp } from "./RapidMigrationAssessment/PauseCollector.ts";
+import { RegisterCollectorHttp } from "./RapidMigrationAssessment/RegisterCollector.ts";
+import { ResumeCollectorHttp } from "./RapidMigrationAssessment/ResumeCollector.ts";
 import {
   BiddersPretargetingConfig,
   BiddersPretargetingConfigProvider,
 } from "./RealTimeBidding/BiddersPretargetingConfig.ts";
-import { CreateAssessmentHttp as RecaptchaenterpriseCreateAssessmentHttp } from "./RecaptchaEnterprise/CreateAssessmentHttp.ts";
+import { CreateAssessmentHttp as RecaptchaenterpriseCreateAssessmentHttp } from "./RecaptchaEnterprise/CreateAssessment.ts";
 import {
   Firewallpolicy as RecaptchaenterpriseFirewallpolicy,
   FirewallpolicyProvider as RecaptchaenterpriseFirewallpolicyProvider,
@@ -2123,18 +2154,18 @@ import {
   CatalogsCatalogItem,
   CatalogsCatalogItemProvider,
 } from "./RecommendationEngine/CatalogsCatalogItem.ts";
-import { GetCatalogItemHttp } from "./RecommendationEngine/GetCatalogItemHttp.ts";
+import { GetCatalogItemHttp } from "./RecommendationEngine/GetCatalogItem.ts";
 import { AclPolicy, AclPolicyProvider } from "./Redis/AclPolicy.ts";
-import { GetAclPolicyHttp } from "./Redis/GetAclPolicyHttp.ts";
-import { GetAuthStringHttp } from "./Redis/GetAuthStringHttp.ts";
-import { GetInstanceHttp as GetRedisInstanceHttp } from "./Redis/GetInstanceHttp.ts";
+import { GetAclPolicyHttp } from "./Redis/GetAclPolicy.ts";
+import { GetAuthStringHttp } from "./Redis/GetAuthString.ts";
+import { GetInstanceHttp as GetRedisInstanceHttp } from "./Redis/GetInstance.ts";
 import {
   Instance as RedisInstance,
   InstanceProvider as RedisInstanceProvider,
 } from "./Redis/Instance.ts";
-import { ReadRedisHttp } from "./Redis/ReadRedisHttp.ts";
-import { ReadWriteRedisHttp } from "./Redis/ReadWriteRedisHttp.ts";
-import { WriteRedisHttp } from "./Redis/WriteRedisHttp.ts";
+import { ReadRedisHttp } from "./Redis/ReadRedis.ts";
+import { ReadWriteRedisHttp } from "./Redis/ReadWriteRedis.ts";
+import { WriteRedisHttp } from "./Redis/WriteRedis.ts";
 import {
   Folder as ResourceManagerFolder,
   FolderProvider as ResourceManagerFolderProvider,
@@ -2157,16 +2188,16 @@ import {
   CatalogsServingConfig,
   CatalogsServingConfigProvider,
 } from "./Retail/CatalogsServingConfig.ts";
-import { PredictHttp as RetailPredictHttp } from "./Retail/PredictHttp.ts";
-import { SearchHttp as RetailSearchHttp } from "./Retail/SearchHttp.ts";
+import { PredictHttp as RetailPredictHttp } from "./Retail/Predict.ts";
+import { SearchHttp as RetailSearchHttp } from "./Retail/Search.ts";
 import {
   Container as RunContainer,
   ContainerProvider as RunContainerProvider,
 } from "./Run/Container.ts";
-import { GetServiceHttp } from "./Run/GetServiceHttp.ts";
-import { GetWorkerPoolHttp } from "./Run/GetWorkerPoolHttp.ts";
+import { GetServiceHttp } from "./Run/GetService.ts";
+import { GetWorkerPoolHttp } from "./Run/GetWorkerPool.ts";
 import { Job as CloudRunJob, JobProvider as CloudRunJobProvider } from "./Run/Job.ts";
-import { RunJobHttp as CloudRunRunJobHttp } from "./Run/RunJobHttp.ts";
+import { RunJobHttp as CloudRunRunJobHttp } from "./Run/RunJob.ts";
 import { Service, ServiceProvider } from "./Run/Service.ts";
 import { WorkerPool, WorkerPoolProvider } from "./Run/WorkerPool.ts";
 import {
@@ -2277,8 +2308,8 @@ import {
   SignedNodesNodesDevice as SasportalSignedNodesNodesDevice,
   SignedNodesNodesDeviceProvider as SasportalSignedNodesNodesDeviceProvider,
 } from "./SasPortal/SignedNodesNodesDevice.ts";
-import { AccessSecretVersionHttp } from "./SecretManager/AccessSecretVersionHttp.ts";
-import { AddSecretVersionHttp } from "./SecretManager/AddSecretVersionHttp.ts";
+import { AccessSecretVersionHttp } from "./SecretManager/AccessSecretVersion.ts";
+import { AddSecretVersionHttp } from "./SecretManager/AddSecretVersion.ts";
 import { LocationsSecret, LocationsSecretProvider } from "./SecretManager/LocationsSecret.ts";
 import { Secret, SecretProvider } from "./SecretManager/Secret.ts";
 import {
@@ -2361,9 +2392,9 @@ import {
   Endpoint as ServiceDirectoryEndpoint,
   EndpointProvider as ServiceDirectoryEndpointProvider,
 } from "./ServiceDirectory/Endpoint.ts";
-import { GetEndpointHttp as ServiceDirectoryGetEndpointHttp } from "./ServiceDirectory/GetEndpointHttp.ts";
+import { GetEndpointHttp as ServiceDirectoryGetEndpointHttp } from "./ServiceDirectory/GetEndpoint.ts";
 import { Namespace, NamespaceProvider } from "./ServiceDirectory/Namespace.ts";
-import { ResolveHttp as ServiceDirectoryResolveHttp } from "./ServiceDirectory/ResolveHttp.ts";
+import { ResolveHttp as ServiceDirectoryResolveHttp } from "./ServiceDirectory/Resolve.ts";
 import {
   Service as ServiceDirectoryService,
   ServiceProvider as ServiceDirectoryServiceProvider,
@@ -2379,9 +2410,9 @@ import {
   Database as SpannerDatabase,
   DatabaseProvider as SpannerDatabaseProvider,
 } from "./Spanner/Database.ts";
-import { ExecuteSqlHttp as SpannerExecuteSqlHttp } from "./Spanner/ExecuteSqlHttp.ts";
-import { GetDdlHttp as SpannerGetDdlHttp } from "./Spanner/GetDdlHttp.ts";
-import { GetInstanceHttp as GetSpannerInstanceHttp } from "./Spanner/GetInstanceHttp.ts";
+import { ExecuteSqlHttp as SpannerExecuteSqlHttp } from "./Spanner/ExecuteSql.ts";
+import { GetDdlHttp as SpannerGetDdlHttp } from "./Spanner/GetDdl.ts";
+import { GetInstanceHttp as GetSpannerInstanceHttp } from "./Spanner/GetInstance.ts";
 import {
   Instance as SpannerInstance,
   InstanceProvider as SpannerInstanceProvider,
@@ -2403,10 +2434,10 @@ import {
   InstancesInstancePartitionProvider as SpannerInstancesInstancePartitionProvider,
 } from "./Spanner/InstancesInstancePartition.ts";
 import { CustomClass, CustomClassProvider } from "./Speech/CustomClass.ts";
-import { GetCustomClassHttp } from "./Speech/GetCustomClassHttp.ts";
-import { GetPhraseSetHttp } from "./Speech/GetPhraseSetHttp.ts";
+import { GetCustomClassHttp } from "./Speech/GetCustomClass.ts";
+import { GetPhraseSetHttp } from "./Speech/GetPhraseSet.ts";
 import { PhraseSet, PhraseSetProvider } from "./Speech/PhraseSet.ts";
-import { RecognizeHttp } from "./Speech/RecognizeHttp.ts";
+import { RecognizeHttp } from "./Speech/Recognize.ts";
 import {
   Backup as SqlBackupBackup,
   BackupProvider as SqlBackupBackupProvider,
@@ -2419,9 +2450,9 @@ import {
   Database as SqlDatabase,
   DatabaseProvider as SqlDatabaseProvider,
 } from "./SQL/Database.ts";
-import { ExecuteSqlHttp } from "./SQL/ExecuteSqlHttp.ts";
-import { GetInstanceHttp as GetSqlInstanceHttp } from "./SQL/GetInstanceHttp.ts";
-import { GetUserHttp as GetSqlUserHttp } from "./SQL/GetUserHttp.ts";
+import { ExecuteSqlHttp } from "./SQL/ExecuteSql.ts";
+import { GetInstanceHttp as GetSqlInstanceHttp } from "./SQL/GetInstance.ts";
+import { GetUserHttp as GetSqlUserHttp } from "./SQL/GetUser.ts";
 import {
   Instance as SqlInstance,
   InstanceProvider as SqlInstanceProvider,
@@ -2434,9 +2465,9 @@ import {
   DefaultObjectAccessControl,
   DefaultObjectAccessControlProvider,
 } from "./Storage/DefaultObjectAccessControl.ts";
-import { DeleteObjectHttp } from "./Storage/DeleteObjectHttp.ts";
+import { DeleteObjectHttp } from "./Storage/DeleteObject.ts";
 import { Folder, FolderProvider } from "./Storage/Folder.ts";
-import { GetObjectHttp } from "./Storage/GetObjectHttp.ts";
+import { GetObjectHttp } from "./Storage/GetObject.ts";
 import { HmacKey, HmacKeyProvider } from "./Storage/HmacKey.ts";
 import { Managed, ManagedProvider } from "./Storage/Managed.ts";
 import { Notification, NotificationProvider } from "./Storage/Notification.ts";
@@ -2445,34 +2476,46 @@ import {
   ObjectProvider as StorageObjectProvider,
 } from "./Storage/Object.ts";
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
-import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
+import { PutObjectHttp } from "./Storage/PutObject.ts";
+import {
+  Job as StorageBatchOperationsJob,
+  JobProvider as StorageBatchOperationsJobProvider,
+} from "./StorageBatchOperations/Job.ts";
+import {
+  ReportConfig as StorageInsightsReportConfig,
+  ReportConfigProvider as StorageInsightsReportConfigProvider,
+} from "./StorageInsights/ReportConfig.ts";
 import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
-import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
-import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
+import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccount.ts";
+import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJob.ts";
 import { TransferJob, TransferJobProvider } from "./StorageTransfer/TransferJob.ts";
-import { GetNodeHttp as GetTpuNodeHttp } from "./TPU/GetNodeHttp.ts";
-import { GetQueuedResourceHttp as GetTpuQueuedResourceHttp } from "./TPU/GetQueuedResourceHttp.ts";
+import { GetNodeHttp as GetTpuNodeHttp } from "./TPU/GetNode.ts";
+import { GetQueuedResourceHttp as GetTpuQueuedResourceHttp } from "./TPU/GetQueuedResource.ts";
 import { Node as TpuNode, NodeProvider as TpuNodeProvider } from "./TPU/Node.ts";
 import {
   QueuedResource as TpuQueuedResource,
   QueuedResourceProvider as TpuQueuedResourceProvider,
 } from "./TPU/QueuedResource.ts";
-import { CreateJobHttp } from "./Transcoder/CreateJobHttp.ts";
+import { CreateJobHttp } from "./Transcoder/CreateJob.ts";
 import { JobTemplate, JobTemplateProvider } from "./Transcoder/JobTemplate.ts";
 import { AdaptiveMtDataset, AdaptiveMtDatasetProvider } from "./Translate/AdaptiveMtDataset.ts";
-import { AdaptiveMtTranslateHttp } from "./Translate/AdaptiveMtTranslateHttp.ts";
-import { GetAdaptiveMtDatasetHttp } from "./Translate/GetAdaptiveMtDatasetHttp.ts";
-import { GetGlossariesGlossaryEntryHttp } from "./Translate/GetGlossariesGlossaryEntryHttp.ts";
-import { GetModelHttp as TranslateGetModelHttp } from "./Translate/GetModelHttp.ts";
+import { AdaptiveMtTranslateHttp } from "./Translate/AdaptiveMtTranslate.ts";
+import { GetAdaptiveMtDatasetHttp } from "./Translate/GetAdaptiveMtDataset.ts";
+import { GetGlossariesGlossaryEntryHttp } from "./Translate/GetGlossariesGlossaryEntry.ts";
+import { GetModelHttp as TranslateGetModelHttp } from "./Translate/GetModel.ts";
 import {
   GlossariesGlossaryEntry,
   GlossariesGlossaryEntryProvider,
 } from "./Translate/GlossariesGlossaryEntry.ts";
 import {
+  Glossary as TranslateGlossary,
+  GlossaryProvider as TranslateGlossaryProvider,
+} from "./Translate/Glossary.ts";
+import {
   Model as TranslateModel,
   ModelProvider as TranslateModelProvider,
 } from "./Translate/Model.ts";
-import { TranslateTextHttp } from "./Translate/TranslateTextHttp.ts";
+import { TranslateTextHttp } from "./Translate/TranslateText.ts";
 import { Matter, MatterProvider } from "./Vault/Matter.ts";
 import { MattersExport, MattersExportProvider } from "./Vault/MattersExport.ts";
 import { MattersHold, MattersHoldProvider } from "./Vault/MattersHold.ts";
@@ -2558,7 +2601,7 @@ import {
 } from "./VMwareEngine/VmwareEngineNetwork.ts";
 import { Connector, ConnectorProvider } from "./VpcAccess/Connector.ts";
 import { ScanConfig, ScanConfigProvider } from "./WebSecurityScanner/ScanConfig.ts";
-import { CreateExecutionHttp } from "./Workflows/CreateExecutionHttp.ts";
+import { CreateExecutionHttp } from "./Workflows/CreateExecution.ts";
 import { Workflow, WorkflowProvider } from "./Workflows/Workflow.ts";
 import {
   DeploymentsActuation,
@@ -2572,12 +2615,12 @@ import {
   Subscription as WorkspaceeventsSubscription,
   SubscriptionProvider as WorkspaceeventsSubscriptionProvider,
 } from "./WorkspaceEvents/Subscription.ts";
-import { GenerateAccessTokenHttp } from "./Workstations/GenerateAccessTokenHttp.ts";
-import { GetWorkstationClusterHttp } from "./Workstations/GetWorkstationClusterHttp.ts";
-import { GetWorkstationConfigHttp } from "./Workstations/GetWorkstationConfigHttp.ts";
-import { GetWorkstationHttp } from "./Workstations/GetWorkstationHttp.ts";
-import { StartWorkstationHttp } from "./Workstations/StartWorkstationHttp.ts";
-import { StopWorkstationHttp } from "./Workstations/StopWorkstationHttp.ts";
+import { GenerateAccessTokenHttp } from "./Workstations/GenerateAccessToken.ts";
+import { GetWorkstationHttp } from "./Workstations/GetWorkstation.ts";
+import { GetWorkstationClusterHttp } from "./Workstations/GetWorkstationCluster.ts";
+import { GetWorkstationConfigHttp } from "./Workstations/GetWorkstationConfig.ts";
+import { StartWorkstationHttp } from "./Workstations/StartWorkstation.ts";
+import { StopWorkstationHttp } from "./Workstations/StopWorkstation.ts";
 import {
   WorkstationCluster,
   WorkstationClusterProvider,
@@ -2962,6 +3005,7 @@ const makeProviders = () =>
           ResourceManagerProject,
           Key,
           AgentregistryBinding,
+          AgentregistryService,
           RecaptchaenterpriseKey,
           RecaptchaenterpriseFirewallpolicy,
           Policy,
@@ -3177,6 +3221,7 @@ const makeProviders = () =>
           AgentsToolsVersion,
           AgentsTransitionRouteGroup,
           AgentsWebhook,
+          DialogflowAgent,
           SecuritySetting,
           OrganizationStoredInfoType,
           DeidentifyTemplate,
@@ -3313,6 +3358,8 @@ const makeProviders = () =>
           ObservationJob,
           ObservationSource,
           ApisConfig,
+          Api,
+          ApiGatewayGateway,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       Object.assign(
@@ -3437,6 +3484,7 @@ const makeProviders = () =>
           RestorePlan,
           RestorePlansRestore,
           MembershipsFeature,
+          GkeHubMembership,
           InstancesBackup,
           BareMetalCluster,
           BareMetalClustersBareMetalNodePool,
@@ -3504,6 +3552,13 @@ const makeProviders = () =>
           ProjectsLocationsGlobalPolicyOrchestrator,
           AdaptiveMtDataset,
           GlossariesGlossaryEntry,
+          TranslateGlossary,
+          BatchJob,
+          StorageInsightsReportConfig,
+          StorageBatchOperationsJob,
+          NotebooksInstance,
+          IDSEndpoint,
+          DataFusionInstance,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -3547,6 +3602,7 @@ const makeProviders = () =>
           PersistentResource,
           PipelineJob,
           RagCorpora,
+          RagEngineConfig,
           ReasoningEnginesMemory,
           AnalyticsDatastore,
           ApimServiceExtension,
@@ -4188,6 +4244,7 @@ const makeProviders = () =>
             Layer.mergeAll(
               AgentsTransitionRouteGroupProvider(),
               AgentsWebhookProvider(),
+              DialogflowAgentProvider(),
               SecuritySettingProvider(),
             ),
           ),
@@ -4321,7 +4378,7 @@ const makeProviders = () =>
             RestorePlanProvider(),
             RestorePlansRestoreProvider(),
           ),
-          Layer.mergeAll(MembershipsFeatureProvider()),
+          Layer.mergeAll(MembershipsFeatureProvider(), GkeHubMembershipProvider()),
           Layer.mergeAll(InstancesBackupProvider(), JobTemplateProvider()),
           Layer.mergeAll(
             BareMetalClusterProvider(),
@@ -4475,6 +4532,8 @@ const makeProviders = () =>
                 ObservationJobProvider(),
                 ObservationSourceProvider(),
                 ApisConfigProvider(),
+                ApiProvider(),
+                ApiGatewayGatewayProvider(),
               ),
               Layer.mergeAll(
                 MerchantReviewProvider(),
@@ -4621,6 +4680,13 @@ const makeProviders = () =>
                 ProjectsLocationsGlobalPolicyOrchestratorProvider(),
                 AdaptiveMtDatasetProvider(),
                 GlossariesGlossaryEntryProvider(),
+                TranslateGlossaryProvider(),
+                BatchJobProvider(),
+                StorageInsightsReportConfigProvider(),
+                StorageBatchOperationsJobProvider(),
+                NotebooksInstanceProvider(),
+                IDSEndpointProvider(),
+                DataFusionInstanceProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(
@@ -4635,6 +4701,7 @@ const makeProviders = () =>
                 WorkstationClustersWorkstationConfigProvider(),
                 WorkstationClustersWorkstationConfigsWorkstationProvider(),
                 AgentregistryBindingProvider(),
+                AgentregistryServiceProvider(),
                 RecaptchaenterpriseKeyProvider(),
                 RecaptchaenterpriseFirewallpolicyProvider(),
                 AgentidentityAuthProviderProvider(),
@@ -4675,6 +4742,7 @@ const makeProviders = () =>
                 PersistentResourceProvider(),
                 PipelineJobProvider(),
                 RagCorporaProvider(),
+                RagEngineConfigProvider(),
                 ReasoningEnginesMemoryProvider(),
                 AnalyticsDatastoreProvider(),
                 ApimServiceExtensionProvider(),

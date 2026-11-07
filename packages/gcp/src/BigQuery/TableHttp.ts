@@ -2,10 +2,11 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
 import { type BindingIam, grantFor } from "../HttpBinding.ts";
-import { type ListTableResult, QueryNotComplete, type ReadTableClient } from "./ReadTable.ts";
+import type { ListTableResult, ReadTableClient } from "./ReadTable.ts";
 import { decodeRows, encodeRow, queryParameter } from "./Rows.ts";
 import type { Table } from "./Table.ts";
-import { InsertRowsFailed, type WriteTableClient } from "./WriteTable.ts";
+import { InsertRowsFailed, QueryNotComplete } from "./TableTypes.ts";
+import type { WriteTableClient } from "./WriteTable.ts";
 
 // bigquery.jobs.create is only grantable on the project; data access is
 // granted on the table's own IAM policy.

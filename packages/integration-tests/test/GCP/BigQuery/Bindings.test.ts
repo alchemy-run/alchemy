@@ -5,9 +5,15 @@ import * as Core from "@alchemy.run/test/Core";
 import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import BigQueryBindingsHost, {
   Analytics,
+  AuditMarkers,
+  GenDataset,
+  GenJob,
+  GenPolicy,
+  GenTable,
   Inserted,
   Listed,
   Queried,
@@ -23,6 +29,14 @@ const sharedStack = Core.scratchStack(testOptions, "BigQueryBindings");
 let baseUrl: string;
 let hostAccount: string;
 let dataset: { project: string; datasetId: string; location: string };
+let gen: {
+  datasetId: string;
+  table: string;
+  tableId: string;
+  jobId: string;
+  jobLocation: string;
+  auditMarkers: string;
+};
 let tables: {
   queried: string;
   listed: string;
@@ -75,12 +89,23 @@ const projectGrantsOf = (account: string) =>
           .map((binding) => ({
             role: binding.role,
             condition: binding.condition?.expression,
-          })),
+          }))
+          .sort((a, b) => (a.role ?? "").localeCompare(b.role ?? "")),
       ),
     );
 
-/** bigquery.jobs.create is only grantable on the project. */
-const JOB_USER = [{ role: "roles/bigquery.jobUser", condition: undefined }];
+/**
+ * Roles only grantable on the project: running jobs (Query, ReadTable,
+ * InsertJob), reading and cancelling jobs (jobs have no IAM policy),
+ * listing datasets, and undeleting one (a deleted dataset has no policy).
+ */
+const PROJECT_GRANTS = [
+  "roles/bigquery.admin",
+  "roles/bigquery.jobUser",
+  "roles/bigquery.resourceViewer",
+  "roles/bigquery.routineMetadataViewer",
+  "roles/bigquery.user",
+].map((role) => ({ role, condition: undefined }));
 
 /** Roles `account` holds on a table's own IAM policy. */
 const tableRolesOf = (table: string, account: string) =>
@@ -116,6 +141,10 @@ describe(
           Effect.gen(function* () {
             const host = yield* BigQueryBindingsHost;
             const analytics = yield* Analytics;
+            const genDataset = yield* GenDataset;
+            const genTable = yield* GenTable;
+            const genJob = yield* GenJob;
+            yield* GenPolicy;
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
@@ -123,6 +152,14 @@ describe(
                 project: analytics.project,
                 datasetId: analytics.datasetId,
                 location: analytics.location,
+              },
+              gen: {
+                datasetId: genDataset.datasetId,
+                table: genTable.name,
+                tableId: genTable.tableId,
+                jobId: genJob.jobId,
+                jobLocation: genJob.location,
+                auditMarkers: (yield* AuditMarkers).bucketName,
               },
               tables: {
                 // Not bound by any table binding: deployed for Query.
@@ -140,6 +177,7 @@ describe(
         hostAccount = out.serviceAccount!;
         dataset = out.dataset;
         tables = out.tables;
+        gen = out.gen;
       }),
       { timeout: 900_000 },
     );
@@ -164,7 +202,7 @@ describe(
               .filter((item) => item.userByEmail === hostAccount)
               .map((item) => LEGACY_DATASET_ROLES[item.role!] ?? item.role);
             expect(datasetRoles).toEqual(["roles/bigquery.dataViewer"]);
-            expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
+            expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
@@ -228,7 +266,7 @@ describe(
             expect(yield* tableRolesOf(tables.readRows, hostAccount)).toEqual([
               "roles/bigquery.dataViewer",
             ]);
-            expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
+            expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
@@ -266,12 +304,170 @@ describe(
             expect(yield* tableRolesOf(tables.readWrite, hostAccount)).toEqual([
               "roles/bigquery.dataEditor",
             ]);
-            expect(yield* projectGrantsOf(hostAccount)).toEqual(JOB_USER);
+            expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    describe("generated dataset bindings", () => {
+      test.provider(
+        "reads the dataset and its children, granted on the dataset only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              dataset: bigquery.Dataset;
+              tables: bigquery.TableList;
+              models: bigquery.ListModelsResponse;
+              routines: bigquery.ListRoutinesResponse;
+              missingModel: string;
+              patchMissingModel: string;
+              deleteMissingModel: string;
+              missingRoutine: string;
+              undelete: string;
+            }>(baseUrl, "dataset");
+            expect(out.dataset.datasetReference?.datasetId).toEqual(gen.datasetId);
+            expect((out.tables.tables ?? []).map((t) => t.tableReference?.tableId)).toEqual([
+              gen.tableId,
+            ]);
+            expect(out.models.models ?? []).toEqual([]);
+            expect(out.routines.routines ?? []).toEqual([]);
+            expect(out.missingModel).toEqual("NotFound");
+            expect(out.patchMissingModel).toEqual("NotFound");
+            expect(out.deleteMissingModel).toEqual("NotFound");
+            expect(out.missingRoutine).toEqual("NotFound");
+            expect(out.undelete).not.toEqual("succeeded");
+
+            const live = yield* bigquery.getDatasets({
+              projectId: dataset.project,
+              datasetId: gen.datasetId,
+            });
+            const roles = (live.access ?? [])
+              .filter((item) => item.userByEmail === hostAccount)
+              .map((item) => LEGACY_DATASET_ROLES[item.role!] ?? item.role)
+              .sort();
+            expect(roles).toEqual([
+              "roles/bigquery.dataEditor",
+              "roles/bigquery.metadataViewer",
+              "roles/bigquery.routineMetadataViewer",
+            ]);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("generated row access policy bindings", () => {
+      test.provider(
+        "reads then batch-deletes the table's policy, granted on the table only",
+        (_stack) =>
+          Effect.gen(function* () {
+            const policies = yield* expectProbe<{
+              list: bigquery.ListRowAccessPoliciesResponse;
+              get: bigquery.RowAccessPolicy;
+            }>(baseUrl, "policies");
+            expect(
+              (policies.list.rowAccessPolicies ?? []).map(
+                (policy) => policy.rowAccessPolicyReference?.policyId,
+              ),
+            ).toEqual(["gen_policy"]);
+            expect(policies.get.filterPredicate).toEqual("id = 'visible'");
+
+            yield* expectProbe(baseUrl, "batchDeletePolicies");
+            const after = yield* bigquery.listRowAccessPolicies({
+              projectId: dataset.project,
+              datasetId: gen.datasetId,
+              tableId: gen.tableId,
+            });
+            expect(after.rowAccessPolicies ?? []).toEqual([]);
+            expect(yield* tableRolesOf(gen.table, hostAccount)).toEqual([
+              "roles/bigquery.securityAdmin",
+            ]);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("generated job and project bindings", () => {
+      test.provider(
+        "reads and cancels the bound job, and lists and runs jobs in the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const job = yield* expectProbe<{
+              get: bigquery.Job;
+              cancel: bigquery.JobCancelResponse;
+            }>(baseUrl, "job");
+            expect(job.get.jobReference?.jobId).toEqual(gen.jobId);
+            expect(job.cancel.job?.status?.state).toEqual("DONE");
+
+            const project = yield* expectProbe<{
+              datasets: bigquery.DatasetList;
+              jobs: bigquery.JobList;
+              inserted: bigquery.Job;
+            }>(baseUrl, "project");
+            const datasetIds = (project.datasets.datasets ?? []).map(
+              (item) => item.datasetReference?.datasetId,
+            );
+            expect(datasetIds).toContain(gen.datasetId);
+            expect(datasetIds).toContain(dataset.datasetId);
+            expect(project.jobs.jobs?.length ?? 0).toBeGreaterThan(0);
+            expect(project.inserted.configuration?.query?.query).toEqual("SELECT 2 AS two");
+            expect(yield* projectGrantsOf(hostAccount)).toEqual(PROJECT_GRANTS);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("audit logs", () => {
+      test.provider(
+        "delivers the dataset's, table's and job's audit entries",
+        (_stack) =>
+          Effect.gen(function* () {
+            const cases = [
+              {
+                key: "dataset",
+                name: `projects/${dataset.project}/datasets/${gen.datasetId}`,
+                trigger: bigquery.patchDatasets({
+                  projectId: dataset.project,
+                  datasetId: gen.datasetId,
+                  body: { description: "audited" },
+                }),
+              },
+              {
+                key: "table",
+                name: gen.table,
+                trigger: bigquery.patchTables({
+                  projectId: dataset.project,
+                  datasetId: gen.datasetId,
+                  tableId: gen.tableId,
+                  body: { description: "audited" },
+                }),
+              },
+              {
+                key: "job",
+                name: `projects/${dataset.project}/jobs/${gen.jobId}`,
+                trigger: bigquery.cancelJobs({
+                  projectId: dataset.project,
+                  jobId: gen.jobId,
+                  location: gen.jobLocation,
+                }),
+              },
+            ];
+            for (const { key, name, trigger } of cases) {
+              const entry = yield* expectAuditEntry({
+                bucket: gen.auditMarkers,
+                key,
+                method: "",
+                trigger,
+              });
+              expect(entry.serviceName).toEqual("bigquery.googleapis.com");
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName).startsWith(path(name))).toEqual(true);
+            }
+          }),
+        { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], timeout: 900_000 },
       );
     });
   },

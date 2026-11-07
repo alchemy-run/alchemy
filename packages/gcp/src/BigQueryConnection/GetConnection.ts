@@ -1,7 +1,9 @@
-import type * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
+import * as bigqueryconnection from "@distilled.cloud/gcp/bigqueryconnection_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConnectionHttpBinding } from "./BindingHttp.ts";
 import type { Connection } from "./Connection.ts";
 
 export interface GetConnectionRequest extends Omit<
@@ -42,3 +44,21 @@ export interface GetConnection extends Binding.Service<
 > {}
 
 export const GetConnection = Binding.Service<GetConnection>("GCP.BigQueryConnection.GetConnection");
+
+/**
+ * HTTP implementation of {@link GetConnection}.
+ *
+ * @layer
+ * @provides GCP.BigQueryConnection.GetConnection
+ */
+export const GetConnectionHttp = Layer.effect(
+  GetConnection,
+  makeConnectionHttpBinding({
+    tag: "GCP.BigQueryConnection.GetConnection",
+    iam: {
+      role: "roles/bigquery.connectionUser",
+      on: "bigqueryconnection.connection",
+    },
+    operation: bigqueryconnection.getProjectsLocationsConnections,
+  }),
+);

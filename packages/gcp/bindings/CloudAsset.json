@@ -1,0 +1,19 @@
+{
+  "discovery": "cloudasset-v1",
+  "module": "cloudasset_v1",
+  "resources": {
+    "Feed": {
+      "pattern": "*/*/feeds/*"
+    },
+    "SavedQuery": {
+      "pattern": "*/*/savedQueries/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Feed": "ProbeFeed",
+      "SavedQuery": "ProbeSavedQuery"
+    },
+    "untestable": {}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "discovery": "redis-v1",
+  "module": "redis_v1",
+  "resources": {
+    "AclPolicy": {
+      "pattern": "projects/*/locations/*/aclPolicies/*"
+    },
+    "Instance": {
+      "pattern": "projects/*/locations/*/instances/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Instance": "Cache",
+      "AclPolicy": "Acl"
+    }
+  }
+}

@@ -1,7 +1,11 @@
-import type * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as storagetransfer from "@distilled.cloud/gcp/storagetransfer_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeTransferJobHttpBinding } from "./BindingHttp.ts";
 import type { TransferJob } from "./TransferJob.ts";
 
 export interface RunTransferJobRequest extends Omit<
@@ -46,3 +50,27 @@ export interface RunTransferJob extends Binding.Service<
 > {}
 
 export const RunTransferJob = Binding.Service<RunTransferJob>("GCP.StorageTransfer.RunTransferJob");
+
+/**
+ * HTTP implementation of {@link RunTransferJob}.
+ *
+ * @layer
+ * @provides GCP.StorageTransfer.RunTransferJob
+ */
+export const RunTransferJobHttp: Layer.Layer<
+  RunTransferJob,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
+  RunTransferJob,
+  makeTransferJobHttpBinding<
+    storagetransfer.RunTransferJobsRequest,
+    storagetransfer.Operation,
+    storagetransfer.RunTransferJobsError
+  >({
+    tag: "GCP.StorageTransfer.RunTransferJob",
+    iam: { role: "roles/storagetransfer.user" },
+    operation: storagetransfer.runTransferJobs,
+    projectInBody: true,
+  }),
+);

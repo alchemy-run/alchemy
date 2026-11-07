@@ -1,7 +1,9 @@
-import type * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
+import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNamedHttpBinding } from "./BindingHttp.ts";
 import type { ReasoningEngine } from "./ReasoningEngine.ts";
 
 export interface QueryReasoningEngineRequest extends Omit<
@@ -45,4 +47,24 @@ export interface QueryReasoningEngine extends Binding.Service<
 
 export const QueryReasoningEngine = Binding.Service<QueryReasoningEngine>(
   "GCP.AIPlatform.QueryReasoningEngine",
+);
+
+/**
+ * HTTP implementation of {@link QueryReasoningEngine}.
+ *
+ * @layer
+ * @provides GCP.AIPlatform.QueryReasoningEngine
+ */
+export const QueryReasoningEngineHttp = Layer.effect(
+  QueryReasoningEngine,
+  makeNamedHttpBinding<
+    ReasoningEngine,
+    aiplatform.QueryReasoningEnginesRequest,
+    aiplatform.GoogleCloudAiplatformV1QueryReasoningEngineResponse,
+    aiplatform.QueryReasoningEnginesError
+  >({
+    tag: "GCP.AIPlatform.QueryReasoningEngine",
+    operation: aiplatform.queryReasoningEngines,
+    iam: { role: "roles/aiplatform.viewer" },
+  }),
 );

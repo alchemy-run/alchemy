@@ -9,7 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
-import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -136,8 +136,8 @@ export interface MembershipsFeatureLookup {
  * A GKE Hub MembershipFeature — the per-membership settings for a Fleet
  * Feature such as Config Management or Service Mesh.
  *
- * Changing `featureId`, `membership`, or `location` replaces the
- * feature. Spec and labels update in place.
+ * Changing `featureId`, `membership`, `location` or `labels` replaces the
+ * feature (labels are set only at create). The spec updates in place.
  *
  * ### Creating a Membership Feature
  * **Example:** Config Management on a membership
@@ -166,9 +166,9 @@ export interface MembershipsFeatureLookup {
  * ```
  *
  * ### Updating a Membership Feature
- * **Example:** Spec and labels
+ * **Example:** A new spec
  * ```typescript
- * // Same logical id, changed props: updated in place.
+ * // Same logical id, changed spec: updated in place (changing labels replaces it).
  * const feature = yield* GCP.GKEHub.MembershipsFeature("ConfigSync", {
  *   membership: membership.name,
  *   featureId: "configmanagement",
@@ -177,7 +177,6 @@ export interface MembershipsFeatureLookup {
  *       configSync: { enabled: true, preventDrift: true },
  *     },
  *   },
- *   labels: { env: "prod", team: "platform" },
  * });
  * ```
  *
@@ -279,6 +278,11 @@ export const MembershipsFeatureProvider = () =>
         nextLocation: location,
         previousParent: olds?.membership ?? output?.membership,
         nextParent: membershipName(news.membership, env.project, location),
+        // Labels are set only at create: an update takes `spec` alone
+        // ("update_mask is invalid: only 'spec' is supported").
+        extra:
+          (olds?.labels ?? output?.labels) !== undefined &&
+          fingerprint(olds?.labels ?? output?.labels ?? {}) !== fingerprint(news.labels ?? {}),
       });
     }),
 
@@ -358,23 +362,16 @@ export const MembershipsFeatureProvider = () =>
         return yield* new ResourceNotResolved({ resourceName: name });
       }
 
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
+      // Only `spec` updates in place; a label change replaces the feature.
       const specChanged =
         news.spec !== undefined && fingerprint(current.spec) !== fingerprint(news.spec);
-      const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
-        specChanged && "spec",
-      ]);
+      const mask = fieldMask([specChanged && "spec"]);
 
       if (mask.length > 0) {
         const operation = yield* gkehub.patchProjectsLocationsMembershipsFeatures({
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            spec: news.spec,
-          },
+          body: { spec: news.spec },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

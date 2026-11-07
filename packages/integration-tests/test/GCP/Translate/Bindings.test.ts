@@ -9,7 +9,6 @@ import { callProbe, expectProbe } from "../bindingHost.ts";
 import TranslateBindingsHost, {
   Dataset,
   EnEs,
-  glossaryName,
   Hello,
   modelDataset,
 } from "./fixtures/bindings-host.ts";
@@ -64,7 +63,7 @@ describe(
               dataset: dataset.name,
               project: dataset.project,
               model: modelDataset ? (yield* EnEs).name : undefined,
-              entry: glossaryName ? (yield* Hello).name : undefined,
+              entry: (yield* Hello).name,
             };
           }),
         );
@@ -155,7 +154,7 @@ describe(
       );
     });
 
-    describe.skipIf(!glossaryName)("GetGlossariesGlossaryEntry", () => {
+    describe("GetGlossariesGlossaryEntry", () => {
       test.provider(
         "reads the glossary entry as the host's service account",
         (_stack) =>

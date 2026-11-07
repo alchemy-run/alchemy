@@ -1,0 +1,10 @@
+{
+  "discovery": "places-v1",
+  "module": "places_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["places.googleapis.com"]
+  }
+}

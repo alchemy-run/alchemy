@@ -2,6 +2,8 @@ import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeReadSubscriptionBinding } from "./AccessHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 export interface PullSubscriptionOptions {
@@ -84,3 +86,12 @@ export interface ReadSubscription extends Binding.Service<
 > {}
 
 export const ReadSubscription = Binding.Service<ReadSubscription>("GCP.PubSub.ReadSubscription");
+
+/**
+ * HTTP implementation of {@link ReadSubscription} over the Pub/Sub REST API.
+ *
+ * @layer
+ * @provides GCP.PubSub.ReadSubscription
+ * @category PubSub
+ */
+export const ReadSubscriptionHttp = Layer.effect(ReadSubscription, makeReadSubscriptionBinding);

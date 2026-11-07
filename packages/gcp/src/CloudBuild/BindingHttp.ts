@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -20,7 +20,7 @@ export const makeRepositoryHttpBinding = <I extends { repository: string }, A, E
     return Effect.fn(function* <T extends Repository>(repository: T) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${repository})`({
-          iam: [grantFor(options.iam, repository.name)],
+          iam: grantsFor(options.iam, repository.name),
         });
       }
       const name = yield* repository.name;

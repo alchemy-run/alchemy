@@ -3,7 +3,7 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam } from "../HttpBinding.ts";
 import type { AdminReservation } from "./AdminReservation.ts";
 import type { AdminSubscription } from "./AdminSubscription.ts";
 import type { AdminTopic } from "./AdminTopic.ts";
@@ -33,7 +33,7 @@ export const makeReservationHttpBinding = <I extends { name?: string }, A, E>(op
     return Effect.fn(function* (reservation: AdminReservation) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${reservation})`({
-          iam: [grantFor(options.iam, reservation.name)],
+          iam: grantsFor(options.iam, reservation.name),
         });
       }
       const name = yield* reservation.name;
@@ -63,7 +63,7 @@ export const makeTopicNameHttpBinding = <I extends { name?: string }, A, E>(opti
     return Effect.fn(function* (topic: AdminTopic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${topic})`({
-          iam: [grantFor(options.iam, topic.name)],
+          iam: grantsFor(options.iam, topic.name),
         });
       }
       const name = yield* topic.name;
@@ -91,7 +91,7 @@ export const makeTopicStatsHttpBinding = <I extends { topic: string }, A, E>(opt
     return Effect.fn(function* (topic: AdminTopic) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${topic})`({
-          iam: [grantFor(options.iam, topic.name)],
+          iam: grantsFor(options.iam, topic.name),
         });
       }
       const name = yield* topic.name;
@@ -126,7 +126,7 @@ export const makeSubscriptionHttpBinding = <
     return Effect.fn(function* (subscription: AdminSubscription) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${subscription})`({
-          iam: [grantFor(options.iam, subscription.name)],
+          iam: grantsFor(options.iam, subscription.name),
         });
       }
       const name = yield* subscription.name;

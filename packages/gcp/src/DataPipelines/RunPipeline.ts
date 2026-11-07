@@ -1,7 +1,11 @@
-import type * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makePipelineHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface RunPipelineRequest extends Omit<
@@ -43,3 +47,23 @@ export interface RunPipeline extends Binding.Service<
 > {}
 
 export const RunPipeline = Binding.Service<RunPipeline>("GCP.DataPipelines.RunPipeline");
+
+/**
+ * HTTP implementation of {@link RunPipeline}.
+ *
+ * @layer
+ * @provides GCP.DataPipelines.RunPipeline
+ */
+export const RunPipelineHttp: Layer.Layer<RunPipeline, never, Credentials | HttpClient.HttpClient> =
+  Layer.effect(
+    RunPipeline,
+    makePipelineHttpBinding<
+      datapipelines.RunProjectsLocationsPipelinesRequest,
+      datapipelines.GoogleCloudDatapipelinesV1RunPipelineResponse,
+      datapipelines.RunProjectsLocationsPipelinesError
+    >({
+      tag: "GCP.DataPipelines.RunPipeline",
+      iam: { role: "roles/datapipelines.invoker" },
+      operation: datapipelines.runProjectsLocationsPipelines,
+    }),
+  );

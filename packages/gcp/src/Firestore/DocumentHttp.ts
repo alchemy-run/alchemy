@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 
 /**
@@ -18,7 +18,7 @@ export const makeDocumentHttpBinding = <I extends { name: string }, A, E>(option
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${database})`({
-          iam: [grantFor(options.iam, database.name)],
+          iam: grantsFor(options.iam, database.name),
         });
       }
       const name = yield* database.name;

@@ -1,0 +1,10 @@
+{
+  "discovery": "addressvalidation-v1",
+  "module": "addressvalidation_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["addressvalidation.googleapis.com"]
+  }
+}

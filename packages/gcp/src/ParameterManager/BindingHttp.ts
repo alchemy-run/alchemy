@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { ParametersVersion } from "./ParametersVersion.ts";
 
 /**
@@ -19,7 +19,7 @@ export const makeParameterVersionHttpBinding = <I, A, E, Req = void>(options: {
     return Effect.fn(function* (version: ParametersVersion) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${version})`({
-          iam: [grantFor(options.iam, version.name)],
+          iam: grantsFor(options.iam, version.name),
         });
       }
       const name = yield* version.name;

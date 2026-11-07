@@ -1,7 +1,9 @@
-import type * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
+import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNamedHttpBinding } from "./BindingHttp.ts";
 import type { ReasoningEnginesSandboxEnvironment } from "./ReasoningEnginesSandboxEnvironment.ts";
 
 export interface PauseSandboxEnvironmentRequest extends Omit<
@@ -43,4 +45,24 @@ export interface PauseSandboxEnvironment extends Binding.Service<
 
 export const PauseSandboxEnvironment = Binding.Service<PauseSandboxEnvironment>(
   "GCP.AIPlatform.PauseSandboxEnvironment",
+);
+
+/**
+ * HTTP implementation of {@link PauseSandboxEnvironment}.
+ *
+ * @layer
+ * @provides GCP.AIPlatform.PauseSandboxEnvironment
+ */
+export const PauseSandboxEnvironmentHttp = Layer.effect(
+  PauseSandboxEnvironment,
+  makeNamedHttpBinding<
+    ReasoningEnginesSandboxEnvironment,
+    aiplatform.PauseReasoningEnginesSandboxEnvironmentsRequest,
+    aiplatform.GoogleLongrunningOperation,
+    aiplatform.PauseReasoningEnginesSandboxEnvironmentsError
+  >({
+    tag: "GCP.AIPlatform.PauseSandboxEnvironment",
+    operation: aiplatform.pauseReasoningEnginesSandboxEnvironments,
+    iam: { role: "roles/aiplatform.user" },
+  }),
 );

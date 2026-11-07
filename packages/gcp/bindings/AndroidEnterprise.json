@@ -1,0 +1,21 @@
+{
+  "discovery": "androidenterprise-v1",
+  "module": "androidenterprise_v1",
+  "resources": {
+    "Storelayoutcluster": {
+      "pattern": "androidenterprise/v1/enterprises/*/storeLayout/pages/*/clusters/*",
+      "_flat": true
+    },
+    "Storelayoutpage": {
+      "pattern": "androidenterprise/v1/enterprises/*/storeLayout/pages/*",
+      "_flat": true
+    },
+    "Webapp": {
+      "pattern": "androidenterprise/v1/enterprises/*/webApps/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

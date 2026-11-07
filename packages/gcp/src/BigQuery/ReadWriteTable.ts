@@ -1,7 +1,9 @@
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { ReadTableClient } from "./ReadTable.ts";
 import type { Table } from "./Table.ts";
+import { makeBigQueryTableBinding, readWriteTableIam } from "./TableHttp.ts";
 import type { WriteTableClient } from "./WriteTable.ts";
 
 export interface ReadWriteTableClient extends ReadTableClient, WriteTableClient {}
@@ -35,3 +37,22 @@ export interface ReadWriteTable extends Binding.Service<
 > {}
 
 export const ReadWriteTable = Binding.Service<ReadWriteTable>("GCP.BigQuery.ReadWriteTable");
+
+/**
+ * HTTP implementation of {@link ReadWriteTable} over the BigQuery REST API.
+ *
+ * @layer
+ * @provides GCP.BigQuery.ReadWriteTable
+ * @category BigQuery
+ */
+export const ReadWriteTableHttp = Layer.effect(
+  ReadWriteTable,
+  makeBigQueryTableBinding({
+    tag: "GCP.BigQuery.ReadWriteTable",
+    iam: readWriteTableIam,
+    makeClient: (helpers, table) => ({
+      ...helpers.makeRead(table),
+      ...helpers.makeWrite(table),
+    }),
+  }),
+);

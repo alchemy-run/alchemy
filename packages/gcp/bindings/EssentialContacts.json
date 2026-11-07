@@ -1,0 +1,24 @@
+{
+  "discovery": "essentialcontacts-v1",
+  "module": "essentialcontacts_v1",
+  "resources": {
+    "Contact": {
+      "pattern": "projects/*/contacts/*"
+    },
+    "FolderContact": {
+      "pattern": "folders/*/contacts/*"
+    },
+    "OrganizationContact": {
+      "pattern": "organizations/*/contacts/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Contact": "ProbeContact"
+    },
+    "untestable": {
+      "FolderContact": "Folder contacts need a folder the test identity can manage contacts on. (GOOGLE_FOLDER_ID)",
+      "OrganizationContact": "Organization contacts need org-level Essential Contacts permissions the testing service account does not have (calls fail with Forbidden). Set (GOOGLE_ORGANIZATION_ID)"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "discovery": "composer-v1",
+  "module": "composer_v1",
+  "resources": {
+    "Environment": {
+      "pattern": "projects/*/locations/*/environments/*"
+    },
+    "EnvironmentsUserWorkloadsConfigMap": {
+      "pattern": "projects/*/locations/*/environments/*/userWorkloadsConfigMaps/*"
+    },
+    "EnvironmentsUserWorkloadsSecret": {
+      "pattern": "projects/*/locations/*/environments/*/userWorkloadsSecrets/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Environment": "Airflow",
+      "EnvironmentsUserWorkloadsConfigMap": "TaskConfig",
+      "EnvironmentsUserWorkloadsSecret": "TaskSecret"
+    }
+  }
+}

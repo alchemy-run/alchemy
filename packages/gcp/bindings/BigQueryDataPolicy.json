@@ -1,0 +1,12 @@
+{
+  "discovery": "bigquerydatapolicy-v2",
+  "module": "bigquerydatapolicy_v2",
+  "resources": {
+    "DataPolicy": {
+      "pattern": "projects/*/locations/*/dataPolicies/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

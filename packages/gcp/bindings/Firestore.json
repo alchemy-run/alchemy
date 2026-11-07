@@ -1,0 +1,52 @@
+{
+  "discovery": "firestore-v1",
+  "module": "firestore_v1",
+  "permissionService": "datastore",
+  "resources": {
+    "Database": {
+      "pattern": "projects/*/databases/*",
+      "scopeByCondition": true
+    }
+  },
+  "names": {
+    "BatchDocumentGet": "BatchGetDocuments",
+    "BatchDocumentWrite": "BatchWriteDocuments",
+    "BeginDocumentTransaction": "BeginTransaction",
+    "BulkDatabaseDeleteDocuments": "BulkDeleteDocuments",
+    "CommitDatabaseDocument": "Commit",
+    "RollbackDatabaseDocument": "Rollback",
+    "ExecuteDocumentPipeline": "ExecutePipeline",
+    "PartitionDocumentQuery": "PartitionQuery",
+    "RunDocumentAggregationQuery": "RunAggregationQuery",
+    "ListDocumentCollectionIds": "ListCollectionIds",
+    "ExportDatabaseDocuments": "ExportDocuments",
+    "ImportDatabaseDocuments": "ImportDocuments"
+  },
+  "append": {
+    "firestore.projects.databases.documents.partitionQuery": "documents",
+    "firestore.projects.databases.documents.runAggregationQuery": "documents",
+    "firestore.projects.databases.documents.listCollectionIds": "documents",
+    "firestore.projects.databases.documents.listDocuments": "documents"
+  },
+  "skip": {
+    "firestore.projects.databases.documents.listen": "a streaming (WebChannel) RPC, not a request/response call",
+    "firestore.projects.databases.documents.write": "a streaming (WebChannel) RPC, not a request/response call",
+    "firestore.projects.databases.changeStreams.create": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.delete": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.list": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.changeStreams.get": "checks a permission no predefined Firestore role grants (preview)",
+    "firestore.projects.databases.clone": "creates long-lived infrastructure that belongs in a resource, not a runtime call (a new database)",
+    "firestore.projects.databases.restore": "creates long-lived infrastructure that belongs in a resource, not a runtime call (a new database)"
+  },
+  "projectGrant": {
+    "firestore.projects.databases.userCreds.get": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.enable": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.disable": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.resetPassword": "IAM Conditions on `resource.name` don't match individual user credentials",
+    "firestore.projects.databases.userCreds.delete": "IAM Conditions on `resource.name` don't match individual user credentials"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

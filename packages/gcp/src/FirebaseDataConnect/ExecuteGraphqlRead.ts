@@ -1,7 +1,9 @@
-import type * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
+import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface ExecuteGraphqlReadRequest extends Omit<
@@ -46,4 +48,19 @@ export interface ExecuteGraphqlRead extends Binding.Service<
 
 export const ExecuteGraphqlRead = Binding.Service<ExecuteGraphqlRead>(
   "GCP.FirebaseDataConnect.ExecuteGraphqlRead",
+);
+
+/**
+ * HTTP implementation of {@link ExecuteGraphqlRead}.
+ *
+ * @layer
+ * @provides GCP.FirebaseDataConnect.ExecuteGraphqlRead
+ */
+export const ExecuteGraphqlReadHttp = Layer.effect(
+  ExecuteGraphqlRead,
+  makeServiceHttpBinding({
+    tag: "GCP.FirebaseDataConnect.ExecuteGraphqlRead",
+    iam: { role: "roles/firebasedataconnect.dataViewer" },
+    operation: firebasedataconnect.executeGraphqlReadProjectsLocationsServices,
+  }),
 );

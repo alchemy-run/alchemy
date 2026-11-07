@@ -1,0 +1,27 @@
+{
+  "discovery": "alloydb-v1",
+  "module": "alloydb_v1",
+  "resources": {
+    "Backup": {
+      "pattern": "projects/*/locations/*/backups/*"
+    },
+    "Cluster": {
+      "pattern": "projects/*/locations/*/clusters/*"
+    },
+    "ClustersUser": {
+      "pattern": "projects/*/locations/*/clusters/*/users/*"
+    },
+    "Instance": {
+      "pattern": "projects/*/locations/*/clusters/*/instances/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Cluster": "Db",
+      "Instance": "Primary",
+      "Backup": "Snapshot",
+      "ClustersUser": "AppUser"
+    },
+    "location": "us-west1"
+  }
+}

@@ -1,9 +1,10 @@
-import type * as datastore from "@distilled.cloud/gcp/datastore_v1";
+import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "../Firestore/Database.ts";
-import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
+import { type DatastoreDatabaseRequest, makeDatastoreHttpBinding } from "./BindingHttp.ts";
 
 /** Request for {@link RunQuery}; project and database come from the bound database. */
 export type RunQueryRequest = DatastoreDatabaseRequest<datastore.RunQueryProjectsRequest>;
@@ -45,3 +46,18 @@ export interface RunQuery extends Binding.Service<
 > {}
 
 export const RunQuery = Binding.Service<RunQuery>("GCP.Datastore.RunQuery");
+
+/**
+ * HTTP implementation of {@link RunQuery}.
+ *
+ * @layer
+ * @provides GCP.Datastore.RunQuery
+ */
+export const RunQueryHttp = Layer.effect(
+  RunQuery,
+  makeDatastoreHttpBinding({
+    tag: "GCP.Datastore.RunQuery",
+    iam: { role: "roles/datastore.viewer", scopeByCondition: true },
+    operation: datastore.runQueryProjects,
+  }),
+);

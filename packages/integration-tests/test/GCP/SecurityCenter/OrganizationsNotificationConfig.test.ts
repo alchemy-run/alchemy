@@ -50,7 +50,7 @@ test.provider(
           name: `${organization}/notificationConfigs/alchemy-missing`,
         }),
       );
-      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),

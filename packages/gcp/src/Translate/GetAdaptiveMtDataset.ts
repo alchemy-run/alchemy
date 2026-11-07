@@ -1,8 +1,10 @@
-import type * as translate from "@distilled.cloud/gcp/translate_v3";
+import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdaptiveMtDataset } from "./AdaptiveMtDataset.ts";
+import { makeAdaptiveMtDatasetHttpBinding } from "./BindingHttp.ts";
 
 export interface GetAdaptiveMtDatasetRequest extends Omit<
   translate.GetProjectsLocationsAdaptiveMtDatasetsRequest,
@@ -43,4 +45,19 @@ export interface GetAdaptiveMtDataset extends Binding.Service<
 
 export const GetAdaptiveMtDataset = Binding.Service<GetAdaptiveMtDataset>(
   "GCP.Translate.GetAdaptiveMtDataset",
+);
+
+/**
+ * HTTP implementation of {@link GetAdaptiveMtDataset}.
+ *
+ * @layer
+ * @provides GCP.Translate.GetAdaptiveMtDataset
+ */
+export const GetAdaptiveMtDatasetHttp = Layer.effect(
+  GetAdaptiveMtDataset,
+  makeAdaptiveMtDatasetHttpBinding({
+    tag: "GCP.Translate.GetAdaptiveMtDataset",
+    operation: translate.getProjectsLocationsAdaptiveMtDatasets,
+    iam: { role: "roles/cloudtranslate.viewer" },
+  }),
 );

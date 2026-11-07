@@ -1,7 +1,9 @@
-import type * as speech from "@distilled.cloud/gcp/speech_v1";
+import * as speech from "@distilled.cloud/gcp/speech_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePhraseSetHttpBinding } from "./BindingHttp.ts";
 import type { PhraseSet } from "./PhraseSet.ts";
 
 export interface GetPhraseSetRequest extends Omit<
@@ -41,3 +43,24 @@ export interface GetPhraseSet extends Binding.Service<
 > {}
 
 export const GetPhraseSet = Binding.Service<GetPhraseSet>("GCP.Speech.GetPhraseSet");
+
+/**
+ * HTTP implementation of {@link GetPhraseSet}.
+ *
+ * @layer
+ * @provides GCP.Speech.GetPhraseSet
+ */
+export const GetPhraseSetHttp = Layer.effect(
+  GetPhraseSet,
+  makePhraseSetHttpBinding<
+    speech.GetProjectsLocationsPhraseSetsRequest,
+    speech.PhraseSet,
+    speech.GetProjectsLocationsPhraseSetsError,
+    GetPhraseSetRequest
+  >({
+    tag: "GCP.Speech.GetPhraseSet",
+    operation: speech.getProjectsLocationsPhraseSets,
+    iam: { role: "roles/speech.client" },
+    toInput: (name) => ({ name }),
+  }),
+);

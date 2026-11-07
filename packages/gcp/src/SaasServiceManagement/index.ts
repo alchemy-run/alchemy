@@ -6,3 +6,4 @@ export * from "./Tenant.ts";
 export * from "./Unit.ts";
 export * from "./UnitKind.ts";
 export * from "./UnitOperation.ts";
+export * from "./generated.ts";

@@ -1,7 +1,11 @@
-import type * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeCollectorHttpBinding } from "./BindingHttp.ts";
 import type { Collector } from "./Collector.ts";
 
 export interface PauseCollectorRequest extends Omit<
@@ -44,4 +48,27 @@ export interface PauseCollector extends Binding.Service<
 
 export const PauseCollector = Binding.Service<PauseCollector>(
   "GCP.RapidMigrationAssessment.PauseCollector",
+);
+
+/**
+ * HTTP implementation of {@link PauseCollector}.
+ *
+ * @layer
+ * @provides GCP.RapidMigrationAssessment.PauseCollector
+ */
+export const PauseCollectorHttp: Layer.Layer<
+  PauseCollector,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
+  PauseCollector,
+  makeCollectorHttpBinding<
+    rma.PauseProjectsLocationsCollectorsRequest,
+    rma.Operation,
+    rma.PauseProjectsLocationsCollectorsError
+  >({
+    tag: "GCP.RapidMigrationAssessment.PauseCollector",
+    iam: { role: "roles/rma.runner" },
+    operation: rma.pauseProjectsLocationsCollectors,
+  }),
 );

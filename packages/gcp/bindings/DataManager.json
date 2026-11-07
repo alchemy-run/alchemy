@@ -1,0 +1,8 @@
+{
+  "discovery": "datamanager-v1",
+  "module": "datamanager_v1",
+  "resources": {},
+  "probes": {
+    "resources": {}
+  }
+}

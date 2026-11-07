@@ -1,7 +1,9 @@
-import type * as composer from "@distilled.cloud/gcp/composer_v1";
+import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEnvironmentHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 export interface ExecuteAirflowCommandRequest extends Omit<
@@ -52,4 +54,24 @@ export interface ExecuteAirflowCommand extends Binding.Service<
 
 export const ExecuteAirflowCommand = Binding.Service<ExecuteAirflowCommand>(
   "GCP.Composer.ExecuteAirflowCommand",
+);
+
+/**
+ * HTTP implementation of {@link ExecuteAirflowCommand}.
+ *
+ * Grants `roles/composer.editor` on the project because
+ * `composer.environments.executeAirflowCommand` is in no narrower
+ * predefined role and Composer environments have no resource-level IAM.
+ *
+ * @layer
+ * @provides GCP.Composer.ExecuteAirflowCommand
+ */
+export const ExecuteAirflowCommandHttp = Layer.effect(
+  ExecuteAirflowCommand,
+  makeEnvironmentHttpBinding({
+    tag: "GCP.Composer.ExecuteAirflowCommand",
+    iam: { role: "roles/composer.editor" },
+    nameKey: "environment",
+    operation: composer.executeAirflowCommandProjectsLocationsEnvironments,
+  }),
 );

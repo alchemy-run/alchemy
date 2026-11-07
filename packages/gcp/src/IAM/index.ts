@@ -5,3 +5,4 @@ export * from "./ServiceAccount.ts";
 export * from "./ServiceAccountKey.ts";
 export * from "./WorkloadIdentityPool.ts";
 export * from "./WorkloadIdentityProvider.ts";
+export * from "./generated.ts";

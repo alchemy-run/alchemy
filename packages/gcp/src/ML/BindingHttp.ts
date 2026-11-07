@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { Model } from "./Model.ts";
 import type { ModelsVersion } from "./ModelsVersion.ts";
 
@@ -19,7 +19,7 @@ export const makeModelHttpBinding = <I extends { name?: string }, A, E>(options:
     return Effect.fn(function* (model: Model) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${model})`({
-          iam: [grantFor(options.iam, model.name)],
+          iam: grantsFor(options.iam, model.name),
         });
       }
       const name = yield* model.name;
@@ -47,7 +47,7 @@ export const makeVersionHttpBinding = <I extends { name?: string }, A, E>(option
     return Effect.fn(function* (version: ModelsVersion) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${version})`({
-          iam: [grantFor(options.iam, version.model)],
+          iam: grantsFor(options.iam, version.model),
         });
       }
       const name = yield* version.name;

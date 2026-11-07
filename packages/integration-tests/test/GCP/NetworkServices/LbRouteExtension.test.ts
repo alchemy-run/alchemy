@@ -6,7 +6,9 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { InternalAlb } from "../internalAlb.ts";
 import { expectFound } from "../lookup.ts";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -89,23 +91,23 @@ test.provider(
   },
 );
 
-test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENSION)(
+// The extension sits on an internal Application Load Balancer, which takes
+// minutes to build, so `--fast` skips the lifecycle.
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an lb route extension",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const forwardingRule = process.env.GCP_TEST_LB_ROUTE_EXTENSION_TARGET!;
-      const service = process.env.GCP_TEST_LB_ROUTE_EXTENSION_SERVICE!;
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const alb = yield* InternalAlb;
           return yield* GCP.NetworkServices.LbRouteExtension("Route", {
             location: "us-central1",
             description: "lb route a",
             labels: { env: "test" },
             loadBalancingScheme: "INTERNAL_MANAGED",
-            forwardingRules: [forwardingRule],
+            forwardingRules: [alb.rule],
             extensionChains: [
               {
                 name: "chain1",
@@ -114,7 +116,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
                   {
                     name: "ext1",
                     authority: "ext1.example.com",
-                    service,
+                    service: alb.callout,
                     timeout: "0.1s",
                     supportedEvents: ["REQUEST_HEADERS"],
                   },
@@ -144,13 +146,14 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const alb = yield* InternalAlb;
           return yield* GCP.NetworkServices.LbRouteExtension("Route", {
             lbRouteExtensionId: created.lbRouteExtensionId,
             location: "us-central1",
             description: "lb route b",
             labels: { env: "prod", role: "route" },
             loadBalancingScheme: "INTERNAL_MANAGED",
-            forwardingRules: [forwardingRule],
+            forwardingRules: [alb.rule],
             extensionChains: [
               {
                 name: "chain1",
@@ -159,7 +162,7 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
                   {
                     name: "ext1",
                     authority: "ext1.example.com",
-                    service,
+                    service: alb.callout,
                     timeout: "0.2s",
                     failOpen: true,
                     supportedEvents: ["REQUEST_HEADERS"],
@@ -179,9 +182,9 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(withNetworkSlot, logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
-    timeout: 120_000,
+    timeout: 900_000,
   },
 );

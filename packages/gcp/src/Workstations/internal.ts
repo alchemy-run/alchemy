@@ -198,11 +198,13 @@ export const replaceOnIdentity = (input: {
 };
 
 /**
- * Wait for a Cloud Workstations long-running operation. Cluster creates and deletes take up to ~20 minutes.
+ * Wait for a Cloud Workstations long-running operation. Cluster creates
+ * take ~3 minutes and deletes usually ~15, but a delete observed on
+ * 2026-10-29 was still running after 30.
  */
 export const waitForOperation = (operation: workstations.Operation) =>
   waitForGcpOperation(operation, (name) => workstations.getProjectsLocationsOperations({ name }), {
-    budget: "30 minutes",
+    budget: "60 minutes",
   });
 
 export const waitUntilExists = <A, E extends object, R>(
