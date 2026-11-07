@@ -31,6 +31,11 @@ export interface AssetFileOption {
   ignore?: string | string[];
 }
 
+export interface AssetFileMetadata {
+  contentType: string;
+  cacheControl: string;
+}
+
 export interface AssetDeploymentProps {
   /**
    * Destination bucket.
@@ -97,6 +102,12 @@ export interface AssetDeployment extends Resource<
      * `alchemy drift` detect out-of-band edits and deletions.
      */
     objectHashes?: Record<string, string>;
+    /**
+     * `Content-Type` and `Cache-Control` each file was uploaded with, keyed by
+     * its path in `files`. A file whose desired metadata differs from this
+     * record is uploaded again even when its body is unchanged.
+     */
+    fileMetadata?: Record<string, AssetFileMetadata>;
     /**
      * With `purge`, the keys under the prefix that are not part of the
      * deployment, as observed. Lets `alchemy drift` detect objects added
@@ -172,7 +183,10 @@ export const AssetDeploymentProvider = () =>
   Provider.effect(
     AssetDeployment,
     Effect.gen(function* () {
-      const reconcileSync = Effect.fn(function* (news: AssetDeploymentProps) {
+      const reconcileSync = Effect.fn(function* (
+        news: AssetDeploymentProps,
+        previous: AssetDeployment["Attributes"] | undefined,
+      ) {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const bucketName = news.bucket.bucketName;
@@ -184,6 +198,10 @@ export const AssetDeploymentProvider = () =>
         const root = path.resolve(initialCwd, news.sourcePath);
         const files = yield* walkFiles(root);
         const observed = yield* listObjects(bucketName, prefix ? `${prefix}/` : prefix);
+        const uploadedMetadata =
+          previous?.bucketName === bucketName && previous.prefix === prefix
+            ? previous.fileMetadata
+            : undefined;
         const prepared = yield* Effect.forEach(
           files,
           (relativePath) =>
@@ -229,7 +247,14 @@ export const AssetDeploymentProvider = () =>
           prepared.flatMap((file) => {
             const expectedETag = objectHashes[file.relative];
             const observedETag = observed.get(file.key)?.replace(/^"|"$/g, "");
-            if (observedETag === expectedETag) return [];
+            const uploaded = uploadedMetadata?.[file.relative];
+            if (
+              observedETag === expectedETag &&
+              uploaded?.contentType === file.contentType &&
+              uploaded.cacheControl === file.cacheControl
+            ) {
+              return [];
+            }
             return [
               s3.putObject({
                 Bucket: bucketName,
@@ -257,6 +282,12 @@ export const AssetDeploymentProvider = () =>
           fileCount: files.length,
           files: prepared.map((file) => file.relative),
           objectHashes,
+          fileMetadata: Object.fromEntries(
+            prepared.map((file) => [
+              file.relative,
+              { contentType: file.contentType, cacheControl: file.cacheControl },
+            ]),
+          ),
           strayKeys: news.purge ? [] : undefined,
         };
       });
@@ -293,8 +324,8 @@ export const AssetDeploymentProvider = () =>
               : undefined,
           };
         }),
-        reconcile: Effect.fn(function* ({ news, session }) {
-          const output = yield* retryForBucketReadiness(reconcileSync(news));
+        reconcile: Effect.fn(function* ({ news, output: previous, session }) {
+          const output = yield* retryForBucketReadiness(reconcileSync(news, previous));
           yield* session.note(
             `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
           );
