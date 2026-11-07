@@ -170,8 +170,9 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
   }
   .alc-tree__side > .alc-tree__leaf {
     align-self: stretch;
-    /* A column only stretches leaves across, never taller. */
-    flex: 0 0 auto;
+    /* Leaves share the column's height, so a tall branch beside them leaves
+       no empty space under the last one. */
+    flex: 1 1 auto;
   }
   .alc-tree__side > .alc-tree__box {
     flex: 1 1 auto;
