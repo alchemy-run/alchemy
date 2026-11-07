@@ -6,9 +6,9 @@ import PackageManagers from "../../../components/PackageManagers.astro";
 
 Host your model on Cloudflare, and every aggregate instance, view key and policy gets its own Durable Object. You declare none of them yourself.
 
-## Host the model in a Worker
+## Host the model
 
-Provide `DomainCloudflare.layerDurableObjects()` as the platform, and serve your Apis from the Worker.
+Provide `DomainCloudflare.layerDurableObjects()` to the model's Layer, as you would `DomainRivet.layerDurableObjects` or `Domain.InMemory`, and serve your Apis from the Worker.
 
 ```typescript
 // packages/server/src/BankWorker.ts
@@ -162,7 +162,7 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
+Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
 
 Renaming a model renames its classes, and the model starts empty under the new names.
 

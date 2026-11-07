@@ -540,8 +540,8 @@ const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, nev
     });
   });
 
-/** Stubs over the gateway; RPC crosses it as fetch-RPC over the actor's `fetch`. */
-const makeNamespace = (
+/** Stubs over the gateway; RPC crosses it as fetch-RPC over the actor's `fetch`. @internal */
+export const makeNamespace = (
   name: string,
   target: Omit<GatewayTarget, "name" | "key"> | undefined,
 ): DurableObjectNamespace<any> => ({
