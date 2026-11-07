@@ -828,6 +828,45 @@ Effect Cluster entities, workflows, singletons and crons, on a Postgres database
 - [Hetzner](https://alchemy.run/cluster/hetzner) — Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
 - [Cloudflare](https://alchemy.run/cluster/cloudflare) — Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no servers to manage.
 
+## Daytona
+
+Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.
+
+- [Daytona](https://alchemy.run/daytona) — Run code you don't fully trust in Daytona sandboxes. Declare snapshots, volumes and secrets in your Stack, and create, drive and delete sandboxes from any Worker or Lambda.
+- [What is Daytona?](https://alchemy.run/daytona/what-is-daytona) — The concepts behind Daytona — organizations, API keys, regions and runners, snapshots, sandboxes and their lifecycle, the toolbox, previews, volumes, network limits and secrets — and how @alchemy.run/daytona models each of them.
+- [Setup](https://alchemy.run/daytona/setup) — Sign Alchemy in to Daytona, or give it an API key.
+
+## Daytona — Tutorial
+
+- [Part 1: Your First Snapshot](https://alchemy.run/daytona/tutorial/part-1) — Declare the snapshot your sandboxes boot from and deploy it.
+- [Part 2: Run Code in a Sandbox](https://alchemy.run/daytona/tutorial/part-2) — Add a Worker that creates a sandbox per request, runs a command, and deletes it.
+- [Part 3: A Sandbox per User](https://alchemy.run/daytona/tutorial/part-3) — Give each user a sandbox with their own volume, so their files survive the sandbox.
+- [Part 4: Testing](https://alchemy.run/daytona/tutorial/part-4) — Deploy the Stack in a test, call the Worker, and destroy it.
+- [Part 5: Stages and CI](https://alchemy.run/daytona/tutorial/part-5) — Deploy a copy of the app per stage, and from CI.
+
+## Daytona — Accounts & access
+
+- [Organizations and API keys](https://alchemy.run/daytona/organizations-and-keys) — How a Daytona organization holds your sandboxes and bill, how your profile picks the organization Alchemy deploys to, and the API key each Worker gets.
+- [Members and roles](https://alchemy.run/daytona/organization/organization) — Give people access to a Daytona organization with roles, invitations and members, sign them in with single sign-on, and set organization defaults.
+- [Secrets](https://alchemy.run/daytona/security/secrets) — Give a Daytona sandbox credentials it can use but not read, shared or one per user, with values from .env or a secrets manager.
+
+## Daytona — Sandboxes
+
+- [Programs in a sandbox](https://alchemy.run/daytona/sandboxes/programs) — Run an Effect program you write inside a Daytona sandbox, redeploy it without losing the sandbox, mount volumes into it, and install mount clients with a derived snapshot.
+- [Regions and runners](https://alchemy.run/daytona/sandboxes/runners) — Where Daytona sandboxes run — shared regions, the region a sandbox picks, and a region of your own with runners on machines you operate.
+- [Sandboxes](https://alchemy.run/daytona/sandboxes/sandboxes) — How a Daytona sandbox moves between started, stopped, archived and deleted, and how to create sandboxes per request or per user from a Worker, or declare a long-lived dev box in your Stack.
+- [Snapshots](https://alchemy.run/daytona/sandboxes/snapshots) — Pull an image, build a Dockerfile on Daytona, or capture a warm base that sandboxes start from.
+- [Toolbox](https://alchemy.run/daytona/sandboxes/toolbox) — Run commands, edit files, use git and language servers, open previews and SSH into a sandbox.
+- [Volumes](https://alchemy.run/daytona/sandboxes/volumes) — Keep files in volumes that outlive sandboxes, shared or one per user.
+
+## Daytona — Networking
+
+- [Network and previews](https://alchemy.run/daytona/networking/network) — What a Daytona sandbox can reach — your organization's tier, domain and CIDR allowlists, no network at all — and how preview URLs let the outside reach a port inside it.
+
+## Daytona — Observability
+
+- [Telemetry, webhooks and audit](https://alchemy.run/daytona/observability/telemetry) — Send a Daytona organization's sandbox logs, traces and metrics to your backend, get webhooks for sandbox events, and read usage and the audit log from a Worker.
+
 ## Better Auth
 
 Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.
@@ -1080,4 +1119,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~234 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~239 KB) — only fetch it when you need to locate a specific resource's reference page.

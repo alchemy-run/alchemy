@@ -1,0 +1,62 @@
+---
+title: "Part 1: Your First Snapshot"
+description: Declare the snapshot your sandboxes boot from and deploy it.
+sidebar:
+  order: 1
+---
+
+Build an API that runs code in Daytona sandboxes: a fresh sandbox per request, and a sandbox per user that keeps their files.
+
+The finished code is in [`examples/daytona-sandboxes`](https://github.com/alchemy-run/alchemy/tree/main/examples/daytona-sandboxes).
+
+## Prerequisites
+
+Finish [Daytona setup](/daytona/setup) and [Cloudflare setup](/cloudflare/setup).
+
+## Declare the snapshot
+
+```typescript
+// src/Images.ts
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Base = Daytona.Snapshot("Base", {
+  image: "node:22-bookworm-slim",
+  cpu: 1,
+  memory: 1,
+  disk: 3,
+});
+```
+
+A snapshot is the image a sandbox boots from, with its default size. Daytona pulls `node:22-bookworm-slim` once; every sandbox starts from that copy.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Base } from "./src/Images.ts";
+
+export default Alchemy.Stack(
+  "DaytonaSandboxes",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Daytona.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const base = yield* Base;
+    return { snapshot: base.name };
+  }),
+);
+```
+
+## Deploy
+
+```sh
+alchemy deploy
+```
+
+The snapshot shows up under **Snapshots** in the Daytona dashboard once it is active.

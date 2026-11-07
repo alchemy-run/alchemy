@@ -171,6 +171,9 @@ export const bindingTargetProvider = () =>
           if (n.name !== o.name || n.string !== o.string) {
             return {
               action: "update",
+              // Like a Worker's `workerName`: unchanged by an update that
+              // keeps the name.
+              stables: n.name === o.name ? ["name"] : undefined,
             };
           }
           return undefined;
