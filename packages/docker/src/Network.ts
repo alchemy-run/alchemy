@@ -48,8 +48,23 @@ export interface Network extends Resource<
     createdAt: number;
   },
   never,
-  Providers
+  Providers,
+  NetworkLookup
 > {}
+
+/**
+ * Props for {@link Network.lookup}: find a network this stack
+ * doesn't manage by its name.
+ */
+export interface NetworkLookup {
+  /** Network name. */
+  name: string;
+  /**
+   * Docker context the engine is reached through.
+   * @default the current context
+   */
+  context?: string;
+}
 
 /**
  * A Docker network managed through the active Docker context.
@@ -74,6 +89,20 @@ export interface Network extends Resource<
  * }).pipe(adopt(true));
  * ```
  *
+ * ### Looking up an existing network
+ * `Network.lookup` references a network Alchemy doesn't manage (created with
+ * the Docker CLI, Compose or another stack). It is read during plan/deploy,
+ * never created, updated or removed.
+ *
+ * **Example:** Attach a container to an existing network
+ * ```typescript
+ * const shared = Docker.Network.lookup({ name: "compose_default" });
+ * const api = yield* Docker.Container("Api", {
+ *   image: "nginx:alpine",
+ *   networks: [{ name: shared.name }],
+ * });
+ * ```
+ *
  * @resource
  * @product Network
  */
@@ -87,6 +116,13 @@ export const NetworkProvider = () =>
 
       return Network.Provider.of({
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ name, context }) {
+          const info = yield* docker.network
+            .inspect(name, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          return info ? toNetworkAttributes(info) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerEngineContextName(olds?.context);
           const name = yield* networkName(id, olds, instanceId);
