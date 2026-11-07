@@ -67,7 +67,7 @@ A sandbox from a snapshot takes its machine size unless you pass `type`.
 
 ## Fork a sandbox
 
-`fork` starts a copy of a sandbox created at run time, from its last snapshot:
+`fork` starts a copy of a sandbox your code created, from its last snapshot:
 
 ```typescript
 yield* sandbox.stop(); // stopping takes a snapshot
@@ -85,7 +85,7 @@ A handle saves its sandbox under a name of your own, and waits until it's ready:
 const saved = yield* sandbox.snapshot("after-install");
 ```
 
-Snapshots you save at run time aren't deleted with the Stack.
+Snapshots your code saves aren't deleted with the Stack.
 
 ## Next
 

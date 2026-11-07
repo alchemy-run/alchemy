@@ -104,8 +104,8 @@ export interface Environment extends Resource<
  * **Example:** Variables and a secret file
  * ```typescript
  * export const Agents = Boat.Environment("Agents", {
- *   env: { NODE_ENV: "production", API_TOKEN: Config.redacted("API_TOKEN") },
- *   secretFiles: [{ path: ".npmrc", contents: Config.redacted("NPMRC") }],
+ *   env: { NODE_ENV: "production", API_TOKEN: Config.Redacted("API_TOKEN") },
+ *   secretFiles: [{ path: ".npmrc", contents: Config.Redacted("NPMRC") }],
  * });
  *
  * export const Box = Boat.Sandbox("Box", { environment: Agents });

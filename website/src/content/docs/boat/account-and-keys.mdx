@@ -1,6 +1,6 @@
 ---
 title: Account & API keys
-description: How a Boat account holds your sandboxes, how a scoped API key limits what a caller can do, and the key each host gets instead of yours.
+description: How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -8,7 +8,7 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything you create on Boat belongs to your **account**: its sandboxes, snapshots, environments, webhooks and API keys. If you belong to an organization, sandboxes can be billed to it instead, and each one stays private to the person who created it.
 
-An **API key** is scoped. It carries the **actions** it may take, and can be limited to some sandboxes or the sandboxes of some environments. The host that runs a Worker below gets a key that reaches one sandbox and can do nothing else.
+An **API key** can do only what you give it. It carries the **actions** it may take, and can be limited to some sandboxes or the sandboxes of some environments. The host that runs a Worker below gets a key that reaches one sandbox and can do nothing else.
 
 <Tree
   nodes={[
@@ -23,7 +23,7 @@ An **API key** is scoped. It carries the **actions** it may take, and can be lim
     { on: "account", label: "your key · admin" },
     { on: "box", label: "the Worker's key" },
   ]}
-  caption="Your key reaches the whole account. The key Alchemy mints for the Worker that connects to DevBox reaches only DevBox, and only for the actions the binding needs."
+  caption="Your key reaches the whole account. The key Alchemy creates for the Worker that connects to DevBox reaches only DevBox, and only for the actions the binding needs."
 />
 
 ## Your profile signs you in
@@ -68,13 +68,13 @@ const key = yield* Boat.ApiKey("BoxExec", {
 });
 ```
 
-`key.key` is the key, as a `Redacted` value. Boat shows a key only once, so Alchemy keeps it in state. A key can't be changed: a new scope creates a new key and revokes the old one.
+`key.key` is the key, as a `Redacted` value. Boat shows a key only once, so Alchemy keeps it in state. A key can't be changed: new actions or sandboxes create a new key and delete the old one.
 
 A key can't do more, or live longer, than the key that creates it. A key your browser sign-in creates lasts at most a year, until your own key expires. Leave `ttl` out to get the longest lifetime Boat allows.
 
 ## What each host gets
 
-Each binding gets its own key, created at deploy and revoked when the host is destroyed. Your key never reaches the host.
+Each binding gets its own key, created at deploy and deleted when the host is destroyed. Your key never reaches the host.
 
 `Boat.ConnectSandbox(box)` gets a key that reaches only `box`: it runs commands, uses files, hosts ports, and stops, resumes and snapshots that one sandbox. `Boat.CreateSandbox()` gets a key that creates sandboxes and works in them, and deletes only the sandboxes it created. Neither can read your environments, webhooks or other keys.
 
@@ -92,4 +92,4 @@ Your plan caps how many sandboxes may run at once and how many may start each mi
 
 ## Next
 
-What a sandbox is, and how to use one, is in [Sandboxes](/boat/sandboxes).
+What a sandbox starts with, its variables, secret files and credentials, is in [Environments](/boat/environments). Where to run your code is in [Choosing a runtime](/boat/choosing-a-runtime).

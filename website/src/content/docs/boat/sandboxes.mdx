@@ -49,7 +49,7 @@ export const Untrusted = Boat.Sandbox("Untrusted", { noEnv: true, env: { TASK: "
 
 It gets only its own `env`, and it can't act on your account or other sandboxes. See [Environments](/boat/environments) for sandboxes that should get some secrets and not others.
 
-## Create sandboxes at run time
+## Create sandboxes while your app runs
 
 For a sandbox per user or per task, bind `CreateSandbox` in a Worker or Function, and create sandboxes while it runs:
 

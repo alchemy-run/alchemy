@@ -70,4 +70,4 @@ jobs:
       - run: bun alchemy destroy --stage "pr-${{ github.event.number }}" --yes
 ```
 
-Destroying the stage revokes the Worker's key.
+Destroying the stage deletes the Worker's key.

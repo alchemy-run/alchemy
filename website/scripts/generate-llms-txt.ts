@@ -635,6 +635,7 @@ const SECTIONS: Section[] = [
         "boat/tutorial/part-4",
         "boat/tutorial/part-5",
         "boat/account-and-keys",
+        "boat/choosing-a-runtime",
         "boat/sandboxes",
         "boat/programs",
         "boat/snapshots",

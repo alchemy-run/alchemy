@@ -1617,6 +1617,7 @@ export default defineConfig({
             {
               label: "Sandboxes",
               items: [
+                { label: "Choosing a runtime", link: "/boat/choosing-a-runtime" },
                 { label: "Sandboxes", link: "/boat/sandboxes" },
                 { label: "Programs", link: "/boat/programs" },
                 { label: "Snapshots & forks", link: "/boat/snapshots" },

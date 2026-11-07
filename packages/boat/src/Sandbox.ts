@@ -287,7 +287,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * ```typescript
  * export const Golden = Boat.Snapshot("Golden", { run: ["npm i -g pnpm"] });
  * export const Agents = Boat.Environment("Agents", {
- *   env: { API_TOKEN: Config.redacted("API_TOKEN") },
+ *   env: { API_TOKEN: Config.Redacted("API_TOKEN") },
  * });
  *
  * export const Box = Boat.Sandbox("Box", {

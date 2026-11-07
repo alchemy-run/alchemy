@@ -21,7 +21,7 @@ Stages share your Boat account. Sandboxes a stage's Worker creates carry the sta
 const staging = yield* sandboxes.list({ labels: { "alchemy.stage": "staging" } });
 ```
 
-Destroying a stage revokes its Worker's key and leaves its sandboxes to stop on their timers. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
+Destroying a stage deletes its Worker's key and leaves its sandboxes to stop on their timers. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
 
 ## Next
 

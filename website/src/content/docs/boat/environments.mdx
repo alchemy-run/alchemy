@@ -35,8 +35,8 @@ import * as Boat from "@alchemy.run/boat";
 import * as Config from "effect/Config";
 
 export const Agents = Boat.Environment("Agents", {
-  env: { NODE_ENV: "production", TOKEN: Config.redacted("AGENT_TOKEN") },
-  secretFiles: [{ path: ".npmrc", contents: Config.redacted("NPMRC") }],
+  env: { NODE_ENV: "production", TOKEN: Config.Redacted("AGENT_TOKEN") },
+  secretFiles: [{ path: ".npmrc", contents: Config.Redacted("NPMRC") }],
   passGithub: false,
 });
 ```
@@ -53,7 +53,7 @@ Pass the environment to a declared sandbox:
 export const Box = Boat.Sandbox("Box", { environment: Agents });
 ```
 
-A sandbox created at run time names it:
+A sandbox your code creates names it:
 
 ```typescript
 const agents = yield* Agents;
@@ -84,9 +84,37 @@ export const Tenants = Boat.Environment("Tenants", {
 
 A single sandbox with none of the account's secrets doesn't need an environment: pass `noEnv: true` on it.
 
-## Secrets from your secret store
+## Values from a secrets manager
 
-Values can come from anywhere Alchemy reads [secrets](/environments/secrets): a `.env` file in development, or a secret provider such as Doppler or Infisical in CI, with different values per stage.
+`.env` is only the default. A Stack's `secrets` option reads the same `Config` values from a secrets manager instead, like Doppler or Infisical, so production keys never sit in a file on anyone's machine. Pick the source per stage:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Doppler from "@alchemy.run/doppler";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Agents } from "./src/Agents.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
+    state: Cloudflare.state(),
+    secrets: ({ stage }) =>
+      stage === "prod"
+        ? Doppler.Secrets({ project: "my-app", config: "prd" })
+        : Alchemy.Secrets.DotEnv(),
+  },
+  Effect.gen(function* () {
+    const agents = yield* Agents;
+    return { environment: agents.name };
+  }),
+);
+```
+
+`Config.Redacted("AGENT_TOKEN")` doesn't change. See [Secret providers](/environments/secret-providers).
 
 ## Next
 
