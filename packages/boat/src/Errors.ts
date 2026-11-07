@@ -15,7 +15,8 @@ export class ExecTimedOut extends Data.TaggedError("Boat.ExecTimedOut")<{
 /** A saved snapshot Boat could not save. */
 export class SnapshotFailed extends Data.TaggedError("Boat.SnapshotFailed")<{
   readonly message: string;
-  readonly name: string;
+  /** The snapshot's name, or the sandbox whose setup it waited on. */
+  readonly snapshot: string;
 }> {}
 
 /** An environment variable value Boat's `.env` format can't hold. */

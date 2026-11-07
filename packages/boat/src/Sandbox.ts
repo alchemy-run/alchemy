@@ -299,6 +299,9 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * @resource
  * @product Sandbox
  */
+/** The plain resource behind {@link Sandbox}, which carries `lookup`. */
+const SandboxResource = Resource<Sandbox>("Boat.Sandbox");
+
 export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> & {
   /** References a sandbox the stack doesn't manage, by id. */
   readonly lookup: ReturnType<typeof Resource<Sandbox>>["lookup"];
@@ -306,7 +309,7 @@ export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRu
   Platform("Boat.Sandbox", {
     createRuntimeContext: createHostRuntimeContext("Boat.Sandbox"),
   }),
-  { lookup: Resource<Sandbox>("Boat.Sandbox").lookup },
+  { lookup: (props: { sandboxId: string }) => SandboxResource.lookup(props) },
 );
 
 /** A sandbox, or `undefined` when Boat no longer has it. */

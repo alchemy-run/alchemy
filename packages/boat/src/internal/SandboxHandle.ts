@@ -102,7 +102,7 @@ const awaitSnapshot = (name: string) =>
       snapshot.status === "ready"
         ? Effect.succeed(snapshot)
         : new SnapshotFailed({
-            name,
+            snapshot: name,
             message:
               snapshot.status === "failed"
                 ? `Boat could not save snapshot ${name}: ${snapshot.error ?? "unknown error"}`

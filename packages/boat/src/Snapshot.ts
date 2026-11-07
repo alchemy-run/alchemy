@@ -117,7 +117,7 @@ const awaitSaved = (name: string) =>
       snapshot.status === "ready"
         ? Effect.succeed(snapshot)
         : new SnapshotFailed({
-            name,
+            snapshot: name,
             message:
               snapshot.status === "failed"
                 ? `Boat could not save snapshot ${name}: ${snapshot.error ?? "unknown error"}`
@@ -142,7 +142,7 @@ const awaitSetup = (sandboxId: string) =>
     Effect.flatMap((status) =>
       status === "pending" || status === "running"
         ? new SnapshotFailed({
-            name: sandboxId,
+            snapshot: sandboxId,
             message: `Sandbox ${sandboxId}'s setup script was still running after three minutes`,
           })
         : Effect.void,
