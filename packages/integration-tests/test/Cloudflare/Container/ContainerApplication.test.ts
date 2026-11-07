@@ -40,6 +40,7 @@ import LinkedChanged from "./fixtures/linked/changed.ts";
 import { LinkedContainer } from "./fixtures/linked/container.ts";
 import LinkedFirst from "./fixtures/linked/first.ts";
 import {
+  buildTimeoutApplication,
   publicationApplications,
   maxRegistryCacheApplication,
   sharedApplication,
@@ -609,6 +610,40 @@ describe.concurrent(
         { timeout: 120_000 },
       );
     }
+
+    // Issue #3150: a build has no deadline unless `build.timeout` sets one.
+    test.provider(
+      "build.timeout cancels a slow build, and a build without it runs to completion",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const error = yield* stack.deploy(buildTimeoutApplication("3 seconds")).pipe(Effect.flip);
+          expect(error).toMatchObject({ _tag: "ContainerBuildTimeoutError" });
+          const canceled = yield* buildHistory.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (builds) => builds.every((build) => build.status !== "Running"),
+              times: 8,
+            }),
+          );
+          expect(canceled.filter((build) => build.status === "Completed")).toHaveLength(0);
+
+          const { app } = yield* stack.deploy(buildTimeoutApplication());
+          expect(
+            (yield* buildHistory).filter((build) => build.status === "Completed"),
+          ).toHaveLength(1);
+
+          // The deadline is not part of the image: changing it plans no update.
+          const plan = yield* stack.plan(buildTimeoutApplication("1 hour"));
+          expect(plan.resources.BuildTimeout?.action).toBe("noop");
+
+          yield* stack.destroy();
+          expect(
+            yield* waitForApplicationDeleted(app.accountId, app.applicationId),
+          ).toBeUndefined();
+        }).pipe(withBuilder("alchemy-build-timeout"), logLevel),
+      { timeout: 180_000 },
+    );
 
     test.provider(
       "shares publication without mixing contexts or application settings",

@@ -15,6 +15,7 @@ import { type ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -42,6 +43,8 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import {
+  buildTimeout,
+  ContainerBuildTimeoutError,
   ContainerConfigurationError,
   durableObjectPlaceholder,
   hasImageSource,
@@ -52,6 +55,17 @@ import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
+
+/** Whether two props differ only in `build.timeout`, which bounds a deploy, not what it deploys. */
+const onlyBuildTimeoutChanged = (
+  olds: AnyContainerApplicationProps,
+  news: AnyContainerApplicationProps,
+) =>
+  olds.build?.timeout !== news.build?.timeout &&
+  deepEqual(
+    { ...olds, build: { ...olds.build, timeout: undefined } },
+    { ...news, build: { ...news.build, timeout: undefined } },
+  );
 
 export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
   readonly message: string;
@@ -779,7 +793,12 @@ export const LiveContainerProvider = () =>
 
       // Applications with identical image inputs can share one immutable
       // registry reference. Keep publication state within this provider instance.
-      const publications = new Map<string, ReturnType<typeof publishImage>>();
+      type Publication = Effect.Effect<
+        Effect.Success<ReturnType<typeof publishImage>>,
+        Effect.Error<ReturnType<typeof publishImage>> | ContainerBuildTimeoutError,
+        Effect.Services<ReturnType<typeof publishImage>>
+      >;
+      const publications = new Map<string, Publication>();
       const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
         id: string,
         props: AnyContainerApplicationProps,
@@ -800,8 +819,26 @@ export const LiveContainerProvider = () =>
           reuseRemotePublication,
           imageHash,
         ]);
-        const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session, reuseRemotePublication).pipe(
+        const timeout = yield* buildTimeout(props.build?.timeout);
+        const publish = publishImage(id, props, build, imageRef, session, reuseRemotePublication);
+        // No deadline by default: a build or push takes as long as it needs.
+        const candidate: Publication = yield* Effect.cached(
+          (timeout === undefined
+            ? publish
+            : publish.pipe(
+                Effect.timeoutOrElse({
+                  duration: timeout,
+                  orElse: () =>
+                    Effect.fail(
+                      new ContainerBuildTimeoutError({
+                        image: imageRef,
+                        timeout,
+                        message: `Building and pushing ${imageRef} did not finish within ${Duration.format(timeout)}. Deploy again to resume from the cached build steps, or increase build.timeout.`,
+                      }),
+                    ),
+                }),
+              )
+          ).pipe(
             Effect.onExit((exit) =>
               Exit.isFailure(exit)
                 ? Effect.sync(() => {
@@ -1352,6 +1389,13 @@ export const LiveContainerProvider = () =>
           if (!isResolved(declared)) return;
           yield* validateContainerConfiguration(declared, output?.schedulingPolicy);
           if (!isResolved(newBindings)) return;
+          if (
+            output !== undefined &&
+            onlyBuildTimeoutChanged(stripEffects(olds), declared) &&
+            deepEqual(oldBindings, newBindings)
+          ) {
+            return { action: "noop" } as const;
+          }
           const news = yield* withMountCapabilities(id, declared, newBindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
 

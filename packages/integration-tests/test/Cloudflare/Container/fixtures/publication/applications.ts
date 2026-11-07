@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Output from "alchemy/Output";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 
 export const publicationApplications = (contexts: {
@@ -79,4 +80,16 @@ export const recoveryApplications = (delay: number, includeSecond = false) =>
       ? yield* Cloudflare.Container("RecoverySecond", props).Application
       : undefined;
     return { first, second };
+  });
+
+export const buildTimeoutApplication = (timeout?: Duration.Input) =>
+  Effect.gen(function* () {
+    const app = yield* Cloudflare.Container("BuildTimeout", {
+      dockerfile: {
+        content: `FROM alpine:3.19\nRUN sleep 20\nCMD ["sleep", "3600"]\n`,
+      },
+      build: timeout === undefined ? undefined : { timeout },
+      maxInstances: 1,
+    }).Application;
+    return { app };
   });

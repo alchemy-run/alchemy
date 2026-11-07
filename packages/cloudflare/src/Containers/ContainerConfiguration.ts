@@ -18,6 +18,13 @@ export class ContainerConfigurationError extends Data.TaggedError("ContainerConf
   readonly message: string;
 }> {}
 
+/** Building and pushing a Container's image took longer than its `build.timeout`. */
+export class ContainerBuildTimeoutError extends Data.TaggedError("ContainerBuildTimeoutError")<{
+  readonly image: string;
+  readonly timeout: Duration.Duration;
+  readonly message: string;
+}> {}
+
 export class ContainerImagePreparationError extends Data.TaggedError(
   "ContainerImagePreparationError",
 )<{
@@ -155,6 +162,23 @@ export const imagePreparationTimeoutMillis = (timeout: Duration.Input = "30 minu
       }),
   });
 
+/** Validate the optional deadline for building and pushing an image. */
+export const buildTimeout = (timeout: Duration.Input | undefined) =>
+  timeout === undefined
+    ? Effect.succeed(undefined)
+    : Effect.try({
+        try: () => {
+          const duration = Duration.fromInputUnsafe(timeout);
+          const millis = Duration.toMillis(duration);
+          if (!Number.isFinite(millis) || millis <= 0) throw new Error("Invalid timeout");
+          return duration;
+        },
+        catch: () =>
+          new ContainerConfigurationError({
+            message: "build.timeout must be a finite, positive duration.",
+          }),
+      });
+
 /**
  * Validate container props before publishing images or touching the hosting
  * Worker. Reject switches between fleet scheduling and Durable Object scheduling.
@@ -181,6 +205,7 @@ export const validateContainerConfiguration = Effect.fn(function* (
     );
   }
 
+  yield* buildTimeout(props.build?.timeout);
   if (!isDurableObjectContainer(props)) return;
 
   yield* imagePreparationTimeoutMillis(props.imagePreparationTimeout);

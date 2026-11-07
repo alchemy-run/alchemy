@@ -567,6 +567,18 @@ type ContainerShape<Shape> = {
  * }) {}
  * ```
  *
+ * A build and push run as long as they need. Set `build.timeout` to fail
+ * the deploy with `ContainerBuildTimeoutError` instead. The next deploy
+ * resumes from the steps BuildKit finished.
+ *
+ * **Example:** Bound the image build
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: { timeout: "45 minutes" },
+ * }) {}
+ * ```
+ *
  * Pin base images and downloaded dependencies: changes outside the build
  * context cannot invalidate the input hash. Each stage still has its own
  * Container application, runtime settings, and instances; only images and

@@ -10,6 +10,22 @@ import { Resource } from "alchemy/Resource";
 import type { ProcessServices } from "alchemy/Runtime/Process";
 import type * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
+
+/** Options for publishing a Container's image. */
+export interface ContainerBuildTimeout {
+  /**
+   * Maximum time to build and push the image, such as `"30 minutes"`.
+   * When it passes, the deploy fails with `ContainerBuildTimeoutError`.
+   * BuildKit keeps the steps that finished, so the next deploy resumes
+   * from them. Must be finite and positive.
+   *
+   * @default no deadline
+   */
+  timeout?: Duration.Input;
+}
+
+/** The `build` prop of a Container built from your own Dockerfile. */
+export type ContainerDockerfileBuild = DockerfileBuild & ContainerBuildTimeout;
 import type { Providers } from "../Providers.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
@@ -357,7 +373,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    * `pure.packages`, or disable with `pure: false`. `cache: true` keeps the
    * image build's layers in the repository's `:buildcache` tag.
    */
-  build?: Bundle.BundleConfig & BuildCacheOptions;
+  build?: Bundle.BundleConfig & BuildCacheOptions & ContainerBuildTimeout;
 }
 
 /**
@@ -366,6 +382,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  */
 export interface ExternalContainerProps
   extends ContainerApplicationPropsBase, DockerfileBuildOptions {
+  /** Build arguments, BuildKit secrets, the layer cache and the deadline for the Dockerfile build. */
+  build?: ContainerDockerfileBuild;
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -453,6 +471,11 @@ export interface DurableObjectContainerProps
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**
+   * Build arguments, BuildKit secrets, the layer cache and the deadline for
+   * the Dockerfile build. `timeout` also bounds pulling and pushing an `image`.
+   */
+  build?: ContainerDockerfileBuild;
+  /**
    * Registry image to copy into Cloudflare's managed registry, e.g.
    * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
    * Omit every image source to contribute no image: `start()` then uses the
@@ -523,8 +546,8 @@ export interface AnyContainerApplicationProps extends Omit<
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache for both. */
-  build?: Bundle.BundleConfig & DockerfileBuild;
+  /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache and deadline for both. */
+  build?: Bundle.BundleConfig & ContainerDockerfileBuild;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
