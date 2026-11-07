@@ -2022,7 +2022,7 @@ export default defineConfig({
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
                 { label: "RivetKit Actors", link: "/rivet/rivetkit" },
                 { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
-                { label: "Rust Actors", link: "/rivet/rust" },
+                { label: "Rust Actors", link: "/rivet/rivetkit-rust" },
               ],
             },
             {

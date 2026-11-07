@@ -618,7 +618,7 @@ const SECTIONS: Section[] = [
         "rivet/calling",
         "rivet/rivetkit",
         "rivet/rivetkit-effect",
-        "rivet/rust",
+        "rivet/rivetkit-rust",
         "rivet/durable-streams",
         "rivet/control-planes",
         "rivet/pools",
