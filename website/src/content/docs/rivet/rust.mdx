@@ -99,23 +99,45 @@ async fn main() -> anyhow::Result<()> {
 
 ## Declare it
 
-Point a `Rivet.DurableObject` at the crate's `Cargo.toml`, and give it a pool:
+Point a `Rivet.DurableObject` at the crate's directory with `crate`, and give it a pool:
 
 ```typescript title="src/counter.ts"
 import * as Rivet from "@alchemy.run/rivet";
 import * as Effect from "effect/Effect";
 import { Counters } from "./cluster.ts";
 
-export const Counter = Rivet.DurableObject("Counter", { main: "./counter/Cargo.toml" }).pipe(
+export const Counter = Rivet.DurableObject("Counter", { crate: "./counter" }).pipe(
   Effect.provide(Counters),
 );
 ```
 
-Alchemy builds the node image with Docker. It compiles the package's binary in release mode on the deploying machine's own platform, cross-compiling when the pool's nodes use another architecture, and copies the binary onto a slim Debian image. If the manifest declares exactly one `[[bin]]` under another name, Alchemy runs that binary instead. You don't need Rust installed, only Docker.
+Alchemy builds the node image with Docker, so you don't need Rust installed. It compiles the package's binary on the deploying machine's own platform, cross-compiling when the pool's nodes use another architecture, and copies it onto a slim Debian image.
 
-The crate's directory is the build context, without `target`. A crate that's a member of a Cargo workspace builds on its own, so it can't inherit dependencies with `workspace = true`.
+`crate` is relative to where you run the deploy. It can also name the crate's `Cargo.toml`.
 
-`main` is relative to where you run the deploy.
+## Build it the way Cargo would
+
+A crate in a Cargo workspace is built from the workspace, as `cargo build -p` builds it, so `workspace = true` dependencies and path dependencies inside the workspace resolve. Alchemy finds the workspace the way Cargo does: the nearest `Cargo.toml` above the crate with a `[workspace]`.
+
+Dependencies compile in an image layer of their own, keyed by the workspace's manifests and lockfile. A change to your code rebuilds only your crate; a change to a dependency rebuilds them all.
+
+## Configure the build
+
+`build` takes the Cargo settings a crate needs:
+
+```typescript title="src/counter.ts"
+export const Counter = Rivet.DurableObject("Counter", {
+  crate: "./crates/counter",
+  build: {
+    toolchain: "1.85",
+    features: ["metrics"],
+    packages: ["protobuf-compiler"],
+    runtimePackages: ["libssl3"],
+  },
+}).pipe(Effect.provide(Counters));
+```
+
+`toolchain` is a tag of the official `rust` image, and defaults to the latest stable release. `features`, `noDefaultFeatures` and `profile` pass through to Cargo; the profile defaults to `release`. `packages` are Debian packages the compiler needs, and `runtimePackages` are ones the binary needs on the nodes. The nodes run the package's own binary, or `bin` to name another.
 
 ## Give it a pool of its own
 
@@ -130,7 +152,7 @@ export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
 export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
 ```
 
-A pool that runs JavaScript nodes only, such as `RivetFly.MachinePool` or `RivetHetzner.ServerPool`, fails to deploy a Rust Actor with `Rivet.PoolCannotRunImage`.
+A pool whose nodes run JavaScript bundles, such as `RivetFly.MachinePool` or `RivetHetzner.ServerPool`, doesn't provide what a crate needs, so the Stack doesn't type-check.
 
 ## Reach it from other code
 

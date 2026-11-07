@@ -1,10 +1,8 @@
-[package]
-name = "rust-actors"
-version = "0.1.0"
-edition = "2024"
-publish = false
+[workspace]
+members = ["counter"]
+resolver = "3"
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
 rivetkit = "3.0.6"

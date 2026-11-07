@@ -72,6 +72,7 @@ export interface EcsPoolOptions extends PoolSettings {
 export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
   makePoolLayer({
     label: "RivetAWS.EcsPool",
+    images: true,
     id,
     settings: options,
     expected: "an AWS VPC",

@@ -14,6 +14,7 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Self } from "alchemy/Self";
 import { Stack } from "alchemy/Stack";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -29,8 +30,8 @@ import {
 } from "../DurableObject.ts";
 import { Pool, type PoolDurableObject } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
-import { PoolHost } from "./PoolHostService.ts";
-import { isRustManifest, stageRustProgram } from "./RustProgram.ts";
+import { ImagePoolHost, PoolHost } from "./PoolHostService.ts";
+import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
 export const RIVETKIT_VERSION = "3.0.0";
@@ -175,141 +176,178 @@ export interface PoolNodes<Network> {
  * A pool Layer: `network` narrows the cluster's network to the one this host
  * can join, `nodes` declares the service that runs the pool's nodes.
  */
-export const makePoolLayer = <Network, Req>(options: {
+export const makePoolLayer = <Network, Req, Images extends boolean = false>(options: {
+  readonly label: string;
+  readonly id: string;
+  readonly settings: PoolSettings;
+  readonly network: (cluster: ClusterShape) => Network | undefined;
+  readonly expected: string;
+  /**
+   * The host's compute builds images from a Dockerfile, so its nodes can
+   * run a Rust Durable Object: the Layer also provides `ImagePoolHost`.
+   */
+  readonly images?: Images;
+  readonly nodes: (nodes: PoolNodes<Network>) => Effect.Effect<void, never, Req>;
+}): Layer.Layer<
+  PoolHost | (Images extends true ? ImagePoolHost : never),
+  never,
+  Cluster | Stack | Providers | Req
+> =>
+  Layer.effectContext(
+    makeHosts(options).pipe(
+      Effect.map(({ pool, image }) => {
+        const hosts = Context.make(PoolHost, pool);
+        return (
+          options.images ? Context.add(hosts, ImagePoolHost, image) : hosts
+        ) as Context.Context<PoolHost | (Images extends true ? ImagePoolHost : never)>;
+      }),
+    ),
+  );
+
+const makeHosts = <Network, Req>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: PoolSettings;
   readonly network: (cluster: ClusterShape) => Network | undefined;
   readonly expected: string;
   readonly nodes: (nodes: PoolNodes<Network>) => Effect.Effect<void, never, Req>;
-}): Layer.Layer<PoolHost, never, Cluster | Stack | Providers | Req> =>
-  Layer.effect(
-    PoolHost,
-    Effect.gen(function* () {
-      const cluster = yield* Cluster;
-      // An external Durable Object deploys from its own Effect: give it the
-      // services this Layer was built with.
-      const context = yield* Effect.context<Stack | Providers | Req>();
-      const noop: PoolHost["Service"] = { deployExternal: () => Effect.void };
-      if (globalThis.__ALCHEMY_RUNTIME__) return noop;
-      const network = options.network(cluster);
-      if (network === undefined) {
+}) =>
+  Effect.gen(function* () {
+    const cluster = yield* Cluster;
+    // An external Durable Object deploys from its own Effect: give it the
+    // services this Layer was built with.
+    const context = yield* Effect.context<Stack | Providers | Req>();
+    const noop = {
+      pool: { deployExternal: () => Effect.void } satisfies PoolHost["Service"],
+      image: { deployCrate: () => Effect.void } satisfies ImagePoolHost["Service"],
+    };
+    if (globalThis.__ALCHEMY_RUNTIME__) return noop;
+    const network = options.network(cluster);
+    if (network === undefined) {
+      return yield* Effect.die(
+        new ClusterNetworkMismatch({
+          message: `${options.label} runs nodes on ${options.expected}, and its cluster is not on one.`,
+        }),
+      );
+    }
+    // Named up front, so a class knows its pool without depending on the
+    // pool resource — whose bindings carry every class's env, which can
+    // name other classes' pools.
+    const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
+    // A private address only works for nodes inside the control plane's
+    // network: nodes anywhere else connect to its public endpoint.
+    const endpoint =
+      network === cluster.network ? (cluster.nodeEndpoint ?? cluster.endpoint) : cluster.endpoint;
+    const caller = {
+      pool: name,
+      endpoint: cluster.clientEndpoint ?? cluster.endpoint,
+      namespace: cluster.namespace,
+      token: cluster.token,
+    };
+
+    /** Declare the pool, put `object` on it, and declare the nodes that run `program`. */
+    const deploy = Effect.fn(function* (
+      object: PoolDurableObject,
+      env: Record<string, unknown>,
+      bindCaller: Effect.Effect<void, never, any>,
+      program: (pool: Pool) => NodeProgram,
+    ) {
+      const pool = yield* Pool(options.id, {
+        endpoint: cluster.endpoint,
+        token: cluster.token,
+        namespace: cluster.namespace,
+        name,
+      });
+      yield* pool.bind`${object.name}`({ durableObjects: [object], env });
+      yield* bindCaller;
+      yield* options.nodes({
+        cluster,
+        network,
+        pool,
+        program: program(pool),
+        environment: {
+          RIVET_ENDPOINT: endpoint,
+          RIVET_TOKEN: cluster.token,
+          RIVET_NAMESPACE: cluster.namespace,
+          RIVET_POOL: pool.name,
+        },
+      });
+    });
+
+    // The generic `Self` is the class whose phase is running — the typed
+    // `Self<Rivet.DurableObject>` is the enclosing one while a class is
+    // built inside another's. Outside a class phase there is none: the
+    // pool was provided to an external Durable Object.
+    const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
+    if (self !== undefined) {
+      if (self.Type !== DurableObjectTypeId) {
         return yield* Effect.die(
-          new ClusterNetworkMismatch({
-            message: `${options.label} runs nodes on ${options.expected}, and its cluster is not on one.`,
+          new PoolOutsideDurableObject({
+            message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not a Rivet.DurableObject.`,
           }),
         );
       }
-      // Named up front, so a class knows its pool without depending on the
-      // pool resource — whose bindings carry every class's env, which can
-      // name other classes' pools.
-      const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
-      // A private address only works for nodes inside the control plane's
-      // network: nodes anywhere else connect to its public endpoint.
-      const endpoint =
-        network === cluster.network ? (cluster.nodeEndpoint ?? cluster.endpoint) : cluster.endpoint;
-      const caller = {
-        pool: name,
-        endpoint: cluster.clientEndpoint ?? cluster.endpoint,
-        namespace: cluster.namespace,
-        token: cluster.token,
-      };
-
-      /** Declare the pool, put `object` on it, and declare the nodes that run `program`. */
-      const deploy = Effect.fn(function* (
-        object: PoolDurableObject,
-        env: Record<string, unknown>,
-        bindCaller: Effect.Effect<void, never, any>,
-        program: (pool: Pool) => NodeProgram,
-      ) {
-        const pool = yield* Pool(options.id, {
-          endpoint: cluster.endpoint,
-          token: cluster.token,
-          namespace: cluster.namespace,
-          name,
-        });
-        yield* pool.bind`${object.name}`({ durableObjects: [object], env });
-        yield* bindCaller;
-        yield* options.nodes({
-          cluster,
-          network,
-          pool,
-          program: program(pool),
-          environment: {
-            RIVET_ENDPOINT: endpoint,
-            RIVET_TOKEN: cluster.token,
-            RIVET_NAMESPACE: cluster.namespace,
-            RIVET_POOL: pool.name,
+      const object = self as unknown as DurableObject & DurableObjectRuntimeContext;
+      yield* object.registerPool((env) =>
+        deploy(
+          {
+            name: object.LogicalId,
+            module: object.Props.main,
+            handler: object.Props.handler ?? "default",
           },
-        });
-      });
-
-      // The generic `Self` is the class whose phase is running — the typed
-      // `Self<Rivet.DurableObject>` is the enclosing one while a class is
-      // built inside another's. Outside a class phase there is none: the
-      // pool was provided to an external Durable Object.
-      const self = Option.getOrUndefined(yield* Effect.serviceOption(Self));
-      if (self !== undefined) {
-        if (self.Type !== DurableObjectTypeId) {
-          return yield* Effect.die(
-            new PoolOutsideDurableObject({
-              message: `${options.label}("${options.id}") was provided to ${self.Type} '${self.LogicalId}', not a Rivet.DurableObject.`,
-            }),
-          );
-        }
-        const object = self as unknown as DurableObject & DurableObjectRuntimeContext;
-        yield* object.registerPool((env) =>
-          deploy(
-            {
-              name: object.LogicalId,
-              module: object.Props.main,
-              handler: object.Props.handler ?? "default",
+          env,
+          // What callers need to reach the class through the gateway.
+          object.bind`Pool`(caller),
+          (pool) => ({
+            main: nodeEntry(),
+            build: {
+              input: {
+                external: EXTERNAL,
+                plugins: pool.durableObjects.pipe(Output.map(durableObjectsPlugin)),
+              },
             },
-            env,
-            // What callers need to reach the class through the gateway.
-            object.bind`Pool`(caller),
-            (pool) => ({
-              main: nodeEntry(),
+          }),
+        ),
+      );
+    }
+
+    return {
+      pool: {
+        deployExternal: ({ id, main, resource }) =>
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+          deploy(
+            { name: id, module: main, handler: "", external: true },
+            {},
+            resource.bind`Pool`(caller),
+            () => ({
+              main,
               build: {
                 input: {
-                  external: EXTERNAL,
-                  plugins: pool.durableObjects.pipe(Output.map(durableObjectsPlugin)),
+                  external: EXTERNAL_PROGRAM,
+                  plugins: Output.literal([]) as unknown as Output.Output<
+                    ReturnType<typeof durableObjectsPlugin>
+                  >,
                 },
               },
             }),
-          ),
-        );
-      }
-
-      return {
-        deployExternal: ({ id, main, resource }) =>
+          ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+      } satisfies PoolHost["Service"],
+      image: {
+        deployCrate: ({ id, crate, build, resource }) =>
           // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
           Effect.gen(function* () {
-            // A crate's manifest: its binary is the node, built into an image.
-            const image = isRustManifest(main)
-              ? yield* stageRustProgram(yield* stackDnsLabel(id), main)
-              : undefined;
+            // The crate's binary is the node, built into an image.
+            const image = yield* stageRustProgram(yield* stackDnsLabel(id), crate, build);
             yield* deploy(
-              { name: id, module: main, handler: "", external: true },
+              { name: id, module: crate, handler: "", external: true },
               {},
               resource.bind`Pool`(caller),
-              () =>
-                image ?? {
-                  main,
-                  build: {
-                    input: {
-                      external: EXTERNAL_PROGRAM,
-                      plugins: Output.literal([]) as unknown as Output.Output<
-                        ReturnType<typeof durableObjectsPlugin>
-                      >,
-                    },
-                  },
-                },
+              () => image,
             );
           }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
-      } satisfies PoolHost["Service"];
-    }),
-  );
+      } satisfies ImagePoolHost["Service"],
+    };
+  });
 
 /** A cluster value as an Output, whether it is one already or a plain value. */
 const output = <T>(value: Input<T>): Output.Output<T> =>

@@ -44,6 +44,7 @@ export interface ServicePoolOptions extends PoolSettings {
 export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
   makePoolLayer({
     label: "RivetRailway.ServicePool",
+    images: true,
     id,
     settings: options,
     expected: "a reachable control plane",

@@ -33,7 +33,8 @@ import type { Scope } from "effect/Scope";
 import type { DurableObjectState } from "./DurableObjectState.ts";
 import { fromNativeFetcher } from "./internal/Fetcher.ts";
 import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
-import { PoolHost } from "./internal/PoolHostService.ts";
+import { ImagePoolHost, PoolHost } from "./internal/PoolHostService.ts";
+import type { CargoBuild } from "./internal/RustProgram.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DurableObjectTypeId = "Rivet.DurableObject";
@@ -125,31 +126,57 @@ type ClassProps<PropsReq> =
 
 type ClassRequirements<Req> = Providers | Exclude<Req, DurableObjectServices | PlatformServices>;
 
+export type { CargoBuild } from "./internal/RustProgram.ts";
+
 /** Props of an external Durable Object: a RivetKit program, run as it is. */
 export interface ExternalDurableObjectProps {
   /**
-   * The program, relative to where the deploy runs. Either a TypeScript
-   * entry file — a RivetKit registry that calls `registry.start()`, or a
-   * `@rivetkit/effect` program that launches `Registry.serve` — which is
-   * bundled; or a Rust crate's `Cargo.toml`, whose package's binary calls
-   * `registry().start()` and is compiled into the node image. Either runs
-   * on the pool's nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * The program's entry file, relative to where the deploy runs: a RivetKit
+   * registry that calls `registry.start()`, or a `@rivetkit/effect` program
+   * that launches `Registry.serve`. It is bundled and run on the pool's
+   * nodes unchanged, with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
    * `RIVET_NAMESPACE` and `RIVET_POOL` set.
    */
   main: string;
+  crate?: never;
+}
+
+/** Props of a Rust Durable Object: Actors written with RivetKit's Rust crate, run as they are. */
+export interface RustDurableObjectProps {
+  /**
+   * The crate, relative to where the deploy runs: its directory or its
+   * `Cargo.toml`. Its binary calls `registry().start()`, and is compiled
+   * into the pool's node image and run unchanged, with `RIVET_ENDPOINT`,
+   * `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL` set. A crate in a
+   * Cargo workspace is built from the workspace, as Cargo builds it.
+   */
+  crate: string;
+  /** How the crate is compiled. */
+  build?: CargoBuild;
+  main?: never;
 }
 
 /** The class surface of {@link DurableObject}. */
 export interface DurableObjectClass {
   /**
    * An external Durable Object: Actors written with RivetKit, in its async
-   * or Effect form or in Rust, deployed as they are. Provide a pool Layer
-   * to it.
+   * or Effect form, deployed as they are. Provide a pool Layer to it.
    */
   <const Id extends string>(
     id: Id,
     props: ExternalDurableObjectProps,
   ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * A Rust Durable Object: Actors written with RivetKit's Rust crate,
+   * compiled into the node image. Provide a pool Layer whose nodes are
+   * built from a Dockerfile: `RivetDocker.SwarmPool`, `RivetAWS.EcsPool`,
+   * `RivetKubernetes.DeploymentPool`, `RivetRailway.ServicePool` or
+   * `RivetCloud.Pool`.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: RustDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, ImagePoolHost | Providers>;
   <Self, Shape = {}>(): {
     /** The class form with an inline implementation. */
     <
@@ -290,9 +317,10 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * instance in its pool on first use, so callers need no RivetKit and no
  * route to the nodes.
  *
- * Given only `main`, it is external: a RivetKit program, async,
- * `@rivetkit/effect` or a Rust crate, that its pool builds and runs as it
- * is. It needs a pool of its own, and has no bindings or `yield*` calls.
+ * Given only `main`, it is external: a RivetKit program, async or
+ * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
+ * `crate`, it is a Rust program that its pool compiles into the node image.
+ * Either needs a pool of its own, and has no bindings or `yield*` calls.
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
@@ -374,24 +402,39 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * );
  * ```
  *
- * **Example:** Actors written in Rust, compiled into the pool's node image
+ * ### Deploying Rust Actors
+ * **Example:** A crate compiled into the pool's node image
  * ```typescript
  * export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
  *
- * export const Counter = Rivet.DurableObject("Counter", { main: "./counter/Cargo.toml" }).pipe(
+ * export const Counter = Rivet.DurableObject("Counter", { crate: "./counter" }).pipe(
  *   Effect.provide(Counters),
  * );
+ * ```
+ *
+ * **Example:** Features, a pinned toolchain and system packages
+ * ```typescript
+ * export const Counter = Rivet.DurableObject("Counter", {
+ *   crate: "./crates/counter",
+ *   build: {
+ *     toolchain: "1.85",
+ *     features: ["metrics"],
+ *     packages: ["protobuf-compiler"],
+ *   },
+ * }).pipe(Effect.provide(Counters));
  * ```
  *
  * @resource
  */
 export const DurableObject: DurableObjectClass = ((
-  ...args: [string, ExternalDurableObjectProps] | []
+  ...args: [string, ExternalDurableObjectProps | RustDurableObjectProps] | []
 ) =>
   args.length === 0
     ? (id: string, props?: unknown, impl?: unknown) =>
         declare(id, (platform as any)()(id, props, impl))
-    : external(args[0], args[1])) as unknown as DurableObjectClass;
+    : args[1].crate !== undefined
+      ? rust(args[0], args[1] as RustDurableObjectProps)
+      : external(args[0], args[1] as ExternalDurableObjectProps)) as unknown as DurableObjectClass;
 
 /**
  * An external Durable Object: declare its resource, then have the pool it
@@ -404,6 +447,21 @@ const external = (id: string, props: ExternalDurableObjectProps) =>
     const host = yield* PoolHost;
     const main = yield* Effect.sync(() => nodePath.resolve(props.main));
     yield* host.deployExternal({ id, main, resource });
+    return resource;
+  });
+
+/**
+ * A Rust Durable Object: declare its resource, then have the pool it was
+ * given compile its crate into the node image. The pool Layer is what
+ * provides `ImagePoolHost`.
+ */
+const rust = (id: string, props: RustDurableObjectProps) =>
+  Effect.gen(function* () {
+    const crate = yield* Effect.sync(() => nodePath.resolve(props.crate));
+    const resource: DurableObject = yield* (platform as any)(id, { main: crate });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* ImagePoolHost;
+    yield* host.deployCrate({ id, crate, build: props.build, resource });
     return resource;
   });
 

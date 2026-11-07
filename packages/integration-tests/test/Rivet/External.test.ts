@@ -1,10 +1,13 @@
 import { fileURLToPath } from "node:url";
 import * as Docker from "@alchemy.run/docker";
+import * as Fly from "@alchemy.run/fly";
 import * as Rivet from "@alchemy.run/rivet";
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as RivetFly from "@alchemy.run/rivet/Fly";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as Alchemy from "alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -71,8 +74,10 @@ describe.skipIf(!!process.env.FAST)(
             const effectActors = yield* Rivet.DurableObject("EffectActors", {
               main: fixture("effect/main.ts"),
             }).pipe(Effect.provide(EffectPool));
+            // A member of a Cargo workspace, built with a feature.
             const rustActors = yield* Rivet.DurableObject("RustActors", {
-              main: fixture("rust/Cargo.toml"),
+              crate: fixture("rust/counter"),
+              build: { features: ["double"] },
             }).pipe(Effect.provide(RustPool));
             return {
               token: asyncActors.token,
@@ -125,9 +130,24 @@ describe.skipIf(!!process.env.FAST)(
         const counter = clientFor(deployed.rustPool).counter.getOrCreate(["external-rust"]);
         const first = yield* call(() => counter.increment(3));
         const second = yield* call(() => counter.increment(4));
-        expect(second - first).toBe(4);
+        // Built with the `double` feature: each increment counts twice.
+        expect(second - first).toBe(8);
       }),
       { timeout: 300_000 },
     );
   },
 );
+
+// Type-level only, never deployed: a pool whose nodes are JavaScript bundles
+// can't host a Rust Durable Object, so the Stack doesn't type-check.
+export const rustNeedsAnImagePool = () =>
+  Alchemy.Stack(
+    "RustOnFly",
+    { providers: Layer.mergeAll(Fly.providers(), Rivet.providers()), state: Alchemy.localState() },
+    // @ts-expect-error RivetFly.MachinePool doesn't provide ImagePoolHost, which a crate needs
+    Effect.gen(function* () {
+      yield* Rivet.DurableObject("RustOnFly", { crate: fixture("rust/counter") }).pipe(
+        Effect.provide(RivetFly.MachinePool("Fly").pipe(Layer.provide(Cluster))),
+      );
+    }),
+  );

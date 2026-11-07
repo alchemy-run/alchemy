@@ -1,5 +1,5 @@
-//! Rivet's Rust quickstart Actor, as its docs write it: deployed unchanged as
-//! an external Durable Object.
+//! Rivet's Rust quickstart Actor, deployed as a Rust Durable Object from a
+//! member of a Cargo workspace. The `double` feature doubles each increment.
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -57,7 +57,11 @@ impl Handler<Increment> for Counter {
 			.sql()
 			.execute(
 				"UPDATE counter SET count = count + ? WHERE id = 0 RETURNING count",
-				Some(vec![BindParam::Integer(action.amount)]),
+				Some(vec![BindParam::Integer(if cfg!(feature = "double") {
+					action.amount * 2
+				} else {
+					action.amount
+				})]),
 			)
 			.await?;
 		let count = match result.rows.first().and_then(|row| row.first()) {
