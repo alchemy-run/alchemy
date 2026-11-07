@@ -99,12 +99,43 @@ export interface QueueAttributes {
  * ) {}
  * ```
  *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const jobs = Modal.Queue.lookup({ name: "jobs" });
+ * ```
+ *
  * @resource
  * @product Queue
  */
 export const Queue = declarable<Queue>()(Resource<Queue>("Modal.Queue"));
 
-export type Queue = Resource<"Modal.Queue", QueueProps, QueueAttributes, never, Providers>;
+export type Queue = Resource<
+  "Modal.Queue",
+  QueueProps,
+  QueueAttributes,
+  never,
+  Providers,
+  QueueLookup
+>;
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack
+ * doesn't manage by its name.
+ */
+export interface QueueLookup {
+  /** Queue name. */
+  name: string;
+  /**
+   * Modal environment the object lives in.
+   * @default the workspace's default environment
+   */
+  environment?: string;
+}
 
 /** A queue by name, or `undefined` when missing. */
 export const lookupQueue = Effect.fn(function* (
@@ -177,6 +208,10 @@ export const QueueProvider = () =>
           if (output !== undefined && name !== output.name) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name, environment }) {
+          return yield* observe(undefined, name, environment);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const observed = yield* observe(output?.queueId, name, envNameOf(olds?.environment));

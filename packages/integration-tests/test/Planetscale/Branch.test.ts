@@ -13,6 +13,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
@@ -172,6 +173,20 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
 
               return { database, branch };
             }),
+          );
+          yield* expectFound(
+            Planetscale.PostgresBranch.lookup({ database: branch.database, name: branch.name }),
+            branch,
+            // Migrations and replica intent are this stack's record.
+            {
+              ignore: [
+                "migrationsDir",
+                "migrationsTable",
+                "migrationsHashes",
+                "importHashes",
+                "desiredReplicas",
+              ],
+            },
           );
 
           const live = yield* ps.getBranch({

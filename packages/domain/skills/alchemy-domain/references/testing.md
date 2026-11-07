@@ -47,6 +47,9 @@ The steps:
 - `given(ref, ...events)` records history. It reaches views, but never triggers policies.
 - `when(ref, command)` sends a command, then runs every policy, saga and projection until the model settles.
 - `then(ref, ...events)` asserts the next events committed on that stream, since the last `then` or `given` on it. With no events, it asserts that nothing new was committed. Every committed event needs a `then`, on every stream, including those a policy or saga writes: an event no `then` asserts fails the story at the end.
+- `anyOrder(...events)` / `inOrder(...events)` group events inside a `then` when the model doesn't order them, e.g. a policy and a saga step writing one stream: `then(ref, anyOrder(a, b))`. They nest, and payloads and counts still have to match.
+
+A story runs every order of concurrent work that can matter: when several policies or saga steps that write the same stream are ready at once, it replays once per order, and every run must pass. An ordered `then` over events from concurrent writers fails in the order it doesn't hold; use `anyOrder`. More than 256 orders fails the story: split it.
 - `rejected(rejection)` asserts the last command's rejection. An unasserted rejection fails the story.
 - `replied(value)` asserts the last command's reply.
 - `state(ref, partial | fn)` asserts aggregate state.

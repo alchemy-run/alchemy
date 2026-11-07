@@ -3,7 +3,12 @@ import type { SecurityGroupId } from "@alchemy.run/aws/EC2/SecurityGroup";
 import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
-import { makePoolLayer, RIVETKIT_VERSION, type PoolSettings } from "../internal/PoolHost.ts";
+import {
+  isImageProgram,
+  makePoolLayer,
+  RIVETKIT_VERSION,
+  type PoolSettings,
+} from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface Ec2PoolOptions extends PoolSettings {
@@ -84,20 +89,22 @@ export const Ec2Pool = (id: string, options: Ec2PoolOptions = {}) =>
     network: poolNetworkOf,
     nodes: (nodes) =>
       Effect.gen(function* () {
+        const { program } = nodes;
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const env = nodeEnvironment(nodes);
         const subnets = network.subnetIds;
         for (let i = 0; i < (options.replicas ?? 1); i++) {
           // Every class the pool hosts is bundled into the node program.
           yield* EC2.Instance(`${id}Node${i}`, {
-            ...nodes.program,
+            // A Rust program is its own image, run in Docker on the
+            // instance; every other program is bundled with RivetKit beside it.
+            ...(isImageProgram(program) ? program : { ...program, userData: installRivetKit }),
             imageId: EC2.amazonLinux2023(),
             instanceType: options.instanceType ?? "t3.small",
             // The cluster's network carries plain strings; these are AWS ids.
             subnetId: subnets[i % subnets.length] as Input<SubnetId>,
             securityGroupIds: [network.securityGroupId as Input<SecurityGroupId>],
             associatePublicIpAddress: true,
-            userData: installRivetKit,
             env,
           });
         }

@@ -1,6 +1,7 @@
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
+import { Random, RandomProvider } from "alchemy/Random";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { App, AppProvider } from "./App.ts";
@@ -56,6 +57,8 @@ export const providers = () =>
       PersistentSandbox,
       Proxy,
       Queue,
+      // Each RPC binding mints its caller's key (`Modal.InvokeFunction`, `Modal.FetchServer`).
+      Random,
       Sandbox,
       Secret,
       Server,
@@ -78,6 +81,7 @@ export const providers = () =>
         PersistentSandboxProvider(),
         ProxyProvider(),
         QueueProvider(),
+        RandomProvider(),
         SandboxProvider(),
         SecretProvider(),
         ServerProvider(),

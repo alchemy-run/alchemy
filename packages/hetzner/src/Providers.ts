@@ -1,3 +1,4 @@
+import { DockerLive } from "@alchemy.run/docker/Docker";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
@@ -106,7 +107,8 @@ export const providers = () =>
         DnsRecordListProvider(),
         RecordSetProvider(),
         ServerProvider(),
-        ServiceProvider(),
+        // A `context` Service builds its image with the local Docker CLI.
+        ServiceProvider().pipe(Layer.provide(DockerLive)),
         SshKeyProvider(),
         VolumeProvider(),
         VolumeAttachmentProvider(),

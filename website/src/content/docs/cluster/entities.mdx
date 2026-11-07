@@ -4,6 +4,7 @@ description: How an Effect Cluster entity is written in Alchemy — its declarat
 ---
 
 import Queue from "../../../components/diagrams/Queue.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
 
 An entity is a class with one instance per id. Every instance runs the same code against its own state, and handles its messages one at a time.
 
@@ -30,6 +31,7 @@ An entity is declared from an Effect Cluster entity, made with Effect's `Entity.
 ```typescript title="src/Room.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { Entity } from "effect/cluster";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
@@ -49,13 +51,14 @@ export default class Room extends Cluster.Entity<Room>()(
   Rooms,
   { main: import.meta.url },
   Effect.gen(function* () {
+    const capacity = yield* Config.Int("ROOM_CAPACITY");
     return Effect.gen(function* () {
       const members = yield* Ref.make(new Set<string>());
       return Rooms.of({
         Join: ({ payload }) =>
           Effect.gen(function* () {
             const all = yield* Ref.get(members);
-            if (all.size >= 10) return yield* new RoomFull({ capacity: 10 });
+            if (all.size >= capacity) return yield* new RoomFull({ capacity });
             const next = new Set(all).add(payload.name);
             yield* Ref.set(members, next);
             return next.size;
@@ -75,83 +78,83 @@ Providing the pool, `Default`, is what deploys it. `yield* Room` returns the ent
 
 ## Two phases
 
-The outer Effect runs once per runner, when it starts. Resolve bindings there: other entities, secrets, Config values.
+The implementation in `src/Room.ts` above is two Effects, one inside the other.
 
-The inner Effect runs once per instance, on its first message. Its state starts there:
+The outer Effect runs once per runner, when it starts. Resolve what every instance shares there: bindings to other entities, secrets, Config values. The inner Effect runs once per instance, on its first message, and holds that instance's state:
 
-```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/effect-cluster";
-import { Entity } from "effect/cluster";
-import * as Effect from "effect/Effect";
-import * as Ref from "effect/Ref";
-import { Rpc } from "effect/rpc";
-import * as Schema from "effect/Schema";
-import { Default } from "./Cluster.ts";
-
-const Rooms = Entity.make("Room", [
-  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
-  Rpc.make("Members", { success: Schema.Array(Schema.String) }),
-]);
-
-export default class Room extends Cluster.Entity<Room>()(
-  Rooms,
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    return Effect.gen(function* () {
-      const { entityId } = yield* Entity.CurrentAddress;
-      yield* Effect.logInfo(`room ${entityId} started`);
-      const members = yield* Ref.make(new Set<string>());
-      return Rooms.of({
-        Join: ({ payload }) =>
-          Ref.modify(members, (all) => {
-            const next = new Set(all).add(payload.name);
-            return [next.size, next];
-          }),
-        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
-      });
+```typescript
+Effect.gen(function* () {
+  const capacity = yield* Config.Int("ROOM_CAPACITY");
+  return Effect.gen(function* () {
+    const members = yield* Ref.make(new Set<string>());
+    return Rooms.of({
+      Join: ({ payload }) =>
+        Effect.gen(function* () {
+          const all = yield* Ref.get(members);
+          if (all.size >= capacity) return yield* new RoomFull({ capacity });
+          const next = new Set(all).add(payload.name);
+          yield* Ref.set(members, next);
+          return next.size;
+        }),
+      Members: () => Effect.map(Ref.get(members), (all) => [...all]),
     });
-  }).pipe(Effect.provide(Default)),
-) {}
+  });
+});
 ```
 
-`Entity.CurrentAddress` holds the instance's id and shard.
+Every room on a runner reads the same `capacity`. Each room gets its own `members`:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "runner", label: "runner" },
+    { id: "lobby", label: "lobby" },
+    { id: "kitchen", label: "kitchen" },
+  ]}
+  bars={[
+    { lane: "runner", start: 0.2, end: 1.4, label: "outer", tone: "warn" },
+    { lane: "lobby", start: 2, end: 2.8, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 2.8, end: 4.2, label: "Join" },
+    { lane: "lobby", start: 4.2, end: 5.6, label: "Join" },
+    { lane: "kitchen", start: 5, end: 5.8, label: "inner", tone: "warn" },
+    { lane: "kitchen", start: 5.8, end: 7.4, label: "Join" },
+    { lane: "lobby", start: 7.6, end: 9.4, label: "Members" },
+  ]}
+  legend={[{ tone: "warn", label: "phase runs" }, { tone: "accent", label: "message" }]}
+  caption="The runner builds the outer Effect once. Each room builds the inner Effect on its first message, then handles every later message with the state it made."
+/>
+
+Inside the inner Effect, `Entity.CurrentAddress`, from `effect/cluster`, holds the instance's id and shard:
+
+```typescript
+const { entityId } = yield* Entity.CurrentAddress;
+```
 
 ## How long an instance lives
 
-An instance stops after sitting idle for a minute. Its next message starts it again, from the inner Effect, with fresh state. Set how long it waits, and how many of its messages may run at once, next to `main`:
+An instance stops after sitting idle for a minute. Its next message starts it again, from the inner Effect, with fresh state:
 
-```typescript title="src/Room.ts"
-import * as Cluster from "@alchemy.run/effect-cluster";
-import { Entity } from "effect/cluster";
-import * as Effect from "effect/Effect";
-import * as Ref from "effect/Ref";
-import { Rpc } from "effect/rpc";
-import * as Schema from "effect/Schema";
-import { Default } from "./Cluster.ts";
+<Timeline
+  end={10}
+  lanes={[{ id: "lobby", label: "lobby" }]}
+  bars={[
+    { lane: "lobby", start: 0.2, end: 1, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 1, end: 2.4, label: "Join" },
+    { lane: "lobby", start: 2.4, end: 5.6, label: "idle", tone: "muted" },
+    { lane: "lobby", start: 7, end: 7.8, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 7.8, end: 9.2, label: "Join" },
+  ]}
+  marks={[{ at: 5.6, label: "maxIdleTime" }]}
+  caption="After maxIdleTime with no messages, the lobby stops and its members are gone. The next Join builds the inner Effect again and starts from an empty room."
+/>
 
-const Rooms = Entity.make("Room", [
-  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
-]);
+Set how long it waits, and how many of its messages may run at once, next to `main`:
 
-export default class Room extends Cluster.Entity<Room>()(
-  Rooms,
-  { main: import.meta.url, maxIdleTime: "10 minutes", concurrency: 1 },
-  Effect.gen(function* () {
-    return Effect.gen(function* () {
-      const members = yield* Ref.make(new Set<string>());
-      return Rooms.of({
-        Join: ({ payload }) =>
-          Ref.modify(members, (all) => {
-            const next = new Set(all).add(payload.name);
-            return [next.size, next];
-          }),
-      });
-    });
-  }).pipe(Effect.provide(Default)),
-) {}
+```typescript
+{ main: import.meta.url, maxIdleTime: "10 minutes", concurrency: 1 }
 ```
 
-An instance also stops when its runner does, including on every deploy, and when its shard moves to another runner.
+An instance also stops when its runner does, including on every deploy, and when its shard moves to another runner. Keep state that must outlive it in a database.
 
 ## Keep its code out of its callers
 
@@ -206,7 +209,7 @@ export default Room.make(
 
 ## Messages
 
-Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations and helpers work unchanged:
+Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations, in `ClusterSchema`, and its helpers work unchanged:
 
 ```typescript title="src/Room.ts"
 import * as Cluster from "@alchemy.run/effect-cluster";

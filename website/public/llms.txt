@@ -822,13 +822,14 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 - [Part 2: Messages in SQL](https://alchemy.run/rivet/tutorial/part-2) — Give each room a SQL table of messages, and post and read them over HTTP.
 - [Part 3: Clear Idle Rooms](https://alchemy.run/rivet/tutorial/part-3) — Use a Durable Object alarm to clear a room's messages an hour after the last one.
 - [Part 4: Run It on Hetzner](https://alchemy.run/rivet/tutorial/part-4) — Move the chat rooms from Docker to Hetzner Cloud by swapping the control plane, the pool and the API's host.
-- [Three ways to build Actors](https://alchemy.run/rivet/actors) — Build Rivet Actors as Alchemy Durable Objects, with RivetKit, or with RivetKit's Effect SDK — what each one is for, and how all three deploy to the same control planes and pools.
+- [Four ways to build Actors](https://alchemy.run/rivet/actors) — Build Rivet Actors as Alchemy Durable Objects, with RivetKit, with RivetKit's Effect SDK, or in Rust — what each one is for, and how all four deploy to the same control planes and pools.
 - [Durable Object](https://alchemy.run/rivet/durable-objects) — What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
 - [Storage](https://alchemy.run/rivet/storage) — What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
 - [Concurrency](https://alchemy.run/rivet/concurrency) — How a Rivet Durable Object runs calls in parallel, how a transaction keeps a read and a write together, and how Workers.InputGate gives code written for Cloudflare the same rule it has there.
 - [Calling a Durable Object](https://alchemy.run/rivet/calling) — How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
 - [RivetKit Actors](https://alchemy.run/rivet/rivetkit) — Deploy Actors written with RivetKit, unchanged, to a Rivet control plane and pool on any cloud.
 - [RivetKit Effect Actors](https://alchemy.run/rivet/rivetkit-effect) — Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
+- [Rust Actors](https://alchemy.run/rivet/rivetkit-rust) — Deploy Actors written with RivetKit's Rust SDK, unchanged, to a Rivet control plane and pool. Alchemy compiles the crate into the pool's node image.
 - [Durable Streams](https://alchemy.run/rivet/durable-streams) — Append-only logs with a replayable history, one per key, served by Rivet Services — declare one with its message Schema, append, read from an offset, follow it live, and choose its wire format as a Layer.
 - [Control Plane](https://alchemy.run/rivet/control-planes) — What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
 - [Pool](https://alchemy.run/rivet/pools) — How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
@@ -910,11 +911,11 @@ Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and sc
 
 ## Modal
 
-Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.
+Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.
 
-- [Modal](https://alchemy.run/modal) — Run functions, servers and agent sandboxes on Modal, and keep files there, from your Workers and Lambdas.
+- [Modal](https://alchemy.run/modal) — Run Functions, Servers and Sandboxes on Modal with Alchemy. Declare apps, images, volumes and secrets in TypeScript, and create sandboxes from any Worker or Lambda.
+- [What is Modal?](https://alchemy.run/modal/what-is-modal) — The concepts behind Modal — workspaces and tokens, environments, apps, images, Functions, Servers, Sandboxes, Volumes, Dicts, Queues and Secrets — and how @alchemy.run/modal models each of them.
 - [Setup](https://alchemy.run/modal/setup) — Log in to Modal, or give Alchemy a Modal token.
-- [Concepts](https://alchemy.run/modal/concepts) — How Modal environments, apps and objects map to your Stack.
 
 ## Modal — Tutorial
 
@@ -923,6 +924,25 @@ Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, 
 - [Part 3: Testing](https://alchemy.run/modal/tutorial/part-3) — Test the deployed API against real Modal sandboxes.
 - [Part 4: Stages](https://alchemy.run/modal/tutorial/part-4) — Deploy separate dev, staging and prod copies, each in its own Modal environment.
 - [Part 5: CI/CD](https://alchemy.run/modal/tutorial/part-5) — Deploy from GitHub Actions with a Modal token in repository secrets.
+
+## Modal — Accounts & access
+
+- [Workspaces and tokens](https://alchemy.run/modal/workspaces-and-tokens) — How a Modal workspace holds everything, how environments keep stages apart, how profiles choose the workspace, and the service users your runtimes act as.
+- [Access control](https://alchemy.run/modal/security/access-control) — Separate workloads with environments, member roles and scoped tokens.
+- [Secrets](https://alchemy.run/modal/security/secrets) — Give Modal Functions, Servers and Sandboxes API keys and passwords as Modal Secrets, as environment variables or added to requests on the way out.
+
+## Modal — Compute
+
+- [Choosing a runtime](https://alchemy.run/modal/compute/choosing-a-runtime) — Functions, Servers, program sandboxes and sandboxes created at run time on Modal, and when to use each.
+
+## Modal — Services
+
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
+- [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
+- [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
+- [Servers](https://alchemy.run/modal/services/servers) — Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
+- [Web endpoints](https://alchemy.run/modal/services/web-endpoints) — Serve a Modal Function on the web at a modal.run URL.
 
 ## Modal — Sandboxes
 
@@ -938,19 +958,9 @@ Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, 
 - [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
 - [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
 
-## Modal — Security
+## Modal — Networking
 
-- [Access control](https://alchemy.run/modal/security/access-control) — Separate workloads with environments, member roles and scoped tokens.
-- [Network & secrets](https://alchemy.run/modal/security/network-and-secrets) — Limit what a sandbox can reach and give it credentials it can't read.
-
-## Modal — Services
-
-- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
-- [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
-- [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
-- [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
-- [Servers](https://alchemy.run/modal/services/servers) — Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
-- [Web endpoints](https://alchemy.run/modal/services/web-endpoints) — Serve a Modal Function on the web at a modal.run URL.
+- [Network & tunnels](https://alchemy.run/modal/networking/network) — Limit what a Modal Sandbox can reach, reach its ports through tunnels, and give its traffic static egress IPs.
 
 ## Better Auth
 
@@ -1198,4 +1208,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~252 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.

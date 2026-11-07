@@ -138,7 +138,16 @@ export interface DiskAttributes {
   allowSandboxMount: boolean;
 }
 
-export type Disk = Resource<"Archil.Disk", DiskProps, DiskAttributes, never, Providers>;
+export type Disk = Resource<"Archil.Disk", DiskProps, DiskAttributes, never, Providers, DiskLookup>;
+
+/**
+ * Props for {@link Disk.lookup}: find a disk this stack
+ * doesn't manage by its name.
+ */
+export interface DiskLookup {
+  /** Disk name. */
+  name: string;
+}
 
 /**
  * An Archil disk: a durable filesystem that mounts in about 50 ms on any
@@ -258,6 +267,17 @@ export type Disk = Resource<"Archil.Disk", DiskProps, DiskAttributes, never, Pro
  * // runtime
  * const seeds = yield* Archil.BranchDisk(Seed);
  * const branch = yield* seeds.branch({ name: `session-${id}`, fromCheckpoint: "base" });
+ * ```
+ *
+ * ### Looking up an existing disk
+ * `Disk.lookup` references a disk Alchemy doesn't manage (created in
+ * the Archil console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Branch an existing disk
+ * ```typescript
+ * const data = Archil.Disk.lookup({ name: "datasets" });
+ * const preview = yield* Archil.Branch("Preview", { disk: data.diskId });
  * ```
  *
  * @resource
@@ -421,6 +441,11 @@ export const DiskProvider = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const disk = yield* findDiskByName(name);
+          return disk ? toDiskAttributes(disk, yield* readDiskSettings(disk.id)) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* diskName(id, olds?.name));
           const disk =

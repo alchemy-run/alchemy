@@ -667,6 +667,7 @@ const SECTIONS: Section[] = [
         "rivet/calling",
         "rivet/rivetkit",
         "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
         "rivet/durable-streams",
         "rivet/control-planes",
         "rivet/pools",
@@ -750,16 +751,27 @@ const SECTIONS: Section[] = [
   {
     heading: "Modal",
     intro:
-      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+      "Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.",
     pages: {
-      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+      slugs: ["modal/index", "modal/what-is-modal", "modal/setup"],
     },
   },
   { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  {
+    heading: "Modal — Accounts & access",
+    pages: {
+      slugs: [
+        "modal/workspaces-and-tokens",
+        "modal/security/access-control",
+        "modal/security/secrets",
+      ],
+    },
+  },
+  { heading: "Modal — Compute", pages: { directory: "modal/compute" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
   { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
   { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
-  { heading: "Modal — Security", pages: { directory: "modal/security" } },
-  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  { heading: "Modal — Networking", pages: { directory: "modal/networking" } },
   {
     heading: "Better Auth",
     intro:

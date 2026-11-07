@@ -4,7 +4,11 @@ import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import { makeDurableObjectCallbackFactory } from "./AlarmCallback.ts";
-import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
+import {
+  DurableObjectState,
+  fromDurableObjectState,
+  type NativeDurableObjectState,
+} from "./DurableObjectState.ts";
 import { takeRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { getWorkerExport } from "./WorkerBridge.ts";
 
@@ -22,8 +26,13 @@ export const makeDurableObjectBridge = (
   const bridge = makeWorkerdBridge(DurableObject, {
     makeCallback: makeDurableObjectCallbackFactory,
     getExport: (exportName) => getWorkerExport<DurableObjectExport>({ ...options, exportName }),
+    // The native state workerd constructed the object with. `unknown` skips
+    // comparing its two declarations, which hangs (see `NativeDurableObjectState`).
     services: (state) =>
-      Context.make(DurableObjectState, fromDurableObjectState(state)) as Context.Context<never>,
+      Context.make(
+        DurableObjectState,
+        fromDurableObjectState(state as unknown as NativeDurableObjectState),
+      ) as Context.Context<never>,
     // A stub appends the caller's trace context; one from an older deploy
     // doesn't, and its call starts a trace of its own.
     rpcArgs: takeRpcTraceContext,

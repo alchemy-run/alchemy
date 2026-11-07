@@ -73,14 +73,9 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "start",
   },
 
-  hub(
-    "Cloudflare",
-    "cloudflare",
-    "Clouds",
-    "workers · durable objects · R2 · D1",
-    ["/providers/cloudflare"],
-    ["Actors"],
-  ),
+  hub("Cloudflare", "cloudflare", "Clouds", "workers · durable objects · R2 · D1", [
+    "/providers/cloudflare",
+  ]),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
