@@ -70,7 +70,7 @@ export type Server = Resource<
   "Modal.Server",
   ServerProps,
   ServerAttributes,
-  { env?: Record<string, any>; mounts?: MountContract },
+  { env?: Record<string, any>; mounts?: MountContract; rpcCallers?: string[] },
   Providers
 >;
 

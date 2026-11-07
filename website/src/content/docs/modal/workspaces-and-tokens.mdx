@@ -87,6 +87,8 @@ const sandboxes = yield* Modal.CreateSandbox(Warm);
 
 This Worker's service user is a `contributor` in `Warm`'s environment, and nothing in any other. Keep workloads that shouldn't touch each other in separate environments.
 
+A Modal Function or Server needs no service user: it calls Modal as its own container, so no token is stored in it.
+
 Declare a service user yourself for anything outside the Stack, like a CI job:
 
 ```typescript title="src/identities.ts"

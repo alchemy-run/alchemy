@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as volumes from "@distilled.cloud/daytona/volumes";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Daytona.providers() });
 
@@ -30,6 +31,7 @@ test.provider(
       yield* stack.destroy();
 
       const created = yield* stack.deploy(Daytona.Volume("Data", {}));
+      yield* expectFound(Daytona.Volume.lookup({ name: created.name }), created);
       expect(created.state).toEqual("ready");
       expect(yield* state(created.volumeId)).toEqual("ready");
 
