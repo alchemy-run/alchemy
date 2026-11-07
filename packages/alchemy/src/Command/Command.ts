@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -21,6 +22,7 @@ import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as DevTrust from "../Local/DevTrust.ts";
 import type { ScopedPlanStatusSession } from "../Report.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
 import { initialCwd } from "../Util/Node.ts";
@@ -234,6 +236,7 @@ export const CommandExecutorLive = () =>
   Layer.effect(
     CommandExecutor,
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
@@ -260,40 +263,54 @@ export const CommandExecutorLive = () =>
         return Effect.succeed({ bin, args });
       };
 
+      // Each child's own bundle of the dev session's CAs. Acquired before the
+      // child, so it is removed after the child is gone.
+      const trustEnv = DevTrust.nodeEnv().pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+      );
+
       /** Spawns a command, returning the child process handle. */
       const spawn = (props: CommandProps) =>
         parseCommand(props).pipe(
           Effect.flatMap(({ bin, args }) =>
-            Effect.acquireRelease(
-              spawner.spawn(
-                ChildProcess.make(bin, args, {
-                  // Anchored: a live `process.cwd()` read can race a
-                  // concurrent tool's transient chdir (see Util/Node.ts).
-                  cwd: path.resolve(initialCwd, props.cwd ?? "."),
-                  shell: props.shell ?? false,
-                  env: Object.fromEntries(
-                    Object.entries(props.env ?? {})
-                      .filter(
-                        (entry): entry is [string, string | Redacted.Redacted<string>] =>
-                          entry[1] !== undefined,
-                      )
-                      .map(([k, v]) => [k, Redacted.isRedacted(v) ? Redacted.value(v) : v]),
-                  ),
-                  extendEnv: true,
-                  stdin: isNonInteractive() ? "ignore" : "inherit",
-                  stdout: "pipe",
-                  stderr: "pipe",
-                  // The Effect process runtime creates a detached process group
-                  // by default on POSIX. Preserve that default so timeouts and
-                  // scoped interruption can terminate every descendant.
-                  // Preserve hard cleanup when the leader exits with an error.
-                  killSignal: "SIGKILL",
-                }),
+            Effect.flatMap(trustEnv, (trust) =>
+              Effect.acquireRelease(
+                spawner.spawn(
+                  ChildProcess.make(bin, args, {
+                    // Anchored: a live `process.cwd()` read can race a
+                    // concurrent tool's transient chdir (see Util/Node.ts).
+                    cwd: path.resolve(initialCwd, props.cwd ?? "."),
+                    shell: props.shell ?? false,
+                    env: {
+                      // Under `alchemy dev`, every CA the dev session trusts;
+                      // the command's own env wins.
+                      ...trust,
+                      ...Object.fromEntries(
+                        Object.entries(props.env ?? {})
+                          .filter(
+                            (entry): entry is [string, string | Redacted.Redacted<string>] =>
+                              entry[1] !== undefined,
+                          )
+                          .map(([k, v]) => [k, Redacted.isRedacted(v) ? Redacted.value(v) : v]),
+                      ),
+                    },
+                    extendEnv: true,
+                    stdin: isNonInteractive() ? "ignore" : "inherit",
+                    stdout: "pipe",
+                    stderr: "pipe",
+                    // The Effect process runtime creates a detached process group
+                    // by default on POSIX. Preserve that default so timeouts and
+                    // scoped interruption can terminate every descendant.
+                    // Preserve hard cleanup when the leader exits with an error.
+                    killSignal: "SIGKILL",
+                  }),
+                ),
+                (child) =>
+                  child
+                    .kill({ killSignal: "SIGTERM", forceKillAfter: TERMINATION_GRACE_PERIOD })
+                    .pipe(Effect.ignore),
               ),
-              (child) =>
-                child
-                  .kill({ killSignal: "SIGTERM", forceKillAfter: TERMINATION_GRACE_PERIOD })
-                  .pipe(Effect.ignore),
             ),
           ),
           Effect.map((child) => redactChildProcessHandle(child, makeCommandRedactor(props.env))),
