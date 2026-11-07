@@ -383,6 +383,12 @@
       "path": "./examples/e2b-program/tsconfig.json"
     },
     {
+      "path": "./examples/boat-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-program/tsconfig.json"
+    },
+    {
       "path": "./examples/e2b-program-async/tsconfig.json"
     },
     {

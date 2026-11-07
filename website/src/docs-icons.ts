@@ -30,6 +30,10 @@ const custom: Record<string, string> = {
   // it already draws in currentColor.
   archil:
     '<g transform="scale(0.375)"><rect x="1.82" y="1.82" width="60.36" height="60.36" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" transform="translate(-115.998 -166.784)" d="M172.376 222.438L169.116 222.447V207.734C169.116 206.191 167.865 204.939 166.321 204.938H156.427C155.042 204.939 153.762 205.677 153.067 206.876L144.003 222.525L123.625 222.59L150.84 175.562L172.376 175.41V222.438ZM168.961 184.194C168.961 182.71 167.017 182.155 166.233 183.415L156.512 199.038C155.836 200.124 156.617 201.53 157.896 201.53H166.088C167.675 201.53 168.961 200.244 168.961 198.657V184.194Z"/></g>',
+  // Official mark: https://boat.dev/icon.svg (Boat's favicon, a boat under
+  // two sails, 497.985×462.094 viewBox), path verbatim, scaled uniformly into
+  // the 24×24 box and centered vertically; drawn in currentColor.
+  boat: '<g transform="translate(0 0.86) scale(0.0482)"><path fill="currentColor" d="M490.123 361.461C494.464 361.461 497.985 364.978 497.985 369.323V403.916C497.985 408.256 494.464 411.777 490.123 411.777H473.317C468.941 411.777 465.396 415.327 465.396 419.699V454.232C465.396 458.573 461.875 462.094 457.534 462.094H84.3579C83.1446 462.094 81.9773 461.511 81.2263 460.558C52.4607 424.054 51.9691 423.595 7.86426 411.777C3.67043 410.653 0 408.256 0 403.916V369.323C0 364.978 3.52235 361.461 7.86426 361.461H490.123ZM234.167 4.81756C238.589 -2.56834 249.679 -1.18229 252.148 7.06463L321.938 240.22L244.366 338.334H51.9617C44.2696 338.334 39.5154 329.947 43.4665 323.347L234.167 4.81756ZM453.056 132.260C451.192 124.166 440.791 121.826 435.640 128.341L282.295 322.292C277.163 328.784 281.786 338.334 290.063 338.334H488.080C494.445 338.334 499.157 332.414 497.728 326.210L453.056 132.260Z"/></g>',
   // Official mark: https://axiom.co/axiom-brand-assets.zip
   // Preserve its 800×690 proportions, centered in our 24×24 icon box.
   axiom:
@@ -95,6 +99,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   E2B: c("e2b"),
   Daytona: c("daytona"),
   Archil: c("archil"),
+  Boat: c("boat"),
   Prisma: c("prisma"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
   PrismaColor: c("prismaColor"),
@@ -192,6 +197,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   E2B: c("e2b"),
   Daytona: c("daytona"),
   Archil: c("archil"),
+  Boat: c("boat"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: c("prisma"),

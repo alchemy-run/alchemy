@@ -4,7 +4,7 @@ import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import type { Resource, ResourceBinding } from "alchemy/Resource";
+import { Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -35,6 +35,23 @@ import type { Providers } from "./Providers.ts";
  * twice; `xlarge` needs the $100/month plan or higher.
  */
 export type SandboxType = "small" | "default" | "large" | "xlarge";
+
+/** Where a sandbox is in its life. `archived` is stopped, with its disk saved. */
+export type SandboxState =
+  | "init"
+  | "provisioning"
+  | "provisioned"
+  | "cloning"
+  | "ready"
+  | "idle"
+  | "running"
+  | "archiving"
+  | "archived"
+  | "error"
+  | "cancelled";
+
+/** How the setup script went: `pending`, `running`, `done` or `failed`. */
+export type SandboxSetupStatus = "pending" | "running" | "done" | "failed";
 
 /** What bindings attach to a sandbox that runs a program: its process's environment. */
 export interface SandboxBinding {
@@ -146,7 +163,7 @@ export interface SandboxAttributes {
   sandboxId: string;
   name: string;
   /** `ready`, `running`, `idle`, `archived` (stopped), … */
-  state: boat.SandboxState;
+  state: SandboxState;
   type: SandboxType | undefined;
   /** vCPUs and RAM (GB) the machine size guarantees. */
   vcpu: number | undefined;
@@ -166,7 +183,7 @@ export interface SandboxAttributes {
   /** Your labels, without Alchemy's. */
   labels: Record<string, string>;
   /** The setup script's outcome: `pending`, `running`, `done` or `failed`. */
-  setupStatus: boat.SandboxSetupStatus | undefined;
+  setupStatus: SandboxSetupStatus | undefined;
   /** The program's URL, for a sandbox with `main`. */
   url: string | undefined;
   /**
@@ -282,10 +299,15 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * @resource
  * @product Sandbox
  */
-export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> =
+export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> & {
+  /** References a sandbox the stack doesn't manage, by id. */
+  readonly lookup: ReturnType<typeof Resource<Sandbox>>["lookup"];
+} = Object.assign(
   Platform("Boat.Sandbox", {
     createRuntimeContext: createHostRuntimeContext("Boat.Sandbox"),
-  });
+  }),
+  { lookup: Resource<Sandbox>("Boat.Sandbox").lookup },
+);
 
 /** A sandbox, or `undefined` when Boat no longer has it. */
 export const observeSandbox = (sandboxId: string) =>

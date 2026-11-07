@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as boat from "@distilled.cloud/boat-dev/boat";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -126,7 +127,9 @@ describe("CreateSandbox", () => {
         Effect.map((got): string => got.sandbox?.state ?? "gone"),
         Effect.catchTag("NotFound", () => Effect.succeed("gone")),
         // Out-of-band verification resolves credentials as the stack does.
-        Effect.provide(Boat.providers()),
+        Effect.provide(
+          Layer.mergeAll(Boat.BoatAuth, Boat.fromAuthProvider(), FetchHttpClient.layer),
+        ),
       );
       expect(gone).toBe("gone");
     }),
