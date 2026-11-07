@@ -63,7 +63,7 @@ import { layerDurableObjectEngine, makeEngine } from "../Workflows/DurableObject
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
 import { domainClass, type LegacyClass } from "./DomainClass.ts";
-import { RUN_ROOT } from "./MigrationRun.ts";
+import { RUN_ROOT } from "./Migration.ts";
 import { ID_KEY } from "./Router.ts";
 import { backfillRuntime, exclusively, type Random } from "./Runtime.ts";
 import { beforeVersionsBinding, DeployVersion } from "./Version.ts";

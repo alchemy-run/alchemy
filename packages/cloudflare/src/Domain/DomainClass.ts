@@ -13,7 +13,7 @@ import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { type Worker, Worker as CloudflareWorker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
-import { MIGRATION_ROUTE, migration, migrationObject } from "./MigrationRun.ts";
+import { MIGRATION_ROUTE, migration, migrationObject } from "./Migration.ts";
 import { legacyObject, router } from "./Router.ts";
 import { MIGRATION_WORKFLOW } from "./Version.ts";
 
@@ -27,7 +27,7 @@ import { MIGRATION_WORKFLOW } from "./Version.ts";
  * `domainClass(random, "Billing")` declares the class the first time a model
  * is provided on a Worker and hands back the same one after: its definitions
  * add their routes to it, and the deploy's migration reaches it (see
- * `MigrationRun.ts`) while a Worker upgraded from an older layout still has
+ * `Migration.ts`) while a Worker upgraded from an older layout still has
  * the old classes.
  */
 

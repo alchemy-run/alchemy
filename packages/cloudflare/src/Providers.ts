@@ -58,10 +58,6 @@ import {
   Backfill as DomainBackfill,
   BackfillProvider as DomainBackfillProvider,
 } from "./Domain/Backfill.ts";
-import {
-  Migration as DomainMigration,
-  MigrationProvider as DomainMigrationProvider,
-} from "./Domain/Migration.ts";
 import * as Email from "./Email/index.ts";
 import * as Firewall from "./Firewall/index.ts";
 import * as Flagship from "./Flagship/index.ts";
@@ -239,7 +235,6 @@ export const providers = () =>
       Dns.View,
       Dns.ZoneDnsSettings,
       DomainBackfill,
-      DomainMigration,
       Dns.ZoneTransferAcl,
       Dns.ZoneTransferIncoming,
       Dns.ZoneTransferOutgoing,
@@ -669,7 +664,6 @@ export const providers = () =>
           WorkersForPlatforms.DispatchNamespaceProvider(),
           Workflows.WorkflowProvider(),
           DomainBackfillProvider(),
-          DomainMigrationProvider(),
           Zaraz.ConfigProvider(),
           Zone.CustomNameserversProvider(),
           Zone.HoldProvider(),
