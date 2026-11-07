@@ -1,6 +1,7 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Credentials, Retry } from "@distilled.cloud/prisma";
 import {
   getBranch,
   getDatabase,
@@ -9,7 +10,11 @@ import {
   updateDatabase,
 } from "@distilled.cloud/prisma/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";
 import { expectFound } from "./lookup.ts";
@@ -467,6 +472,87 @@ test.provider(
     expect(failure.text).toContain("has no default region and no default database region");
 
     yield* stack.destroy();
+  }),
+  { tags: logicalIdTags, timeout: 180_000 },
+);
+
+// A host (e.g. the `prisma` CLI holding a `prisma login` session) provides
+// its own PrismaEnvironment whose Effect returns the current token. Alchemy
+// must run it on every request so a refreshed token reaches the next call.
+const hostEnvironment = (() => {
+  let resolutions = 0;
+  const requests: { url: string; authorization: string | undefined }[] = [];
+  const profile = Layer.mergeAll(Prisma.managementApi(), FetchHttpClient.layer);
+  const environment = Layer.effect(
+    Prisma.PrismaEnvironment,
+    Effect.map(Prisma.PrismaEnvironment.current, (current) =>
+      Effect.sync(() => {
+        resolutions++;
+        return current;
+      }),
+    ),
+  ).pipe(Layer.provide(profile));
+  const transport = Layer.effect(
+    HttpClient.HttpClient,
+    Effect.map(HttpClient.HttpClient, (client) =>
+      client.pipe(
+        HttpClient.mapRequest((request) => {
+          requests.push({ url: request.url, authorization: request.headers.authorization });
+          return request;
+        }),
+      ),
+    ),
+  ).pipe(Layer.provide(FetchHttpClient.layer));
+  const providers = Layer.effect(
+    Prisma.Providers,
+    Provider.collection([Prisma.Project, Prisma.Database]),
+  ).pipe(
+    Layer.provideMerge(Layer.mergeAll(Prisma.ProjectProvider(), Prisma.DatabaseProvider())),
+    Layer.provideMerge(Prisma.PrismaClientLive),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.effect(
+          Credentials,
+          Effect.map(Prisma.PrismaEnvironment, (resolve) =>
+            Effect.map(resolve, (env) => ({ apiToken: env.serviceToken, apiBaseUrl: env.baseUrl })),
+          ),
+        ),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
+    Layer.provideMerge(environment),
+    Layer.provideMerge(transport),
+    Layer.orDie,
+  );
+  return {
+    requests,
+    resolutions: () => resolutions,
+    reset: () => {
+      resolutions = 0;
+      requests.length = 0;
+    },
+    ...Test.make({ providers }),
+  };
+})();
+
+hostEnvironment.test.provider(
+  "resolves a host-provided PrismaEnvironment on every Management API request",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+    hostEnvironment.reset();
+
+    const deployed = yield* stack.deploy(databaseStack());
+    const observed = yield* observeDatabase(deployed.database.databaseId);
+    expect(observed.project.id).toBe(deployed.project.projectId);
+
+    const requests = hostEnvironment.requests.filter((request) => request.url.includes("/v1/"));
+    expect(requests.length).toBeGreaterThan(1);
+    expect(requests.every((request) => request.authorization?.startsWith("Bearer "))).toBe(true);
+    expect(hostEnvironment.resolutions()).toBeGreaterThanOrEqual(requests.length);
+
+    yield* stack.destroy();
+    yield* expectDatabaseGone(deployed.database.databaseId);
+    yield* expectProjectGone(deployed.project.projectId);
   }),
   { tags: logicalIdTags, timeout: 180_000 },
 );

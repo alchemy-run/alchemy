@@ -7,6 +7,7 @@ import {
 import {
   DurableObjectState,
   fromDurableObjectState,
+  type NativeDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import type * as cf from "@cloudflare/workers-types";
 import { RuntimeContext } from "alchemy/RuntimeContext";
@@ -109,7 +110,7 @@ export const makeAlarmScheduler = Effect.gen(function* () {
     id: { toString: () => "alarm-scheduler-test" },
     storage: native,
   } as unknown as cf.DurableObjectState;
-  const state = fromDurableObjectState(raw);
+  const state = fromDurableObjectState(raw as unknown as NativeDurableObjectState);
   const random = yield* SecureRandom.SecureRandom;
   let seal = initializeAlarmCallbacks(raw);
   return {
