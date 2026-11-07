@@ -1,6 +1,8 @@
-import type * as iot from "@distilled.cloud/aws/iot";
+import * as iot from "@distilled.cloud/aws/iot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import type { Thing } from "./Thing.ts";
 
 export interface DescribeThingRequest extends Omit<iot.DescribeThingRequest, "thingName"> {}
@@ -36,3 +38,17 @@ export interface DescribeThing extends Binding.Service<
 > {}
 
 export const DescribeThing = Binding.Service<DescribeThing>("AWS.IoT.DescribeThing");
+
+/**
+ * HTTP implementation of the {@link DescribeThing} capability — grants
+ * `iot:DescribeThing` on the thing ARN and calls the IoT `DescribeThing`
+ * API.
+ */
+export const DescribeThingHttp = Layer.effect(
+  DescribeThing,
+  makeIotThingHttpBinding({
+    tag: "AWS.IoT.DescribeThing",
+    operation: iot.describeThing,
+    actions: ["iot:DescribeThing"],
+  }),
+);

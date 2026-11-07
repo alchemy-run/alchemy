@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeModelScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `CountTokens` request with the binding-injected `modelId` made
@@ -78,3 +80,12 @@ export interface CountTokens extends Binding.Service<
   >
 > {}
 export const CountTokens = Binding.Service<CountTokens>("AWS.Bedrock.CountTokens");
+
+export const CountTokensHttp = Layer.effect(
+  CountTokens,
+  makeModelScopedHttpBinding({
+    tag: "AWS.Bedrock.CountTokens",
+    operation: bedrock.countTokens,
+    actions: ["bedrock:CountTokens"],
+  }),
+);

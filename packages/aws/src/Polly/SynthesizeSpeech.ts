@@ -1,6 +1,8 @@
-import type * as polly from "@distilled.cloud/aws/polly";
+import * as polly from "@distilled.cloud/aws/polly";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePollyHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `polly:SynthesizeSpeech` — synthesize UTF-8 plain
@@ -40,3 +42,15 @@ export interface SynthesizeSpeech extends Binding.Service<
   >
 > {}
 export const SynthesizeSpeech = Binding.Service<SynthesizeSpeech>("AWS.Polly.SynthesizeSpeech");
+
+// polly:SynthesizeSpeech only supports resource-level IAM for lexicons; the
+// synthesis call itself is account-wide, so the grant is Resource: ["*"]
+// (which also covers any LexiconNames in the request).
+export const SynthesizeSpeechHttp = Layer.effect(
+  SynthesizeSpeech,
+  makePollyHttpBinding({
+    capability: "SynthesizeSpeech",
+    iamActions: ["polly:SynthesizeSpeech"],
+    operation: polly.synthesizeSpeech,
+  }),
+);

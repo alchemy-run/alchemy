@@ -1,6 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
+import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMwaaServerlessHttpBinding } from "./BindingHttp.ts";
 import type { Workflow } from "./Workflow.ts";
 
 /**
@@ -40,3 +42,12 @@ export interface GetWorkflowRun extends Binding.Service<
   >
 > {}
 export const GetWorkflowRun = Binding.Service<GetWorkflowRun>("AWS.MWAAServerless.GetWorkflowRun");
+
+export const GetWorkflowRunHttp = Layer.effect(
+  GetWorkflowRun,
+  makeMwaaServerlessHttpBinding({
+    tag: "AWS.MWAAServerless.GetWorkflowRun",
+    operation: mwaa.getWorkflowRun,
+    actions: ["airflow-serverless:GetWorkflowRun"],
+  }),
+);

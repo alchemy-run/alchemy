@@ -3,6 +3,8 @@ import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOpenSearchDataPlaneBinding, makeReadDomainClient } from "./DataPlaneHttp.ts";
 import type {
   CountRequest,
   CountResponse,
@@ -102,3 +104,12 @@ export interface DomainRead extends Binding.Service<
   (domain: Domain) => Effect.Effect<ReadDomainClient>
 > {}
 export const DomainRead = Binding.Service<DomainRead>("AWS.OpenSearch.DomainRead");
+
+export const DomainReadHttp = Layer.effect(
+  DomainRead,
+  makeOpenSearchDataPlaneBinding({
+    name: "DomainRead",
+    iamActions: ["es:ESHttpGet", "es:ESHttpHead"],
+    makeClient: makeReadDomainClient,
+  }),
+);

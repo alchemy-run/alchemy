@@ -1,0 +1,123 @@
+{
+  "tag": "AWS.MediaTailor",
+  "module": "mediatailor",
+  "resources": {
+    "PlaybackConfiguration": {
+      "file": "PlaybackConfiguration.ts"
+    }
+  },
+  "builder": "makeMediaTailorHttpBinding",
+  "builders": {
+    "makeMediaTailorHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    },
+    "makeMediaTailorPlaybackHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreatePrefetchSchedule": {
+      "operation": "createPrefetchSchedule",
+      "resource": "PlaybackConfiguration",
+      "param": "config",
+      "request": {
+        "mode": "required",
+        "interface": "CreatePrefetchScheduleRequest",
+        "omit": ["PlaybackConfigurationName"]
+      },
+      "builder": "makeMediaTailorPlaybackHttpBinding"
+    },
+    "CreateProgram": {
+      "operation": "createProgram",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeletePrefetchSchedule": {
+      "operation": "deletePrefetchSchedule",
+      "resource": "PlaybackConfiguration",
+      "param": "config",
+      "request": {
+        "mode": "required",
+        "interface": "DeletePrefetchScheduleRequest",
+        "omit": ["PlaybackConfigurationName"]
+      },
+      "builder": "makeMediaTailorPlaybackHttpBinding"
+    },
+    "DeleteProgram": {
+      "operation": "deleteProgram",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeProgram": {
+      "operation": "describeProgram",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetChannelSchedule": {
+      "operation": "getChannelSchedule",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetPrefetchSchedule": {
+      "operation": "getPrefetchSchedule",
+      "resource": "PlaybackConfiguration",
+      "param": "config",
+      "request": {
+        "mode": "required",
+        "interface": "GetPrefetchScheduleRequest",
+        "omit": ["PlaybackConfigurationName"]
+      },
+      "builder": "makeMediaTailorPlaybackHttpBinding"
+    },
+    "ListAlerts": {
+      "operation": "listAlerts",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPrefetchSchedules": {
+      "operation": "listPrefetchSchedules",
+      "resource": "PlaybackConfiguration",
+      "param": "config",
+      "request": {
+        "mode": "required",
+        "interface": "ListPrefetchSchedulesRequest",
+        "omit": ["PlaybackConfigurationName"]
+      },
+      "builder": "makeMediaTailorPlaybackHttpBinding"
+    },
+    "StartChannel": {
+      "operation": "startChannel",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopChannel": {
+      "operation": "stopChannel",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateProgram": {
+      "operation": "updateProgram",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

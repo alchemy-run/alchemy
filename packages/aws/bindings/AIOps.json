@@ -1,0 +1,58 @@
+{
+  "tag": "AWS.AIOps",
+  "module": "aiops",
+  "resources": {
+    "InvestigationGroup": {
+      "file": "InvestigationGroup.ts"
+    }
+  },
+  "builder": "makeAIOpsGroupHttpBinding",
+  "builders": {
+    "makeAIOpsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeAIOpsGroupHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetInvestigationGroup": {
+      "operation": "getInvestigationGroup",
+      "resource": "InvestigationGroup",
+      "param": "group",
+      "request": {
+        "mode": "none"
+      },
+      "withTs": {
+        "input": "(identifier) => ({identifier})"
+      }
+    },
+    "GetInvestigationGroupPolicy": {
+      "operation": "getInvestigationGroupPolicy",
+      "resource": "InvestigationGroup",
+      "param": "group",
+      "request": {
+        "mode": "none"
+      },
+      "withTs": {
+        "input": "(identifier) => ({identifier})"
+      }
+    },
+    "ListInvestigationGroups": {
+      "operation": "listInvestigationGroups",
+      "builder": "makeAIOpsAccountHttpBinding"
+    },
+    "ListTagsForResource": {
+      "operation": "listTagsForResource",
+      "resource": "InvestigationGroup",
+      "param": "group",
+      "request": {
+        "mode": "none"
+      },
+      "withTs": {
+        "input": "(resourceArn) => ({resourceArn})"
+      }
+    }
+  }
+}

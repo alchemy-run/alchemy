@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallFirewallHttpBinding } from "./BindingHttp.ts";
 import type { Firewall } from "./Firewall.ts";
 
 export interface StartFlowCaptureRequest extends Omit<NFW.StartFlowCaptureRequest, "FirewallArn"> {}
@@ -41,4 +44,13 @@ export interface StartFlowCapture extends Binding.Service<
 
 export const StartFlowCapture = Binding.Service<StartFlowCapture>(
   "AWS.NetworkFirewall.StartFlowCapture",
+);
+
+export const StartFlowCaptureHttp = Layer.effect(
+  StartFlowCapture,
+  makeNetworkFirewallFirewallHttpBinding({
+    tag: "AWS.NetworkFirewall.StartFlowCapture",
+    operation: nfw.startFlowCapture,
+    actions: ["network-firewall:StartFlowCapture"],
+  }),
 );

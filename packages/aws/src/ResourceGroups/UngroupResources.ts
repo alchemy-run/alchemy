@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsGroupHttpBinding } from "./BindingHttp.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link UngroupResources} — the group is injected from the binding. */
@@ -43,4 +45,16 @@ export interface UngroupResources extends Binding.Service<
 > {}
 export const UngroupResources = Binding.Service<UngroupResources>(
   "AWS.ResourceGroups.UngroupResources",
+);
+
+export const UngroupResourcesHttp = Layer.effect(
+  UngroupResources,
+  makeResourceGroupsGroupHttpBinding({
+    tag: "AWS.ResourceGroups.UngroupResources",
+    operation: resourcegroups.ungroupResources,
+    actions: ["resource-groups:UngroupResources"],
+    // Application-group membership is removed by untagging the member
+    // through the Resource Groups Tagging API.
+    supportingActions: ["tag:GetResources", "tag:UntagResources"],
+  }),
 );

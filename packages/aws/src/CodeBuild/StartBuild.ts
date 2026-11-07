@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectNameHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 export interface StartBuildRequest extends Omit<SVC.StartBuildInput, "projectName"> {}
@@ -36,3 +39,12 @@ export interface StartBuild extends Binding.Service<
   >
 > {}
 export const StartBuild = Binding.Service<StartBuild>("AWS.CodeBuild.StartBuild");
+
+export const StartBuildHttp = Layer.effect(
+  StartBuild,
+  makeCodeBuildProjectNameHttpBinding({
+    tag: "AWS.CodeBuild.StartBuild",
+    operation: codebuild.startBuild,
+    actions: ["codebuild:StartBuild"],
+  }),
+);

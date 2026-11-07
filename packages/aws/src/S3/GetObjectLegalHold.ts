@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface GetObjectLegalHoldRequest extends Omit<S3.GetObjectLegalHoldRequest, "Bucket"> {}
@@ -35,3 +37,12 @@ export interface GetObjectLegalHold extends Binding.Service<
   >
 > {}
 export const GetObjectLegalHold = Binding.Service<GetObjectLegalHold>("AWS.S3.GetObjectLegalHold");
+
+export const GetObjectLegalHoldHttp = Layer.effect(
+  GetObjectLegalHold,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.GetObjectLegalHold",
+    operation: S3.getObjectLegalHold,
+    actions: ["s3:GetObjectLegalHold"],
+  }),
+);

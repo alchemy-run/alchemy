@@ -1,0 +1,204 @@
+{
+  "tag": "AWS.MailManager",
+  "module": "mailmanager",
+  "alias": "mm",
+  "resources": {
+    "AddressList": {
+      "file": "AddressList.ts"
+    },
+    "Archive": {
+      "file": "Archive.ts"
+    }
+  },
+  "builder": "makeArchiveTaskHttpBinding",
+  "builders": {
+    "makeAddressListHttpBinding": {},
+    "makeAddressListJobHttpBinding": {},
+    "makeArchiveHttpBinding": {},
+    "makeArchiveTaskHttpBinding": {}
+  },
+  "bindings": {
+    "CreateAddressListImportJob": {
+      "operation": "createAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "DeregisterMemberFromAddressList": {
+      "operation": "deregisterMemberFromAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "GetAddressListImportJob": {
+      "operation": "getAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding"
+    },
+    "GetArchiveExport": {
+      "operation": "getArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetArchiveMessage": {
+      "operation": "getArchiveMessage",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetArchiveMessageContent": {
+      "operation": "getArchiveMessageContent",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetArchiveSearch": {
+      "operation": "getArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetArchiveSearchResults": {
+      "operation": "getArchiveSearchResults",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetMemberOfAddressList": {
+      "operation": "getMemberOfAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "ListAddressListImportJobs": {
+      "operation": "listAddressListImportJobs",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "ListArchiveExports": {
+      "operation": "listArchiveExports",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding"
+    },
+    "ListArchiveSearches": {
+      "operation": "listArchiveSearches",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding"
+    },
+    "ListMembersOfAddressList": {
+      "operation": "listMembersOfAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "RegisterMemberToAddressList": {
+      "operation": "registerMemberToAddressList",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required",
+        "omit": ["AddressListId"],
+        "inline": true
+      },
+      "builder": "makeAddressListHttpBinding"
+    },
+    "StartAddressListImportJob": {
+      "operation": "startAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding"
+    },
+    "StartArchiveExport": {
+      "operation": "startArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding"
+    },
+    "StartArchiveSearch": {
+      "operation": "startArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required",
+        "omit": ["ArchiveId"],
+        "inline": true
+      },
+      "builder": "makeArchiveHttpBinding"
+    },
+    "StopAddressListImportJob": {
+      "operation": "stopAddressListImportJob",
+      "resource": "AddressList",
+      "param": "list",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAddressListJobHttpBinding"
+    },
+    "StopArchiveExport": {
+      "operation": "stopArchiveExport",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopArchiveSearch": {
+      "operation": "stopArchiveSearch",
+      "resource": "Archive",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

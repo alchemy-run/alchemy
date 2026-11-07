@@ -1,0 +1,30 @@
+{
+  "tag": "AWS.EMRServerless",
+  "module": "emr-serverless",
+  "alias": "emr",
+  "resources": {
+    "Application": {
+      "file": "Application.ts"
+    }
+  },
+  "builder": "makeEmrServerlessHttpBinding",
+  "builders": {
+    "makeEmrServerlessHttpBinding": {}
+  },
+  "bindings": {
+    "StartApplication": {
+      "operation": "startApplication",
+      "resource": "Application",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "StopApplication": {
+      "operation": "stopApplication",
+      "resource": "Application",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

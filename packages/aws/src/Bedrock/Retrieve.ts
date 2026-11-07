@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKnowledgeBaseScopedHttpBinding } from "./BindingHttp.ts";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
 
 /**
@@ -48,3 +50,12 @@ export interface Retrieve extends Binding.Service<
   >
 > {}
 export const Retrieve = Binding.Service<Retrieve>("AWS.Bedrock.Retrieve");
+
+export const RetrieveHttp = Layer.effect(
+  Retrieve,
+  makeKnowledgeBaseScopedHttpBinding({
+    tag: "AWS.Bedrock.Retrieve",
+    operation: bedrock.retrieve,
+    actions: ["bedrock:Retrieve"],
+  }),
+);

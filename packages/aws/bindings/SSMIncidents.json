@@ -1,0 +1,111 @@
+{
+  "tag": "AWS.SSMIncidents",
+  "module": "ssm-incidents",
+  "alias": "incidents",
+  "resources": {
+    "ResponsePlan": {
+      "file": "ResponsePlan.ts"
+    }
+  },
+  "builder": "makeIncidentsAccountHttpBinding",
+  "builders": {
+    "makeIncidentsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeIncidentsResponsePlanHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetIncidentFindings": {
+      "operation": "batchGetIncidentFindings",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateTimelineEvent": {
+      "operation": "createTimelineEvent",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteIncidentRecord": {
+      "operation": "deleteIncidentRecord",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteTimelineEvent": {
+      "operation": "deleteTimelineEvent",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetIncidentRecord": {
+      "operation": "getIncidentRecord",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTimelineEvent": {
+      "operation": "getTimelineEvent",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListIncidentFindings": {
+      "operation": "listIncidentFindings",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListIncidentRecords": {
+      "operation": "listIncidentRecords",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRelatedItems": {
+      "operation": "listRelatedItems",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListTimelineEvents": {
+      "operation": "listTimelineEvents",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartIncident": {
+      "operation": "startIncident",
+      "resource": "ResponsePlan",
+      "param": "plan",
+      "request": {
+        "mode": "optional",
+        "omit": ["responsePlanArn"],
+        "inline": true
+      },
+      "builder": "makeIncidentsResponsePlanHttpBinding"
+    },
+    "UpdateIncidentRecord": {
+      "operation": "updateIncidentRecord",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateRelatedItems": {
+      "operation": "updateRelatedItems",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateTimelineEvent": {
+      "operation": "updateTimelineEvent",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

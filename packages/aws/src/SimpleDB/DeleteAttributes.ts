@@ -1,7 +1,9 @@
-import type * as sdb from "@distilled.cloud/aws/simpledb";
+import * as sdb from "@distilled.cloud/aws/simpledb";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSimpleDbBinding } from "./Binding.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface DeleteAttributesRequest extends Omit<sdb.DeleteAttributesRequest, "DomainName"> {}
@@ -42,3 +44,11 @@ export interface DeleteAttributes extends Binding.Service<
   >
 > {}
 export const DeleteAttributes = Binding.Service<DeleteAttributes>("AWS.SimpleDB.DeleteAttributes");
+
+export const DeleteAttributesHttp = Layer.effect(
+  DeleteAttributes,
+  makeSimpleDbBinding({
+    operation: "DeleteAttributes",
+    method: sdb.deleteAttributes,
+  }),
+);

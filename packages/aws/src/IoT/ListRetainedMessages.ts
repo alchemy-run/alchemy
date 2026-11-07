@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListRetainedMessagesRequest extends iotdata.ListRetainedMessagesRequest {}
 
@@ -35,4 +37,18 @@ export interface ListRetainedMessages extends Binding.Service<
 
 export const ListRetainedMessages = Binding.Service<ListRetainedMessages>(
   "AWS.IoT.ListRetainedMessages",
+);
+
+/**
+ * HTTP implementation of the {@link ListRetainedMessages} capability —
+ * grants `iot:ListRetainedMessages` on `*` and calls the IoT data-plane
+ * `ListRetainedMessages` API.
+ */
+export const ListRetainedMessagesHttp = Layer.effect(
+  ListRetainedMessages,
+  makeIotAccountHttpBinding({
+    tag: "AWS.IoT.ListRetainedMessages",
+    operation: iotdata.listRetainedMessages,
+    actions: ["iot:ListRetainedMessages"],
+  }),
 );

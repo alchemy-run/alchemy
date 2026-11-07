@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/kinesis-analytics-v2";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeKinesisAnalyticsHttpBinding } from "./BindingHttp.ts";
 
 export interface DescribeApplicationRequest extends Omit<
   SVC.DescribeApplicationRequest,
@@ -37,4 +40,13 @@ export interface DescribeApplication extends Binding.Service<
 > {}
 export const DescribeApplication = Binding.Service<DescribeApplication>(
   "AWS.KinesisAnalyticsV2.DescribeApplication",
+);
+
+export const DescribeApplicationHttp = Layer.effect(
+  DescribeApplication,
+  makeKinesisAnalyticsHttpBinding({
+    tag: "AWS.KinesisAnalyticsV2.DescribeApplication",
+    operation: analytics.describeApplication,
+    actions: ["kinesisanalytics:DescribeApplication"],
+  }),
 );

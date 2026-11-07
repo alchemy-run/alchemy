@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -28,4 +31,13 @@ export interface ListBootstrapActions extends Binding.Service<
 > {}
 export const ListBootstrapActions = Binding.Service<ListBootstrapActions>(
   "AWS.EMR.ListBootstrapActions",
+);
+
+export const ListBootstrapActionsHttp = Layer.effect(
+  ListBootstrapActions,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.ListBootstrapActions",
+    operation: emr.listBootstrapActions,
+    actions: ["elasticmapreduce:ListBootstrapActions"],
+  }),
 );

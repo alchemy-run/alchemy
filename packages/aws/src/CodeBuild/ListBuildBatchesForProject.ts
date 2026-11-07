@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectNameHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -29,4 +32,13 @@ export interface ListBuildBatchesForProject extends Binding.Service<
 > {}
 export const ListBuildBatchesForProject = Binding.Service<ListBuildBatchesForProject>(
   "AWS.CodeBuild.ListBuildBatchesForProject",
+);
+
+export const ListBuildBatchesForProjectHttp = Layer.effect(
+  ListBuildBatchesForProject,
+  makeCodeBuildProjectNameHttpBinding({
+    tag: "AWS.CodeBuild.ListBuildBatchesForProject",
+    operation: codebuild.listBuildBatchesForProject,
+    actions: ["codebuild:ListBuildBatchesForProject"],
+  }),
 );

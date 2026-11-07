@@ -1,0 +1,57 @@
+{
+  "tag": "AWS.HealthLake",
+  "module": "healthlake",
+  "resources": {
+    "FHIRDatastore": {
+      "file": "FHIRDatastore.ts"
+    }
+  },
+  "builder": "makeHealthLakeDatastoreHttpBinding",
+  "builders": {
+    "makeHealthLakeDatastoreHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeFHIRExportJob": {
+      "operation": "describeFHIRExportJob",
+      "resource": "FHIRDatastore",
+      "param": "datastore",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeFHIRExportJobRequest",
+        "omit": ["DatastoreId"]
+      }
+    },
+    "DescribeFHIRImportJob": {
+      "operation": "describeFHIRImportJob",
+      "resource": "FHIRDatastore",
+      "param": "datastore",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeFHIRImportJobRequest",
+        "omit": ["DatastoreId"]
+      }
+    },
+    "ListFHIRExportJobs": {
+      "operation": "listFHIRExportJobs",
+      "resource": "FHIRDatastore",
+      "param": "datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFHIRExportJobsRequest",
+        "omit": ["DatastoreId"]
+      }
+    },
+    "ListFHIRImportJobs": {
+      "operation": "listFHIRImportJobs",
+      "resource": "FHIRDatastore",
+      "param": "datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "ListFHIRImportJobsRequest",
+        "omit": ["DatastoreId"]
+      }
+    }
+  }
+}

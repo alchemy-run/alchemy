@@ -1,0 +1,126 @@
+{
+  "tag": "AWS.PinpointSMSVoiceV2",
+  "module": "pinpoint-sms-voice-v2",
+  "alias": "smsvoice",
+  "resources": {
+    "OptOutList": {
+      "file": "OptOutList.ts"
+    },
+    "PhoneNumber": {
+      "file": "PhoneNumber.ts"
+    }
+  },
+  "builder": "makeSmsVoicePhoneNumberHttpBinding",
+  "builders": {
+    "makeSmsVoiceAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSmsVoiceOptOutListHttpBinding": {
+      "grants": "resource"
+    },
+    "makeSmsVoicePhoneNumberHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CarrierLookup": {
+      "operation": "carrierLookup",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeSmsVoiceAccountHttpBinding"
+    },
+    "DeleteKeyword": {
+      "operation": "deleteKeyword",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteKeywordRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    },
+    "DeleteOptedOutNumber": {
+      "operation": "deleteOptedOutNumber",
+      "resource": "OptOutList",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteOptedOutNumberRequest",
+        "omit": ["OptOutListName"]
+      },
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
+    },
+    "DescribeKeywords": {
+      "operation": "describeKeywords",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeKeywordsRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    },
+    "DescribeOptedOutNumbers": {
+      "operation": "describeOptedOutNumbers",
+      "resource": "OptOutList",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeOptedOutNumbersRequest",
+        "omit": ["OptOutListName"]
+      },
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
+    },
+    "PutKeyword": {
+      "operation": "putKeyword",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "PutKeywordRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    },
+    "PutMessageFeedback": {
+      "operation": "putMessageFeedback",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeSmsVoiceAccountHttpBinding"
+    },
+    "PutOptedOutNumber": {
+      "operation": "putOptedOutNumber",
+      "resource": "OptOutList",
+      "request": {
+        "mode": "required",
+        "interface": "PutOptedOutNumberRequest",
+        "omit": ["OptOutListName"]
+      },
+      "builder": "makeSmsVoiceOptOutListHttpBinding"
+    },
+    "SendMediaMessage": {
+      "operation": "sendMediaMessage",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "SendMediaMessageRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    },
+    "SendTextMessage": {
+      "operation": "sendTextMessage",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "SendTextMessageRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    },
+    "SendVoiceMessage": {
+      "operation": "sendVoiceMessage",
+      "resource": "PhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "SendVoiceMessageRequest",
+        "omit": ["OriginationIdentity"]
+      }
+    }
+  }
+}

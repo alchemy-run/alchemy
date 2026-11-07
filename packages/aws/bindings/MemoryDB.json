@@ -1,0 +1,103 @@
+{
+  "tag": "AWS.MemoryDB",
+  "module": "memorydb",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeMemoryDBAccountHttpBinding",
+  "builders": {
+    "makeMemoryDBAccountHttpBinding": {},
+    "makeMemoryDBClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchUpdateCluster": {
+      "operation": "batchUpdateCluster",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "resources": ["arn:aws:memorydb:*:*:cluster/*"]
+      },
+      "note": "Clusters are addressed by a runtime name list — grant on the cluster ARN wildcard."
+    },
+    "CopySnapshot": {
+      "operation": "copySnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "TagResource authorizes tag-on-create for the target snapshot. Both the source and target snapshot names are runtime data."
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      },
+      "builder": "makeMemoryDBClusterHttpBinding",
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "TagResource authorizes tag-on-create for the snapshot. The action authorizes against both the source cluster and the to-be-created snapshot (whose name-based ARN is runtime data)."
+    },
+    "DeleteSnapshot": {
+      "operation": "deleteSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters"
+    },
+    "DescribeEngineVersions": {
+      "operation": "describeEngineVersions"
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents"
+    },
+    "DescribeServiceUpdates": {
+      "operation": "describeServiceUpdates"
+    },
+    "DescribeSnapshots": {
+      "operation": "describeSnapshots"
+    },
+    "FailoverShard": {
+      "operation": "failoverShard",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["ClusterName"],
+        "inline": true
+      },
+      "builder": "makeMemoryDBClusterHttpBinding"
+    },
+    "ListAllowedNodeTypeUpdates": {
+      "operation": "listAllowedNodeTypeUpdates",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeMemoryDBClusterHttpBinding"
+    }
+  }
+}

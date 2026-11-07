@@ -1,6 +1,8 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsTaskLaunchHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { Task } from "./Task.ts";
 
@@ -58,3 +60,12 @@ export interface RunTask extends Binding.Service<
   >
 > {}
 export const RunTask = Binding.Service<RunTask>("AWS.ECS.RunTask");
+
+export const RunTaskHttp = Layer.effect(
+  RunTask,
+  makeEcsTaskLaunchHttpBinding({
+    tag: "AWS.ECS.RunTask",
+    operation: ECS.runTask,
+    actions: ["ecs:RunTask"],
+  }),
+);

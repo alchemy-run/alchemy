@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeAccountBinding } from "./MicrovmBinding.ts";
 
 export interface ListManagedMicrovmImagesRequest extends microvms.ListManagedMicrovmImagesInput {}
 
@@ -28,3 +29,10 @@ export interface ListManagedMicrovmImages extends Binding.Service<
 export const ListManagedMicrovmImages = Binding.Service<ListManagedMicrovmImages>(
   "AWS.Lambda.ListManagedMicrovmImages",
 );
+
+export const ListManagedMicrovmImagesHttp = makeAccountBinding({
+  binding: ListManagedMicrovmImages,
+  name: "ListManagedMicrovmImages",
+  actions: ["lambda:ListManagedMicrovmImages"],
+  operation: microvms.listManagedMicrovmImages,
+});

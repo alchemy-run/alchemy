@@ -1,0 +1,29 @@
+{
+  "tag": "AWS.CloudControl",
+  "module": "cloudcontrol",
+  "resources": {},
+  "builder": "makeCloudControlHttpBinding",
+  "builders": {
+    "makeCloudControlHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CancelResourceRequest": {
+      "operation": "cancelResourceRequest",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourceRequestStatus": {
+      "operation": "getResourceRequestStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListResourceRequests": {
+      "operation": "listResourceRequests"
+    }
+  }
+}

@@ -1,6 +1,8 @@
-import type * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEndpointHttpBinding } from "./BindingHttp.ts";
 import type { Endpoint } from "./Endpoint.ts";
 
 export interface UpdateEndpointWeightsAndCapacitiesRequest extends Omit<
@@ -53,3 +55,12 @@ export const UpdateEndpointWeightsAndCapacities =
   Binding.Service<UpdateEndpointWeightsAndCapacities>(
     "AWS.SageMaker.UpdateEndpointWeightsAndCapacities",
   );
+
+export const UpdateEndpointWeightsAndCapacitiesHttp = Layer.effect(
+  UpdateEndpointWeightsAndCapacities,
+  makeEndpointHttpBinding({
+    tag: "AWS.SageMaker.UpdateEndpointWeightsAndCapacities",
+    operation: sagemaker.updateEndpointWeightsAndCapacities,
+    actions: ["sagemaker:UpdateEndpointWeightsAndCapacities"],
+  }),
+);

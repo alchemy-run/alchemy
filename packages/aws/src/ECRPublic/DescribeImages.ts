@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /** Request for {@link DescribeImages} — `repositoryName` is injected. */
@@ -42,3 +44,12 @@ export interface DescribeImages extends Binding.Service<
 > {}
 
 export const DescribeImages = Binding.Service<DescribeImages>("AWS.ECRPublic.DescribeImages");
+
+export const DescribeImagesHttp = Layer.effect(
+  DescribeImages,
+  makePublicRepositoryHttpBinding({
+    capability: "DescribeImages",
+    iamActions: ["ecr-public:DescribeImages"],
+    operation: ecrpublic.describeImages,
+  }),
+);

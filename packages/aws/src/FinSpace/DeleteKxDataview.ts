@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -33,3 +36,12 @@ export interface DeleteKxDataview extends Binding.Service<
   >
 > {}
 export const DeleteKxDataview = Binding.Service<DeleteKxDataview>("AWS.FinSpace.DeleteKxDataview");
+
+export const DeleteKxDataviewHttp = Layer.effect(
+  DeleteKxDataview,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.DeleteKxDataview",
+    operation: finspace.deleteKxDataview,
+    actions: ["finspace:DeleteKxDataview"],
+  }),
+);

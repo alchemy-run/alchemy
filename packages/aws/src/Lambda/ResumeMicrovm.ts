@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface ResumeMicrovmRequest extends microvms.ResumeMicrovmRequest {}
@@ -31,3 +32,11 @@ export interface ResumeMicrovm extends Binding.Service<
   >
 > {}
 export const ResumeMicrovm = Binding.Service<ResumeMicrovm>("AWS.Lambda.ResumeMicrovm");
+
+export const ResumeMicrovmHttp = makeImageBinding({
+  binding: ResumeMicrovm,
+  name: "ResumeMicrovm",
+  actions: ["lambda:ResumeMicrovm"],
+  operation: microvms.resumeMicrovm,
+  scope: "microvm",
+});

@@ -1,0 +1,84 @@
+{
+  "tag": "AWS.Signer",
+  "module": "signer",
+  "resources": {
+    "SigningProfile": {
+      "file": "SigningProfile.ts"
+    }
+  },
+  "builder": "makeSignerHttpBinding",
+  "builders": {
+    "makeSignerHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSignerProfileHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeSigningJob": {
+      "operation": "describeSigningJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetRevocationStatus": {
+      "operation": "getRevocationStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSigningPlatform": {
+      "operation": "getSigningPlatform",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListSigningJobs": {
+      "operation": "listSigningJobs"
+    },
+    "ListSigningPlatforms": {
+      "operation": "listSigningPlatforms"
+    },
+    "RevokeSignature": {
+      "operation": "revokeSignature",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "RevokeSigningProfile": {
+      "operation": "revokeSigningProfile",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding"
+    },
+    "SignPayload": {
+      "operation": "signPayload",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding"
+    },
+    "StartSigningJob": {
+      "operation": "startSigningJob",
+      "resource": "SigningProfile",
+      "param": "profile",
+      "request": {
+        "mode": "required",
+        "omit": ["profileName"],
+        "inline": true
+      },
+      "builder": "makeSignerProfileHttpBinding"
+    }
+  }
+}

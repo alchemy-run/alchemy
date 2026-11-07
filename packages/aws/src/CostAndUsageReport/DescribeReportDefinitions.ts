@@ -1,6 +1,8 @@
-import type * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
+import * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCurHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link DescribeReportDefinitions} — pagination knobs only.
@@ -44,4 +46,19 @@ export interface DescribeReportDefinitions extends Binding.Service<
 
 export const DescribeReportDefinitions = Binding.Service<DescribeReportDefinitions>(
   "AWS.CostAndUsageReport.DescribeReportDefinitions",
+);
+
+/**
+ * HTTP implementation of {@link DescribeReportDefinitions}: grants
+ * `cur:DescribeReportDefinitions` on `*` (the API enumerates every report
+ * definition in the account) and calls the us-east-1 CUR endpoint with the
+ * function's IAM credentials.
+ */
+export const DescribeReportDefinitionsHttp = Layer.effect(
+  DescribeReportDefinitions,
+  makeCurHttpBinding({
+    capability: "DescribeReportDefinitions",
+    iamActions: ["cur:DescribeReportDefinitions"],
+    operation: cur.describeReportDefinitions,
+  }),
 );

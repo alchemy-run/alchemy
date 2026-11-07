@@ -12,8 +12,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import type { ConverseRequest } from "./Converse.ts";
-import type { ConverseStreamRequest } from "./ConverseStream.ts";
+import { type ConverseRequest, Converse, ConverseHttp } from "./Converse.ts";
+import {
+  type ConverseStreamRequest,
+  ConverseStream,
+  ConverseStreamHttp,
+} from "./ConverseStream.ts";
 
 /**
  * Inference parameters applied to every request made through the
@@ -835,3 +839,28 @@ const toAiError = (cause: unknown, method: "generateText" | "streamText"): AiErr
     reason: AiError.UnknownError.make({ description }),
   });
 };
+
+/**
+ * HTTP implementation of {@link LanguageModel}. Composes the {@link Converse}
+ * and {@link ConverseStream} bindings, so binding a model registers both
+ * `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` scoped to
+ * exactly that model.
+ */
+export const LanguageModelHttp = Layer.effect(
+  LanguageModel,
+  Effect.gen(function* () {
+    const converse = yield* Converse;
+    const converseStream = yield* ConverseStream;
+    return Effect.fn(function* (
+      model: string | readonly [string, ...string[]],
+      options?: LanguageModelOptions,
+    ) {
+      const [first, ...rest] = typeof model === "string" ? [model] : model;
+      return makeLanguageModelLayer({
+        converse: yield* converse(first, ...rest),
+        converseStream: yield* converseStream(first, ...rest),
+        parameters: options?.parameters,
+      });
+    });
+  }),
+).pipe(Layer.provide(Layer.mergeAll(ConverseHttp, ConverseStreamHttp)));

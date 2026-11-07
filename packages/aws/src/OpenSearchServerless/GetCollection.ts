@@ -1,6 +1,9 @@
-import type * as aoss from "@distilled.cloud/aws/opensearchserverless";
+import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Collection } from "./Collection.ts";
 
 /**
@@ -35,4 +38,36 @@ export interface GetCollection extends Binding.Service<
 > {}
 export const GetCollection = Binding.Service<GetCollection>(
   "AWS.OpenSearchServerless.GetCollection",
+);
+
+// Bespoke (not the shared scaffolding): BatchGetCollection takes an `ids`
+// array rather than a single injected `id`, and the callable unwraps the
+// batch response to the bound collection's detail.
+export const GetCollectionHttp = Layer.effect(
+  GetCollection,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(aoss.batchGetCollection);
+
+    return Effect.fn(function* (collection: Collection) {
+      const CollectionId = yield* collection.collectionId;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.OpenSearchServerless.GetCollection(${collection})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["aoss:BatchGetCollection"],
+              Resource: [Output.interpolate`${collection.collectionArn}`],
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.OpenSearchServerless.GetCollection(${collection.LogicalId})`)(
+        function* () {
+          const response = yield* op({ ids: [yield* CollectionId] });
+          return response.collectionDetails?.[0];
+        },
+      );
+    });
+  }),
 );

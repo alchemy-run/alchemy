@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 
 export interface GetConnectionRequest extends iotdata.GetConnectionRequest {}
 
@@ -35,3 +37,17 @@ export interface GetConnection extends Binding.Service<
 > {}
 
 export const GetConnection = Binding.Service<GetConnection>("AWS.IoT.GetConnection");
+
+/**
+ * HTTP implementation of the {@link GetConnection} capability — grants
+ * `iot:GetConnection` on the bound client filter and calls the IoT
+ * data-plane `GetConnection` API.
+ */
+export const GetConnectionHttp = Layer.effect(
+  GetConnection,
+  makeIotClientHttpBinding({
+    tag: "AWS.IoT.GetConnection",
+    operation: iotdata.getConnection,
+    actions: ["iot:GetConnection"],
+  }),
+);

@@ -1,0 +1,138 @@
+{
+  "tag": "AWS.Grafana",
+  "module": "grafana",
+  "resources": {
+    "Workspace": {
+      "file": "Workspace.ts"
+    }
+  },
+  "builder": "makeGrafanaWorkspaceHttpBinding",
+  "builders": {
+    "makeGrafanaAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeGrafanaWorkspaceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AssociateLicense": {
+      "operation": "associateLicense",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "CreateWorkspaceServiceAccount": {
+      "operation": "createWorkspaceServiceAccount",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "DeleteWorkspaceServiceAccount": {
+      "operation": "deleteWorkspaceServiceAccount",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "DeleteWorkspaceServiceAccountToken": {
+      "operation": "deleteWorkspaceServiceAccountToken",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "DescribeWorkspaceAuthentication": {
+      "operation": "describeWorkspaceAuthentication",
+      "resource": "Workspace",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "DescribeWorkspaceConfiguration": {
+      "operation": "describeWorkspaceConfiguration",
+      "resource": "Workspace",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "DisassociateLicense": {
+      "operation": "disassociateLicense",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "ListPermissions": {
+      "operation": "listPermissions",
+      "resource": "Workspace",
+      "request": {
+        "mode": "optional",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "ListVersions": {
+      "operation": "listVersions",
+      "builder": "makeGrafanaAccountHttpBinding"
+    },
+    "ListWorkspaceServiceAccountTokens": {
+      "operation": "listWorkspaceServiceAccountTokens",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "ListWorkspaceServiceAccounts": {
+      "operation": "listWorkspaceServiceAccounts",
+      "resource": "Workspace",
+      "request": {
+        "mode": "optional",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "UpdatePermissions": {
+      "operation": "updatePermissions",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "UpdateWorkspaceAuthentication": {
+      "operation": "updateWorkspaceAuthentication",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    },
+    "UpdateWorkspaceConfiguration": {
+      "operation": "updateWorkspaceConfiguration",
+      "resource": "Workspace",
+      "request": {
+        "mode": "required",
+        "omit": ["workspaceId"],
+        "inline": true
+      }
+    }
+  }
+}

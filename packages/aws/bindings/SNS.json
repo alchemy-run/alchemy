@@ -1,0 +1,447 @@
+{
+  "tag": "AWS.SNS",
+  "module": "sns",
+  "resources": {
+    "PlatformApplication": {
+      "file": "PlatformApplication.ts"
+    },
+    "Subscription": {
+      "file": "Subscription.ts"
+    },
+    "Topic": {
+      "file": "Topic.ts"
+    }
+  },
+  "builder": "makeSnsAccountHttpBinding",
+  "builders": {
+    "makeSnsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSnsEndpointHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSnsPlatformHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSnsSubscriptionHttpBinding": {
+      "grants": "resource"
+    },
+    "makeSnsTopicHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AddPermission": {
+      "operation": "addPermission",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "AddPermissionRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "CheckIfPhoneNumberIsOptedOut": {
+      "operation": "checkIfPhoneNumberIsOptedOut",
+      "request": {
+        "mode": "required",
+        "interface": "CheckIfPhoneNumberIsOptedOutRequest",
+        "omit": []
+      },
+      "note": "Opt-out reads are backed by `sms-voice:DescribeOptedOutNumbers` (probe-verified)."
+    },
+    "ConfirmSubscription": {
+      "operation": "confirmSubscription",
+      "resource": "Subscription",
+      "request": {
+        "mode": "required",
+        "interface": "ConfirmSubscriptionRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsSubscriptionHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "CreatePlatformEndpoint": {
+      "operation": "createPlatformEndpoint",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "required",
+        "interface": "CreatePlatformEndpointRequest",
+        "omit": ["PlatformApplicationArn"]
+      },
+      "builder": "makeSnsPlatformHttpBinding"
+    },
+    "CreateSMSSandboxPhoneNumber": {
+      "operation": "createSMSSandboxPhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "CreateSMSSandboxPhoneNumberRequest",
+        "omit": []
+      },
+      "note": "Registering a sandbox number creates a verified destination number and sends the OTP text via End User Messaging (probe-verified)."
+    },
+    "DeleteEndpoint": {
+      "operation": "deleteEndpoint",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteEndpointRequest",
+        "omit": []
+      },
+      "builder": "makeSnsEndpointHttpBinding"
+    },
+    "DeleteSMSSandboxPhoneNumber": {
+      "operation": "deleteSMSSandboxPhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteSMSSandboxPhoneNumberRequest",
+        "omit": []
+      }
+    },
+    "GetDataProtectionPolicy": {
+      "operation": "getDataProtectionPolicy",
+      "resource": "Topic",
+      "request": {
+        "mode": "optional",
+        "interface": "GetDataProtectionPolicyRequest",
+        "omit": ["ResourceArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "ResourceArn"
+      }
+    },
+    "GetEndpointAttributes": {
+      "operation": "getEndpointAttributes",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "required",
+        "interface": "GetEndpointAttributesRequest",
+        "omit": []
+      },
+      "builder": "makeSnsEndpointHttpBinding"
+    },
+    "GetSMSAttributes": {
+      "operation": "getSMSAttributes",
+      "request": {
+        "mode": "optional",
+        "interface": "GetSMSAttributesRequest",
+        "omit": []
+      },
+      "note": "SNS SMS preferences are backed by AWS End User Messaging — the read fans out to `sms-voice:DescribeSpendLimits` (probe-verified)."
+    },
+    "GetSMSSandboxAccountStatus": {
+      "operation": "getSMSSandboxAccountStatus",
+      "request": {
+        "mode": "optional",
+        "interface": "GetSMSSandboxAccountStatusRequest",
+        "omit": []
+      }
+    },
+    "GetSubscriptionAttributes": {
+      "operation": "getSubscriptionAttributes",
+      "resource": "Subscription",
+      "request": {
+        "mode": "optional",
+        "interface": "GetSubscriptionAttributesRequest",
+        "omit": ["SubscriptionArn"]
+      },
+      "builder": "makeSnsSubscriptionHttpBinding",
+      "with": {
+        "key": "SubscriptionArn"
+      }
+    },
+    "GetTopicAttributes": {
+      "operation": "getTopicAttributes",
+      "resource": "Topic",
+      "request": {
+        "mode": "optional",
+        "interface": "GetTopicAttributesRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "ListEndpointsByPlatformApplication": {
+      "operation": "listEndpointsByPlatformApplication",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "optional",
+        "interface": "ListEndpointsByPlatformApplicationRequest",
+        "omit": ["PlatformApplicationArn"]
+      },
+      "builder": "makeSnsPlatformHttpBinding"
+    },
+    "ListOriginationNumbers": {
+      "operation": "listOriginationNumbers",
+      "request": {
+        "mode": "optional",
+        "interface": "ListOriginationNumbersRequest",
+        "omit": []
+      }
+    },
+    "ListPhoneNumbersOptedOut": {
+      "operation": "listPhoneNumbersOptedOut",
+      "request": {
+        "mode": "optional",
+        "interface": "ListPhoneNumbersOptedOutRequest",
+        "omit": []
+      }
+    },
+    "ListPlatformApplications": {
+      "operation": "listPlatformApplications",
+      "request": {
+        "mode": "optional",
+        "interface": "ListPlatformApplicationsRequest",
+        "omit": []
+      }
+    },
+    "ListSMSSandboxPhoneNumbers": {
+      "operation": "listSMSSandboxPhoneNumbers",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSMSSandboxPhoneNumbersRequest",
+        "omit": []
+      }
+    },
+    "ListSubscriptions": {
+      "operation": "listSubscriptions",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSubscriptionsRequest",
+        "omit": []
+      }
+    },
+    "ListSubscriptionsByTopic": {
+      "operation": "listSubscriptionsByTopic",
+      "resource": "Topic",
+      "request": {
+        "mode": "optional",
+        "interface": "ListSubscriptionsByTopicRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "ListTagsForResource": {
+      "operation": "listTagsForResource",
+      "resource": "Topic",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTagsForResourceRequest",
+        "omit": ["ResourceArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "ResourceArn"
+      }
+    },
+    "ListTopics": {
+      "operation": "listTopics",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTopicsRequest",
+        "omit": []
+      }
+    },
+    "OptInPhoneNumber": {
+      "operation": "optInPhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "OptInPhoneNumberRequest",
+        "omit": []
+      },
+      "note": "Opting a number back in deletes it from the End User Messaging opted-out list (probe-verified)."
+    },
+    "Publish": {
+      "operation": "publish",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "PublishRequest",
+        "omit": ["TopicArn", "TargetArn", "PhoneNumber"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "PublishBatch": {
+      "operation": "publishBatch",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "PublishBatchRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "PublishSms": {
+      "operation": "publish",
+      "request": {
+        "mode": "required",
+        "interface": "PublishSmsRequest",
+        "omit": ["TopicArn", "TargetArn"]
+      },
+      "note": "Direct SMS delivery is backed by `sms-voice:SendTextMessage` (probe-verified).",
+      "sets": ["PhoneNumber"]
+    },
+    "PublishToEndpoint": {
+      "operation": "publish",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "required",
+        "interface": "PublishToEndpointRequest",
+        "omit": ["TopicArn", "PhoneNumber"]
+      },
+      "builder": "makeSnsEndpointHttpBinding"
+    },
+    "PutDataProtectionPolicy": {
+      "operation": "putDataProtectionPolicy",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "PutDataProtectionPolicyRequest",
+        "omit": ["ResourceArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "ResourceArn"
+      }
+    },
+    "RemovePermission": {
+      "operation": "removePermission",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "RemovePermissionRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "SetEndpointAttributes": {
+      "operation": "setEndpointAttributes",
+      "resource": "PlatformApplication",
+      "param": "application",
+      "request": {
+        "mode": "required",
+        "interface": "SetEndpointAttributesRequest",
+        "omit": []
+      },
+      "builder": "makeSnsEndpointHttpBinding"
+    },
+    "SetSMSAttributes": {
+      "operation": "setSMSAttributes",
+      "request": {
+        "mode": "required",
+        "interface": "SetSMSAttributesRequest",
+        "omit": []
+      },
+      "note": "Spend-limit updates fan out to AWS End User Messaging."
+    },
+    "SetSubscriptionAttributes": {
+      "operation": "setSubscriptionAttributes",
+      "resource": "Subscription",
+      "request": {
+        "mode": "required",
+        "interface": "SetSubscriptionAttributesRequest",
+        "omit": ["SubscriptionArn"]
+      },
+      "builder": "makeSnsSubscriptionHttpBinding",
+      "with": {
+        "key": "SubscriptionArn"
+      }
+    },
+    "SetTopicAttributes": {
+      "operation": "setTopicAttributes",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "SetTopicAttributesRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "Subscribe": {
+      "operation": "subscribe",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "SubscribeRequest",
+        "omit": ["TopicArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "TopicArn"
+      }
+    },
+    "TagResource": {
+      "operation": "tagResource",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "TagResourceRequest",
+        "omit": ["ResourceArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "ResourceArn"
+      }
+    },
+    "Unsubscribe": {
+      "operation": "unsubscribe",
+      "request": {
+        "mode": "required",
+        "interface": "UnsubscribeRequest",
+        "omit": []
+      }
+    },
+    "UntagResource": {
+      "operation": "untagResource",
+      "resource": "Topic",
+      "request": {
+        "mode": "required",
+        "interface": "UntagResourceRequest",
+        "omit": ["ResourceArn"]
+      },
+      "builder": "makeSnsTopicHttpBinding",
+      "with": {
+        "key": "ResourceArn"
+      }
+    },
+    "VerifySMSSandboxPhoneNumber": {
+      "operation": "verifySMSSandboxPhoneNumber",
+      "request": {
+        "mode": "required",
+        "interface": "VerifySMSSandboxPhoneNumberRequest",
+        "omit": []
+      }
+    }
+  }
+}

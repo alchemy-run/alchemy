@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -33,4 +36,13 @@ export interface GetOnClusterAppUIPresignedURL extends Binding.Service<
 > {}
 export const GetOnClusterAppUIPresignedURL = Binding.Service<GetOnClusterAppUIPresignedURL>(
   "AWS.EMR.GetOnClusterAppUIPresignedURL",
+);
+
+export const GetOnClusterAppUIPresignedURLHttp = Layer.effect(
+  GetOnClusterAppUIPresignedURL,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.GetOnClusterAppUIPresignedURL",
+    operation: emr.getOnClusterAppUIPresignedURL,
+    actions: ["elasticmapreduce:GetOnClusterAppUIPresignedURL"],
+  }),
 );

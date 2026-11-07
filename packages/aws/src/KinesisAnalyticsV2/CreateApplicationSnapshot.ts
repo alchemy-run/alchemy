@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/kinesis-analytics-v2";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeKinesisAnalyticsHttpBinding } from "./BindingHttp.ts";
 
 export interface CreateApplicationSnapshotRequest extends Omit<
   SVC.CreateApplicationSnapshotRequest,
@@ -37,4 +40,13 @@ export interface CreateApplicationSnapshot extends Binding.Service<
 > {}
 export const CreateApplicationSnapshot = Binding.Service<CreateApplicationSnapshot>(
   "AWS.KinesisAnalyticsV2.CreateApplicationSnapshot",
+);
+
+export const CreateApplicationSnapshotHttp = Layer.effect(
+  CreateApplicationSnapshot,
+  makeKinesisAnalyticsHttpBinding({
+    tag: "AWS.KinesisAnalyticsV2.CreateApplicationSnapshot",
+    operation: analytics.createApplicationSnapshot,
+    actions: ["kinesisanalytics:CreateApplicationSnapshot"],
+  }),
 );

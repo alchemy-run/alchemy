@@ -1,5 +1,6 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the Amazon S3 Control HTTP bindings.
@@ -157,6 +158,11 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
    * NOT populated for `s3:CreateJob` — IAM denies a conditioned grant).
    */
   passRole?: boolean;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -165,11 +171,11 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const policyStatements: PolicyStatement[] = [
+        const policyStatements: Input<PolicyStatement>[] = [
           {
             Effect: "Allow",
             Action: [...options.actions],
-            Resource: ["*"],
+            Resource: AWSBindings.grantResources(options.arns),
           },
         ];
         if (options.passRole) {

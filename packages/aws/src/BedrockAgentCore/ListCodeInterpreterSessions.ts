@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 export interface ListCodeInterpreterSessionsRequest extends Omit<
@@ -48,4 +50,16 @@ export interface ListCodeInterpreterSessions extends Binding.Service<
 > {}
 export const ListCodeInterpreterSessions = Binding.Service<ListCodeInterpreterSessions>(
   "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
+);
+
+export const ListCodeInterpreterSessionsHttp = Layer.effect(
+  ListCodeInterpreterSessions,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.ListCodeInterpreterSessions",
+    operation: agentcore.listCodeInterpreterSessions,
+    actions: ["bedrock-agentcore:ListCodeInterpreterSessions"],
+    requestKey: "codeInterpreterIdentifier",
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
+  }),
 );

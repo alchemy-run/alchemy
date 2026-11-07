@@ -1,6 +1,8 @@
-import type * as SD from "@distilled.cloud/aws/servicediscovery";
+import * as SD from "@distilled.cloud/aws/servicediscovery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudMapDiscoveryHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface DiscoverInstancesRevision extends Binding.Service<
 > {}
 export const DiscoverInstancesRevision = Binding.Service<DiscoverInstancesRevision>(
   "AWS.CloudMap.DiscoverInstancesRevision",
+);
+
+export const DiscoverInstancesRevisionHttp = Layer.effect(
+  DiscoverInstancesRevision,
+  makeCloudMapDiscoveryHttpBinding({
+    tag: "AWS.CloudMap.DiscoverInstancesRevision",
+    operation: SD.discoverInstancesRevision,
+    actions: ["servicediscovery:DiscoverInstancesRevision"],
+  }),
 );

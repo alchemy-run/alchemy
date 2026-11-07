@@ -1,6 +1,9 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { Role } from "../IAM/Role.ts";
 
 /**
@@ -63,4 +66,54 @@ export interface CreateLanguageModel extends Binding.Service<
 > {}
 export const CreateLanguageModel = Binding.Service<CreateLanguageModel>(
   "AWS.Transcribe.CreateLanguageModel",
+);
+
+// Bespoke (not makeTranscribeRoleHttpBinding): CreateLanguageModel nests the
+// data-access role inside `InputDataConfig.DataAccessRoleArn` rather than as
+// a top-level request field.
+export const CreateLanguageModelHttp = Layer.effect(
+  CreateLanguageModel,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const createLanguageModel = yield* AWSBindings.withCredentials(transcribe.createLanguageModel);
+
+    return Effect.fn(function* <Rl extends Role>(dataAccessRole: Rl) {
+      const RoleArn = yield* dataAccessRole.roleArn;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.Transcribe.CreateLanguageModel(${dataAccessRole})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["transcribe:CreateLanguageModel"],
+              Resource: ["*"],
+            },
+            // CRITICAL: without iam:PassRole on the data-access role,
+            // CreateLanguageModel fails only at runtime with an
+            // AccessDenied.
+            {
+              Effect: "Allow",
+              Action: ["iam:PassRole"],
+              Resource: [Output.interpolate`${dataAccessRole.roleArn}`],
+              Condition: {
+                StringEquals: {
+                  "iam:PassedToService": "transcribe.amazonaws.com",
+                },
+              },
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.Transcribe.CreateLanguageModel(${dataAccessRole.LogicalId})`)(
+        function* (request: CreateLanguageModelRequest) {
+          return yield* createLanguageModel({
+            ...request,
+            InputDataConfig: {
+              ...request.InputDataConfig,
+              DataAccessRoleArn: request.InputDataConfig.DataAccessRoleArn ?? (yield* RoleArn),
+            },
+          });
+        },
+      );
+    });
+  }),
 );

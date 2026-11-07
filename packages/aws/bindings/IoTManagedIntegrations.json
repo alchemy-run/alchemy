@@ -1,0 +1,181 @@
+{
+  "tag": "AWS.IoTManagedIntegrations",
+  "module": "iot-managed-integrations",
+  "alias": "mi",
+  "resources": {
+    "ManagedThing": {
+      "file": "ManagedThing.ts"
+    }
+  },
+  "builder": "makeManagedIntegrationsHttpBinding",
+  "builders": {
+    "makeManagedIntegrationsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    },
+    "makeManagedThingHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    }
+  },
+  "bindings": {
+    "GetCustomEndpoint": {
+      "operation": "getCustomEndpoint",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetDeviceDiscovery": {
+      "operation": "getDeviceDiscovery",
+      "request": {
+        "mode": "required",
+        "interface": "GetDeviceDiscoveryRequest",
+        "omit": []
+      }
+    },
+    "GetManagedThingCapabilities": {
+      "operation": "getManagedThingCapabilities",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "Identifier"
+      }
+    },
+    "GetManagedThingCertificate": {
+      "operation": "getManagedThingCertificate",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "Identifier"
+      }
+    },
+    "GetManagedThingConnectivityData": {
+      "operation": "getManagedThingConnectivityData",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "Identifier"
+      }
+    },
+    "GetManagedThingMetaData": {
+      "operation": "getManagedThingMetaData",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "Identifier"
+      }
+    },
+    "GetManagedThingState": {
+      "operation": "getManagedThingState",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "ManagedThingId"
+      }
+    },
+    "GetSchemaVersion": {
+      "operation": "getSchemaVersion",
+      "request": {
+        "mode": "required",
+        "interface": "GetSchemaVersionRequest",
+        "omit": []
+      }
+    },
+    "ListDeviceDiscoveries": {
+      "operation": "listDeviceDiscoveries",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDeviceDiscoveriesRequest",
+        "omit": []
+      }
+    },
+    "ListDiscoveredDevices": {
+      "operation": "listDiscoveredDevices",
+      "request": {
+        "mode": "required",
+        "interface": "ListDiscoveredDevicesRequest",
+        "omit": []
+      }
+    },
+    "ListManagedThingSchemas": {
+      "operation": "listManagedThingSchemas",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "optional",
+        "interface": "ListManagedThingSchemasRequest",
+        "omit": ["Identifier"]
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "Identifier"
+      }
+    },
+    "ListSchemaVersions": {
+      "operation": "listSchemaVersions",
+      "request": {
+        "mode": "required",
+        "interface": "ListSchemaVersionsRequest",
+        "omit": []
+      }
+    },
+    "SendConnectorEvent": {
+      "operation": "sendConnectorEvent",
+      "request": {
+        "mode": "required",
+        "interface": "SendConnectorEventRequest",
+        "omit": []
+      }
+    },
+    "SendManagedThingCommand": {
+      "operation": "sendManagedThingCommand",
+      "resource": "ManagedThing",
+      "param": "thing",
+      "request": {
+        "mode": "required",
+        "interface": "SendManagedThingCommandRequest",
+        "omit": ["ManagedThingId"]
+      },
+      "builder": "makeManagedThingHttpBinding",
+      "with": {
+        "key": "ManagedThingId"
+      }
+    },
+    "StartDeviceDiscovery": {
+      "operation": "startDeviceDiscovery",
+      "request": {
+        "mode": "required",
+        "interface": "StartDeviceDiscoveryRequest",
+        "omit": []
+      }
+    }
+  }
+}

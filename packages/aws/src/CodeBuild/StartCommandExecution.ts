@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -33,4 +36,14 @@ export interface StartCommandExecution extends Binding.Service<
 > {}
 export const StartCommandExecution = Binding.Service<StartCommandExecution>(
   "AWS.CodeBuild.StartCommandExecution",
+);
+
+export const StartCommandExecutionHttp = Layer.effect(
+  StartCommandExecution,
+  makeCodeBuildProjectHttpBinding({
+    tag: "AWS.CodeBuild.StartCommandExecution",
+    operation: codebuild.startCommandExecution,
+    actions: ["codebuild:StartCommandExecution"],
+    sandboxScoped: true,
+  }),
 );

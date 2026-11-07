@@ -1,0 +1,57 @@
+{
+  "tag": "AWS.Synthetics",
+  "module": "synthetics",
+  "resources": {
+    "Canary": {
+      "file": "Canary.ts"
+    }
+  },
+  "builder": "makeSyntheticsCanaryHttpBinding",
+  "builders": {
+    "makeSyntheticsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSyntheticsCanaryHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeCanariesLastRun": {
+      "operation": "describeCanariesLastRun",
+      "builder": "makeSyntheticsAccountHttpBinding"
+    },
+    "GetCanary": {
+      "operation": "getCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "optional",
+        "interface": "GetCanaryRequest",
+        "omit": ["Name"]
+      }
+    },
+    "GetCanaryRuns": {
+      "operation": "getCanaryRuns",
+      "resource": "Canary",
+      "request": {
+        "mode": "optional",
+        "interface": "GetCanaryRunsRequest",
+        "omit": ["Name"]
+      }
+    },
+    "StartCanary": {
+      "operation": "startCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "StopCanary": {
+      "operation": "stopCanary",
+      "resource": "Canary",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

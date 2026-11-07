@@ -2,7 +2,9 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAmpWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { PrometheusApiError, PrometheusMetricMetadata } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
@@ -44,3 +46,20 @@ export interface GetMetricMetadata extends Binding.Service<
   >
 > {}
 export const GetMetricMetadata = Binding.Service<GetMetricMetadata>("AWS.AMP.GetMetricMetadata");
+
+export const GetMetricMetadataHttp = Layer.effect(
+  GetMetricMetadata,
+  makeAmpWorkspaceHttpBinding({
+    name: "GetMetricMetadata",
+    iamActions: ["aps:GetMetricMetadata"],
+    makeClient: (send) => (request: GetMetricMetadataRequest) =>
+      send({
+        method: "GET",
+        path: "api/v1/metadata",
+        query: {
+          metric: request.metric,
+          limit: request.limit !== undefined ? String(request.limit) : undefined,
+        },
+      }).pipe(Effect.map((data) => data as Record<string, PrometheusMetricMetadata[]>)),
+  }),
+);

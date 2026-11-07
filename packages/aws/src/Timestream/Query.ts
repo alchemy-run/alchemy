@@ -1,6 +1,8 @@
-import type * as TSQ from "@distilled.cloud/aws/timestream-query";
+import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueryTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface QueryRequest extends TSQ.QueryRequest {}
@@ -44,3 +46,12 @@ export interface Query extends Binding.Service<
 > {}
 
 export const Query = Binding.Service<Query>("AWS.Timestream.Query");
+
+export const QueryHttp = Layer.effect(
+  Query,
+  makeQueryTableHttpBinding({
+    tag: "AWS.Timestream.Query",
+    operation: TSQ.query,
+    actions: ["timestream:Select"],
+  }),
+);

@@ -1,6 +1,7 @@
-import type * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeAppRunnerHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 export interface DescribeCustomDomainsRequest extends Omit<
@@ -46,3 +47,19 @@ export interface DescribeCustomDomains extends Binding.Service<
 export const DescribeCustomDomains = Binding.Service<DescribeCustomDomains>(
   "AWS.AppRunner.DescribeCustomDomains",
 );
+
+/**
+ * HTTP implementation of the {@link DescribeCustomDomains} binding. Calls
+ * `apprunner:DescribeCustomDomains` with the Lambda's IAM role, scoped to
+ * the bound service.
+ */
+export const DescribeCustomDomainsHttp = makeAppRunnerHttpBinding(DescribeCustomDomains, {
+  operation: apprunner.describeCustomDomains,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:DescribeCustomDomains"],
+      resources: [service.serviceArn],
+    }),
+  }),
+});

@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostCategoryHttpBinding } from "./BindingHttp.ts";
 import type { CostCategory } from "./CostCategory.ts";
 
 /**
@@ -51,3 +53,12 @@ export const ListCostCategoryResourceAssociations =
   Binding.Service<ListCostCategoryResourceAssociations>(
     "AWS.CostExplorer.ListCostCategoryResourceAssociations",
   );
+
+export const ListCostCategoryResourceAssociationsHttp = Layer.effect(
+  ListCostCategoryResourceAssociations,
+  makeCostCategoryHttpBinding({
+    capability: "ListCostCategoryResourceAssociations",
+    iamActions: ["ce:ListCostCategoryResourceAssociations"],
+    operation: ce.listCostCategoryResourceAssociations,
+  }),
+);

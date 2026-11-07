@@ -1,0 +1,97 @@
+{
+  "tag": "AWS.ELBv2",
+  "module": "elastic-load-balancing-v2",
+  "alias": "elbv2",
+  "resources": {
+    "LoadBalancer": {
+      "file": "LoadBalancer.ts"
+    },
+    "TargetGroup": {
+      "file": "TargetGroup.ts"
+    },
+    "TrustStore": {
+      "file": "TrustStore.ts"
+    }
+  },
+  "builder": "makeTargetGroupHttpBinding",
+  "builders": {
+    "makeLoadBalancerHttpBinding": {},
+    "makeTargetGroupHttpBinding": {},
+    "makeTrustStoreHttpBinding": {}
+  },
+  "bindings": {
+    "DeregisterTargets": {
+      "operation": "deregisterTargets",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "DeregisterTargetsRequest",
+        "omit": ["TargetGroupArn"]
+      }
+    },
+    "DescribeCapacityReservation": {
+      "operation": "describeCapacityReservation",
+      "resource": "LoadBalancer",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeCapacityReservationRequest",
+        "omit": ["LoadBalancerArn"]
+      },
+      "builder": "makeLoadBalancerHttpBinding",
+      "with": {
+        "resource": "*"
+      }
+    },
+    "DescribeTargetHealth": {
+      "operation": "describeTargetHealth",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeTargetHealthRequest",
+        "omit": ["TargetGroupArn"]
+      },
+      "with": {
+        "resource": "*"
+      }
+    },
+    "GetTrustStoreCaCertificatesBundle": {
+      "operation": "getTrustStoreCaCertificatesBundle",
+      "resource": "TrustStore",
+      "request": {
+        "mode": "optional",
+        "omit": ["TrustStoreArn"],
+        "inline": true
+      },
+      "builder": "makeTrustStoreHttpBinding"
+    },
+    "GetTrustStoreRevocationContent": {
+      "operation": "getTrustStoreRevocationContent",
+      "resource": "TrustStore",
+      "request": {
+        "mode": "optional",
+        "interface": "GetTrustStoreRevocationContentRequest",
+        "omit": ["TrustStoreArn"]
+      },
+      "builder": "makeTrustStoreHttpBinding"
+    },
+    "ModifyCapacityReservation": {
+      "operation": "modifyCapacityReservation",
+      "resource": "LoadBalancer",
+      "request": {
+        "mode": "required",
+        "interface": "ModifyCapacityReservationRequest",
+        "omit": ["LoadBalancerArn"]
+      },
+      "builder": "makeLoadBalancerHttpBinding"
+    },
+    "RegisterTargets": {
+      "operation": "registerTargets",
+      "resource": "TargetGroup",
+      "request": {
+        "mode": "required",
+        "interface": "RegisterTargetsRequest",
+        "omit": ["TargetGroupArn"]
+      }
+    }
+  }
+}

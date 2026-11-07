@@ -34,6 +34,7 @@
     "docs:check-jsdoc": "node ./scripts/fix-api-jsdocs.ts --check",
     "exports:check": "node scripts/sync-exports.ts --check",
     "gcp:bindings:check": "node scripts/generate-gcp-bindings.ts --check",
+    "aws:bindings:check": "node scripts/generate-aws-bindings.ts --check",
     "exports:sync": "node scripts/sync-exports.ts",
     "docs:check": "pnpm --dir website docs:check",
     "docs:fix-jsdoc": "node ./scripts/fix-api-jsdocs.ts",

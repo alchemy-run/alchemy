@@ -1,6 +1,8 @@
-import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLogGroupHttpBinding } from "./BindingHttp.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 export type InputLogEvent = Logs.InputLogEvent;
@@ -73,3 +75,16 @@ export interface PutLogEvents extends Binding.Service<
   >
 > {}
 export const PutLogEvents = Binding.Service<PutLogEvents>("AWS.Logs.PutLogEvents");
+
+export const PutLogEventsHttp = Layer.effect(
+  PutLogEvents,
+  makeLogGroupHttpBinding({
+    tag: "AWS.Logs.PutLogEvents",
+    operation: Logs.putLogEvents,
+    actions: ["logs:PutLogEvents"],
+    // PutLogEvents authorizes against the log-stream resource
+    // (`log-group:{name}:log-stream:{stream}`), covered by the `:*`
+    // wildcard on the group ARN.
+    iamResources: "streams",
+  }),
+);

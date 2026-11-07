@@ -1,0 +1,62 @@
+{
+  "tag": "AWS.MediaConvert",
+  "module": "mediaconvert",
+  "resources": {},
+  "builder": "makeMediaConvertHttpBinding",
+  "builders": {
+    "makeMediaConvertHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CancelJob": {
+      "operation": "cancelJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateJob": {
+      "operation": "createJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "GetJob": {
+      "operation": "getJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetJobsQueryResults": {
+      "operation": "getJobsQueryResults",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListJobs": {
+      "operation": "listJobs"
+    },
+    "Probe": {
+      "operation": "probe",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchJobs": {
+      "operation": "searchJobs"
+    },
+    "StartJobsQuery": {
+      "operation": "startJobsQuery",
+      "note": "The wire operation is StartJobsQuery but IAM authorizes the creation of the query object as CreateJobsQuery — grant both spellings."
+    }
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "tag": "AWS.Glue",
+  "module": "glue",
+  "resources": {
+    "Crawler": {
+      "file": "Crawler.ts"
+    },
+    "Database": {
+      "file": "Database.ts"
+    },
+    "Job": {
+      "file": "Job.ts"
+    },
+    "Table": {
+      "file": "Table.ts"
+    }
+  },
+  "builder": "makeGlueTableHttpBinding",
+  "builders": {
+    "makeGlueCrawlerHttpBinding": {
+      "grants": "resource"
+    },
+    "makeGlueDatabaseHttpBinding": {
+      "grants": "resource"
+    },
+    "makeGlueJobHttpBinding": {},
+    "makeGlueTableHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchCreatePartition": {
+      "operation": "batchCreatePartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "BatchCreatePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "BatchDeletePartition": {
+      "operation": "batchDeletePartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeletePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "BatchGetPartition": {
+      "operation": "batchGetPartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "BatchGetPartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "BatchStopJobRun": {
+      "operation": "batchStopJobRun",
+      "resource": "Job",
+      "request": {
+        "mode": "required",
+        "interface": "BatchStopJobRunRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding"
+    },
+    "BatchUpdatePartition": {
+      "operation": "batchUpdatePartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "BatchUpdatePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "CreatePartition": {
+      "operation": "createPartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "CreatePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "DeletePartition": {
+      "operation": "deletePartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "DeletePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "GetCrawler": {
+      "operation": "getCrawler",
+      "resource": "Crawler",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeGlueCrawlerHttpBinding"
+    },
+    "GetJobBookmark": {
+      "operation": "getJobBookmark",
+      "resource": "Job",
+      "request": {
+        "mode": "optional",
+        "interface": "GetJobBookmarkRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding",
+      "with": {
+        "anyResource": true
+      },
+      "note": "Glue evaluates bookmark actions without a resource — an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
+    },
+    "GetJobRun": {
+      "operation": "getJobRun",
+      "resource": "Job",
+      "request": {
+        "mode": "required",
+        "interface": "GetJobRunRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding"
+    },
+    "GetJobRuns": {
+      "operation": "getJobRuns",
+      "resource": "Job",
+      "request": {
+        "mode": "optional",
+        "interface": "GetJobRunsRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding"
+    },
+    "GetPartition": {
+      "operation": "getPartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "GetPartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "GetPartitions": {
+      "operation": "getPartitions",
+      "resource": "Table",
+      "request": {
+        "mode": "optional",
+        "interface": "GetPartitionsRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    },
+    "GetTable": {
+      "operation": "getTable",
+      "resource": "Table",
+      "request": {
+        "mode": "optional",
+        "interface": "GetTableRequest",
+        "omit": ["DatabaseName", "Name", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "Name"
+      }
+    },
+    "GetTables": {
+      "operation": "getTables",
+      "resource": "Database",
+      "request": {
+        "mode": "optional",
+        "interface": "GetTablesRequest",
+        "omit": ["DatabaseName", "CatalogId"]
+      },
+      "builder": "makeGlueDatabaseHttpBinding"
+    },
+    "ResetJobBookmark": {
+      "operation": "resetJobBookmark",
+      "resource": "Job",
+      "request": {
+        "mode": "optional",
+        "interface": "ResetJobBookmarkRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding",
+      "with": {
+        "anyResource": true
+      },
+      "note": "Glue evaluates bookmark actions without a resource — an ARN-scoped grant never matches (verified live via the IAM policy simulator)."
+    },
+    "StartCrawler": {
+      "operation": "startCrawler",
+      "resource": "Crawler",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeGlueCrawlerHttpBinding"
+    },
+    "StartJobRun": {
+      "operation": "startJobRun",
+      "resource": "Job",
+      "request": {
+        "mode": "optional",
+        "interface": "StartJobRunRequest",
+        "omit": ["JobName"]
+      },
+      "builder": "makeGlueJobHttpBinding"
+    },
+    "StopCrawler": {
+      "operation": "stopCrawler",
+      "resource": "Crawler",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeGlueCrawlerHttpBinding"
+    },
+    "UpdatePartition": {
+      "operation": "updatePartition",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "UpdatePartitionRequest",
+        "omit": ["DatabaseName", "TableName", "CatalogId"]
+      },
+      "with": {
+        "tableNameKey": "TableName"
+      }
+    }
+  }
+}

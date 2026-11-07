@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -45,3 +47,13 @@ export interface UploadLayerPart extends Binding.Service<
 > {}
 
 export const UploadLayerPart = Binding.Service<UploadLayerPart>("AWS.ECR.UploadLayerPart");
+
+/** HTTP implementation of {@link UploadLayerPart} over the ECR API. */
+export const UploadLayerPartHttp = Layer.effect(
+  UploadLayerPart,
+  makeEcrRepositoryHttpBinding({
+    capability: "UploadLayerPart",
+    operation: ecr.uploadLayerPart,
+    iamActions: ["ecr:UploadLayerPart"],
+  }),
+);

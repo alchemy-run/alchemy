@@ -1,0 +1,128 @@
+{
+  "tag": "AWS.DevOpsGuru",
+  "module": "devops-guru",
+  "resources": {},
+  "builder": "makeDevOpsGuruAccountHttpBinding",
+  "builders": {
+    "makeDevOpsGuruAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DeleteInsight": {
+      "operation": "deleteInsight",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeAccountHealth": {
+      "operation": "describeAccountHealth"
+    },
+    "DescribeAccountOverview": {
+      "operation": "describeAccountOverview",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeAnomaly": {
+      "operation": "describeAnomaly",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeFeedback": {
+      "operation": "describeFeedback"
+    },
+    "DescribeInsight": {
+      "operation": "describeInsight",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeOrganizationHealth": {
+      "operation": "describeOrganizationHealth"
+    },
+    "DescribeOrganizationOverview": {
+      "operation": "describeOrganizationOverview",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeOrganizationResourceCollectionHealth": {
+      "operation": "describeOrganizationResourceCollectionHealth",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeResourceCollectionHealth": {
+      "operation": "describeResourceCollectionHealth",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCostEstimation": {
+      "operation": "getCostEstimation"
+    },
+    "ListAnomaliesForInsight": {
+      "operation": "listAnomaliesForInsight",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListAnomalousLogGroups": {
+      "operation": "listAnomalousLogGroups",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListEvents": {
+      "operation": "listEvents",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListInsights": {
+      "operation": "listInsights",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListMonitoredResources": {
+      "operation": "listMonitoredResources"
+    },
+    "ListOrganizationInsights": {
+      "operation": "listOrganizationInsights",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRecommendations": {
+      "operation": "listRecommendations",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "PutFeedback": {
+      "operation": "putFeedback"
+    },
+    "SearchInsights": {
+      "operation": "searchInsights",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchOrganizationInsights": {
+      "operation": "searchOrganizationInsights",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartCostEstimation": {
+      "operation": "startCostEstimation",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

@@ -2,7 +2,13 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  makeOpenSearchDataPlaneBinding,
+  makeReadDomainClient,
+  makeWriteDomainClient,
+} from "./DataPlaneHttp.ts";
 import type { OpenSearchApiError } from "./DataPlaneTypes.ts";
 import type { Domain } from "./Domain.ts";
 import type { ReadDomainClient } from "./DomainRead.ts";
@@ -78,3 +84,22 @@ export interface DomainReadWrite extends Binding.Service<
   (domain: Domain) => Effect.Effect<ReadWriteDomainClient>
 > {}
 export const DomainReadWrite = Binding.Service<DomainReadWrite>("AWS.OpenSearch.DomainReadWrite");
+
+export const DomainReadWriteHttp = Layer.effect(
+  DomainReadWrite,
+  makeOpenSearchDataPlaneBinding({
+    name: "DomainReadWrite",
+    iamActions: ["es:ESHttp*"],
+    makeClient: (send): ReadWriteDomainClient => ({
+      ...makeReadDomainClient(send),
+      ...makeWriteDomainClient(send),
+      request: (method, path, options) =>
+        send({
+          method,
+          path,
+          query: options?.query,
+          json: options?.body,
+        }).pipe(Effect.map(({ body }) => body)),
+    }),
+  }),
+);

@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/databrew";
+import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataBrewJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 /**
@@ -27,3 +30,12 @@ export interface StartJobRun extends Binding.Service<
   ) => Effect.Effect<() => Effect.Effect<SVC.StartJobRunResponse, SVC.StartJobRunError>>
 > {}
 export const StartJobRun = Binding.Service<StartJobRun>("AWS.DataBrew.StartJobRun");
+
+export const StartJobRunHttp = Layer.effect(
+  StartJobRun,
+  makeDataBrewJobHttpBinding({
+    tag: "AWS.DataBrew.StartJobRun",
+    operation: databrew.startJobRun,
+    actions: ["databrew:StartJobRun"],
+  }),
+);

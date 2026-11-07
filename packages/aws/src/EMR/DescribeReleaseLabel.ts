@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:DescribeReleaseLabel` — reads one EMR release label — the applications (with versions) it ships and the OS releases it supports.
@@ -27,4 +30,13 @@ export interface DescribeReleaseLabel extends Binding.Service<
 > {}
 export const DescribeReleaseLabel = Binding.Service<DescribeReleaseLabel>(
   "AWS.EMR.DescribeReleaseLabel",
+);
+
+export const DescribeReleaseLabelHttp = Layer.effect(
+  DescribeReleaseLabel,
+  makeEmrAccountHttpBinding({
+    tag: "AWS.EMR.DescribeReleaseLabel",
+    operation: emr.describeReleaseLabel,
+    actions: ["elasticmapreduce:DescribeReleaseLabel"],
+  }),
 );

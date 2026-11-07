@@ -1,6 +1,8 @@
-import type * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
+import * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFeatureGroupHttpBinding } from "./BindingHttp.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
 export interface BatchGetRecordRequest {
@@ -52,3 +54,24 @@ export interface BatchGetRecord extends Binding.Service<
   >
 > {}
 export const BatchGetRecord = Binding.Service<BatchGetRecord>("AWS.SageMaker.BatchGetRecord");
+
+export const BatchGetRecordHttp = Layer.effect(
+  BatchGetRecord,
+  makeFeatureGroupHttpBinding({
+    tag: "AWS.SageMaker.BatchGetRecord",
+    operation: featurestore.batchGetRecord,
+    actions: ["sagemaker:BatchGetRecord"],
+    // The wire request identifies feature groups per identifier batch — scope
+    // the whole batch to the bound feature group.
+    prepare: (request: BatchGetRecordRequest, featureGroupName) => ({
+      Identifiers: [
+        {
+          FeatureGroupName: featureGroupName,
+          RecordIdentifiersValueAsString: request.RecordIdentifiersValueAsString,
+          FeatureNames: request.FeatureNames,
+        },
+      ],
+      ExpirationTimeResponse: request.ExpirationTimeResponse,
+    }),
+  }),
+);

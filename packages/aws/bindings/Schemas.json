@@ -1,0 +1,39 @@
+{
+  "tag": "AWS.Schemas",
+  "module": "schemas",
+  "resources": {
+    "Discoverer": {
+      "file": "Discoverer.ts"
+    }
+  },
+  "builder": "makeSchemasDiscovererHttpBinding",
+  "builders": {
+    "makeSchemasDiscovererHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "StartDiscoverer": {
+      "operation": "startDiscoverer",
+      "resource": "Discoverer",
+      "request": {
+        "mode": "none"
+      },
+      "with": {
+        "ruleActions": ["events:EnableRule"]
+      },
+      "note": "StartDiscoverer re-enables the discoverer's managed EventBridge rule."
+    },
+    "StopDiscoverer": {
+      "operation": "stopDiscoverer",
+      "resource": "Discoverer",
+      "request": {
+        "mode": "none"
+      },
+      "with": {
+        "ruleActions": ["events:DisableRule"]
+      },
+      "note": "StopDiscoverer disables the discoverer's managed EventBridge rule."
+    }
+  }
+}

@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -41,3 +43,13 @@ export interface StartImageScan extends Binding.Service<
 > {}
 
 export const StartImageScan = Binding.Service<StartImageScan>("AWS.ECR.StartImageScan");
+
+/** HTTP implementation of {@link StartImageScan} over the ECR API. */
+export const StartImageScanHttp = Layer.effect(
+  StartImageScan,
+  makeEcrRepositoryHttpBinding({
+    capability: "StartImageScan",
+    operation: ecr.startImageScan,
+    iamActions: ["ecr:StartImageScan"],
+  }),
+);

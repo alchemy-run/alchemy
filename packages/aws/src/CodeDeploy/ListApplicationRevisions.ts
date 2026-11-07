@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeCodeDeployApplicationHttpBinding } from "./BindingHttp.ts";
 
 export interface ListApplicationRevisionsRequest extends Omit<
   SVC.ListApplicationRevisionsInput,
@@ -39,4 +42,13 @@ export interface ListApplicationRevisions extends Binding.Service<
 > {}
 export const ListApplicationRevisions = Binding.Service<ListApplicationRevisions>(
   "AWS.CodeDeploy.ListApplicationRevisions",
+);
+
+export const ListApplicationRevisionsHttp = Layer.effect(
+  ListApplicationRevisions,
+  makeCodeDeployApplicationHttpBinding({
+    tag: "AWS.CodeDeploy.ListApplicationRevisions",
+    operation: codedeploy.listApplicationRevisions,
+    actions: ["codedeploy:ListApplicationRevisions"],
+  }),
 );

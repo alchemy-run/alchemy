@@ -1,6 +1,8 @@
-import type * as emrc from "@distilled.cloud/aws/emr-containers";
+import * as emrc from "@distilled.cloud/aws/emr-containers";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { VirtualCluster } from "./VirtualCluster.ts";
 
 /**
@@ -37,4 +39,39 @@ export interface DescribeVirtualCluster extends Binding.Service<
 > {}
 export const DescribeVirtualCluster = Binding.Service<DescribeVirtualCluster>(
   "AWS.EMRContainers.DescribeVirtualCluster",
+);
+
+/**
+ * Bespoke (not scaffold-built): `describeVirtualCluster` addresses the
+ * virtual cluster itself via `id` rather than carrying a `virtualClusterId`
+ * field, and the grant is on the cluster ARN alone (no sub-resource
+ * pattern).
+ */
+export const DescribeVirtualClusterHttp = Layer.effect(
+  DescribeVirtualCluster,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(emrc.describeVirtualCluster);
+
+    return Effect.fn(function* (virtualCluster: VirtualCluster) {
+      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      const VirtualClusterId = yield* virtualCluster.virtualClusterId;
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["emr-containers:DescribeVirtualCluster"],
+              Resource: [virtualCluster.virtualClusterArn],
+            },
+          ],
+        });
+      }
+      return Effect.fn(`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster.LogicalId})`)(
+        function* () {
+          return yield* op({ id: yield* VirtualClusterId });
+        },
+      );
+    });
+  }),
 );

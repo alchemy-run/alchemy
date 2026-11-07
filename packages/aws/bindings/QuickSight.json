@@ -1,0 +1,89 @@
+{
+  "tag": "AWS.QuickSight",
+  "module": "quicksight",
+  "resources": {
+    "Dashboard": {
+      "file": "Dashboard.ts"
+    },
+    "DataSet": {
+      "file": "DataSet.ts"
+    }
+  },
+  "builder": "makeQuickSightDataSetHttpBinding",
+  "builders": {
+    "makeQuickSightDashboardHttpBinding": {
+      "grants": "resource"
+    },
+    "makeQuickSightDataSetHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelIngestion": {
+      "operation": "cancelIngestion",
+      "resource": "DataSet",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DataSetId"],
+        "inline": true
+      }
+    },
+    "CreateIngestion": {
+      "operation": "createIngestion",
+      "resource": "DataSet",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DataSetId"],
+        "inline": true
+      }
+    },
+    "DescribeDashboardSnapshotJob": {
+      "operation": "describeDashboardSnapshotJob",
+      "resource": "Dashboard",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DashboardId"],
+        "inline": true
+      },
+      "builder": "makeQuickSightDashboardHttpBinding"
+    },
+    "DescribeDashboardSnapshotJobResult": {
+      "operation": "describeDashboardSnapshotJobResult",
+      "resource": "Dashboard",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DashboardId"],
+        "inline": true
+      },
+      "builder": "makeQuickSightDashboardHttpBinding"
+    },
+    "DescribeIngestion": {
+      "operation": "describeIngestion",
+      "resource": "DataSet",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DataSetId"],
+        "inline": true
+      }
+    },
+    "ListIngestions": {
+      "operation": "listIngestions",
+      "resource": "DataSet",
+      "request": {
+        "mode": "optional",
+        "omit": ["AwsAccountId", "DataSetId"],
+        "inline": true
+      }
+    },
+    "StartDashboardSnapshotJob": {
+      "operation": "startDashboardSnapshotJob",
+      "resource": "Dashboard",
+      "request": {
+        "mode": "required",
+        "omit": ["AwsAccountId", "DashboardId"],
+        "inline": true
+      },
+      "builder": "makeQuickSightDashboardHttpBinding"
+    }
+  }
+}

@@ -1,6 +1,12 @@
 import type * as s3vectors from "@distilled.cloud/aws/s3vectors";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  makeVectorsHttpBinding,
+  makeWriteVectorsClient,
+  writeVectorsActions,
+} from "./BindingHttp.ts";
 import type { Index } from "./VectorIndex.ts";
 
 /** Fields the binding injects from the bound {@link Index}. */
@@ -54,3 +60,17 @@ export interface VectorsWrite extends Binding.Service<
   <I extends Index>(index: I) => Effect.Effect<WriteVectorsClient>
 > {}
 export const VectorsWrite = Binding.Service<VectorsWrite>("AWS.S3Vectors.VectorsWrite");
+
+/**
+ * HTTP implementation of {@link VectorsWrite} — calls the S3 Vectors data
+ * plane with the host Function's own credentials, granting only the write
+ * actions (`PutVectors`, `DeleteVectors`) on the bound index.
+ */
+export const VectorsWriteHttp = Layer.effect(
+  VectorsWrite,
+  makeVectorsHttpBinding({
+    name: "VectorsWrite",
+    actions: writeVectorsActions,
+    makeClient: makeWriteVectorsClient,
+  }),
+);

@@ -1,6 +1,9 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Runtime } from "./Runtime.ts";
 
 export interface GetAgentCardRequest extends Omit<
@@ -44,3 +47,19 @@ export interface GetAgentCard extends Binding.Service<
   >
 > {}
 export const GetAgentCard = Binding.Service<GetAgentCard>("AWS.BedrockAgentCore.GetAgentCard");
+
+export const GetAgentCardHttp = Layer.effect(
+  GetAgentCard,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.GetAgentCard",
+    operation: agentcore.getAgentCard,
+    actions: ["bedrock-agentcore:GetAgentCard"],
+    requestKey: "agentRuntimeArn",
+    identifier: (runtime: Runtime) => runtime.agentRuntimeArn,
+    arns: (runtime: Runtime) => [
+      runtime.agentRuntimeArn,
+      // qualified invocations target a runtime endpoint sub-resource.
+      Output.interpolate`${runtime.agentRuntimeArn}/runtime-endpoint/*`,
+    ],
+  }),
+);

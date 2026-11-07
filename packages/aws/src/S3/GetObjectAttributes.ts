@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface GetObjectAttributesRequest extends Omit<S3.GetObjectAttributesRequest, "Bucket"> {}
@@ -39,4 +41,19 @@ export interface GetObjectAttributes extends Binding.Service<
 > {}
 export const GetObjectAttributes = Binding.Service<GetObjectAttributes>(
   "AWS.S3.GetObjectAttributes",
+);
+
+export const GetObjectAttributesHttp = Layer.effect(
+  GetObjectAttributes,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.GetObjectAttributes",
+    operation: S3.getObjectAttributes,
+    actions: [
+      "s3:GetObject",
+      "s3:GetObjectVersion",
+      "s3:GetObjectAttributes",
+      "s3:GetObjectVersionAttributes",
+    ],
+    listBucket: true,
+  }),
 );

@@ -1,0 +1,267 @@
+{
+  "tag": "AWS.CloudWatch",
+  "module": "cloudwatch",
+  "resources": {
+    "AlarmMuteRule": {
+      "file": "AlarmMuteRule.ts"
+    },
+    "AlarmResource": {
+      "file": "binding-common.ts"
+    },
+    "Dashboard": {
+      "file": "Dashboard.ts"
+    },
+    "InsightRule": {
+      "file": "InsightRule.ts"
+    },
+    "MetricStream": {
+      "file": "MetricStream.ts"
+    },
+    "TaggableResource": {
+      "file": "binding-common.ts"
+    }
+  },
+  "builder": "makeCloudWatchAccountHttpBinding",
+  "builders": {
+    "makeCloudWatchAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeCloudWatchResourceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeAlarmContributors": {
+      "operation": "describeAlarmContributors",
+      "resource": "AlarmResource",
+      "param": "alarm",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAlarmContributorsRequest",
+        "omit": ["AlarmName"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "AlarmName"
+      },
+      "withTs": {
+        "identifier": "(alarm: AlarmResource) => alarm.alarmName",
+        "resourceArn": "(alarm: AlarmResource) => alarm.alarmArn"
+      }
+    },
+    "DescribeAlarmHistory": {
+      "operation": "describeAlarmHistory",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAlarmHistoryRequest",
+        "omit": []
+      }
+    },
+    "DescribeAlarmsForMetric": {
+      "operation": "describeAlarmsForMetric",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeAlarmsForMetricRequest",
+        "omit": []
+      }
+    },
+    "DescribeAnomalyDetectors": {
+      "operation": "describeAnomalyDetectors",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAnomalyDetectorsRequest",
+        "omit": []
+      }
+    },
+    "DescribeInsightRules": {
+      "operation": "describeInsightRules",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeInsightRulesRequest",
+        "omit": []
+      }
+    },
+    "GetAlarmMuteRule": {
+      "operation": "getAlarmMuteRule",
+      "resource": "AlarmMuteRule",
+      "param": "rule",
+      "request": {
+        "mode": "optional",
+        "interface": "GetAlarmMuteRuleRequest",
+        "omit": ["AlarmMuteRuleName"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "AlarmMuteRuleName"
+      },
+      "withTs": {
+        "identifier": "(rule: AlarmMuteRule) => rule.alarmMuteRuleName",
+        "resourceArn": "(rule: AlarmMuteRule) => rule.alarmMuteRuleArn"
+      }
+    },
+    "GetDashboard": {
+      "operation": "getDashboard",
+      "resource": "Dashboard",
+      "request": {
+        "mode": "optional",
+        "interface": "GetDashboardRequest",
+        "omit": ["DashboardName"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "DashboardName"
+      },
+      "withTs": {
+        "identifier": "(dashboard: Dashboard) => dashboard.dashboardName",
+        "resourceArn": "(dashboard: Dashboard) => dashboard.dashboardArn"
+      }
+    },
+    "GetInsightRuleReport": {
+      "operation": "getInsightRuleReport",
+      "resource": "InsightRule",
+      "param": "rule",
+      "request": {
+        "mode": "required",
+        "interface": "GetInsightRuleReportRequest",
+        "omit": ["RuleName"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "RuleName"
+      },
+      "withTs": {
+        "identifier": "(rule: InsightRule) => rule.ruleName",
+        "resourceArn": "(rule: InsightRule) => rule.ruleArn"
+      }
+    },
+    "GetMetricData": {
+      "operation": "getMetricData",
+      "request": {
+        "mode": "required",
+        "interface": "GetMetricDataRequest",
+        "omit": []
+      }
+    },
+    "GetMetricStatistics": {
+      "operation": "getMetricStatistics",
+      "request": {
+        "mode": "required",
+        "interface": "GetMetricStatisticsRequest",
+        "omit": []
+      }
+    },
+    "GetMetricStream": {
+      "operation": "getMetricStream",
+      "resource": "MetricStream",
+      "request": {
+        "mode": "optional",
+        "interface": "GetMetricStreamRequest",
+        "omit": ["Name"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "Name"
+      },
+      "withTs": {
+        "identifier": "(metricStream: MetricStream) => metricStream.metricStreamName",
+        "resourceArn": "(metricStream: MetricStream) => metricStream.metricStreamArn"
+      }
+    },
+    "GetMetricWidgetImage": {
+      "operation": "getMetricWidgetImage",
+      "request": {
+        "mode": "required",
+        "interface": "GetMetricWidgetImageRequest",
+        "omit": []
+      }
+    },
+    "ListAlarmMuteRules": {
+      "operation": "listAlarmMuteRules",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAlarmMuteRulesRequest",
+        "omit": []
+      }
+    },
+    "ListDashboards": {
+      "operation": "listDashboards",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDashboardsRequest",
+        "omit": []
+      }
+    },
+    "ListManagedInsightRules": {
+      "operation": "listManagedInsightRules",
+      "request": {
+        "mode": "optional",
+        "interface": "ListManagedInsightRulesRequest",
+        "omit": []
+      }
+    },
+    "ListMetricStreams": {
+      "operation": "listMetricStreams",
+      "request": {
+        "mode": "optional",
+        "interface": "ListMetricStreamsRequest",
+        "omit": []
+      }
+    },
+    "ListMetrics": {
+      "operation": "listMetrics",
+      "request": {
+        "mode": "optional",
+        "interface": "ListMetricsRequest",
+        "omit": []
+      }
+    },
+    "ListTagsForResource": {
+      "operation": "listTagsForResource",
+      "resource": "TaggableResource",
+      "param": "resource",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTagsForResourceRequest",
+        "omit": ["ResourceARN"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "ResourceARN"
+      },
+      "withTs": {
+        "identifier": "(resource: TaggableResource) => getTaggableResourceArn(resource)",
+        "resourceArn": "(resource: TaggableResource) => getTaggableResourceArn(resource)"
+      },
+      "imports": {
+        "./binding-common.ts": ["getTaggableResourceArn"]
+      }
+    },
+    "PutMetricData": {
+      "operation": "putMetricData",
+      "request": {
+        "mode": "required",
+        "interface": "PutMetricDataRequest",
+        "omit": []
+      }
+    },
+    "SetAlarmState": {
+      "operation": "setAlarmState",
+      "resource": "AlarmResource",
+      "param": "alarm",
+      "request": {
+        "mode": "required",
+        "interface": "SetAlarmStateRequest",
+        "omit": ["AlarmName"]
+      },
+      "builder": "makeCloudWatchResourceHttpBinding",
+      "with": {
+        "requestKey": "AlarmName"
+      },
+      "withTs": {
+        "identifier": "(alarm: AlarmResource) => alarm.alarmName",
+        "resourceArn": "(alarm: AlarmResource) => alarm.alarmArn"
+      }
+    }
+  }
+}

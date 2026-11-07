@@ -1,0 +1,46 @@
+{
+  "tag": "AWS.Pipes",
+  "module": "pipes",
+  "resources": {
+    "Pipe": {
+      "file": "Pipe.ts"
+    }
+  },
+  "builder": "makePipesHttpBinding",
+  "builders": {
+    "makePipesAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makePipesHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribePipe": {
+      "operation": "describePipe",
+      "resource": "Pipe",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "ListPipes": {
+      "operation": "listPipes",
+      "builder": "makePipesAccountHttpBinding"
+    },
+    "StartPipe": {
+      "operation": "startPipe",
+      "resource": "Pipe",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "StopPipe": {
+      "operation": "stopPipe",
+      "resource": "Pipe",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

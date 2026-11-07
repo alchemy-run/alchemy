@@ -1,26 +1,26 @@
 export { CachePolicy, CachePolicyProvider } from "./CachePolicy.ts";
 export { CreateInvalidation, type CreateInvalidationRequest } from "./CreateInvalidation.ts";
-export { CreateInvalidationHttp } from "./CreateInvalidationHttp.ts";
+export { CreateInvalidationHttp } from "./CreateInvalidation.ts";
 export { DeleteKey, type DeleteKeyRequest } from "./DeleteKey.ts";
-export { DeleteKeyHttp } from "./DeleteKeyHttp.ts";
+export { DeleteKeyHttp } from "./DeleteKey.ts";
 export {
   DescribeKeyValueStore,
   type DescribeKeyValueStoreRequest,
 } from "./DescribeKeyValueStore.ts";
-export { DescribeKeyValueStoreHttp } from "./DescribeKeyValueStoreHttp.ts";
+export { DescribeKeyValueStoreHttp } from "./DescribeKeyValueStore.ts";
 export { Distribution, DistributionProvider } from "./Distribution.ts";
 export { GetInvalidation, type GetInvalidationRequest } from "./GetInvalidation.ts";
-export { GetInvalidationHttp } from "./GetInvalidationHttp.ts";
+export { GetInvalidationHttp } from "./GetInvalidation.ts";
 export { GetKey, type GetKeyRequest } from "./GetKey.ts";
-export { GetKeyHttp } from "./GetKeyHttp.ts";
+export { GetKeyHttp } from "./GetKey.ts";
 export { ListInvalidations, type ListInvalidationsRequest } from "./ListInvalidations.ts";
-export { ListInvalidationsHttp } from "./ListInvalidationsHttp.ts";
+export { ListInvalidationsHttp } from "./ListInvalidations.ts";
 export { ListKeys, type ListKeysRequest } from "./ListKeys.ts";
-export { ListKeysHttp } from "./ListKeysHttp.ts";
+export { ListKeysHttp } from "./ListKeys.ts";
 export { PutKey, type PutKeyRequest } from "./PutKey.ts";
-export { PutKeyHttp } from "./PutKeyHttp.ts";
+export { PutKeyHttp } from "./PutKey.ts";
 export { UpdateKeys, type UpdateKeysRequest } from "./UpdateKeys.ts";
-export { UpdateKeysHttp } from "./UpdateKeysHttp.ts";
+export { UpdateKeysHttp } from "./UpdateKeys.ts";
 export { Function, FunctionProvider } from "./Function.ts";
 export { Invalidation, InvalidationProvider } from "./Invalidation.ts";
 export { KeyGroup, KeyGroupProvider } from "./KeyGroup.ts";
@@ -43,3 +43,4 @@ export {
 } from "./RealtimeLogConfig.ts";
 export { ResponseHeadersPolicy, ResponseHeadersPolicyProvider } from "./ResponseHeadersPolicy.ts";
 export { VpcOrigin, VpcOriginProvider } from "./VpcOrigin.ts";
+export * from "./generated.ts";

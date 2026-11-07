@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link ListSessions} runtime callable. The
@@ -37,3 +39,12 @@ export interface ListSessions extends Binding.Service<
   >
 > {}
 export const ListSessions = Binding.Service<ListSessions>("AWS.EMRServerless.ListSessions");
+
+export const ListSessionsHttp = Layer.effect(
+  ListSessions,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.ListSessions",
+    operation: emr.listSessions,
+    actions: ["emr-serverless:ListSessions"],
+  }),
+);

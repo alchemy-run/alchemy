@@ -2,6 +2,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface CopyObjectRequest extends Omit<S3.CopyObjectRequest, "Bucket"> {}
@@ -68,3 +70,12 @@ export interface CopyObject extends Binding.Service<
 > {}
 
 export const CopyObject = Binding.Service<CopyObject>("AWS.S3.CopyObject");
+
+export const CopyObjectHttp = Layer.effect(
+  CopyObject,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.CopyObject",
+    operation: S3.copyObject,
+    actions: ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+  }),
+);

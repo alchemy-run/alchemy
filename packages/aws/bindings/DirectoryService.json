@@ -1,0 +1,85 @@
+{
+  "tag": "AWS.DirectoryService",
+  "module": "directory-service",
+  "alias": "ds",
+  "resources": {
+    "Directory": {
+      "file": "Directory.ts"
+    }
+  },
+  "builder": "makeDirectoryHttpBinding",
+  "builders": {
+    "makeDirectoryHttpBinding": {
+      "grants": "resource"
+    },
+    "makeDirectoryServiceAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CreateComputer": {
+      "operation": "createComputer",
+      "resource": "Directory",
+      "request": {
+        "mode": "required",
+        "omit": ["DirectoryId"],
+        "inline": true
+      }
+    },
+    "CreateSnapshot": {
+      "operation": "createSnapshot",
+      "resource": "Directory",
+      "request": {
+        "mode": "optional",
+        "omit": ["DirectoryId"],
+        "inline": true
+      }
+    },
+    "DescribeDirectories": {
+      "operation": "describeDirectories",
+      "builder": "makeDirectoryServiceAccountHttpBinding"
+    },
+    "DescribeDomainControllers": {
+      "operation": "describeDomainControllers",
+      "resource": "Directory",
+      "request": {
+        "mode": "optional",
+        "omit": ["DirectoryId"],
+        "inline": true
+      }
+    },
+    "DescribeSnapshots": {
+      "operation": "describeSnapshots",
+      "resource": "Directory",
+      "request": {
+        "mode": "optional",
+        "omit": ["DirectoryId"],
+        "inline": true
+      }
+    },
+    "GetDirectoryLimits": {
+      "operation": "getDirectoryLimits",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDirectoryServiceAccountHttpBinding"
+    },
+    "GetSnapshotLimits": {
+      "operation": "getSnapshotLimits",
+      "resource": "Directory",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "ResetUserPassword": {
+      "operation": "resetUserPassword",
+      "resource": "Directory",
+      "request": {
+        "mode": "required",
+        "omit": ["DirectoryId"],
+        "inline": true
+      }
+    }
+  }
+}

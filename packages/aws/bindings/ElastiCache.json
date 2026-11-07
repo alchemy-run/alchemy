@@ -1,0 +1,84 @@
+{
+  "tag": "AWS.ElastiCache",
+  "module": "elasticache",
+  "resources": {
+    "ServerlessCache": {
+      "file": "ServerlessCache.ts"
+    }
+  },
+  "builder": "makeElastiCacheAccountHttpBinding",
+  "builders": {
+    "makeElastiCacheAccountHttpBinding": {},
+    "makeElastiCacheCacheHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CopyServerlessCacheSnapshot": {
+      "operation": "copyServerlessCacheSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "withTs": {
+        "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SERVERLESS_SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "AddTagsToResource authorizes tag-on-create for the target snapshot. The action authorizes against both the source and target snapshots, whose names are runtime data."
+    },
+    "CreateServerlessCacheSnapshot": {
+      "operation": "createServerlessCacheSnapshot",
+      "resource": "ServerlessCache",
+      "param": "cache",
+      "request": {
+        "mode": "required",
+        "omit": ["ServerlessCacheName"],
+        "inline": true
+      },
+      "builder": "makeElastiCacheCacheHttpBinding",
+      "withTs": {
+        "extraResources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SERVERLESS_SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "AddTagsToResource authorizes tag-on-create for the snapshot. The action authorizes against both the source cache and the to-be-created snapshot (whose name-based ARN is runtime data)."
+    },
+    "DeleteServerlessCacheSnapshot": {
+      "operation": "deleteServerlessCacheSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "withTs": {
+        "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SERVERLESS_SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "Snapshot names are runtime data."
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents"
+    },
+    "DescribeServerlessCacheSnapshots": {
+      "operation": "describeServerlessCacheSnapshots"
+    },
+    "DescribeServerlessCaches": {
+      "operation": "describeServerlessCaches"
+    },
+    "ExportServerlessCacheSnapshot": {
+      "operation": "exportServerlessCacheSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "withTs": {
+        "resources": "[SERVERLESS_SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SERVERLESS_SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "Snapshot names are runtime data. S3 access is granted to the ElastiCache service via the target bucket's policy, not to the caller."
+    }
+  }
+}

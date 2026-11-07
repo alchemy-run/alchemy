@@ -1,6 +1,8 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DescribeContinuousBackupsRequest extends Omit<
@@ -45,4 +47,13 @@ export interface DescribeContinuousBackups extends Binding.Service<
 > {}
 export const DescribeContinuousBackups = Binding.Service<DescribeContinuousBackups>(
   "AWS.DynamoDB.DescribeContinuousBackups",
+);
+
+export const DescribeContinuousBackupsHttp = Layer.effect(
+  DescribeContinuousBackups,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.DescribeContinuousBackups",
+    operation: DynamoDB.describeContinuousBackups,
+    actions: ["dynamodb:DescribeContinuousBackups"],
+  }),
 );

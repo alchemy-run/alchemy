@@ -1,6 +1,8 @@
-import type * as sagemaker from "@distilled.cloud/aws/sagemaker-runtime";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEndpointInvocationHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `InvokeEndpointWithResponseStream` request with the binding-injected
@@ -70,4 +72,15 @@ export interface InvokeEndpointWithResponseStream extends Binding.Service<
 > {}
 export const InvokeEndpointWithResponseStream = Binding.Service<InvokeEndpointWithResponseStream>(
   "AWS.SageMakerRuntime.InvokeEndpointWithResponseStream",
+);
+
+export const InvokeEndpointWithResponseStreamHttp = Layer.effect(
+  InvokeEndpointWithResponseStream,
+  makeEndpointInvocationHttpBinding({
+    tag: "AWS.SageMakerRuntime.InvokeEndpointWithResponseStream",
+    operation: sagemaker.invokeEndpointWithResponseStream,
+    // The streaming operation authorizes against sagemaker:InvokeEndpoint
+    // (there is no separate InvokeEndpointWithResponseStream IAM action).
+    actions: ["sagemaker:InvokeEndpoint"],
+  }),
 );
