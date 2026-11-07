@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
@@ -38,6 +39,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Hetzner.PrimaryIp.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));

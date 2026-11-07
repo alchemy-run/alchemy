@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as app from "@distilled.cloud/modal/app";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -17,6 +18,7 @@ test.provider(
           return yield* Modal.App("App", { tags: { team: "platform" } });
         }),
       );
+      yield* expectFound(Modal.App.lookup({ name: created.name }), created);
       expect(created.appId).toMatch(/^ap-/);
       const { tags } = yield* app.appGetTags({ appId: created.appId });
       expect(tags?.team).toBe("platform");

@@ -17,6 +17,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -88,6 +89,21 @@ test.provider(
       });
 
     const initial = yield* stack.deploy(resources());
+    yield* expectFound(
+      Prisma.Database.lookup({ databaseId: initial.named.databaseId }),
+      initial.named,
+      // Prisma returns connection strings only from a create.
+      {
+        ignore: [
+          "directConnectionString",
+          "pooledConnectionString",
+          "accelerateConnectionString",
+          "host",
+          "user",
+          "password",
+        ],
+      },
+    );
     const branches = yield* getProjectBranches({
       projectId: initial.project.projectId,
     });
@@ -153,6 +169,10 @@ test.provider(
       });
 
     const initial = yield* stack.deploy(resources("id"));
+    yield* expectFound(Prisma.Branch.lookup({ branchId: initial.first.branchId }), initial.first, {
+      // The default branch a deploy replaced is this stack's record.
+      ignore: ["previousDefaultBranchId"],
+    });
     expect(initial.first.isDefault).toBe(false);
     expect(initial.second.isDefault).toBe(false);
     yield* expectDatabase(initial.database, initial.first.branchId);

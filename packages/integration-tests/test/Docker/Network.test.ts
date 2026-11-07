@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
@@ -75,6 +76,7 @@ describe(
         const docker = yield* Docker.Docker;
         yield* stack.destroy();
         const first = yield* stack.deploy(Docker.Network("bare-network"));
+        yield* expectFound(Docker.Network.lookup({ name: first.name }), first);
         const second = yield* stack.deploy(Docker.Network("bare-network"));
         expect(second.id).toBe(first.id);
         yield* stack.destroy();
