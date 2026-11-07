@@ -22,6 +22,7 @@ import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectA
 import { fromDurableObjectState, type WorkerdDurableObjectState } from "./DurableObjectState.ts";
 import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
 import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
+import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 
 // The engine's own Durable Object state service is part of every invocation;
 // it is engine-specific, so the registry only sees it as an opaque service.
@@ -229,7 +230,7 @@ const makeAlarmCallback = <Payload, E, R>(
 
     const raw = state.raw.storage;
     const transaction = <A, R>(effect: Effect.Effect<A, CallbackError, R>) =>
-      state.storage.transaction(effect).pipe(
+      inStorageTransaction(raw, effect, (effect) => state.storage.transaction(effect)).pipe(
         Effect.mapError((cause) =>
           cause._tag === "CallbackError"
             ? cause

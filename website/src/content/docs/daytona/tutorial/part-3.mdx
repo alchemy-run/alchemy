@@ -1,0 +1,54 @@
+---
+title: "Part 3: A Sandbox per User"
+description: Give each user a sandbox with their own volume, so their files survive the sandbox.
+sidebar:
+  order: 3
+---
+
+## Bind volumes
+
+```diff lang="typescript"
+// src/Api.ts
+    const sandboxes = yield* Daytona.CreateSandbox(Base);
++    const volumes = yield* Daytona.CreateVolume({ prefix: "user-" });
+```
+
+`Daytona.CreateVolume` creates volumes by name at runtime. Volumes have only a name, so `prefix` marks the ones this Worker manages, and the binding refuses any other name.
+
+## Find or create the user's sandbox
+
+```diff lang="typescript"
+// src/Api.ts
++        if (request.method === "PUT" && user) {
++          const home = yield* volumes.getOrCreate({ name: `user-${user}` });
++          const existing = yield* sandboxes.get(`dev-${user}`);
++          const sandbox =
++            existing ??
++            (yield* sandboxes.create({
++              name: `dev-${user}`,
++              labels: { user },
++              mounts: [{ volume: home, path: "/home/daytona/work" }],
++              autoStopInterval: 15,
++            }));
++          if (existing) yield* sandbox.startSandbox();
++          yield* sandbox.exec(
++            "mkdir -p /home/daytona/work/visits && date > /home/daytona/work/visits/$(date +%s%N)",
++          );
++          const visits = yield* sandbox.exec("ls /home/daytona/work/visits | wc -l");
++          return yield* HttpServerResponse.json({ visits: Number(visits.result.trim()) });
++        }
+```
+
+The sandbox is named after the user, so `sandboxes.get` finds it again. It stops itself after 15 idle minutes; `startSandbox` wakes it. Each visit writes a new file, because a volume is backed by object storage and doesn't support appending to a file.
+
+## Delete the sandbox, keep the files
+
+```diff lang="typescript"
+// src/Api.ts
++        if (request.method === "DELETE" && user) {
++          yield* sandboxes.delete(`dev-${user}`);
++          return HttpServerResponse.empty({ status: 204 });
++        }
+```
+
+The next `PUT` creates a new sandbox and mounts the same volume, so the visit count carries on.
