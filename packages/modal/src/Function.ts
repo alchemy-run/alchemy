@@ -1,5 +1,5 @@
 import type * as functions from "@distilled.cloud/modal/functions";
-import { Platform, type Main } from "alchemy/Platform";
+import { Platform, type Main, type MainRpc } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
@@ -102,7 +102,13 @@ export type Function = Resource<
 >;
 
 export type FunctionServices = ServerHost;
-export type FunctionShape = Main<FunctionServices>;
+/**
+ * What the program returns: `fetch` for HTTP, and any other functions,
+ * its RPC methods.
+ */
+export type FunctionShape =
+  | Main<FunctionServices>
+  | (Exclude<Main<FunctionServices>, void> & MainRpc<FunctionServices>);
 export type FunctionRuntimeContext = HostRuntimeContext;
 
 /**
@@ -359,7 +365,8 @@ export const FunctionProvider = () =>
         bootstrap: bootstrapEntry,
         // Modal authenticates every call of a class function, so its
         // program serves RPC (see `createModalRuntimeContext`).
-        env: (props) => (rpcMethodNamesOf(props.env).length > 0 ? { [RPC_SERVE_ENV]: "1" } : {}),
+        env: (props): Record<string, string> =>
+          rpcMethodNamesOf(props.env).length > 0 ? { [RPC_SERVE_ENV]: "1" } : {},
       });
       return {
         stables: lifecycle.stables,

@@ -251,22 +251,25 @@ export const makeRpcClient = (
       get: (_, prop) => {
         // Never thenable, and no symbol members.
         if (typeof prop !== "string" || prop === "then") return undefined;
+        const call = (args: unknown[]) =>
+          Effect.gen(function* () {
+            const names = (yield* methods) ?? [];
+            if (names.includes(prop)) return yield* callMethod(prop, args);
+            const operation = (client as unknown as Record<string, unknown>)[prop];
+            if (typeof operation === "function") {
+              return yield* (operation as (...a: unknown[]) => Effect.Effect<unknown, unknown>)(
+                ...args,
+              );
+            }
+            return yield* new RpcCallError({
+              method: prop,
+              cause: `The function has no RPC method ${prop}`,
+            });
+          });
         return (...args: unknown[]) =>
           asEffectOrStream(
-            Effect.gen(function* () {
-              const names = (yield* methods) ?? [];
-              if (names.includes(prop)) return yield* callMethod(prop, args);
-              const operation = (client as unknown as Record<string, unknown>)[prop];
-              if (typeof operation === "function") {
-                return yield* (operation as (...a: unknown[]) => Effect.Effect<unknown, unknown>)(
-                  ...args,
-                );
-              }
-              return yield* new RpcCallError({
-                method: prop,
-                cause: `The function has no RPC method ${prop}`,
-              });
-            }),
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the stub's declared method types carry `RuntimeContext`, which the caller's runtime provides
+            call(args) as Effect.Effect<unknown, unknown>,
           );
       },
     },

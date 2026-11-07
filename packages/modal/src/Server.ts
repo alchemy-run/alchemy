@@ -1,5 +1,5 @@
 import * as functions from "@distilled.cloud/modal/functions";
-import { Platform, type Main } from "alchemy/Platform";
+import { Platform, type Main, type MainRpc } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
@@ -75,7 +75,13 @@ export type Server = Resource<
 >;
 
 export type ServerServices = ServerHost;
-export type ServerShape = Main<ServerServices>;
+/**
+ * What the program returns: `fetch` for HTTP, and any other functions,
+ * its RPC methods.
+ */
+export type ServerShape =
+  | Main<ServerServices>
+  | (Exclude<Main<ServerServices>, void> & MainRpc<ServerServices>);
 export type ServerRuntimeContext = HostRuntimeContext;
 
 /**
@@ -224,7 +230,8 @@ export const ServerProvider = () =>
         bootstrap: bootstrapEntry,
         // Behind proxy auth Modal authenticates every request, so the
         // program serves RPC; an unauthenticated Server never does.
-        env: (props) => (props.unauthenticated ? {} : { [RPC_SERVE_ENV]: "1" }),
+        env: (props): Record<string, string> =>
+          props.unauthenticated ? {} : { [RPC_SERVE_ENV]: "1" },
       });
 
       /** The Server's URL: Modal assigns it once the App is published. */
