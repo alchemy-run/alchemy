@@ -10,5 +10,7 @@ export * from "./Errors.ts";
 export * from "./Providers.ts";
 export * from "./Sandbox.ts";
 export * from "./SandboxClient.ts";
+export * from "./SandboxEvents.ts";
+export * from "./SandboxEventsLive.ts";
 export * from "./Snapshot.ts";
 export * from "./Webhook.ts";

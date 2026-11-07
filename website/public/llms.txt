@@ -807,7 +807,7 @@ Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any W
 - [Snapshots & forks](https://alchemy.run/boat/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
 - [Environments](https://alchemy.run/boat/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
 - [Ports](https://alchemy.run/boat/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
-- [Webhooks](https://alchemy.run/boat/webhooks) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — at your own endpoint, signed with a secret.
+- [Webhooks](https://alchemy.run/boat/webhooks) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
 
 ## Rivet
 

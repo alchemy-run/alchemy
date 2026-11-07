@@ -81,7 +81,13 @@ See [Ports](/boat/ports).
 
 ## Webhooks
 
-Boat reports what happens to each sandbox (ready, stopped, failed, restored) to a **webhook**: a URL you register for the account, called with each event, signed with a secret.
+Boat reports what happens to each sandbox (ready, stopped, failed, restored) to a **webhook**: a URL you register for the account, called with each event, signed with a secret. A Worker receives them with `consumeSandboxEvents`, which checks the signature and hands it only your stack's sandboxes.
+
+```typescript
+yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
+  Effect.log(`${event.data.sandbox.id} stopped`),
+);
+```
 
 See [Webhooks](/boat/webhooks).
 

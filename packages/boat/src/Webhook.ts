@@ -8,7 +8,23 @@ import { boatName, isGeneratedName } from "./internal/Ownership.ts";
 import type { Providers } from "./Providers.ts";
 
 /** A sandbox lifecycle event Boat delivers. */
-export type WebhookEvent = boat.WebhookEventType;
+export type WebhookEvent =
+  | "sandbox.ready"
+  | "sandbox.hydrated"
+  | "sandbox.error"
+  | "sandbox.archived"
+  | "sandbox.degraded"
+  | "sandbox.recovered";
+
+/** Every sandbox lifecycle event Boat sends. */
+export const ALL_SANDBOX_EVENTS: ReadonlyArray<WebhookEvent> = [
+  "sandbox.ready",
+  "sandbox.hydrated",
+  "sandbox.error",
+  "sandbox.archived",
+  "sandbox.degraded",
+  "sandbox.recovered",
+];
 
 export interface WebhookProps {
   /** The public HTTPS endpoint (port 443) Boat POSTs events to. Updated in place. */
