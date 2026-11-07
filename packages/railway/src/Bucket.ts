@@ -4,7 +4,7 @@ import {
   type Bucket as RailwayBucket,
   type BucketS3CompatibleCredentials,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -139,8 +139,22 @@ export type Bucket = Resource<
     updatedAt: string;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface BucketLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway bucket id. */
+  bucketId: string;
+}
 
 const resolveBucketProps = (
   props: BucketProps | Effect.Effect<BucketProps, never, Providers>,
@@ -277,6 +291,20 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * export const Data = Railway.Bucket("Data", { project: Site });
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Reference an existing bucket
+ * ```typescript
+ * const assets = Railway.Bucket.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   bucketId: "c9d0e1f2-…",
+ * });
+ * ```
+ *
  * @resource
  * @product Bucket
  */
@@ -374,7 +402,7 @@ const toAttrs = (
     environmentId: string;
     region?: string;
     credentials?: BucketS3CredentialsResultItem;
-    previous?: Bucket["Attributes"];
+    previous?: Partial<Bucket["Attributes"]>;
   },
 ): Bucket["Attributes"] => ({
   bucketId: bucket.id,
@@ -531,6 +559,52 @@ const waitUntilGone = (input: { bucketId: string; projectId: string; environment
     }),
   );
 
+/**
+ * Observe a Bucket from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readBucketAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: BucketProps;
+  output?: Partial<Bucket["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  if (projectId === undefined) return undefined;
+
+  const found =
+    (output?.bucketId !== undefined && output.bucketId.length > 0
+      ? yield* findInProject(projectId, (bucket) => bucket.id === output.bucketId)
+      : undefined) ?? (yield* findInProject(projectId, (bucket) => bucket.name === name));
+  if (found === undefined) return undefined;
+
+  const envId = environmentId ?? output?.environmentId ?? "";
+  const config =
+    envId.length > 0
+      ? yield* getEnvironmentConfig(envId, projectId)
+      : ({} as EnvironmentConfigShape);
+  if (envId.length > 0 && !isDeployed(config, found.id)) {
+    return undefined;
+  }
+  const attrs = toAttrs(found, {
+    environmentId: envId,
+    region: instanceOf(config, found.id)?.region ?? output?.region,
+    previous: output,
+  });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const BucketProvider = () =>
   Provider.succeed(Bucket, {
     stables: ["bucketId", "projectId", "environmentId", "createdAt"],
@@ -551,39 +625,12 @@ export const BucketProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      if (projectId === undefined) return undefined;
+    lookup: ({ projectId, environmentId, bucketId }) =>
+      readBucketAttributes({ id: bucketId, output: { projectId, environmentId, bucketId } }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+      ),
 
-      const found =
-        (output?.bucketId !== undefined && output.bucketId.length > 0
-          ? yield* findInProject(projectId, (bucket) => bucket.id === output.bucketId)
-          : undefined) ?? (yield* findInProject(projectId, (bucket) => bucket.name === name));
-      if (found === undefined) return undefined;
-
-      const envId = environmentId ?? output?.environmentId ?? "";
-      const config =
-        envId.length > 0
-          ? yield* getEnvironmentConfig(envId, projectId)
-          : ({} as EnvironmentConfigShape);
-      if (envId.length > 0 && !isDeployed(config, found.id)) {
-        return undefined;
-      }
-      const attrs = toAttrs(found, {
-        environmentId: envId,
-        region: instanceOf(config, found.id)?.region ?? output?.region,
-        previous: output,
-      });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    read: readBucketAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
