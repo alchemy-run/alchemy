@@ -1,0 +1,66 @@
+---
+title: "Part 2: Run Code in a Sandbox"
+description: Add a Worker that creates a sandbox per request, runs a command, and deletes it.
+sidebar:
+  order: 2
+---
+
+## Bind sandboxes to a Worker
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schema from "effect/Schema";
+import { Base } from "./Images.ts";
+
+const RunRequest = Schema.Struct({ command: Schema.String });
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* Daytona.CreateSandbox(Base);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const { command } = yield* Schema.decodeUnknownEffect(RunRequest)(yield* request.json);
+        const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
+          sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
+        );
+        const result = yield* sandbox.exec(command);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.scoped, Effect.orDie),
+    };
+  }).pipe(Effect.provide(Daytona.CreateSandboxHttp)),
+) {}
+```
+
+`Daytona.CreateSandbox(Base)` gives the Worker its own API key with `write:sandboxes` and `delete:sandboxes`, and creates every sandbox from `Base`. `sandboxes.create()` waits until the sandbox has started. `Effect.acquireRelease` deletes it when the request ends.
+
+## Deploy the Worker
+
+```diff lang="typescript"
+// alchemy.run.ts
++import Api from "./src/Api.ts";
+import { Base } from "./src/Images.ts";
+
+  Effect.gen(function* () {
+    const base = yield* Base;
+-    return { snapshot: base.name };
++    const api = yield* Api;
++    return { url: api.url.as<string>(), snapshot: base.name };
+  }),
+```
+
+## Call it
+
+```sh
+alchemy deploy
+curl -X POST "$URL/run" -d '{"command":"node --version"}'
+```
+
+You get `{"exitCode":0,"result":"v22..."}`.
