@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   parentBefore,
@@ -93,8 +94,32 @@ export type CollectionsEnginesControl = Resource<
     associatedServingConfigIds: string[];
   },
   never,
-  Providers
+  Providers,
+  CollectionsEnginesControlLookup
 >;
+
+/**
+ * Props for {@link CollectionsEnginesControl.lookup}: find a collections
+ * engines control this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CollectionsEnginesControlLookup {
+  /**
+   * Control id (1-63 characters, `a-z`, `_`, `-`).
+   */
+  controlId: string;
+  /**
+   * Parent Engine resource name
+   * `projects/{project}/locations/{location}/col
+   * lections/{collection}/engines/{engine}`.
+   */
+  engine: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine Control on a collection Engine — redirects,
@@ -130,6 +155,20 @@ export type CollectionsEnginesControl = Resource<
  *     synonymsAction: { synonyms: ["hello", "hi", "hey"] },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing collections engines control
+ * `CollectionsEnginesControl.lookup` references a collections engines
+ * control Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared collections engines control.
+ *
+ * **Example:** Reference an existing collections engines control
+ * ```typescript
+ * const collectionsEnginesControl = GCP.DiscoveryEngine.CollectionsEnginesControl.lookup({
+ *   controlId: "my-control",
+ *   engine: "my-engine",
+ * });
  * ```
  *
  * @resource
@@ -239,6 +278,15 @@ export const CollectionsEnginesControlProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ controlId, engine }) {
+      const env = yield* GcpEnvironment.current;
+      const name = engine !== undefined ? resourceName(engine, controlId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

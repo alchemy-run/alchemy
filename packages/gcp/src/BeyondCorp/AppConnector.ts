@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,33 @@ export type AppConnector = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppConnectorLookup
 >;
+
+/**
+ * Props for {@link AppConnector.lookup}: find an app connector this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppConnectorLookup {
+  /**
+   * AppConnector id (the `{appConnector}` segment of
+   * `projects/{project}/locations/{location}/appConnectors/{appConnector}`).
+   * Must be 4-63 characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  appConnectorId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BeyondCorp AppConnector that represents the application-facing
@@ -133,6 +159,19 @@ export type AppConnector = Resource<
  *   serviceAccountEmail: "connector@my-project.iam.gserviceaccount.com",
  *   displayName: "prod connector",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing app connector
+ * `AppConnector.lookup` references an app connector Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * app connector.
+ *
+ * **Example:** Reference an existing app connector
+ * ```typescript
+ * const appConnector = GCP.BeyondCorp.AppConnector.lookup({
+ *   appConnectorId: "my-app-connector",
  * });
  * ```
  *
@@ -223,6 +262,15 @@ export const AppConnectorProvider = () =>
         extra: previousEmail !== undefined && nextEmail.length > 0 && previousEmail !== nextEmail,
       });
     }),
+
+    lookup: Effect.fn(function* ({ appConnectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, appConnectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

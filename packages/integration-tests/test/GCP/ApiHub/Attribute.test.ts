@@ -6,6 +6,7 @@ import * as apihub from "@distilled.cloud/gcp/apihub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -83,6 +84,13 @@ test.provider.skipIf(!runLifecycle)(
             scope: "API",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ApiHub.Attribute.lookup({
+          attributeId: created.attributeId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/attributes/");

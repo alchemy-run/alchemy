@@ -7,8 +7,11 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForCreate, waitForOperation } from "./internal.ts";
 
@@ -79,8 +82,33 @@ export type TagKey = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TagKeyLookup
 >;
+
+/**
+ * Props for {@link TagKey.lookup}: find a tag key this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TagKeyLookup {
+  /**
+   * User-friendly short name. Unique among TagKeys under the same parent.
+   * Must be 1-256 characters, begin and end with an alphanumeric, and
+   * otherwise contain only letters, digits, dashes, underscores, and dots.
+   */
+  shortName: string;
+  /**
+   * Parent organization or project (`organizations/{org}` or
+   * `projects/{project}`).
+   */
+  parent?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Resource Manager TagKey — a namespace for TagValues used to annotate
@@ -116,6 +144,16 @@ export type TagKey = Resource<
  *   shortName: "environment",
  *   description: "prod vs staging",
  * });
+ * ```
+ *
+ * ### Looking up an existing tag key
+ * `TagKey.lookup` references a tag key Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tag key.
+ *
+ * **Example:** Reference an existing tag key
+ * ```typescript
+ * const tagKey = GCP.ResourceManager.TagKey.lookup({ shortName: "my-short" });
  * ```
  *
  * @resource
@@ -208,6 +246,17 @@ const getByNamespaced = (name: string) =>
   resourcemanager
     .getNamespacedTagKeys({ name })
     .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
+
+// A namespaced name holds the project id, so a parent given by project
+// number is searched by listing its keys.
+const findUnderParent = (parent: string, shortName: string) =>
+  resourcemanager.listTagKeys.items({ parent }).pipe(
+    Stream.flatMap((page) => Stream.fromIterable(page.tagKeys ?? [])),
+    Stream.filter((key) => key.shortName === shortName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
 
 const observe = (resourceName: string | undefined, namespacedName: string) =>
   Effect.gen(function* () {
@@ -331,6 +380,17 @@ export const TagKeyProvider = () =>
         deleteFirst: identitySame,
       };
     }),
+
+    lookup: Effect.fn(function* ({ shortName, parent: lookupParent }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = lookupParent ?? defaultParent(env.project);
+      const namespaced = namespacedLookup(parent, shortName);
+      const existing =
+        (yield* observe(undefined, namespaced)) ??
+        (/^projects\/\d+$/.test(parent) ? yield* findUnderParent(parent, shortName) : undefined);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

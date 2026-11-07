@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,32 @@ export type FolderMuteConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderMuteConfigLookup
 >;
+
+/**
+ * Props for {@link FolderMuteConfig.lookup}: find a folder mute config this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderMuteConfigLookup {
+  /**
+   * Mute config id (the `{muteConfig}` segment of
+   * `folders/{folder}/muteConfigs/{muteConfig}`). Letters, digits, and
+   * hyphens; max 63 characters.
+   */
+  muteConfigId: string;
+  /**
+   * Parent folder (`folders/{folder}` or the numeric id).
+   */
+  folder?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A folder-scoped Security Command Center mute config.
@@ -126,6 +151,19 @@ export type FolderMuteConfig = Resource<
  *   muteConfigId: "mute-low",
  *   filter: 'severity="LOW"',
  *   type: "STATIC",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder mute config
+ * `FolderMuteConfig.lookup` references a folder mute config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder mute config.
+ *
+ * **Example:** Reference an existing folder mute config
+ * ```typescript
+ * const folderMuteConfig = GCP.SecurityCenter.FolderMuteConfig.lookup({
+ *   muteConfigId: "my-mute-config",
  * });
  * ```
  *
@@ -182,6 +220,15 @@ export const FolderMuteConfigProvider = () =>
         replaceOn(olds?.type ?? output?.type, news.type)
       );
     }),
+
+    lookup: Effect.fn(function* ({ muteConfigId, folder: lookupFolder }) {
+      const env = yield* GcpEnvironment.current;
+      const folder = yield* resolveFolder(lookupFolder, undefined);
+      const name = resourceName(folder, muteConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, folder, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

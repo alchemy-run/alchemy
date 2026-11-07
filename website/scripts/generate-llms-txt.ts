@@ -564,6 +564,31 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/what-is-e2b",
+        "e2b/setup",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/api-keys",
+        "e2b/network-and-secrets",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
     heading: "Archil — start here",
     intro:
       "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
@@ -663,6 +688,40 @@ const SECTIONS: Section[] = [
         "cluster/cloudflare",
       ],
     },
+  },
+  {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
   },
   {
     heading: "Modal",

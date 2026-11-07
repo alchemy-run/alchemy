@@ -9,6 +9,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -107,6 +108,14 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { artifacts, attachment };
         }),
+      );
+      yield* expectFound(
+        GCP.ArtifactRegistry.RepositoriesAttachment.lookup({
+          attachmentId: created.attachment.attachmentId,
+          location: created.attachment.location,
+          repository: created.attachment.repository,
+        }),
+        created.attachment,
       );
 
       expect(created.attachment.name).toContain("/attachments/");

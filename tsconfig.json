@@ -27,10 +27,16 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/daytona/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/archil/tsconfig.json"
     },
     {
       "path": "./submodules/distilled/packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/e2b/tsconfig.json"
     },
     {
       "path": "./submodules/distilled/packages/modal/tsconfig.json"
@@ -121,6 +127,9 @@
       "path": "./packages/turso/tsconfig.json"
     },
     {
+      "path": "./packages/daytona/tsconfig.json"
+    },
+    {
       "path": "./packages/archil/tsconfig.json"
     },
     {
@@ -128,6 +137,9 @@
     },
     {
       "path": "./packages/effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "./packages/e2b/tsconfig.json"
     },
     {
       "path": "./packages/modal/tsconfig.json"
@@ -357,6 +369,18 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/daytona-sandboxes/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-modal-sandbox/tsconfig.json"

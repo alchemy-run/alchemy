@@ -6,6 +6,7 @@ import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -45,6 +46,7 @@ test.provider(
           description: "test account",
         }),
       );
+      yield* expectFound(GCP.IAM.ServiceAccount.lookup({ accountId: created.accountId }), created);
 
       expect(created.accountId).toMatch(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/);
       expect(created.project).toEqual(project);

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -65,8 +66,34 @@ export type AuthorizedViewSet = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthorizedViewSetLookup
 >;
+
+/**
+ * Props for {@link AuthorizedViewSet.lookup}: find an authorized view set
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AuthorizedViewSetLookup {
+  /**
+   * AuthorizedViewSet id (the `{authorized_view_set}` segment of
+   * `projects/{
+   * project}/locations/{location}/authorizedViewSets/{authorized_view_set}`)
+   * . Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  authorizedViewSetId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Insights AuthorizedViewSet, a container for
@@ -89,6 +116,19 @@ export type AuthorizedViewSet = Resource<
  * const set = yield* GCP.ContactCenterInsights.AuthorizedViewSet("QaViews", {
  *   authorizedViewSetId: "qa-reviewers",
  *   displayName: "qa-reviewers",
+ * });
+ * ```
+ *
+ * ### Looking up an existing authorized view set
+ * `AuthorizedViewSet.lookup` references an authorized view set Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared authorized view set.
+ *
+ * **Example:** Reference an existing authorized view set
+ * ```typescript
+ * const authorizedViewSet = GCP.ContactCenterInsights.AuthorizedViewSet.lookup({
+ *   authorizedViewSetId: "my-authorized-view-set",
  * });
  * ```
  *
@@ -163,6 +203,15 @@ export const AuthorizedViewSetProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ authorizedViewSetId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, authorizedViewSetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

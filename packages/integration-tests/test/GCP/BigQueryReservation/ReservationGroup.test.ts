@@ -6,6 +6,7 @@ import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -70,6 +71,13 @@ test.provider(
             location: "us-central1",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BigQueryReservation.ReservationGroup.lookup({
+          reservationGroupId: created.reservationGroupId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/reservationGroups/");
