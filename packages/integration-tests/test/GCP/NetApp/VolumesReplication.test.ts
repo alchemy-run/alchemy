@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "../lookup.ts";
-import { missingTag } from "./entitlement.ts";
+import { entitled, missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,13 +49,16 @@ test.provider(
       );
       expect(error._tag).toEqual(missingTag);
 
-      const page = yield* netapp.listProjectsLocationsVolumesReplications({
-        parent: `projects/${project}/locations/us-central1/volumes/-`,
-        pageSize: 10,
-      });
-      expect((page.replications ?? []).map((item) => item.name)).not.toContain(
-        `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing/replications/alchemy-repl-missing`,
-      );
+      // Listing is refused too until NetApp accepts the billing account.
+      if (entitled) {
+        const page = yield* netapp.listProjectsLocationsVolumesReplications({
+          parent: `projects/${project}/locations/us-central1/volumes/-`,
+          pageSize: 10,
+        });
+        expect((page.replications ?? []).map((item) => item.name)).not.toContain(
+          `projects/${project}/locations/us-central1/volumes/alchemy-netapp-missing/replications/alchemy-repl-missing`,
+        );
+      }
 
       yield* stack.destroy();
     }).pipe(logLevel),

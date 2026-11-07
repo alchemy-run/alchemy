@@ -640,6 +640,13 @@ const isSubnetNotReady = (error: { readonly _tag: string }) =>
   error.message.includes("/subnetworks/") &&
   error.message.includes("is not ready");
 
+// Dataproc checks the VM service account's access to its staging and temp
+// buckets on create, and a just-granted role takes up to a minute to reach
+// that check: `BadRequest: Multiple validation errors: - Permissions are
+// missing for the custom service account ...`.
+const isGrantNotPropagated = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" && (error.message ?? "").includes("Permissions are missing for the");
+
 /**
  * Create the cluster and wait for the create operation. A create that fails
  * on a busy subnet leaves the cluster in `ERROR`; it is deleted and the
@@ -664,7 +671,7 @@ const createCluster = (
     }
   }).pipe(
     Effect.retry({
-      while: isSubnetNotReady,
+      while: (error) => isSubnetNotReady(error) || isGrantNotPropagated(error),
       times: 6,
       schedule: Schedule.spaced("30 seconds"),
     }),

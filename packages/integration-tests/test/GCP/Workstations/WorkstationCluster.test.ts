@@ -23,7 +23,7 @@ test.provider(
 
       const error = yield* Effect.flip(
         workstations.getProjectsLocationsWorkstationClusters({
-          name: `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
+          name: `projects/${project}/locations/us-east1/workstationClusters/alchemy-missing-cluster`,
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -33,7 +33,7 @@ test.provider(
         pageSize: 10,
       });
       expect((page.workstationClusters ?? []).map((item) => item.name)).not.toContain(
-        `projects/${project}/locations/us-central1/workstationClusters/alchemy-missing-cluster`,
+        `projects/${project}/locations/us-east1/workstationClusters/alchemy-missing-cluster`,
       );
 
       yield* stack.destroy();
@@ -56,7 +56,7 @@ test.provider.skipIf(!runLifecycle)(
           Effect.gen(function* () {
             return yield* GCP.Workstations.WorkstationCluster("Dev", {
               network: `projects/${project}/global/networks/alchemy-missing-vpc`,
-              subnetwork: `projects/${project}/regions/us-central1/subnetworks/alchemy-missing-subnet`,
+              subnetwork: `projects/${project}/regions/us-east1/subnetworks/alchemy-missing-subnet`,
               displayName: "alchemy-test-cluster",
               labels: { env: "test" },
             });
@@ -87,7 +87,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
-            location: "us-central1",
+            location: "us-east1",
             network: "default",
             subnetwork: "default",
             displayName: "alchemy-test-cluster",
@@ -146,7 +146,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
             workstationClusterId: created.cluster.workstationClusterId,
-            location: "us-central1",
+            location: "us-east1",
             network: "default",
             subnetwork: "default",
             displayName: "alchemy-test-cluster-v2",
