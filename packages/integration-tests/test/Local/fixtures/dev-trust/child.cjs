@@ -7,6 +7,7 @@ fs.writeFileSync(
   process.env.DEV_TRUST_OUT,
   JSON.stringify({
     contributed: process.env.ALCHEMY_DEV_TRUST,
+    execContributed: process.env.EXEC_DEV_TRUST,
     bundle,
     certificates: bundle ? fs.readFileSync(bundle, "utf8") : undefined,
   }),

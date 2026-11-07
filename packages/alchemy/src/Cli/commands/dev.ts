@@ -1,14 +1,15 @@
 import { fileURLToPath } from "node:url";
 import * as Command from "effect/cli/Command";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
-import * as Contributions from "../../Contributions.ts";
 import * as DevTrust from "../../Local/DevTrust.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
@@ -55,23 +56,22 @@ export const devCommand = Command.make(
       // A missing entry is this process's error to report, not a stack
       // trace out of the exec child.
       yield* resolveStackEntrypoint(options.main);
-      // Providers' dev environment. Set on THIS process, so the RPC spawner's
-      // sidecars (and the processes they launch) inherit it — they are forked
-      // from here, not from the exec child below.
-      const env = yield* Contributions.devEnv().pipe(
-        Effect.catchTag("ContributionError", (error) =>
-          Effect.logWarning(error.message).pipe(Effect.as({})),
+      // Every CA the stack's local runtimes trust, handed to the processes
+      // this one spawns (the RPC sidecars and the exec child) instead of set
+      // on this process: workerd reads the files each time it starts, and
+      // Node processes read one bundle at startup.
+      const trust = yield* DevTrust.env();
+      // Lives in the command scope and survives every exec child restart.
+      const spawner = Context.get(
+        yield* Layer.build(
+          RpcSpawner.layerServer({
+            profile: rawArgs.profile,
+            envFile: Option.getOrUndefined(rawArgs.envFile),
+            env: trust,
+          }),
         ),
+        RpcSpawner.RpcSpawner,
       );
-      for (const [key, value] of Object.entries(env)) {
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports provider dev env onto this process for spawned sidecars, not config reading
-        process.env[key] ??= value;
-      }
-      // Every CA the stack's local runtimes trust: workerd reads the files
-      // each time it starts, and Node processes read one bundle at startup.
-      yield* DevTrust.publish();
-      Object.assign(process.env, yield* DevTrust.nodeEnv());
-      const spawner = yield* RpcSpawner.RpcSpawner;
       // Neither runtime uses its native `--watch`: those hard-restart the exec
       // child with no teardown, leaving the previous generation's widget in
       // scrollback and never saying what changed. exec.ts watches the user's
@@ -111,6 +111,7 @@ export const devCommand = Command.make(
           [LOG_FD_ENV]: "3",
           // The exec child renders the run's logs but never sees this argv.
           ...consoleSettingsEnv(consoleSettings),
+          ...trust,
           [SPAWNER_URL_ENV_KEY]: spawner.url,
           ...traceEnv,
         },
@@ -168,15 +169,7 @@ export const devCommand = Command.make(
         until: (code) => code !== DEV_RELOAD_EXIT_CODE,
       });
     },
-    (effect, args) =>
-      Effect.andThen(
-        Effect.flatten(VersionCheck),
-        Effect.provide(
-          RpcSpawner.layerServer({
-            profile: args.profile,
-            envFile: Option.getOrUndefined(args.envFile),
-          }),
-        )(effect),
-      ).pipe(logCommandFailure),
+    (effect) =>
+      Effect.andThen(Effect.flatten(VersionCheck), Effect.scoped(effect)).pipe(logCommandFailure),
   ),
 ).pipe(Command.withDescription("Develop a stack with live reload"));

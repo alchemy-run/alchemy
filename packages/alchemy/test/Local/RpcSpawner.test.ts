@@ -133,27 +133,27 @@ describe(
     );
 
     it.live(
-      "passes the dev session's trusted CAs to the sidecar",
-      () => {
-        const files = ["/ca/floci.pem", "/ca/portless.pem"].join(delimiter);
-        return Effect.acquireUseRelease(
-          Effect.sync(() => {
-            process.env[DEV_TRUST_ENV] = files;
-          }),
-          () =>
-            Effect.gen(function* () {
-              const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
-              const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
-              expect(yield* sidecarEnv(wsUrl, [DEV_TRUST_ENV])).toEqual([files]);
-            }).pipe(Effect.provide(services)),
-          () =>
-            Effect.sync(() => {
-              delete process.env[DEV_TRUST_ENV];
-            }),
-        );
-      },
-      // sets a process-global env var the sidecar inherits at spawn
-      { timeout: 60_000, exclusive: true },
+      "passes the dev session's trusted CAs to the sidecar, not to this process",
+      () =>
+        Effect.gen(function* () {
+          const files = ["/ca/floci.pem", "/ca/portless.pem"].join(delimiter);
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+          expect(yield* sidecarEnv(wsUrl, [DEV_TRUST_ENV])).toEqual([files]);
+          expect(process.env[DEV_TRUST_ENV]).toBeUndefined();
+        }).pipe(
+          Effect.provide(
+            Layer.provideMerge(
+              layerServer({
+                profile: undefined,
+                envFile: undefined,
+                env: { [DEV_TRUST_ENV]: ["/ca/floci.pem", "/ca/portless.pem"].join(delimiter) },
+              }),
+              Layer.merge(PlatformServices, FetchHttpClient.layer),
+            ),
+          ),
+        ),
+      { timeout: 60_000 },
     );
 
     it.live(
