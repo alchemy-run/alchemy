@@ -5,10 +5,10 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { ApiKeyAction } from "./ApiKey.ts";
 import { bindBoat, bindOwnerLabels } from "./BoatBindings.ts";
-import { CreateSandbox, type SandboxesClient } from "./CreateSandbox.ts";
+import { CreateSandbox, type CreateSandboxOptions, type SandboxesClient } from "./CreateSandbox.ts";
 import { BoatUnexpectedResponse } from "./Errors.ts";
 import { labelFilter } from "./internal/Ownership.ts";
-import { makeSandboxHandle } from "./internal/SandboxHandle.ts";
+import { makeSandboxHandle, ttlOf } from "./internal/SandboxHandle.ts";
 import type { Snapshot } from "./Snapshot.ts";
 
 /** What a `CreateSandbox` host may do: work in sandboxes, and delete only its own. */
@@ -60,13 +60,17 @@ export const CreateSandboxHttp = Layer.succeed(
     const handleOf = (sandbox: boat.Sandbox) => makeSandboxHandle(auth, sandbox, owner);
 
     const client: SandboxesClient = {
-      create: Effect.fn("Boat.CreateSandbox.create")(function* (options) {
-        const from = options?.from ?? (baseName === undefined ? undefined : yield* baseName);
+      create: Effect.fn("Boat.CreateSandbox.create")(function* (
+        createOptions: CreateSandboxOptions = {},
+      ) {
+        const { autoStop, ...options } = createOptions;
+        const from = options.from ?? (baseName === undefined ? undefined : yield* baseName);
         const created = yield* auth.authorize(
           boat.createSandbox({
             ...options,
+            ...(autoStop === undefined ? {} : { ttlSeconds: ttlOf(autoStop) }),
             ...(from === undefined ? {} : { from }),
-            labels: { ...options?.labels, ...(yield* owner) },
+            labels: { ...options.labels, ...(yield* owner) },
           }),
         );
         return handleOf(created.sandbox);

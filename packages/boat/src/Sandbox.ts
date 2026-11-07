@@ -11,6 +11,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -28,7 +29,9 @@ import {
   isProgramRunning,
   type ProgramState,
 } from "./internal/Program.ts";
+import { resolved, type Ref } from "./internal/Ref.ts";
 import type { Providers } from "./Providers.ts";
+import type { SnapshotBase } from "./Snapshot.ts";
 
 /**
  * Machine size. `small` runs at half the default rate and `large` at
@@ -53,6 +56,11 @@ export type SandboxState =
 /** How the setup script went: `pending`, `running`, `done` or `failed`. */
 export type SandboxSetupStatus = "pending" | "running" | "done" | "failed";
 
+/** An environment, by name. Accepts a `Boat.Environment` or `{ name }`. */
+export interface SandboxEnvironmentRef {
+  name: string;
+}
+
 /** What bindings attach to a sandbox that runs a program: its process's environment. */
 export interface SandboxBinding {
   env?: Record<string, any>;
@@ -70,12 +78,12 @@ export interface SandboxProps extends PlatformProps {
    */
   type?: SandboxType;
   /**
-   * Seconds the sandbox runs before Boat stops it, saving its disk; `null`
-   * never stops it. Updated in place: the next stop is then `ttlSeconds`
-   * from the deploy.
-   * @default 3600, or `null` for a sandbox with `main`
+   * How long the sandbox runs before Boat stops it, saving its disk;
+   * `false` never stops it. Updated in place: the next stop is then
+   * `autoStop` from the deploy.
+   * @default "1 hour", or `false` for a sandbox with `main`
    */
-  ttlSeconds?: number | null;
+  autoStop?: Duration.Input | false;
   /**
    * Environment variables. On a sandbox without `main` they are the
    * sandbox's, on top of its environment's, and changing them replaces it.
@@ -84,11 +92,11 @@ export interface SandboxProps extends PlatformProps {
    */
   env?: Record<string, string | Redacted.Redacted<string>>;
   /**
-   * The Boat environment to attach, by name: its repositories, secrets and
-   * credential settings. Omit for the account's default environment
-   * (`base`). Changing it replaces the sandbox.
+   * The `Boat.Environment` to attach (or `{ name }` of one): its
+   * variables, secret files and credential settings. Omit for the account's
+   * default environment (`base`). Changing it replaces the sandbox.
    */
-  environment?: string;
+  environment?: Ref<SandboxEnvironmentRef>;
   /**
    * Attach none of the account's secrets (no environment variables, secret
    * files or credentials), and confine the sandbox so it can't act on the
@@ -115,10 +123,11 @@ export interface SandboxProps extends PlatformProps {
    */
   setupScript?: string;
   /**
-   * Start from a saved snapshot, by name (a `Boat.Snapshot`'s `name`) or
-   * share code (`bsh_…`). Changing it replaces the sandbox.
+   * The `Boat.Snapshot` to start from (or `{ name }` of one saved
+   * elsewhere, or a share code `bsh_...`). Changing or rebuilding it
+   * replaces the sandbox, so it starts from the new disk.
    */
-  from?: string;
+  snapshot?: Ref<SnapshotBase>;
   /**
    * Your own labels, at most 17 (Alchemy adds three). Boat sets labels
    * only at create, so changing them replaces the sandbox.
@@ -213,7 +222,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
 
 /**
  * A Boat sandbox the stack owns: a Linux machine with Docker, passwordless
- * `sudo` and a desktop, that stops itself after `ttlSeconds` and keeps its
+ * `sudo` and a desktop, that stops itself after `autoStop` and keeps its
  * disk until it is resumed.
  *
  * Use it for a workspace that outlives requests (an agent's home, a dev
@@ -226,8 +235,8 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  *
  * :::caution
  * Replacing the sandbox (a new `type`, `env`, `environment`, `noEnv`,
- * `snapshots`, `monitoring`, `setupScript`, `from` or `labels`) creates a
- * fresh sandbox and deletes the old one with its disk.
+ * `snapshots`, `monitoring`, `setupScript`, `labels`, or a new or rebuilt
+ * `snapshot`) creates a fresh sandbox and deletes the old one with its disk.
  * :::
  *
  * ### Creating a Sandbox
@@ -237,7 +246,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  *
  * export const DevBox = Boat.Sandbox("DevBox", {
  *   type: "large",
- *   ttlSeconds: 3600,
+ *   autoStop: "1 hour",
  *   setupScript: "git clone https://github.com/alchemy-run/alchemy ~/alchemy",
  * });
  * ```
@@ -255,7 +264,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * an implementation, and Alchemy bundles the program, uploads it and runs
  * it with Node, served at `url`. A code change uploads the new bundle and
  * restarts the process; the sandbox and its URL stay the same. A sandbox
- * with `main` never stops on its own unless `ttlSeconds` says so; if it
+ * with `main` never stops on its own unless `autoStop` says so; if it
  * stopped anyway, the next deploy resumes it and starts the program.
  *
  * **Example:** An HTTP server
@@ -273,11 +282,19 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * ) {}
  * ```
  *
- * ### Starting from a snapshot
- * **Example:** Boot from a saved snapshot
+ * ### Starting from a snapshot and an environment
+ * **Example:** A sandbox with a project set up and its secrets
  * ```typescript
- * const golden = yield* Boat.Snapshot("Golden", { sandbox: Builder });
- * const box = yield* Boat.Sandbox("Box", { from: golden.name });
+ * export const Golden = Boat.Snapshot("Golden", { run: ["npm i -g pnpm"] });
+ * export const Agents = Boat.Environment("Agents", {
+ *   env: { API_TOKEN: Config.redacted("API_TOKEN") },
+ * });
+ *
+ * export const Box = Boat.Sandbox("Box", {
+ *   snapshot: Golden,
+ *   environment: Agents,
+ *   autoStop: "30 minutes",
+ * });
  * ```
  *
  * ### Using it at runtime
@@ -308,6 +325,22 @@ export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRu
 } = Object.assign(
   Platform("Boat.Sandbox", {
     createRuntimeContext: createHostRuntimeContext("Boat.Sandbox"),
+    // A declaration passed as a prop (`snapshot: Golden`) is an Effect until
+    // yielded. Yield it here so it is registered and the prop resolves to
+    // its attributes, as with `yield* Golden` inside Effect.gen.
+    transformProps: (_id, props: SandboxProps) =>
+      Effect.gen(function* () {
+        if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        const ref = <T>(value: T) =>
+          Effect.isEffect(value)
+            ? (value as unknown as Effect.Effect<T, never, Providers>)
+            : Effect.succeed(value);
+        return {
+          ...props,
+          snapshot: props.snapshot === undefined ? undefined : yield* ref(props.snapshot),
+          environment: props.environment === undefined ? undefined : yield* ref(props.environment),
+        };
+      }),
   }),
   { lookup: (props: { sandboxId: string }) => SandboxResource.lookup(props) },
 );
@@ -370,6 +403,19 @@ const bindingEnv = (bindings: ReadonlyArray<ResourceBinding<SandboxBinding>>) =>
     {},
   );
 
+/**
+ * Boat's `ttlSeconds` for `autoStop`: `null` never stops. Without
+ * `autoStop`, a program sandbox never stops and others keep Boat's default.
+ */
+const ttlSecondsOf = (autoStop: Duration.Input | false | undefined, program: boolean) =>
+  autoStop === false
+    ? null
+    : autoStop === undefined
+      ? program
+        ? null
+        : undefined
+      : Math.max(1, Math.round(Duration.toMillis(Duration.fromInputUnsafe(autoStop)) / 1000));
+
 /** Props whose change means a new sandbox (Boat can't change them on a live one). */
 const replacingProps = (props: SandboxProps) =>
   JSON.stringify({
@@ -377,12 +423,15 @@ const replacingProps = (props: SandboxProps) =>
     // A program's env is its process's: changing it restarts the program.
     env: props.main === undefined ? (plainEnv(props.env) ?? {}) : undefined,
     program: props.main !== undefined,
-    environment: props.environment,
+    environment: props.environment === undefined ? undefined : resolved(props.environment).name,
     noEnv: props.noEnv ?? false,
     snapshots: props.snapshots ?? true,
     monitoring: props.monitoring ?? true,
     setupScript: props.setupScript,
-    from: props.from,
+    snapshot:
+      props.snapshot === undefined
+        ? undefined
+        : [resolved(props.snapshot).name, resolved(props.snapshot).setupHash ?? null],
     labels: props.labels ?? {},
   });
 
@@ -444,8 +493,7 @@ export const SandboxProvider = () =>
           const owner = yield* ownershipLabels(id);
           const program = news.main !== undefined;
           // A program serves for as long as the sandbox runs: don't stop it on a timer.
-          const ttlSeconds =
-            news.ttlSeconds !== undefined ? news.ttlSeconds : program ? null : undefined;
+          const ttlSeconds = ttlSecondsOf(news.autoStop, program);
 
           // Observe — `output` caches the id; the sandbox may be gone.
           let sandbox = output === undefined ? undefined : yield* observeSandbox(output.sandboxId);
@@ -458,12 +506,14 @@ export const SandboxProvider = () =>
               ...(ttlSeconds === undefined ? {} : { ttlSeconds }),
               // A program's env is its process's, written at deploy, not the sandbox's.
               ...(news.env === undefined || program ? {} : { env: plainEnv(news.env) }),
-              ...(news.environment === undefined ? {} : { environment: news.environment }),
+              ...(news.environment === undefined
+                ? {}
+                : { environment: resolved(news.environment).name }),
               ...(news.noEnv === undefined ? {} : { noEnv: news.noEnv }),
               ...(news.snapshots === undefined ? {} : { snapshots: news.snapshots }),
               ...(news.monitoring === undefined ? {} : { monitoring: news.monitoring }),
               ...(news.setupScript === undefined ? {} : { setupScript: news.setupScript }),
-              ...(news.from === undefined ? {} : { from: news.from }),
+              ...(news.snapshot === undefined ? {} : { from: resolved(news.snapshot).name }),
               labels: { ...news.labels, ...owner },
             });
             sandbox = created.sandbox;

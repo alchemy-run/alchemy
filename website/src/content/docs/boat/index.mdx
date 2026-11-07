@@ -29,7 +29,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const sandbox = yield* Effect.acquireRelease(
-          sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 300 }),
+          sandboxes.create({ type: "small", noEnv: true, autoStop: "5 minutes" }),
           (sandbox) => Effect.ignore(sandbox.delete()),
         );
         yield* sandbox.files.write("main.mjs", yield* request.text);

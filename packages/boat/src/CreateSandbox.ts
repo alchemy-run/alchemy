@@ -1,15 +1,24 @@
 import type * as boat from "@distilled.cloud/boat-dev/boat";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import type { BoatError, BoatSandbox } from "./SandboxClient.ts";
 import type { Snapshot } from "./Snapshot.ts";
 
 /**
- * Boat's `createSandbox` parameters. `from` defaults to the bound snapshot;
- * `labels` are merged under the host's ownership labels.
+ * Boat's `createSandbox` parameters, with `autoStop` in place of
+ * `ttlSeconds`. `from` defaults to the bound snapshot; `labels` are merged
+ * under the host's ownership labels.
  */
-export type CreateSandboxOptions = Omit<boat.CreateSandboxRequest, "count">;
+export type CreateSandboxOptions = Omit<boat.CreateSandboxRequest, "count" | "ttlSeconds"> & {
+  /**
+   * How long the sandbox runs before Boat stops it, saving its disk;
+   * `false` never stops it.
+   * @default "1 hour"
+   */
+  readonly autoStop?: Duration.Input | false;
+};
 
 /** Boat's `listSandboxes` filters, with `labels` as a record. */
 export interface ListSandboxesOptions {
@@ -65,7 +74,7 @@ export interface SandboxesClient {
  * const sandboxes = yield* Boat.CreateSandbox();
  * // in fetch:
  * const sandbox = yield* Effect.acquireRelease(
- *   sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 600 }),
+ *   sandboxes.create({ type: "small", noEnv: true, autoStop: "10 minutes" }),
  *   (sandbox) => Effect.ignore(sandbox.delete()),
  * );
  * const result = yield* sandbox.exec("node --version");
@@ -82,7 +91,7 @@ export interface SandboxesClient {
  * const [existing] = yield* sandboxes.list({ labels: { task } });
  * const sandbox = existing
  *   ? yield* sandboxes.connect(existing.id)
- *   : yield* sandboxes.create({ labels: { task }, ttlSeconds: 1800 });
+ *   : yield* sandboxes.create({ labels: { task }, autoStop: "30 minutes" });
  * ```
  *
  * ### Running commands
@@ -118,7 +127,7 @@ export interface SandboxesClient {
  * **Example:** Save a sandbox and fork it
  * ```typescript
  * yield* sandbox.stop(); // stopping snapshots it
- * const copy = yield* sandbox.fork({ ttlSeconds: 600 });
+ * const copy = yield* sandbox.fork({ autoStop: "10 minutes" });
  * yield* sandbox.resume();
  * ```
  *

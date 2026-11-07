@@ -2,6 +2,7 @@ import type * as Boat from "@distilled.cloud/boat-dev";
 import type * as boat from "@distilled.cloud/boat-dev/boat";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Sandbox from "alchemy/Sandbox";
+import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type * as Stream from "effect/Stream";
@@ -154,14 +155,14 @@ export interface SandboxOperations
    */
   stop(): Effect.Effect<void, BoatError, RuntimeContext>;
   /**
-   * Resumes a stopped sandbox (a no-op on a running one). `ttlSeconds` sets
-   * how long it runs before stopping again.
+   * Resumes a stopped sandbox (a no-op on a running one). `autoStop` sets
+   * how long it runs before stopping again; `false` never stops it.
    */
   resume(options?: {
-    readonly ttlSeconds?: number | null;
+    readonly autoStop?: Duration.Input | false;
   }): Effect.Effect<void, BoatError, RuntimeContext>;
-  /** Sets how long the sandbox runs from now before it stops; `null` never stops it. */
-  setTtl(ttlSeconds: number | null): Effect.Effect<void, BoatError, RuntimeContext>;
+  /** Sets how long the sandbox runs from now before it stops; `false` never stops it. */
+  setAutoStop(autoStop: Duration.Input | false): Effect.Effect<void, BoatError, RuntimeContext>;
   /** Saves the sandbox's disk as a named snapshot, and waits until it is ready. */
   snapshot(name: string): Effect.Effect<boat.SavedSnapshot, BoatError, RuntimeContext>;
 }
@@ -179,7 +180,10 @@ export interface BoatSandbox extends SandboxOperations {
    * `ForkNeedsSnapshot` until it has one; stopping a sandbox snapshots it.
    */
   fork(
-    options?: Omit<boat.ForkSandboxRequest, "sandboxId">,
+    options?: Omit<boat.ForkSandboxRequest, "sandboxId" | "ttlSeconds"> & {
+      /** How long the fork runs before Boat stops it; `false` never stops it. */
+      readonly autoStop?: Duration.Input | false;
+    },
   ): Effect.Effect<BoatSandbox, BoatError, RuntimeContext>;
   /** Deletes the sandbox with its disk. Deleting one that is gone succeeds. */
   delete(): Effect.Effect<void, BoatError, RuntimeContext>;

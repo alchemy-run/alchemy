@@ -19,7 +19,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     /** Runs a script in a fresh sandbox that is deleted when the request ends. */
     const run = Effect.fn("run")(function* (code: string) {
       const sandbox = yield* Effect.acquireRelease(
-        sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 300 }),
+        sandboxes.create({ type: "small", noEnv: true, autoStop: "5 minutes" }),
         (sandbox) => Effect.ignore(sandbox.delete()),
       );
       yield* sandbox.files.write("main.mjs", code);
@@ -33,12 +33,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* sandboxes.create({
           type: "small",
           noEnv: true,
-          ttlSeconds: 600,
+          autoStop: "10 minutes",
           labels: { user },
         });
       }
       const sandbox = yield* sandboxes.connect(existing.id);
-      yield* sandbox.resume({ ttlSeconds: 600 });
+      yield* sandbox.resume({ autoStop: "10 minutes" });
       return sandbox;
     });
 

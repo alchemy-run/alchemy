@@ -47,15 +47,17 @@ An unchanged deploy makes no new version. A changed one updates only what differ
 
 ## Start sandboxes on it
 
-Pass the environment's name to a sandbox, declared or created at run time:
+Pass the environment to a declared sandbox:
+
+```typescript
+export const Box = Boat.Sandbox("Box", { environment: Agents });
+```
+
+A sandbox created at run time names it:
 
 ```typescript
 const agents = yield* Agents;
-const box = yield* Boat.Sandbox("Box", { environment: agents.name });
-```
-
-```typescript
-const sandbox = yield* sandboxes.create({ environment: "agents-prod", ttlSeconds: 600 });
+const sandbox = yield* sandboxes.create({ environment: agents.name, autoStop: "10 minutes" });
 ```
 
 ## What it passes

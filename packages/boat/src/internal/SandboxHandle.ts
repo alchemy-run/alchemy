@@ -44,6 +44,12 @@ const fromBase64 = (data: string) => Uint8Array.from(atob(data), (char) => char.
 /** POSIX single quotes: the value verbatim. */
 const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
+/** Boat's `ttlSeconds` for an auto-stop: `null` never stops. */
+export const ttlOf = (autoStop: Duration.Input | false) =>
+  autoStop === false
+    ? null
+    : Math.max(1, Math.round(Duration.toMillis(Duration.fromInputUnsafe(autoStop)) / 1000));
+
 /** Boat runs commands for at most 10 minutes. */
 const MAX_TIMEOUT_SECONDS = 600;
 
@@ -359,11 +365,13 @@ const makeOperations = (
       onSandbox((sandboxId) =>
         boat.resumeSandbox({
           sandboxId,
-          ...(options?.ttlSeconds === undefined ? {} : { ttlSeconds: options.ttlSeconds }),
+          ...(options?.autoStop === undefined ? {} : { ttlSeconds: ttlOf(options.autoStop) }),
         }),
       ).pipe(Effect.asVoid),
-    setTtl: (ttlSeconds) =>
-      onSandbox((sandboxId) => boat.updateSandbox({ sandboxId, ttlSeconds })).pipe(Effect.asVoid),
+    setAutoStop: (autoStop) =>
+      onSandbox((sandboxId) => boat.updateSandbox({ sandboxId, ttlSeconds: ttlOf(autoStop) })).pipe(
+        Effect.asVoid,
+      ),
     snapshot: (name) =>
       onSandbox((sandboxId) =>
         boat.saveSavedSnapshot({ sandboxId, name }).pipe(Effect.andThen(awaitSnapshot(name))),
@@ -381,13 +389,15 @@ export const makeSandboxHandle = (
   sandboxId: info.id,
   info,
   // Boat never copies labels onto a fork, so it gets the owner's again.
-  fork: (options) =>
-    Effect.flatMap(ownerLabels, (owner) =>
+  fork: (forkOptions = {}) => {
+    const { autoStop, ...options } = forkOptions;
+    return Effect.flatMap(ownerLabels, (owner) =>
       auth.authorize(
         boat.forkSandbox({
           ...options,
+          ...(autoStop === undefined ? {} : { ttlSeconds: ttlOf(autoStop) }),
           sandboxId: info.id,
-          labels: { ...options?.labels, ...owner },
+          labels: { ...options.labels, ...owner },
         }),
       ),
     ).pipe(
@@ -396,7 +406,8 @@ export const makeSandboxHandle = (
           ? Effect.fail(new BoatUnexpectedResponse({ message: "Boat returned no fork" }))
           : Effect.succeed(makeSandboxHandle(auth, forked.sandbox, ownerLabels)),
       ),
-    ),
+    );
+  },
   delete: () =>
     auth.authorize(boat.deleteSandbox({ sandboxId: info.id, xAsciiConfirmDelete: info.id })).pipe(
       Effect.asVoid,

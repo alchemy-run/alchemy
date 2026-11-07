@@ -24,7 +24,7 @@ test.provider(
           const box = yield* Boat.Sandbox("KeyBox", {
             type: "small",
             noEnv: true,
-            ttlSeconds: 600,
+            autoStop: "10 minutes",
           });
           const key = yield* Boat.ApiKey("Scoped", {
             actions,

@@ -68,7 +68,7 @@ A program's sandbox stays the same across deploys; only the process changes.
   caption="Each deploy that changes the code or the program's env uploads the new bundle and restarts the process. The sandbox, its disk and its URL stay the same."
 />
 
-An unchanged deploy leaves the process alone. A program sandbox never stops on its own unless you set `ttlSeconds`. If it stopped anyway, or rebooted, the next deploy resumes it and starts the program again.
+An unchanged deploy leaves the process alone. A program sandbox never stops on its own unless you set `autoStop`. If it stopped anyway, or rebooted, the next deploy resumes it and starts the program again.
 
 `env` on a program sandbox is the program's: changing it restarts the process, without replacing the sandbox.
 

@@ -34,19 +34,19 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const program = (props: { ttlSeconds: number; greeting: string; name?: string }) =>
+      const program = (props: { minutes: number; greeting: string; name?: string }) =>
         Effect.gen(function* () {
           return yield* Boat.Sandbox("Box", {
             type: "small",
             noEnv: true,
-            ttlSeconds: props.ttlSeconds,
+            autoStop: `${props.minutes} minutes`,
             env: { GREETING: props.greeting },
             labels: { purpose: "lifecycle" },
             ...(props.name === undefined ? {} : { name: props.name }),
           });
         });
 
-      const box = yield* stack.deploy(program({ ttlSeconds: 600, greeting: "hello" }));
+      const box = yield* stack.deploy(program({ minutes: 10, greeting: "hello" }));
       const created = yield* observe(box.sandboxId);
       expect(created?.labels?.["alchemy.id"]).toBe("Box");
       expect(created?.labels?.["alchemy.stage"]).toBe(stack.stage);
@@ -58,7 +58,7 @@ test.provider(
 
       // Name and auto-stop change in place: same sandbox.
       const renamed = yield* stack.deploy(
-        program({ ttlSeconds: 900, greeting: "hello", name: `box-${stack.stage}` }),
+        program({ minutes: 15, greeting: "hello", name: `box-${stack.stage}` }),
       );
       expect(renamed.sandboxId).toBe(box.sandboxId);
       const updated = yield* observe(box.sandboxId);
@@ -67,13 +67,13 @@ test.provider(
 
       // An unchanged redeploy plans nothing.
       const plan = yield* stack.plan(
-        program({ ttlSeconds: 900, greeting: "hello", name: `box-${stack.stage}` }),
+        program({ minutes: 15, greeting: "hello", name: `box-${stack.stage}` }),
       );
       expect(plan.resources.Box.action).toBe("noop");
 
       // Env can't change on a live sandbox: a new one replaces it.
       const replaced = yield* stack.deploy(
-        program({ ttlSeconds: 900, greeting: "bonjour", name: `box-${stack.stage}` }),
+        program({ minutes: 15, greeting: "bonjour", name: `box-${stack.stage}` }),
       );
       expect(replaced.sandboxId).not.toBe(box.sandboxId);
       yield* expectGone(box.sandboxId);
@@ -95,15 +95,19 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const program = (ttlSeconds: number) =>
+      const program = (minutes: number) =>
         Effect.gen(function* () {
-          return yield* Boat.Sandbox("Recreated", { type: "small", noEnv: true, ttlSeconds });
+          return yield* Boat.Sandbox("Recreated", {
+            type: "small",
+            noEnv: true,
+            autoStop: `${minutes} minutes`,
+          });
         });
-      const box = yield* stack.deploy(program(600));
+      const box = yield* stack.deploy(program(10));
 
       yield* boat.deleteSandbox({ sandboxId: box.sandboxId, xAsciiConfirmDelete: box.sandboxId });
       yield* expectGone(box.sandboxId);
-      const recreated = yield* stack.deploy(program(900));
+      const recreated = yield* stack.deploy(program(15));
       expect(recreated.sandboxId).not.toBe(box.sandboxId);
       expect((yield* observe(recreated.sandboxId))?.ttlSeconds).toBe(900);
 
@@ -118,7 +122,11 @@ const TargetStack = Alchemy.Stack(
   "BoatLookupTarget",
   { providers: Boat.providers(), state: localState() },
   Effect.gen(function* () {
-    const box = yield* Boat.Sandbox("LookupBox", { type: "small", noEnv: true, ttlSeconds: 600 });
+    const box = yield* Boat.Sandbox("LookupBox", {
+      type: "small",
+      noEnv: true,
+      autoStop: "10 minutes",
+    });
     return { sandboxId: box.sandboxId, name: box.name };
   }),
 );

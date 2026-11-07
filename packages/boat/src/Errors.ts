@@ -24,3 +24,11 @@ export class InvalidEnvironmentValue extends Data.TaggedError("Boat.InvalidEnvir
   readonly message: string;
   readonly key: string;
 }> {}
+
+/** A snapshot's setup command failed or ran past 10 minutes. */
+export class SnapshotSetupFailed extends Data.TaggedError("Boat.SnapshotSetupFailed")<{
+  readonly message: string;
+  readonly command: string;
+  readonly exitCode: number;
+  readonly stderr: string;
+}> {}

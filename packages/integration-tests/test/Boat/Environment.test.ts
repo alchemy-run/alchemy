@@ -24,7 +24,7 @@ test.provider(
 
       const program = (props: { token: string; safe: boolean }) =>
         Effect.gen(function* () {
-          const environment = yield* Boat.Environment("Agents", {
+          const Agents = Boat.Environment("Agents", {
             env: { MODE: "agent", TOKEN: Redacted.make(props.token), QUOTED: 'a b "c"' },
             secretFiles: [{ path: "~/.alchemy-test", contents: Redacted.make("file-secret") }],
             passGithub: false,
@@ -32,10 +32,10 @@ test.provider(
           });
           const box = yield* Boat.Sandbox("OnAgents", {
             type: "small",
-            ttlSeconds: 600,
-            environment: environment.name,
+            autoStop: "10 minutes",
+            environment: Agents,
           });
-          return { environment, box };
+          return { environment: yield* Agents, box };
         });
 
       const { environment, box } = yield* stack.deploy(program({ token: "t1", safe: false }));

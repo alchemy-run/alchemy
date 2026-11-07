@@ -39,10 +39,10 @@ See [Account & API keys](/boat/account-and-keys).
 
 ## Sandboxes
 
-A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for `ttlSeconds` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files, and any sandbox can be forked into a copy from its last snapshot. **Labels** tag a sandbox when it's created, so you can find it again.
+A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for its `autoStop` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files, and any sandbox can be forked into a copy from its last snapshot. **Labels** tag a sandbox when it's created, so you can find it again.
 
 ```typescript
-const sandbox = yield* sandboxes.create({ type: "small", ttlSeconds: 600, labels: { task } });
+const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { task } });
 ```
 
 See [Sandboxes](/boat/sandboxes).
@@ -58,7 +58,7 @@ See [Programs](/boat/programs).
 A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it, with a repository cloned and dependencies installed. A **fork** copies a sandbox from its last snapshot, and Boat takes one whenever a sandbox stops.
 
 ```typescript
-export const Golden = Boat.Snapshot("Golden", { sandboxId: builder.sandboxId });
+export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
 ```
 
 See [Snapshots & forks](/boat/snapshots).

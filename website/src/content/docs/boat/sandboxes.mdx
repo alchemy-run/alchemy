@@ -5,7 +5,7 @@ description: Boat sandboxes — machine sizes, auto-stop, stop and resume, label
 
 import StateMachine from "../../../components/diagrams/StateMachine.astro";
 
-A **sandbox** is a Linux machine: Ubuntu with Docker, Node.js, Bun and Python, and `sudo` that needs no password. It comes in four sizes: `small` (2 vCPUs, 4 GB), `default`, `large` and `xlarge`, the last on Boat's $100 plan and up. A sandbox starts in under a second, runs for `ttlSeconds`, then stops and keeps its disk.
+A **sandbox** is a Linux machine: Ubuntu with Docker, Node.js, Bun and Python, and `sudo` that needs no password. It comes in four sizes: `small` (2 vCPUs, 4 GB), `default`, `large` and `xlarge`, the last on Boat's $100 plan and up. A sandbox starts in under a second, runs for its `autoStop`, then stops and keeps its disk.
 
 <StateMachine
   states={[
@@ -14,7 +14,7 @@ A **sandbox** is a Linux machine: Ubuntu with Docker, Node.js, Bun and Python, a
     { id: "deleted", label: "deleted", col: 2, row: 0, end: true },
   ]}
   transitions={[
-    { from: "ready", to: "archived", label: "ttlSeconds, stop()", bend: 0.4 },
+    { from: "ready", to: "archived", label: "autoStop, stop()", bend: 0.4 },
     { from: "archived", to: "ready", label: "resume()", bend: 0.4 },
     { from: "archived", to: "deleted", label: "delete, or 14 days" },
   ]}
@@ -32,12 +32,12 @@ import * as Boat from "@alchemy.run/boat";
 
 export const DevBox = Boat.Sandbox("DevBox", {
   type: "large",
-  ttlSeconds: 3600,
+  autoStop: "60 minutes",
   setupScript: "git clone https://github.com/alchemy-run/alchemy ~/alchemy",
 });
 ```
 
-`setupScript` runs once, in the background, after the sandbox starts; `setupStatus` says how it went. `ttlSeconds: null` never stops it. Changing the name, subdomain or `ttlSeconds` updates the sandbox in place. A new `type`, `env`, `environment`, `setupScript`, `from` or `labels` replaces it, and the old sandbox's disk goes with it.
+`setupScript` runs once, in the background, after the sandbox starts; `setupStatus` says how it went. `autoStop: false` never stops it. Changing the name, subdomain or `autoStop` updates the sandbox in place. A new `type`, `env`, `environment`, `setupScript`, `labels`, or a new or rebuilt `snapshot`, replaces it, and the old sandbox's disk goes with it.
 
 ## Keep the account's secrets out
 
@@ -57,12 +57,12 @@ For a sandbox per user or per task, bind `CreateSandbox` in a Worker or Function
 const sandboxes = yield* Boat.CreateSandbox();
 // in fetch:
 const sandbox = yield* Effect.acquireRelease(
-  sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 600 }),
+  sandboxes.create({ type: "small", noEnv: true, autoStop: "10 minutes" }),
   (sandbox) => Effect.ignore(sandbox.delete()),
 );
 ```
 
-Provide `Boat.CreateSandboxHttp`. `create` takes Boat's own parameters: `type`, `ttlSeconds`, `env`, `environment`, `noEnv`, `setupScript`, `labels`, `from`.
+Provide `Boat.CreateSandboxHttp`. `create` takes Boat's own parameters (`type`, `env`, `environment`, `noEnv`, `setupScript`, `labels`, `from`), and `autoStop`.
 
 ## Find a sandbox again
 
@@ -72,8 +72,8 @@ Labels mark a sandbox when it's created. Find it by them on the next request, an
 const [existing] = yield* sandboxes.list({ labels: { user } });
 const sandbox = existing
   ? yield* sandboxes.connect(existing.id)
-  : yield* sandboxes.create({ type: "small", ttlSeconds: 600, labels: { user } });
-yield* sandbox.resume({ ttlSeconds: 600 });
+  : yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { user } });
+yield* sandbox.resume({ autoStop: "10 minutes" });
 ```
 
 Sandboxes a binding creates also carry `alchemy.stack`, `alchemy.stage` and `alchemy.id`. They aren't deleted when the Stack is destroyed, so list them by those labels to clean up.
@@ -119,7 +119,7 @@ Bind `ConnectSandbox` to reach a sandbox the Stack declares, from a Worker or Fu
 ```typescript
 const devBox = yield* Boat.ConnectSandbox(DevBox);
 // in fetch:
-yield* devBox.resume({ ttlSeconds: 1800 });
+yield* devBox.resume({ autoStop: "30 minutes" });
 const result = yield* devBox.exec("git pull && npm test", { cwd: "/home/user/alchemy" });
 ```
 

@@ -61,12 +61,12 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const sandboxes = yield* Boat.CreateSandbox();
-    const box = yield* Boat.ConnectSandbox(yield* BindingBox);
+    const box = yield* Boat.ConnectSandbox(BindingBox);
 
     /** A small sandbox with none of the account's secrets, deleted when the request ends. */
     const scopedSandbox = (options?: Boat.CreateSandboxOptions) =>
       Effect.acquireRelease(
-        sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 600, ...options }),
+        sandboxes.create({ type: "small", noEnv: true, autoStop: "10 minutes", ...options }),
         (sandbox) => Effect.ignore(sandbox.delete()),
       );
 
@@ -75,7 +75,11 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
      * The sandbox outlives the request, so a later request can proxy to it.
      */
     const openEchoSandbox = Effect.gen(function* () {
-      const sandbox = yield* sandboxes.create({ type: "small", noEnv: true, ttlSeconds: 600 });
+      const sandbox = yield* sandboxes.create({
+        type: "small",
+        noEnv: true,
+        autoStop: "10 minutes",
+      });
       return yield* Effect.gen(function* () {
         yield* sandbox.files.write("/home/user/echo.py", ECHO_SERVER);
         yield* sandbox.start("python3 /home/user/echo.py");
@@ -207,13 +211,13 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
               Effect.map((e) => e._tag),
             );
             const fork = yield* Effect.acquireRelease(
-              sandbox.fork({ type: "small", ttlSeconds: 300 }),
+              sandbox.fork({ type: "small", autoStop: "5 minutes" }),
               (forked) => Effect.ignore(forked.delete()),
             );
             const forkNote = yield* fork.files
               .readText("note.txt")
               .pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 20 }));
-            yield* sandbox.resume({ ttlSeconds: 600 });
+            yield* sandbox.resume({ autoStop: "10 minutes" });
             const resumed = yield* sandbox
               .exec("cat note.txt")
               .pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 20 }));
@@ -231,7 +235,7 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
         // The declared sandbox, through ConnectSandbox.
         "/box": () =>
           Effect.gen(function* () {
-            yield* box.resume({ ttlSeconds: 1800 });
+            yield* box.resume({ autoStop: "30 minutes" });
             yield* box.files.write("visits.txt", "1");
             const ran = yield* box.exec("cat visits.txt; hostname");
             const info = yield* box.describe();

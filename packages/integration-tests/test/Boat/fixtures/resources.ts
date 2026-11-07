@@ -4,5 +4,5 @@ import * as Boat from "@alchemy.run/boat";
 export const BindingBox = Boat.Sandbox("BindingBox", {
   type: "small",
   noEnv: true,
-  ttlSeconds: 1800,
+  autoStop: "30 minutes",
 });

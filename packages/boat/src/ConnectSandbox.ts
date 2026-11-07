@@ -10,7 +10,7 @@ import type { ConnectedSandbox } from "./SandboxClient.ts";
  * as the sandboxes `CreateSandbox` returns, except `fork` and `delete`; its
  * `sandboxId` is an Effect, read at runtime.
  *
- * A declared sandbox stops after its `ttlSeconds`. Calls into it then fail
+ * A declared sandbox stops after its `autoStop`. Calls into it then fail
  * with `SandboxNotRunning` until you `resume()` it.
  *
  * The host gets its own Boat API key, minted at deploy and revoked when the
@@ -22,7 +22,7 @@ import type { ConnectedSandbox } from "./SandboxClient.ts";
  * const devBox = yield* Boat.ConnectSandbox(DevBox);
  * return {
  *   fetch: Effect.gen(function* () {
- *     yield* devBox.resume({ ttlSeconds: 600 });
+ *     yield* devBox.resume({ autoStop: "10 minutes" });
  *     const test = yield* devBox.exec("git pull && npm test", { cwd: "/home/user/repo" });
  *     return yield* HttpServerResponse.json(test);
  *   }),
