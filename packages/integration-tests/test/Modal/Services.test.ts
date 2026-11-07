@@ -68,7 +68,7 @@ describe("Modal.Function", () => {
         const { appId } = yield* stack;
         const { appLayout } = yield* app.appGetLayout({ appId });
         expect(Object.keys(appLayout?.functionIds ?? {}).sort()).toEqual(
-          ["Api", "AsyncApi", "AsyncEmbed", "Embed.*", "Web"].sort(),
+          ["Api", "AsyncApi", "AsyncEmbed", "Embed.*", "Relay.*", "Web"].sort(),
         );
       }),
     { tags: tags("function"), timeout: 900_000 },
@@ -139,6 +139,23 @@ describe("InvokeFunction", () => {
   );
 
   test(
+    "a Modal Function calls a Function and a Server as its container",
+    Effect.gen(function* () {
+      const body = yield* worker<{
+        embed: { tokens: number };
+        greeting: string;
+        tokenBound: boolean;
+      }>("/relay");
+      expect(body).toEqual({
+        embed: { model: "words", tokens: 2 },
+        greeting: "hello relay",
+        tokenBound: false,
+      });
+    }),
+    { tags: tags("function"), timeout: 300_000 },
+  );
+
+  test(
     "call an async function with args and kwargs",
     Effect.gen(function* () {
       const body = yield* worker<{ greeting: string; echo: string; kwargs: unknown }>(
@@ -187,6 +204,16 @@ describe("FetchServer", () => {
     Effect.gen(function* () {
       const body = yield* worker<{ greeting: string; letters: string[] }>("/server-rpc");
       expect(body).toEqual({ greeting: "hello modal", letters: ["a", "b", "c"] });
+    }),
+    { tags: tags("server"), timeout: 300_000 },
+  );
+
+  test(
+    "a server refuses an RPC call without its binding's key",
+    Effect.gen(function* () {
+      expect(yield* worker<{ status: number }>("/server-rpc-without-key")).toEqual({
+        status: 401,
+      });
     }),
     { tags: tags("server"), timeout: 300_000 },
   );

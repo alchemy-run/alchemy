@@ -1,8 +1,11 @@
 import { GrpcTransport } from "@distilled.cloud/core/grpc-transport";
+import { withAuthToken } from "@distilled.cloud/modal/AuthToken";
 import {
+  containerSocket,
   Credentials,
   CredentialsFromEnv,
   credentials,
+  fromContainer,
   streamTaskCommandRouter,
   withTaskCommandRouter,
 } from "@distilled.cloud/modal/Credentials";
@@ -13,6 +16,7 @@ import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -28,8 +32,13 @@ import { ServiceUser } from "./ServiceUser.ts";
  *
  * Modal grants access per environment, as a `viewer` or a `contributor`. So:
  *
- * - any host (a Cloudflare Worker, a Lambda, a Modal Function, Server or
- *   Sandbox): {@link Bind} creates a scoped `Modal.ServiceUser` for the
+ * - a Modal Function or Server: nothing is bound. It calls Modal as its own
+ *   container, over the API socket Modal gives every container
+ *   (`fromContainer`), the way Modal's Python client does there. No
+ *   credential is stored. A host with `restrictModalAccess` has no such
+ *   access, so it gets a service user like any other host;
+ * - any other host (a Cloudflare Worker, a Lambda, a Modal Sandbox):
+ *   {@link Bind} creates a scoped `Modal.ServiceUser` for the
  *   host (`<host>ModalIdentity`), grants it the role each binding asks for
  *   on the bound resource's environment, and binds its token pair into the
  *   host's env (`MODAL_TOKEN_ID`, and `MODAL_TOKEN_SECRET` kept `Redacted`);
@@ -151,8 +160,9 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       const runtime = yield* CurrentRuntimeContext;
       if (runtime === undefined) return;
 
-      // A binding that calls no Modal API (only `env`) needs no identity.
-      if (data.roles !== undefined && data.roles.length > 0) {
+      // A binding that calls no Modal API (only `env`) needs no identity, and
+      // a Modal Function or Server calls as its own container.
+      if (data.roles !== undefined && data.roles.length > 0 && !callsAsContainer(host)) {
         // The host talks to the deployer's Modal control plane.
         const resolve = Option.isSome(ambient)
           ? ambient.value
@@ -181,6 +191,14 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
     });
 });
 
+/** Host types whose containers call Modal over their own API socket. */
+const CONTAINER_HOSTS = new Set(["Modal.Function", "Modal.Server"]);
+
+/** Whether `host` calls Modal as its container instead of with a bound token. */
+const callsAsContainer = (host: { readonly Type?: string; readonly Props?: unknown }) =>
+  CONTAINER_HOSTS.has(host.Type ?? "") &&
+  !(host.Props as { readonly restrictModalAccess?: boolean } | undefined)?.restrictModalAccess;
+
 /**
  * The credentials, HTTP client and gRPC transport distilled operations run
  * with on this host. A resolved operation keeps them as a fallback under its
@@ -208,6 +226,17 @@ const operationContext = Effect.gen(function* () {
           ModalTransport,
         ),
       ).pipe(Effect.scoped);
+    }
+    // A Modal Function or Server: call as the container (see `Bind`).
+    const socket = yield* containerSocket;
+    if (socket !== undefined) {
+      return yield* Layer.build(
+        Layer.mergeAll(
+          withAuthToken.pipe(Layer.provide(Layer.mergeAll(fromContainer, FetchHttpClient.layer))),
+          fromContainer,
+          FetchHttpClient.layer,
+        ),
+      ).pipe(Effect.orDie, Effect.scoped);
     }
   }
   // No bound identity (deploy, scripts, Actions): the ambient Modal

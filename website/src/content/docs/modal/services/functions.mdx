@@ -62,7 +62,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The client is typed from `Embed`'s methods. Arguments and results travel as JSON, and a typed failure reaches the caller by its `_tag`, as with any [schemaless RPC](/apis/schemaless/).
+The client is typed from `Embed`'s methods. The binding also gives the Worker its own key, which the function checks on every call, so only bound callers can call its methods. Arguments and results travel as JSON, and a typed failure reaches the caller by its `_tag`, as with any [schemaless RPC](/apis/schemaless/).
 
 ## Return a stream
 
