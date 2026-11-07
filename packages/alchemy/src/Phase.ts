@@ -28,8 +28,8 @@ declare global {
   var __ALCHEMY_HOST_IDENTITY__: string | undefined;
   /**
    * Merges with workerd's ambient `DurableObjectState`, the one a project
-   * gets from tsconfig `"types": ["@cloudflare/workers-types"]` or from
-   * `wrangler types`. Empty on its own: it adds no members, so
+   * gets from tsconfig `"types": ["@cloudflare/workers-types"]`. Empty on
+   * its own: it adds no members, so
    * `NativeDurableObjectState` can tell whether the ambient declaration is
    * loaded and type `raw` with it.
    */

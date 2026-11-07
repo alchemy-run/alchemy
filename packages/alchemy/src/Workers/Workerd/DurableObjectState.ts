@@ -10,8 +10,8 @@ export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
 /**
  * The native workerd `DurableObjectState` that `raw` exposes: the ambient
- * global when the project loads one (tsconfig `"types"` or `wrangler types`),
- * otherwise the `@cloudflare/workers-types` module export.
+ * global when the project loads `@cloudflare/workers-types` through tsconfig
+ * `"types"`, otherwise that package's module export.
  *
  * Both declarations describe the same object, but TypeScript compares them
  * structurally, and comparing the two copies of `facets` (a generic method
