@@ -10,7 +10,7 @@ import {
   RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
-import type { ImagePoolHost, PoolHost } from "../internal/PoolHostService.ts";
+import type { PoolHost } from "../internal/PoolHostService.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
 export interface SwarmPoolOptions extends PoolSettings {
@@ -50,14 +50,9 @@ export interface SwarmPoolOptions extends PoolSettings {
 export const SwarmPool = (
   id: string,
   options: SwarmPoolOptions = {},
-): Layer.Layer<
-  PoolHost | ImagePoolHost,
-  never,
-  Cluster | Stack | RivetProviders | Docker.Providers
-> =>
+): Layer.Layer<PoolHost, never, Cluster | Stack | RivetProviders | Docker.Providers> =>
   makePoolLayer({
     label: "RivetDocker.SwarmPool",
-    images: true,
     id,
     settings: options,
     expected: "a Docker network (RivetDocker.SwarmControlPlane)",

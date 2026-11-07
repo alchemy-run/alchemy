@@ -70,7 +70,6 @@ export interface PoolOptions extends PoolSettings {
 export const Pool = (id: string, options: PoolOptions = {}) =>
   makePoolLayer({
     label: "RivetCloud.Pool",
-    images: true,
     id,
     settings: options,
     expected: "a Rivet Cloud cluster (RivetCloud.ControlPlane)",
@@ -96,7 +95,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
         ...(isImageProgram(nodes.program)
           ? { context: nodes.program.context }
           : {
-              main: (yield* bundleNodes("rivet-cloud", id, nodes)) as unknown as string,
+              main: (yield* bundleNodes("rivet-cloud", id, nodes.program)) as unknown as string,
               rivetkitVersion: RIVETKIT_VERSION,
             }),
         env: env as unknown as Record<string, string>,

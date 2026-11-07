@@ -44,7 +44,6 @@ export interface ServicePoolOptions extends PoolSettings {
 export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
   makePoolLayer({
     label: "RivetRailway.ServicePool",
-    images: true,
     id,
     settings: options,
     expected: "a reachable control plane",
@@ -60,7 +59,7 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
         ...(isImageProgram(nodes.program)
           ? { context: nodes.program.context }
           : {
-              main: (yield* bundleNodes("railway", id, nodes)) as unknown as string,
+              main: (yield* bundleNodes("railway", id, nodes.program)) as unknown as string,
               build: { install: { rivetkit: RIVETKIT_VERSION } },
             }),
         publicDomain: false,

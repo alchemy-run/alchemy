@@ -1,3 +1,4 @@
+import { Docker } from "@alchemy.run/docker/Docker";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
@@ -118,6 +119,20 @@ export interface InstanceProps extends PlatformProps {
    * When omitted, the instance behaves as a low-level EC2 resource.
    */
   main?: string;
+  /**
+   * A Docker build context the instance runs as a container: built on the
+   * deploying machine for the instance's architecture (Graviton types are
+   * arm64), saved, and loaded into Docker on the instance, which installs
+   * Docker if it has none. The image's own `CMD` runs on the host network,
+   * with {@link env}. A change to the context reboots into the new image.
+   * Set this or {@link main}.
+   */
+  context?: string;
+  /**
+   * The Dockerfile for {@link context}, relative to it unless absolute.
+   * @default "Dockerfile"
+   */
+  dockerfile?: string;
   /**
    * Named export to load from `main`.
    * @default "default"
@@ -424,6 +439,7 @@ export const InstanceProvider = () =>
         fs,
         virtualEntryPlugin,
         resourceType: "EC2.Instance",
+        docker: yield* Docker,
       });
 
       const isPendingInstanceProfileError = (error: unknown) => {
@@ -730,7 +746,8 @@ export const InstanceProvider = () =>
           // must be compared by value rather than by reference.
           const userDataChanged =
             !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
-          const hostModeChanged = Boolean(olds.main) !== Boolean(raw.main);
+          const hostModeChanged =
+            Boolean(olds.main || olds.context) !== Boolean(raw.main || raw.context);
           if (
             hostModeChanged ||
             launchConfigChanged(raw.imageId, olds.imageId) ||
@@ -761,6 +778,9 @@ export const InstanceProvider = () =>
           // diff had).
           const contentInputs = {
             main: raw.main,
+            context: raw.context,
+            dockerfile: raw.dockerfile,
+            instanceType: raw.instanceType,
             handler: raw.handler,
             build: raw.build,
             port: raw.port,
@@ -770,11 +790,12 @@ export const InstanceProvider = () =>
             // with MISSING_EXPORT when the source has no default export.
             isExternal: raw.isExternal,
           };
-          if (isResolved(contentInputs) && contentInputs.main !== undefined && output?.code?.hash) {
-            const { hash } = yield* hosted.bundleProgram(
-              id,
-              contentInputs as unknown as Ec2HostedProps,
-            );
+          if (
+            isResolved(contentInputs) &&
+            (contentInputs.main !== undefined || contentInputs.context !== undefined) &&
+            output?.code?.hash
+          ) {
+            const hash = yield* hosted.programHash(id, contentInputs as unknown as Ec2HostedProps);
             if (hash !== output.code.hash) {
               return {
                 action: "update",
@@ -789,6 +810,8 @@ export const InstanceProvider = () =>
             olds.sourceDestCheck !== news.sourceDestCheck ||
             !deepEqual(olds.metadataOptions ?? {}, news.metadataOptions ?? {}) ||
             olds.main !== news.main ||
+            olds.context !== news.context ||
+            olds.dockerfile !== news.dockerfile ||
             olds.handler !== news.handler ||
             olds.port !== news.port ||
             !deepEqual(olds.env ?? {}, news.env ?? {}) ||
@@ -1072,7 +1095,7 @@ export const InstanceProvider = () =>
           // Hosted-runtime reboot — picks up new bundle/env without an
           // explicit instance-type cycle. Skip if the type-change path
           // already restarted us.
-          if (news.main && !restarted) {
+          if ((news.main || news.context) && !restarted) {
             yield* ec2.rebootInstances({ InstanceIds: [instanceId] });
             yield* waitForState({
               instanceId,

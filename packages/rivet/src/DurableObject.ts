@@ -33,7 +33,7 @@ import type { Scope } from "effect/Scope";
 import type { DurableObjectState } from "./DurableObjectState.ts";
 import { fromNativeFetcher } from "./internal/Fetcher.ts";
 import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
-import { ImagePoolHost, PoolHost } from "./internal/PoolHostService.ts";
+import { PoolHost } from "./internal/PoolHostService.ts";
 import type { CargoBuild } from "./internal/RustProgram.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -168,15 +168,12 @@ export interface DurableObjectClass {
   ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
   /**
    * A Rust Durable Object: Actors written with RivetKit's Rust crate,
-   * compiled into the node image. Provide a pool Layer whose nodes are
-   * built from a Dockerfile: `RivetDocker.SwarmPool`, `RivetAWS.EcsPool`,
-   * `RivetKubernetes.DeploymentPool`, `RivetRailway.ServicePool` or
-   * `RivetCloud.Pool`.
+   * compiled into the node image. Provide a pool Layer to it.
    */
   <const Id extends string>(
     id: Id,
     props: RustDurableObjectProps,
-  ): Effect.Effect<DurableObject, never, ImagePoolHost | Providers>;
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
   <Self, Shape = {}>(): {
     /** The class form with an inline implementation. */
     <
@@ -453,14 +450,14 @@ const external = (id: string, props: ExternalDurableObjectProps) =>
 /**
  * A Rust Durable Object: declare its resource, then have the pool it was
  * given compile its crate into the node image. The pool Layer is what
- * provides `ImagePoolHost`.
+ * provides `PoolHost`.
  */
 const rust = (id: string, props: RustDurableObjectProps) =>
   Effect.gen(function* () {
     const crate = yield* Effect.sync(() => nodePath.resolve(props.crate));
     const resource: DurableObject = yield* (platform as any)(id, { main: crate });
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
-    const host = yield* ImagePoolHost;
+    const host = yield* PoolHost;
     yield* host.deployCrate({ id, crate, build: props.build, resource });
     return resource;
   });

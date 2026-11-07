@@ -70,7 +70,6 @@ export interface DeploymentPoolOptions extends PoolSettings {
 export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) =>
   makePoolLayer({
     label: "RivetKubernetes.DeploymentPool",
-    images: true,
     id,
     settings: options,
     expected:

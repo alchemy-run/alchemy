@@ -14,7 +14,6 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Self } from "alchemy/Self";
 import { Stack } from "alchemy/Stack";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -30,7 +29,7 @@ import {
 } from "../DurableObject.ts";
 import { Pool, type PoolDurableObject } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
-import { ImagePoolHost, PoolHost } from "./PoolHostService.ts";
+import { PoolHost } from "./PoolHostService.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
@@ -135,27 +134,6 @@ export type NodeProgram = BundleProgram | ImageProgram;
 export const isImageProgram = (program: NodeProgram): program is ImageProgram =>
   !("main" in program);
 
-/** The pool's nodes run a Rust program, which this host can't build into nodes. */
-export class PoolCannotRunImage extends Data.TaggedError("Rivet.PoolCannotRunImage")<{
-  readonly message: string;
-}> {}
-
-/**
- * The JavaScript program a host that only runs bundles is given, or a
- * deploy-time defect naming the pools that run Rust nodes.
- */
-export const bundleProgramOf = (label: string, program: NodeProgram) =>
-  isImageProgram(program)
-    ? Effect.die(
-        new PoolCannotRunImage({
-          message:
-            `${label} runs JavaScript nodes only, and was given a Rust Durable Object. ` +
-            `Run it on RivetDocker.SwarmPool, RivetAWS.EcsPool, RivetKubernetes.DeploymentPool, ` +
-            `RivetRailway.ServicePool or RivetCloud.Pool.`,
-        }),
-      )
-    : Effect.succeed(program);
-
 /** What a host needs to declare the service that runs a pool's nodes. */
 export interface PoolNodes<Network> {
   readonly cluster: ClusterShape;
@@ -176,35 +154,17 @@ export interface PoolNodes<Network> {
  * A pool Layer: `network` narrows the cluster's network to the one this host
  * can join, `nodes` declares the service that runs the pool's nodes.
  */
-export const makePoolLayer = <Network, Req, Images extends boolean = false>(options: {
+export const makePoolLayer = <Network, Req>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: PoolSettings;
   readonly network: (cluster: ClusterShape) => Network | undefined;
   readonly expected: string;
-  /**
-   * The host's compute builds images from a Dockerfile, so its nodes can
-   * run a Rust Durable Object: the Layer also provides `ImagePoolHost`.
-   */
-  readonly images?: Images;
   readonly nodes: (nodes: PoolNodes<Network>) => Effect.Effect<void, never, Req>;
-}): Layer.Layer<
-  PoolHost | (Images extends true ? ImagePoolHost : never),
-  never,
-  Cluster | Stack | Providers | Req
-> =>
-  Layer.effectContext(
-    makeHosts(options).pipe(
-      Effect.map(({ pool, image }) => {
-        const hosts = Context.make(PoolHost, pool);
-        return (
-          options.images ? Context.add(hosts, ImagePoolHost, image) : hosts
-        ) as Context.Context<PoolHost | (Images extends true ? ImagePoolHost : never)>;
-      }),
-    ),
-  );
+}): Layer.Layer<PoolHost, never, Cluster | Stack | Providers | Req> =>
+  Layer.effect(PoolHost, makeHost(options));
 
-const makeHosts = <Network, Req>(options: {
+const makeHost = <Network, Req>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: PoolSettings;
@@ -217,9 +177,9 @@ const makeHosts = <Network, Req>(options: {
     // An external Durable Object deploys from its own Effect: give it the
     // services this Layer was built with.
     const context = yield* Effect.context<Stack | Providers | Req>();
-    const noop = {
-      pool: { deployExternal: () => Effect.void } satisfies PoolHost["Service"],
-      image: { deployCrate: () => Effect.void } satisfies ImagePoolHost["Service"],
+    const noop: PoolHost["Service"] = {
+      deployExternal: () => Effect.void,
+      deployCrate: () => Effect.void,
     };
     if (globalThis.__ALCHEMY_RUNTIME__) return noop;
     const network = options.network(cluster);
@@ -312,41 +272,37 @@ const makeHosts = <Network, Req>(options: {
     }
 
     return {
-      pool: {
-        deployExternal: ({ id, main, resource }) =>
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
-          deploy(
-            { name: id, module: main, handler: "", external: true },
+      deployExternal: ({ id, main, resource }) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+        deploy(
+          { name: id, module: main, handler: "", external: true },
+          {},
+          resource.bind`Pool`(caller),
+          () => ({
+            main,
+            build: {
+              input: {
+                external: EXTERNAL_PROGRAM,
+                plugins: Output.literal([]) as unknown as Output.Output<
+                  ReturnType<typeof durableObjectsPlugin>
+                >,
+              },
+            },
+          }),
+        ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+      deployCrate: ({ id, crate, build, resource }) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+        Effect.gen(function* () {
+          // The crate's binary is the node, built into an image.
+          const image = yield* stageRustProgram(yield* stackDnsLabel(id), crate, build);
+          yield* deploy(
+            { name: id, module: crate, handler: "", external: true },
             {},
             resource.bind`Pool`(caller),
-            () => ({
-              main,
-              build: {
-                input: {
-                  external: EXTERNAL_PROGRAM,
-                  plugins: Output.literal([]) as unknown as Output.Output<
-                    ReturnType<typeof durableObjectsPlugin>
-                  >,
-                },
-              },
-            }),
-          ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
-      } satisfies PoolHost["Service"],
-      image: {
-        deployCrate: ({ id, crate, build, resource }) =>
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
-          Effect.gen(function* () {
-            // The crate's binary is the node, built into an image.
-            const image = yield* stageRustProgram(yield* stackDnsLabel(id), crate, build);
-            yield* deploy(
-              { name: id, module: crate, handler: "", external: true },
-              {},
-              resource.bind`Pool`(caller),
-              () => image,
-            );
-          }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
-      } satisfies ImagePoolHost["Service"],
-    };
+            () => image,
+          );
+        }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+    } satisfies PoolHost["Service"];
   });
 
 /** A cluster value as an Output, whether it is one already or a plain value. */
@@ -392,15 +348,10 @@ const nodeEntry = () =>
  * its classes, and resolve to the built entry. For hosts that run a `main`
  * as it is (a Fly or Hetzner Service without an Effect implementation).
  */
-export const bundleNodes = Effect.fn(function* (
-  host: string,
-  id: string,
-  nodes: PoolNodes<unknown>,
-) {
+export const bundleNodes = Effect.fn(function* (host: string, id: string, program: BundleProgram) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", host, yield* stackDnsLabel(id));
-  const program = yield* bundleProgramOf(`A ${host} pool`, nodes.program);
   const { external, plugins } = program.build.input;
   return Output.mapEffect((resolved: Parameters<typeof Bundle.build>[0]["plugins"]) =>
     Effect.gen(function* () {
