@@ -625,17 +625,27 @@ export const BucketProvider = () =>
       return undefined;
     }),
 
-    lookup: ({ projectId, environmentId, bucketId }) =>
+    lookup: Effect.fn(function* ({ projectId, environmentId, bucketId }) {
       // The ids find it; an empty name only stops `read` deriving a physical
       // name, which needs a deploy's resource context. Railway answers an id
       // it doesn't know with Not Authorized, so that is a miss too.
-      readBucketAttributes({
+      const attrs = yield* readBucketAttributes({
         id: bucketId,
         output: { projectId, environmentId, bucketId, name: "" },
-      }).pipe(
-        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
-        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
-      ),
+      }).pipe(Effect.catchTag("RailwayForbidden", () => Effect.undefined));
+      if (attrs === undefined) return undefined;
+      // Railway reads S3 credentials back, so a looked-up bucket can be bound.
+      const credentials = yield* fetchCredentials({ bucketId, environmentId, projectId });
+      return {
+        ...stripUnowned(attrs),
+        s3BucketName: credentials.bucketName,
+        endpoint: credentials.endpoint,
+        urlStyle: credentials.urlStyle,
+        s3Region: credentials.region,
+        accessKeyId: redact(credentials.accessKeyId),
+        secretAccessKey: nonEmpty(credentials.secretAccessKey),
+      };
+    }),
 
     read: readBucketAttributes,
 
