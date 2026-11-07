@@ -94,6 +94,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Turso: b("turso"),
   E2B: c("e2b"),
   Daytona: c("daytona"),
+  Modal: c("modal"),
   Archil: c("archil"),
   Prisma: c("prisma"),
   // Brand-colored prism for marketing surfaces (see `prismaColor` above).
@@ -191,6 +192,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Turso: b("turso"),
   E2B: c("e2b"),
   Daytona: c("daytona"),
+  Modal: c("modal"),
   Archil: c("archil"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
