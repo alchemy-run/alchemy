@@ -16,9 +16,9 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
     { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker" },
     { id: "pool", label: "Default", type: "pool", parent: "swarm", icon: "layers" },
     { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true, icon: "server" },
-    { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "user-round" },
+    { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "circle-user-round" },
     { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
-    { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "user-round" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "circle-user-round" },
     { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true, icon: "globe" },
     { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true, icon: "brand:postgresql", specs: [["shard locks", "300"], ["messages", "persisted"]] },
   ]}
