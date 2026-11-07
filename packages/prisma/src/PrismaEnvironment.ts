@@ -2,6 +2,7 @@ import { resolveProviderConfig } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Redacted from "effect/Redacted";
 import {
   PRISMA_AUTH_PROVIDER_NAME,
   type PrismaAuthConfig,
@@ -9,7 +10,9 @@ import {
 } from "./AuthProvider.ts";
 import { resolveBaseUrl } from "./internal/BaseUrl.ts";
 
-export interface PrismaEnvironmentShape extends PrismaResolvedCredentials {
+export interface PrismaEnvironmentShape extends Omit<PrismaResolvedCredentials, "serviceToken"> {
+  /** Omit when the provided `HttpClient` authenticates requests itself. */
+  serviceToken?: Redacted.Redacted<string>;
   baseUrl: string;
 }
 
