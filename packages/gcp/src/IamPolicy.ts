@@ -83,9 +83,12 @@ export type GcpIamResourceKind =
   | "dataproc.cluster"
   | "iam.serviceAccount"
   | "kms.cryptoKey"
+  | "kms.importJob"
+  | "kms.keyRing"
   | "ml.model"
   | "privateca.caPool"
   | "pubsub.schema"
+  | "pubsub.snapshot"
   | "pubsub.subscription"
   | "pubsub.topic"
   | "run.job"
@@ -94,6 +97,7 @@ export type GcpIamResourceKind =
   | "secretmanager.secret"
   | "servicedirectory.namespace"
   | "servicedirectory.service"
+  | "spanner.backup"
   | "spanner.database"
   | "spanner.instance"
   | "storage.bucket"
@@ -309,6 +313,14 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
     kms.getIamPolicyProjectsLocationsKeyRingsCryptoKeys,
     kms.setIamPolicyProjectsLocationsKeyRingsCryptoKeys,
   ),
+  "kms.importJob": queryStyle(
+    kms.getIamPolicyProjectsLocationsKeyRingsImportJobs,
+    kms.setIamPolicyProjectsLocationsKeyRingsImportJobs,
+  ),
+  "kms.keyRing": queryStyle(
+    kms.getIamPolicyProjectsLocationsKeyRings,
+    kms.setIamPolicyProjectsLocationsKeyRings,
+  ),
   "ml.model": queryStyle(ml.getIamPolicyProjectsModels, ml.setIamPolicyProjectsModels),
   "privateca.caPool": queryStyle(
     privateca.getIamPolicyProjectsLocationsCaPools,
@@ -317,6 +329,10 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   "pubsub.schema": queryStyle(
     pubsub.getIamPolicyProjectsSchemas,
     pubsub.setIamPolicyProjectsSchemas,
+  ),
+  "pubsub.snapshot": queryStyle(
+    pubsub.getIamPolicyProjectsSnapshots,
+    pubsub.setIamPolicyProjectsSnapshots,
   ),
   "pubsub.subscription": queryStyle(
     pubsub.getIamPolicyProjectsSubscriptions,
@@ -343,6 +359,10 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
   "servicedirectory.service": bodyStyle(
     servicedirectory.getIamPolicyProjectsLocationsNamespacesServices,
     servicedirectory.setIamPolicyProjectsLocationsNamespacesServices,
+  ),
+  "spanner.backup": bodyStyle(
+    spanner.getIamPolicyProjectsInstancesBackups,
+    spanner.setIamPolicyProjectsInstancesBackups,
   ),
   "spanner.database": bodyStyle(
     spanner.getIamPolicyProjectsInstancesDatabases,
@@ -482,6 +502,8 @@ export const updateIamMembership = (options: {
         error._tag === "IamPolicyEtagMismatch" ||
         // A just-created service account the policy service can't see yet.
         error._tag === "IamMemberNotFound" ||
+        // A Bigtable table not ready yet (being created, restored or deleted).
+        error._tag === "TableNotReady" ||
         (error._tag === "BadRequest" && /does not exist/i.test(error.message ?? "")),
       // ~60s total: long enough for a new service account to propagate.
       times: 6,

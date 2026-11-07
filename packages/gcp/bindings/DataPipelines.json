@@ -1,0 +1,14 @@
+{
+  "discovery": "datapipelines-v1",
+  "module": "datapipelines_v1",
+  "resources": {
+    "Pipeline": {
+      "pattern": "projects/*/locations/*/pipelines/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Pipeline": "BindBatch"
+    }
+  }
+}

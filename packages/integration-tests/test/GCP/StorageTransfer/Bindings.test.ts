@@ -1,5 +1,4 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
@@ -14,7 +13,6 @@ import StorageTransferBindingsHost, {
   SEED_KEY,
   SEED_TEXT,
   Sink,
-  Source,
 } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -47,36 +45,6 @@ const projectRoles = () =>
       ),
     );
 
-/**
- * Let the Google-managed transfer agent read the source and write the
- * sink (the transfer itself runs as that agent, not as the host).
- */
-const grantBucketRole = (bucket: string, member: string, role: string) =>
-  Effect.gen(function* () {
-    const policy = yield* storage.getIamPolicyBuckets({
-      bucket,
-      optionsRequestedPolicyVersion: 3,
-    });
-    const bindings = [...(policy.bindings ?? [])];
-    const existing = bindings.find((binding) => binding.role === role);
-    if (existing?.members?.includes(member)) return;
-    if (existing) {
-      existing.members = [...(existing.members ?? []), member];
-    } else {
-      bindings.push({ role, members: [member] });
-    }
-    yield* storage.setIamPolicyBuckets({
-      bucket,
-      body: { ...policy, bindings },
-    });
-  }).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "Conflict",
-      times: 4,
-      schedule: Schedule.spaced("500 millis"),
-    }),
-  );
-
 describe(
   "StorageTransfer Bindings",
   {
@@ -86,40 +54,13 @@ describe(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
-        // The job's buckets must admit the transfer agent before the job
-        // exists, so deploy them first.
-        const buckets = yield* sharedStack.deploy(
-          Effect.gen(function* () {
-            const source = yield* Source;
-            const sink = yield* Sink;
-            const { project } = yield* GcpEnvironment.current;
-            return {
-              project,
-              source: source.bucketName,
-              sink: sink.bucketName,
-            };
-          }),
-        );
-        // Out-of-band calls in a hook need the provider services.
-        yield* Core.withProviders(
-          Effect.gen(function* () {
-            const account = yield* storagetransfer.getGoogleServiceAccounts({
-              projectId: buckets.project,
-            });
-            const member = `serviceAccount:${account.accountEmail}`;
-            yield* grantBucketRole(buckets.source, member, "roles/storage.objectViewer");
-            yield* grantBucketRole(buckets.source, member, "roles/storage.legacyBucketReader");
-            yield* grantBucketRole(buckets.sink, member, "roles/storage.legacyBucketWriter");
-            yield* grantBucketRole(buckets.sink, member, "roles/storage.objectAdmin");
-          }),
-          testOptions,
-          "StorageTransferBindings",
-        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const host = yield* StorageTransferBindingsHost;
             const job = yield* Copy;
+            const sink = yield* Sink;
             return {
+              sink: sink.bucketName,
               uri: host.uri,
               serviceAccount: host.serviceAccount,
               project: host.project,
@@ -131,7 +72,7 @@ describe(
         hostAccount = out.serviceAccount!;
         project = out.project;
         jobName = out.job;
-        sinkBucket = buckets.sink;
+        sinkBucket = out.sink;
       }),
       { timeout: 900_000 },
     );

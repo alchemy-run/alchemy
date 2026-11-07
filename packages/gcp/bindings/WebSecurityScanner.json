@@ -1,0 +1,26 @@
+{
+  "discovery": "websecurityscanner-v1",
+  "module": "websecurityscanner_v1",
+  "resources": {
+    "ScanConfig": {
+      "pattern": "projects/*/scanConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ScanConfig": "ProbeScanConfig"
+    },
+    "untestable": {}
+  },
+  "permissionService": "cloudsecurityscanner",
+  "permissionCollections": {
+    "scanConfigs": "scans",
+    "scanRuns": "scanruns",
+    "crawledUrls": "crawledurls",
+    "findings": "results",
+    "findingTypeStats": "results"
+  },
+  "verbPermissions": {
+    "start": "run"
+  }
+}

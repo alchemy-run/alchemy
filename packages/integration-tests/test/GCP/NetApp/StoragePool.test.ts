@@ -61,6 +61,9 @@ test.provider.skipIf(!entitled)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.NetApp.StoragePool("Pool", {
+            // One 2 TiB pool fills a region's STANDARD capacity quota, so NetApp
+            // pool suites run one at a time.
+            location: "us-west2",
             network: "default",
             serviceLevel: "STANDARD",
             capacityGib: 2048,
@@ -93,6 +96,7 @@ test.provider.skipIf(!entitled)(
         Effect.gen(function* () {
           return yield* GCP.NetApp.StoragePool("Pool", {
             storagePoolId: created.storagePoolId,
+            location: "us-west2",
             network: "default",
             serviceLevel: "STANDARD",
             capacityGib: 2048,
@@ -111,5 +115,9 @@ test.provider.skipIf(!entitled)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:netapp-pools",
+  },
 );

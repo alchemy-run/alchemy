@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 /**
@@ -29,7 +29,7 @@ export const makePipelineHttpBinding = <I extends { name?: string }, A, E>(optio
     return Effect.fn(function* (pipeline: Pipeline) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${pipeline})`({
-          iam: [grantFor(options.iam, pipeline.name)],
+          iam: grantsFor(options.iam, pipeline.name),
         });
       }
       const name = yield* pipeline.name;

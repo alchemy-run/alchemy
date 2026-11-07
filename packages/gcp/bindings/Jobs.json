@@ -1,0 +1,18 @@
+{
+  "discovery": "jobs-v4",
+  "module": "jobs_v4",
+  "resources": {
+    "Tenant": {
+      "pattern": "projects/*/tenants/*"
+    },
+    "TenantsCompany": {
+      "pattern": "projects/*/tenants/*/companies/*"
+    },
+    "TenantsJob": {
+      "pattern": "projects/*/tenants/*/jobs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

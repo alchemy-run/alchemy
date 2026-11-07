@@ -3,7 +3,7 @@ import type { Output } from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 
 type GcpHttpOp<I, A, E> = Effect.Effect<
   (input: I) => Effect.Effect<A, E>,
@@ -37,7 +37,7 @@ export const makeManagedKafkaHttpBinding =
       return Effect.fn(function* (resource: Resource) {
         if (!globalThis.__ALCHEMY_RUNTIME__) {
           yield* bind`${options.tag}(${resource})`({
-            iam: [grantFor(options.iam, resource.name)],
+            iam: grantsFor(options.iam, resource.name),
           });
         }
         const name = yield* resource.name;

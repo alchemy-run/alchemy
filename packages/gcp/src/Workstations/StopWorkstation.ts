@@ -1,7 +1,9 @@
-import type * as workstations from "@distilled.cloud/gcp/workstations_v1";
+import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWorkstationHttpBinding } from "./BindingHttp.ts";
 import type { WorkstationClustersWorkstationConfigsWorkstation } from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
 
 export interface StopWorkstationRequest extends Omit<
@@ -44,3 +46,18 @@ export interface StopWorkstation extends Binding.Service<
 > {}
 
 export const StopWorkstation = Binding.Service<StopWorkstation>("GCP.Workstations.StopWorkstation");
+
+/**
+ * HTTP implementation of {@link StopWorkstation}.
+ *
+ * @layer
+ * @provides GCP.Workstations.StopWorkstation
+ */
+export const StopWorkstationHttp = Layer.effect(
+  StopWorkstation,
+  makeWorkstationHttpBinding({
+    tag: "GCP.Workstations.StopWorkstation",
+    iam: { role: "roles/workstations.user", on: "workstations.workstation" },
+    operation: workstations.stopProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
+  }),
+);

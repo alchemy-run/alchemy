@@ -1,0 +1,12 @@
+{
+  "discovery": "firebasedatabase-v1beta",
+  "module": "firebasedatabase_v1beta",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["firebasedatabase.googleapis.com"],
+    "untestable": {
+      "project": "needs a Firebase project: the testing project answers NotFound \"Project does not exist.\""
+    }
+  }
+}

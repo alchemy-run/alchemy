@@ -1,0 +1,15 @@
+{
+  "discovery": "cloudfunctions-v2",
+  "module": "cloudfunctions_v2",
+  "resources": {
+    "Function": {
+      "pattern": "projects/*/locations/*/functions/*",
+      "iamKind": "cloudfunctions.function"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Function": "TargetFunction"
+    }
+  }
+}

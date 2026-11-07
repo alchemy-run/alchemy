@@ -1,0 +1,38 @@
+{
+  "discovery": "firebaseappdistribution-v1",
+  "module": "firebaseappdistribution_v1",
+  "resources": {
+    "Group": {
+      "pattern": "projects/*/groups/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Group": "needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none"
+    },
+    "enable": ["firebaseappdistribution.googleapis.com"],
+    "skip": {
+      "ListTesters": "App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT",
+      "ListGroups": "App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT"
+    }
+  },
+  "permissionService": "firebaseappdistro",
+  "permissionCollections": {
+    "feedbackReports": "releases",
+    "apps": "releases"
+  },
+  "verbPermissions": {
+    "batchAdd": "update",
+    "batchRemove": "update",
+    "batchJoin": "update",
+    "batchLeave": "update",
+    "patch": "update",
+    "distribute": "update",
+    "batchDelete": "update",
+    "delete": "update",
+    "upload": "update",
+    "get": "list",
+    "getAabInfo": "list"
+  }
+}

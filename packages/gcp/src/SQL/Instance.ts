@@ -693,8 +693,10 @@ const applyPatch = (project: string, instanceName: string, body: sqladmin.Databa
     .pipe(
       Effect.retry({
         while: (error) => error._tag === "Conflict",
-        times: 8,
-        schedule: Schedule.spaced("5 seconds"),
+        // An instance runs one operation at a time; an export, backup or
+        // restart holds it for minutes.
+        times: 40,
+        schedule: Schedule.spaced("15 seconds"),
       }),
     );
 
@@ -1015,8 +1017,10 @@ export const InstanceProvider = () =>
           Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("5 seconds"),
+            // An instance runs one operation at a time; an export, backup or
+            // restart holds it for minutes.
+            times: 40,
+            schedule: Schedule.spaced("15 seconds"),
           }),
         );
       if (operation !== undefined) {

@@ -1,8 +1,10 @@
-import type * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
+import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdminTopic } from "./AdminTopic.ts";
+import { makeTopicNameHttpBinding } from "./BindingHttp.ts";
 
 export interface GetPartitionsRequest extends Omit<
   pubsublite.GetPartitionsAdminProjectsLocationsTopicsRequest,
@@ -45,3 +47,18 @@ export interface GetPartitions extends Binding.Service<
 > {}
 
 export const GetPartitions = Binding.Service<GetPartitions>("GCP.PubSubLite.GetPartitions");
+
+/**
+ * HTTP implementation of {@link GetPartitions}.
+ *
+ * @layer
+ * @provides GCP.PubSubLite.GetPartitions
+ */
+export const GetPartitionsHttp = Layer.effect(
+  GetPartitions,
+  makeTopicNameHttpBinding({
+    tag: "GCP.PubSubLite.GetPartitions",
+    iam: { role: "roles/pubsublite.viewer" },
+    operation: pubsublite.getPartitionsAdminProjectsLocationsTopics,
+  }),
+);

@@ -1,7 +1,9 @@
-import type * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
+import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeConnectorHttpBinding } from "./BindingHttp.ts";
 import type { ServicesConnector } from "./ServicesConnector.ts";
 
 export interface ExecuteMutationRequest extends Omit<
@@ -50,4 +52,19 @@ export interface ExecuteMutation extends Binding.Service<
 
 export const ExecuteMutation = Binding.Service<ExecuteMutation>(
   "GCP.FirebaseDataConnect.ExecuteMutation",
+);
+
+/**
+ * HTTP implementation of {@link ExecuteMutation}.
+ *
+ * @layer
+ * @provides GCP.FirebaseDataConnect.ExecuteMutation
+ */
+export const ExecuteMutationHttp = Layer.effect(
+  ExecuteMutation,
+  makeConnectorHttpBinding({
+    tag: "GCP.FirebaseDataConnect.ExecuteMutation",
+    iam: { role: "roles/firebasedataconnect.dataAdmin" },
+    operation: firebasedataconnect.executeMutationProjectsLocationsServicesConnectors,
+  }),
 );

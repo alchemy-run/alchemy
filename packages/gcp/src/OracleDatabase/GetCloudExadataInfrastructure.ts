@@ -1,7 +1,9 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 import type { CloudExadataInfrastructure } from "./CloudExadataInfrastructure.ts";
 
 export interface GetCloudExadataInfrastructureRequest extends Omit<
@@ -40,4 +42,19 @@ export interface GetCloudExadataInfrastructure extends Binding.Service<
 
 export const GetCloudExadataInfrastructure = Binding.Service<GetCloudExadataInfrastructure>(
   "GCP.OracleDatabase.GetCloudExadataInfrastructure",
+);
+
+/**
+ * HTTP implementation of {@link GetCloudExadataInfrastructure}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GetCloudExadataInfrastructure
+ */
+export const GetCloudExadataInfrastructureHttp = Layer.effect(
+  GetCloudExadataInfrastructure,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GetCloudExadataInfrastructure",
+    operation: oracle.getProjectsLocationsCloudExadataInfrastructures,
+    iam: { role: "roles/oracledatabase.cloudExadataInfrastructureViewer" },
+  }),
 );

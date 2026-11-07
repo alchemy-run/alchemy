@@ -11,3 +11,4 @@ export * from "./ExternalApi.ts";
 export * from "./Plugin.ts";
 export * from "./PluginsInstance.ts";
 export * from "./RuntimeProjectAttachment.ts";
+export * from "./generated.ts";

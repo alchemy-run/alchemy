@@ -1,7 +1,9 @@
-import type * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
+import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface SubmitJobRequest extends Omit<
@@ -51,3 +53,59 @@ export interface SubmitJob extends Binding.Service<
 > {}
 
 export const SubmitJob = Binding.Service<SubmitJob>("GCP.Dataproc.SubmitJob");
+
+/**
+ * HTTP implementation of {@link SubmitJob}.
+ *
+ * Grants `roles/dataproc.editor` on the project because
+ * `dataproc.jobs.create` is checked on the project (jobs are not children
+ * of the cluster, so neither a cluster-level grant nor an IAM Condition on
+ * the cluster name applies) and no narrower predefined role contains it.
+ *
+ * @layer
+ * @provides GCP.Dataproc.SubmitJob
+ */
+export const SubmitJobHttp = Layer.effect(
+  SubmitJob,
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const submitProjectsRegionsJobs = yield* GCPBindings.withCredentials(
+      dataproc.submitProjectsRegionsJobs,
+    );
+    return Effect.fn(function* <T extends Cluster>(cluster: T) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.Dataproc.SubmitJob(${cluster})`({
+          // dataproc.jobs.create is checked on the project (jobs are not
+          // children of the cluster); no narrower predefined role contains it.
+          iam: [{ role: "roles/dataproc.editor" }],
+        });
+      }
+      const projectId = yield* cluster.project;
+      const region = yield* cluster.region;
+      const clusterName = yield* cluster.clusterName;
+      return Effect.fn(`GCP.Dataproc.SubmitJob(${cluster.LogicalId})`)(function* (
+        request: SubmitJobRequest,
+      ) {
+        const resolvedProject = yield* projectId;
+        const resolvedRegion = yield* region;
+        const resolvedCluster = yield* clusterName;
+        const job = request.body?.job;
+        return yield* submitProjectsRegionsJobs({
+          ...request,
+          projectId: resolvedProject,
+          region: resolvedRegion,
+          body: {
+            ...request?.body,
+            job: {
+              ...job,
+              placement: {
+                ...job?.placement,
+                clusterName: job?.placement?.clusterName ?? resolvedCluster,
+              },
+            },
+          },
+        });
+      });
+    });
+  }),
+);

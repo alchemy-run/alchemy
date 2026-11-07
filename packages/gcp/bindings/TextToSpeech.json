@@ -1,0 +1,10 @@
+{
+  "discovery": "texttospeech-v1",
+  "module": "texttospeech_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["texttospeech.googleapis.com"]
+  }
+}

@@ -1,7 +1,9 @@
-import type * as container from "@distilled.cloud/gcp/container_v1";
+import * as container from "@distilled.cloud/gcp/container_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeContainerClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface GetClusterRequest extends Omit<
@@ -42,3 +44,18 @@ export interface GetCluster extends Binding.Service<
 > {}
 
 export const GetCluster = Binding.Service<GetCluster>("GCP.Container.GetCluster");
+
+/**
+ * HTTP implementation of {@link GetCluster}.
+ *
+ * @layer
+ * @provides GCP.Container.GetCluster
+ */
+export const GetClusterHttp = Layer.effect(
+  GetCluster,
+  makeContainerClusterHttpBinding({
+    tag: "GCP.Container.GetCluster",
+    iam: { role: "roles/container.clusterViewer" },
+    operation: container.getProjectsLocationsClusters,
+  }),
+);

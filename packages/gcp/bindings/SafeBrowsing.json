@@ -1,0 +1,13 @@
+{
+  "discovery": "safebrowsing-v5",
+  "module": "safebrowsing_v5",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["safebrowsing.googleapis.com"],
+    "skip": {
+      "ListHashLists": "answers BadRequest \"Request contains an invalid argument.\" to OAuth callers on the testing project"
+    }
+  }
+}

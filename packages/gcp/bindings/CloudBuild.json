@@ -1,0 +1,19 @@
+{
+  "discovery": "cloudbuild-v2",
+  "module": "cloudbuild_v2",
+  "resources": {
+    "Connection": {
+      "pattern": "projects/*/locations/*/connections/*"
+    },
+    "Repository": {
+      "pattern": "projects/*/locations/*/connections/*/repositories/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Connection": "needs a GitHub connection that completed the OAuth handshake",
+      "Repository": "needs a GitHub connection that completed the OAuth handshake"
+    }
+  }
+}

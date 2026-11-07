@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Instance } from "./Instance.ts";
 
 /**
@@ -18,7 +18,7 @@ export const makeMemcacheInstanceHttpBinding = <I extends { name?: string }, A, 
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${instance})`({
-          iam: [grantFor(options.iam, instance.name)],
+          iam: grantsFor(options.iam, instance.name),
         });
       }
       const name = yield* instance.name;

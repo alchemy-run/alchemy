@@ -1,7 +1,9 @@
-import type * as container from "@distilled.cloud/gcp/container_v1";
+import * as container from "@distilled.cloud/gcp/container_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeContainerNodePoolHttpBinding } from "./BindingHttp.ts";
 import type { NodePool } from "./NodePool.ts";
 
 export interface GetNodePoolRequest extends Omit<
@@ -42,3 +44,18 @@ export interface GetNodePool extends Binding.Service<
 > {}
 
 export const GetNodePool = Binding.Service<GetNodePool>("GCP.Container.GetNodePool");
+
+/**
+ * HTTP implementation of {@link GetNodePool}.
+ *
+ * @layer
+ * @provides GCP.Container.GetNodePool
+ */
+export const GetNodePoolHttp = Layer.effect(
+  GetNodePool,
+  makeContainerNodePoolHttpBinding({
+    tag: "GCP.Container.GetNodePool",
+    iam: { role: "roles/container.clusterViewer" },
+    operation: container.getProjectsLocationsClustersNodePools,
+  }),
+);

@@ -9,3 +9,4 @@ export * from "./Volume.ts";
 export * from "./VolumesQuotaRule.ts";
 export * from "./VolumesReplication.ts";
 export * from "./VolumesSnapshot.ts";
+export * from "./generated.ts";

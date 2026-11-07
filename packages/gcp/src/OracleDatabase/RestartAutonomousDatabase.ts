@@ -1,8 +1,10 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutonomousDatabase } from "./AutonomousDatabase.ts";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 
 export interface RestartAutonomousDatabaseRequest extends Omit<
   oracle.RestartProjectsLocationsAutonomousDatabasesRequest,
@@ -44,4 +46,20 @@ export interface RestartAutonomousDatabase extends Binding.Service<
 
 export const RestartAutonomousDatabase = Binding.Service<RestartAutonomousDatabase>(
   "GCP.OracleDatabase.RestartAutonomousDatabase",
+);
+
+/**
+ * HTTP implementation of {@link RestartAutonomousDatabase}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.RestartAutonomousDatabase
+ */
+export const RestartAutonomousDatabaseHttp = Layer.effect(
+  RestartAutonomousDatabase,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.RestartAutonomousDatabase",
+    operation: oracle.restartProjectsLocationsAutonomousDatabases,
+    // Narrowest predefined role with this autonomousDatabases permission.
+    iam: { role: "roles/oracledatabase.autonomousDatabaseAdmin" },
+  }),
 );

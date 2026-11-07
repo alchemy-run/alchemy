@@ -1,0 +1,9 @@
+{
+  "discovery": "ondemandscanning-v1",
+  "module": "ondemandscanning_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["ondemandscanning.googleapis.com"]
+  }
+}

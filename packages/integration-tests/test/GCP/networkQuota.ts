@@ -19,6 +19,21 @@ const slots = Semaphore.makeUnsafe(3);
 export const withNetworkSlot = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   slots.withPermits(1)(self);
 
+/**
+ * Take one VPC quota slot in a suite's `beforeAll`, for a network its shared
+ * stack keeps until `afterAll` gives it back with {@link releaseNetworkSlot}.
+ */
+export const takeNetworkSlot = Semaphore.take(slots, 1);
+
+/** Give back the slot {@link takeNetworkSlot} took. */
+export const releaseNetworkSlot = Semaphore.release(slots, 1);
+
+/** Like {@link takeNetworkSlot}, for a shared stack with `count` networks. */
+export const takeNetworkSlots = (count: number) => Semaphore.take(slots, count);
+
+/** Give back the slots {@link takeNetworkSlots} took. */
+export const releaseNetworkSlots = (count: number) => Semaphore.release(slots, count);
+
 /** Like {@link withNetworkSlot}, for a test body that creates `count` networks. */
 export const withNetworkSlots =
   (count: number) =>

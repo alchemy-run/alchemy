@@ -1,7 +1,9 @@
-import type * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
+import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRuleSetHttpBinding } from "./BindingHttp.ts";
 import type { RuleSet } from "./RuleSet.ts";
 
 export interface GetRuleSetRequest extends Omit<cw.GetProjectsLocationsRuleSetsRequest, "name"> {}
@@ -43,3 +45,22 @@ export interface GetRuleSet extends Binding.Service<
 > {}
 
 export const GetRuleSet = Binding.Service<GetRuleSet>("GCP.ContentWarehouse.GetRuleSet");
+
+/**
+ * HTTP implementation of {@link GetRuleSet}.
+ *
+ * Grants `roles/contentwarehouse.admin` on the project because
+ * `contentwarehouse.ruleSets.get` is in no narrower predefined role.
+ *
+ * @layer
+ * @provides GCP.ContentWarehouse.GetRuleSet
+ */
+export const GetRuleSetHttp = Layer.effect(
+  GetRuleSet,
+  makeRuleSetHttpBinding({
+    tag: "GCP.ContentWarehouse.GetRuleSet",
+    operation: cw.getProjectsLocationsRuleSets,
+    // contentwarehouse.ruleSets.get is only in contentwarehouse.admin.
+    iam: { role: "roles/contentwarehouse.admin" },
+  }),
+);

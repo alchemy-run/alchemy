@@ -1,3 +1,4 @@
+export * from "./Agent.ts";
 export * from "./AgentsEntityType.ts";
 export * from "./AgentsEnvironment.ts";
 export * from "./AgentsEnvironmentsExperiment.ts";
@@ -23,3 +24,4 @@ export type { AgentsTransitionRouteGroupProps } from "./AgentsTransitionRouteGro
 export * from "./AgentsWebhook.ts";
 export * from "./SecuritySetting.ts";
 export { resourceNameFromOperation, waitForOperation } from "./operations.ts";
+export * from "./generated.ts";

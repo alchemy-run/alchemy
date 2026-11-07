@@ -17,3 +17,4 @@ export * from "./SignedCustomersNodesDevice.ts";
 export * from "./SignedNodesDevice.ts";
 export * from "./SignedNodesDeploymentsDevice.ts";
 export * from "./SignedNodesNodesDevice.ts";
+export * from "./generated.ts";

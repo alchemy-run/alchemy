@@ -1,0 +1,40 @@
+{
+  "discovery": "saasservicemgmt-v1",
+  "module": "saasservicemgmt_v1",
+  "resources": {
+    "Release": {
+      "pattern": "projects/*/locations/*/releases/*"
+    },
+    "Rollout": {
+      "pattern": "projects/*/locations/*/rollouts/*"
+    },
+    "RolloutKind": {
+      "pattern": "projects/*/locations/*/rolloutKinds/*"
+    },
+    "Saa": {
+      "pattern": "projects/*/locations/*/saas/*"
+    },
+    "Tenant": {
+      "pattern": "projects/*/locations/*/tenants/*"
+    },
+    "Unit": {
+      "pattern": "projects/*/locations/*/units/*"
+    },
+    "UnitKind": {
+      "pattern": "projects/*/locations/*/unitKinds/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Saa": "ProbeSaa"
+    },
+    "untestable": {
+      "Release": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Rollout": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "RolloutKind": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Tenant": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Unit": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "UnitKind": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)"
+    }
+  }
+}

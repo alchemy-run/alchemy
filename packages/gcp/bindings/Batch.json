@@ -1,0 +1,15 @@
+{
+  "discovery": "batch-v1",
+  "module": "batch_v1",
+  "resources": {
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Job": "ProbeJob"
+    },
+    "enable": ["batch.googleapis.com", "compute.googleapis.com"]
+  }
+}

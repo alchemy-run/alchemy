@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -24,7 +24,7 @@ export const makeSecretHttpBinding = <I, A, E, Req = void>(options: {
       // `projects/p/locations/l/secrets/s`; both are secret IAM targets.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${secret})`({
-          iam: [grantFor(options.iam, secret.name)],
+          iam: grantsFor(options.iam, secret.name),
         });
       }
       const name = yield* secret.name;

@@ -29,3 +29,6 @@ export * from "./OrganizationSavedQuery.ts";
 export * from "./OrganizationSink.ts";
 export * from "./SavedQuery.ts";
 export * from "./Sink.ts";
+export * from "./AuditLogEventSource.ts";
+export * from "./AuditLogEventSourceLive.ts";
+export * from "./generated.ts";

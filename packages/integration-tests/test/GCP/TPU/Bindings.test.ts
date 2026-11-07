@@ -6,16 +6,19 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
-import TpuBindingsHost, { QueuedTrainer, Trainer } from "./fixtures/bindings-host.ts";
+import TpuBindingsHost, { QueuedTrainer, Trainer, nodeCapacity } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "TpuBindings");
 
-// Cloud TPU is disabled on the testing project (ServiceDisabled "Cloud TPU API
-// has not been used in project ...") and TPU VMs bill by the hour (dollars
-// per run) and need TPU quota; set GCP_TEST_TPU=1 to opt in.
-const runLifecycle = !!process.env.GCP_TEST_TPU && !process.env.FAST;
+// The testing project doesn't enable Cloud TPU by default: every test deploys
+// it first. TPU VMs take several minutes to provision, so `--fast` skips the
+// lifecycle.
+const TpuApi = GCP.ServiceUsage.ProjectService("TpuApi", {
+  service: "tpu.googleapis.com",
+});
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;
@@ -50,14 +53,15 @@ describe.skipIf(!runLifecycle)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* TpuApi;
             const host = yield* TpuBindingsHost;
-            const node = yield* Trainer;
+            const node = nodeCapacity ? yield* Trainer : undefined;
             const queued = yield* QueuedTrainer;
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
               project: host.project,
-              node: node.name,
+              node: node?.name ?? "",
               queued: queued.name,
             };
           }),
@@ -79,7 +83,7 @@ describe.skipIf(!runLifecycle)(
       expect(yield* projectRoles()).toEqual([{ role: "roles/tpu.viewer", condition: undefined }]);
     });
 
-    describe("GetNode", () => {
+    describe.skipIf(!nodeCapacity)("GetNode", () => {
       test.provider(
         "reads the bound node as the host",
         (_stack) =>

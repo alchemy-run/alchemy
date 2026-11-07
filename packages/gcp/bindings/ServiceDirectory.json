@@ -1,0 +1,24 @@
+{
+  "discovery": "servicedirectory-v1",
+  "module": "servicedirectory_v1",
+  "resources": {
+    "Endpoint": {
+      "pattern": "projects/*/locations/*/namespaces/*/services/*/endpoints/*"
+    },
+    "Namespace": {
+      "pattern": "projects/*/locations/*/namespaces/*",
+      "iamKind": "servicedirectory.namespace"
+    },
+    "Service": {
+      "pattern": "projects/*/locations/*/namespaces/*/services/*",
+      "iamKind": "servicedirectory.service"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Namespace": "Registry",
+      "Service": "Api",
+      "Endpoint": "Https"
+    }
+  }
+}

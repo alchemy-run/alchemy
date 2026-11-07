@@ -41,7 +41,7 @@ test.provider(
           name: `projects/${project}/muteConfigs/alchemy-missing`,
         }),
       );
-      expect(["ServiceDisabled", "SecurityCommandCenterLegacyDisabled"]).toContain(error._tag);
+      expect(error._tag).toEqual("BadRequest");
 
       yield* stack.destroy();
     }).pipe(logLevel),

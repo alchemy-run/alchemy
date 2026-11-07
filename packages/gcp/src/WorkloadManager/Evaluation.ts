@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
-import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fieldMask,
@@ -23,6 +23,7 @@ import {
   sameStringList,
   sameText,
   stringMap,
+  ensureWorkloadManagerServiceIdentity,
   toPhysicalId,
   userLabels,
   waitForOperation,
@@ -120,6 +121,8 @@ export type EvaluationProps = {
   evaluationType?: EvaluationType;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
+   * Workload Manager accepts no label updates, so changing them replaces
+   * the evaluation.
    */
   labels?: Record<string, string>;
   /**
@@ -204,8 +207,8 @@ export interface EvaluationLookup {
  * validated against a scope of Cloud resources (SAP, SQL Server, or
  * custom).
  *
- * Changing `evaluationId`, `location`, or `kmsKey` replaces the
- * evaluation. Description, labels, resource filter, rule names,
+ * Changing `evaluationId`, `location`, `kmsKey`, or `labels` replaces the
+ * evaluation. Description, resource filter, rule names,
  * schedule, custom-rules bucket, BigQuery destination, and
  * `evaluationType` update in place.
  *
@@ -259,6 +262,9 @@ export interface EvaluationLookup {
  * @category WorkloadManager
  */
 export const Evaluation = Resource<Evaluation>("GCP.WorkloadManager.Evaluation");
+
+/** Evaluation ids: a letter first, 3–36 characters. */
+const MAX_EVALUATION_ID_LENGTH = 36;
 
 const resourceName = (project: string, location: string, evaluationId: string) =>
   `projects/${project}/locations/${location}/evaluations/${evaluationId}`;
@@ -360,9 +366,11 @@ export const EvaluationProvider = () =>
           env.region,
         ),
         extra:
-          (olds?.kmsKey ?? output?.kmsKey) !== undefined &&
-          news.kmsKey !== undefined &&
-          (olds?.kmsKey ?? output?.kmsKey) !== news.kmsKey,
+          ((olds?.kmsKey ?? output?.kmsKey) !== undefined &&
+            news.kmsKey !== undefined &&
+            (olds?.kmsKey ?? output?.kmsKey) !== news.kmsKey) ||
+          // The API rejects label updates ("updating labels is not unsupported").
+          (olds !== undefined && fingerprint(olds.labels ?? {}) !== fingerprint(news.labels ?? {})),
       });
     }),
 
@@ -382,6 +390,7 @@ export const EvaluationProvider = () =>
         olds?.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, evaluationId);
@@ -405,6 +414,7 @@ export const EvaluationProvider = () =>
         news.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, evaluationId);
@@ -429,21 +439,34 @@ export const EvaluationProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
-        const created = yield* workloadmanager
+        yield* ensureWorkloadManagerServiceIdentity(env.project);
+        yield* workloadmanager
           .createProjectsLocationsEvaluations({
             parent: parentOf(env.project, location),
             evaluationId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-        if (created !== undefined) {
-          // ALREADY_EXISTS (6): a concurrent create won the race.
-          yield* waitForOperation(created).pipe(
-            Effect.catchTag("GCP.OperationFailed", (error) =>
-              error.code === 6 ? Effect.void : Effect.fail(error),
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            Effect.flatMap((created) =>
+              created === undefined
+                ? Effect.void
+                : waitForOperation(created).pipe(
+                    // ALREADY_EXISTS (6): a concurrent create won the race.
+                    Effect.catchTag("GCP.OperationFailed", (error) =>
+                      error.code === 6 ? Effect.void : Effect.fail(error),
+                    ),
+                  ),
             ),
+            // A just-created service agent takes a minute or two to be ready.
+            Effect.retry({
+              while: (error) =>
+                error._tag === "GCP.OperationFailed" &&
+                error.message.includes("service agent is not ready"),
+              schedule: Schedule.spaced("15 seconds"),
+              times: 12,
+            }),
           );
-        }
         current = yield* waitUntilExists(getByName(name), name);
       }
 
@@ -457,10 +480,8 @@ export const EvaluationProvider = () =>
         (item) => item.resourceStatus?.state,
       );
 
-      const observedLabels = tagRecord(current.labels);
-      const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
+      // Labels are fixed at create (a change replaces the evaluation).
       const mask = fieldMask([
-        (upsert.length > 0 || removed.length > 0) && "labels",
         !sameText(current.description, news.description) && "description",
         fingerprint(toFilter(current.resourceFilter)) !== fingerprint(toFilter(resourceFilter)) &&
           "resourceFilter",
@@ -476,7 +497,7 @@ export const EvaluationProvider = () =>
         const operation = yield* workloadmanager.patchProjectsLocationsEvaluations({
           name: current.name ?? name,
           updateMask: mask,
-          body,
+          body: { ...body, labels: undefined },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

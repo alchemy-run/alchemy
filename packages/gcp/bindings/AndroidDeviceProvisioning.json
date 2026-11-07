@@ -1,0 +1,12 @@
+{
+  "discovery": "androiddeviceprovisioning-v1",
+  "module": "androiddeviceprovisioning_v1",
+  "resources": {
+    "CustomersConfiguration": {
+      "pattern": "customers/*/configurations/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

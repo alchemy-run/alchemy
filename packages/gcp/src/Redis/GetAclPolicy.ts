@@ -1,8 +1,10 @@
-import type * as redis from "@distilled.cloud/gcp/redis_v1";
+import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AclPolicy } from "./AclPolicy.ts";
+import { makeRedisHttpBinding } from "./BindingHttp.ts";
 
 export interface GetAclPolicyRequest extends Omit<
   redis.GetProjectsLocationsAclPoliciesRequest,
@@ -38,3 +40,17 @@ export interface GetAclPolicy extends Binding.Service<
 > {}
 
 export const GetAclPolicy = Binding.Service<GetAclPolicy>("GCP.Redis.GetAclPolicy");
+
+/**
+ * HTTP implementation of {@link GetAclPolicy}.
+ *
+ * @layer
+ * @provides GCP.Redis.GetAclPolicy
+ */
+export const GetAclPolicyHttp = Layer.effect(
+  GetAclPolicy,
+  makeRedisHttpBinding({
+    tag: "GCP.Redis.GetAclPolicy",
+    operation: redis.getProjectsLocationsAclPolicies,
+  }),
+);

@@ -1,0 +1,13 @@
+{
+  "discovery": "auditmanager-v1",
+  "module": "auditmanager_v1",
+  "resources": {},
+  "skip": {
+    "auditmanager.projects.locations.operationIds.get": "operation metadata, polled internally",
+    "auditmanager.projects.locations.operationDetails.get": "operation metadata, polled internally"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["auditmanager.googleapis.com"]
+  }
+}

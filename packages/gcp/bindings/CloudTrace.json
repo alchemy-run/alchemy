@@ -1,0 +1,9 @@
+{
+  "discovery": "cloudtrace-v2",
+  "module": "cloudtrace_v2",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["cloudtrace.googleapis.com"]
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "discovery": "vmwareengine-v1",
+  "module": "vmwareengine_v1",
+  "resources": {
+    "Datastore": {
+      "pattern": "projects/*/locations/*/datastores/*"
+    },
+    "NetworkPeering": {
+      "pattern": "projects/*/locations/*/networkPeerings/*"
+    },
+    "NetworkPoliciesExternalAccessRule": {
+      "pattern": "projects/*/locations/*/networkPolicies/*/externalAccessRules/*"
+    },
+    "NetworkPolicy": {
+      "pattern": "projects/*/locations/*/networkPolicies/*"
+    },
+    "PrivateCloud": {
+      "pattern": "projects/*/locations/*/privateClouds/*"
+    },
+    "PrivateCloudsCluster": {
+      "pattern": "projects/*/locations/*/privateClouds/*/clusters/*"
+    },
+    "PrivateCloudsExternalAddress": {
+      "pattern": "projects/*/locations/*/privateClouds/*/externalAddresses/*"
+    },
+    "PrivateCloudsLoggingServer": {
+      "pattern": "projects/*/locations/*/privateClouds/*/loggingServers/*"
+    },
+    "PrivateCloudsManagementDnsZoneBinding": {
+      "pattern": "projects/*/locations/*/privateClouds/*/managementDnsZoneBindings/*"
+    },
+    "PrivateConnection": {
+      "pattern": "projects/*/locations/*/privateConnections/*"
+    },
+    "VmwareEngineNetwork": {
+      "pattern": "projects/*/locations/*/vmwareEngineNetworks/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Datastore": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "NetworkPeering": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "NetworkPoliciesExternalAccessRule": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "NetworkPolicy": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "PrivateCloud": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "PrivateCloudsCluster": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "PrivateCloudsExternalAddress": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "PrivateCloudsLoggingServer": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "PrivateCloudsManagementDnsZoneBinding": "needs GCP_TEST_VMWAREENGINE_PRIVATE_CLOUD (an external prerequisite the testing project lacks)",
+      "PrivateConnection": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
+      "VmwareEngineNetwork": "Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)"
+    }
+  }
+}

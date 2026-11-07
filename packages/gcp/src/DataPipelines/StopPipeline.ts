@@ -1,7 +1,11 @@
-import type * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as datapipelines from "@distilled.cloud/gcp/datapipelines_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makePipelineHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface StopPipelineRequest extends Omit<
@@ -47,3 +51,27 @@ export interface StopPipeline extends Binding.Service<
 > {}
 
 export const StopPipeline = Binding.Service<StopPipeline>("GCP.DataPipelines.StopPipeline");
+
+/**
+ * HTTP implementation of {@link StopPipeline}.
+ *
+ * @layer
+ * @provides GCP.DataPipelines.StopPipeline
+ */
+export const StopPipelineHttp: Layer.Layer<
+  StopPipeline,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
+  StopPipeline,
+  makePipelineHttpBinding<
+    datapipelines.StopProjectsLocationsPipelinesRequest,
+    datapipelines.GoogleCloudDatapipelinesV1Pipeline,
+    datapipelines.StopProjectsLocationsPipelinesError
+  >({
+    tag: "GCP.DataPipelines.StopPipeline",
+    // No narrower predefined role contains datapipelines.pipelines.stop.
+    iam: { role: "roles/datapipelines.admin" },
+    operation: datapipelines.stopProjectsLocationsPipelines,
+  }),
+);

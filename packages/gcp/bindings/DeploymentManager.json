@@ -1,0 +1,13 @@
+{
+  "discovery": "deploymentmanager-v2",
+  "module": "deploymentmanager_v2",
+  "resources": {
+    "Deployment": {
+      "pattern": "projects/*/global/deployments/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}
