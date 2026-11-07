@@ -8,7 +8,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { Endpoint } from "./Endpoint.ts";
-import { FetchServer, type FetchClient, type ServerClient } from "./FetchServer.ts";
+import { FetchServer, type ServerClient } from "./FetchServer.ts";
 import type { Function } from "./Function.ts";
 import * as ModalBindings from "./ModalBindings.ts";
 import type { Server } from "./Server.ts";
@@ -32,71 +32,64 @@ const PROXY_ENV = { key: "MODAL_PROXY_KEY", secret: "MODAL_PROXY_SECRET" } as co
  */
 export const FetchServerHttp = Layer.effect(
   FetchServer,
-  Effect.map(
-    Effect.gen(function* () {
-      // No Modal API calls: the client only needs the host's HTTP client.
-      const http = yield* ModalBindings.withCredentials(HttpClient.HttpClient);
-      const bind = yield* ModalBindings.Bind;
-      const runtime = yield* CurrentRuntimeContext;
-      // Deploy only: a host bundle never creates the token.
-      const Token = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* WebhookToken;
+  Effect.gen(function* () {
+    // No Modal API calls: the client only needs the host's HTTP client.
+    const http = yield* ModalBindings.withCredentials(HttpClient.HttpClient);
+    const bind = yield* ModalBindings.Bind;
+    const runtime = yield* CurrentRuntimeContext;
+    // Deploy only: a host bundle never creates the token.
+    const Token = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* WebhookToken;
 
-      return Effect.fn("Modal.FetchServer")(function* (server: Server | Function | Endpoint) {
-        if (!globalThis.__ALCHEMY_RUNTIME__) {
-          const host = yield* Binding.Host;
-          if (host !== undefined && Token !== undefined) {
-            const token = yield* Token(`${host.LogicalId}ProxyAuth`, {});
-            yield* bind`Modal.FetchServer(${server})`({
-              env: { [PROXY_ENV.key]: token.tokenId, [PROXY_ENV.secret]: token.tokenSecret },
-            });
-          }
+    return Effect.fn("Modal.FetchServer")(function* (server: Server | Function | Endpoint) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (host !== undefined && Token !== undefined) {
+          const token = yield* Token(`${host.LogicalId}ProxyAuth`, {});
+          yield* bind`Modal.FetchServer(${server})`({
+            env: { [PROXY_ENV.key]: token.tokenId, [PROXY_ENV.secret]: token.tokenSecret },
+          });
         }
-        const url = yield* server.url;
-        const resolvedUrl = Effect.flatMap(url, (value) =>
-          value
-            ? Effect.succeed(value)
-            : Effect.fail(
-                new ServerUrlMissing({
-                  message:
-                    "The server has no URL: deploy it as a Modal.Server, a Modal.Function with web, or a Modal.Endpoint",
-                }),
-              ),
-        );
-        const headers = Effect.gen(function* () {
-          if (runtime === undefined) return {};
-          const key = yield* runtime.get<string>(PROXY_ENV.key);
-          const secret = yield* runtime.get<string | Redacted.Redacted<string>>(PROXY_ENV.secret);
-          if (key === undefined || secret === undefined) return {};
-          return {
-            "Modal-Key": key,
-            "Modal-Secret": Redacted.isRedacted(secret) ? Redacted.value(secret) : secret,
-          };
-        });
-        const client = {
-          url: resolvedUrl,
-          fetch: (request) =>
-            Effect.gen(function* () {
-              const base = yield* resolvedUrl;
-              const target = new URL(request.url, "http://server");
-              // The Stack's own deployed server (allowed raw HTTP).
-              return yield* http.execute(
-                request.pipe(
-                  HttpClientRequest.setUrl(
-                    `${base.replace(/\/$/, "")}${target.pathname}${target.search}`,
-                  ),
-                  HttpClientRequest.setHeaders(yield* headers),
-                ),
-              );
-            }),
-        } satisfies ServerClient;
-        // Every other member is an RPC method of the Server's program.
-        return makeFetchRpcStub<ServerClient>({ fetch: client.fetch, base: client });
+      }
+      const url = yield* server.url;
+      const resolvedUrl = Effect.flatMap(url, (value) =>
+        value
+          ? Effect.succeed(value)
+          : Effect.fail(
+              new ServerUrlMissing({
+                message:
+                  "The server has no URL: deploy it as a Modal.Server, a Modal.Function with web, or a Modal.Endpoint",
+              }),
+            ),
+      );
+      const headers = Effect.gen(function* () {
+        if (runtime === undefined) return {};
+        const key = yield* runtime.get<string>(PROXY_ENV.key);
+        const secret = yield* runtime.get<string | Redacted.Redacted<string>>(PROXY_ENV.secret);
+        if (key === undefined || secret === undefined) return {};
+        return {
+          "Modal-Key": key,
+          "Modal-Secret": Redacted.isRedacted(secret) ? Redacted.value(secret) : secret,
+        };
       });
-    }),
-    // The client's type follows the server's program shape (`FetchClient`).
-    (bind) =>
-      bind as unknown as <T extends Server | Function | Endpoint>(
-        server: T,
-      ) => Effect.Effect<FetchClient<T>>,
-  ),
+      const client = {
+        url: resolvedUrl,
+        fetch: (request) =>
+          Effect.gen(function* () {
+            const base = yield* resolvedUrl;
+            const target = new URL(request.url, "http://server");
+            // The Stack's own deployed server (allowed raw HTTP).
+            return yield* http.execute(
+              request.pipe(
+                HttpClientRequest.setUrl(
+                  `${base.replace(/\/$/, "")}${target.pathname}${target.search}`,
+                ),
+                HttpClientRequest.setHeaders(yield* headers),
+              ),
+            );
+          }),
+      } satisfies ServerClient;
+      // Every other member is an RPC method of the Server's program.
+      return makeFetchRpcStub<ServerClient>({ fetch: client.fetch, base: client });
+    });
+  }),
 );

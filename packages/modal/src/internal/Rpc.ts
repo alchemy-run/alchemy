@@ -1,22 +1,9 @@
 import { safeHttpEffect } from "alchemy/Http";
 import * as Output from "alchemy/Output";
-import { serveRpc, type Rpc } from "alchemy/Rpc";
+import { serveRpc } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { RPC_METHODS_ENV, RPC_SERVE_ENV } from "./Entrypoint.ts";
-
-/**
- * The program shape a runtime carries (a `Modal.Function` or `Modal.Server`
- * class, or the resource it yields), or `never` (a deployed or async one).
- */
-export type ShapeOf<T> =
-  T extends Rpc<infer Shape>
-    ? Shape
-    : T extends Effect.Effect<infer R, any, any>
-      ? R extends Rpc<infer Shape>
-        ? Shape
-        : never
-      : never;
 
 /** The RPC methods of a program's shape: every function besides `fetch` and `run`. */
 export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>

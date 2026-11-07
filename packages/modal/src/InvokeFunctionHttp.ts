@@ -20,7 +20,6 @@ import {
   type CallOptions,
   type FunctionClient,
   type FunctionTarget,
-  type InvokeClient,
 } from "./InvokeFunction.ts";
 
 /** The operations the client calls, resolved by `ModalBindings.withCredentials`. */
@@ -286,24 +285,20 @@ export const makeRpcClient = (
  */
 export const InvokeFunctionHttp = Layer.effect(
   InvokeFunction,
-  Effect.map(
-    makeFunctionBinding({
-      tag: "Modal.InvokeFunction",
-      operations: InvokeOps,
-      role: "contributor",
-      make: Effect.fn(function* (resolved, ops, target: FunctionTarget) {
-        if (isFunctionRef(target)) return makeFunctionClient(resolved, ops);
-        // The program's methods, recorded at deploy (an attribute of the Function).
-        const methods = yield* (
-          target as unknown as {
-            readonly methods: Effect.Effect<Effect.Effect<ReadonlyArray<string> | undefined>>;
-          }
-        ).methods;
-        return makeRpcClient(resolved, ops, methods);
-      }),
+  makeFunctionBinding({
+    tag: "Modal.InvokeFunction",
+    operations: InvokeOps,
+    role: "contributor",
+    make: Effect.fn(function* (resolved, ops, target: FunctionTarget) {
+      if (isFunctionRef(target)) return makeFunctionClient(resolved, ops);
+      // The program's methods, recorded at deploy (an attribute of the Function).
+      const methods = yield* (
+        target as unknown as {
+          readonly methods: Effect.Effect<Effect.Effect<ReadonlyArray<string> | undefined>>;
+        }
+      ).methods;
+      // Typed by `InvokeFunction`'s call signatures from the target's program.
+      return makeRpcClient(resolved, ops, methods) as unknown as FunctionClient;
     }),
-    // The client's type follows the target's program shape (`InvokeClient`).
-    (bind) =>
-      bind as unknown as <T extends FunctionTarget>(target: T) => Effect.Effect<InvokeClient<T>>,
-  ),
+  }),
 );

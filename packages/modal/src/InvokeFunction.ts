@@ -1,4 +1,6 @@
 import * as Binding from "alchemy/Binding";
+import type { Input } from "alchemy/Input";
+import type { Rpc } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
@@ -6,7 +8,6 @@ import type { downloadBlob, uploadBlob } from "./Blob.ts";
 import type { Function } from "./Function.ts";
 import type { FunctionLookupError } from "./FunctionTarget.ts";
 import type { ErrorOf, OpError } from "./internal.ts";
-import type { ShapeOf } from "./internal/Rpc.ts";
 import type { InvokeOps } from "./InvokeFunctionHttp.ts";
 
 /** A function deployed outside the Stack (`modal deploy`), by name. */
@@ -93,17 +94,6 @@ export interface FunctionClient {
  * and results.
  */
 export type FunctionStub<Shape> = Omit<Shape, "fetch" | "run">;
-
-/**
- * The client {@link InvokeFunction} returns: the RPC methods of a
- * `Modal.Function` program that has some, and a {@link FunctionClient}
- * otherwise (a Python function, an async program).
- */
-export type InvokeClient<T> = [ShapeOf<T>] extends [never]
-  ? FunctionClient
-  : keyof FunctionStub<ShapeOf<T>> extends never
-    ? FunctionClient
-    : FunctionStub<ShapeOf<T>>;
 
 /**
  * Call a Modal Function from any runtime: a Worker, a Lambda, a Durable
@@ -199,7 +189,21 @@ export type InvokeClient<T> = [ShapeOf<T>] extends [never]
 export interface InvokeFunction extends Binding.Service<
   InvokeFunction,
   "Modal.InvokeFunction",
-  <T extends FunctionTarget>(target: T) => Effect.Effect<InvokeClient<T>>
+  (target: FunctionTarget) => Effect.Effect<FunctionClient>
 > {}
 
-export const InvokeFunction = Binding.Service<InvokeFunction>("Modal.InvokeFunction");
+/** InvokeFunction's call signatures, typed from the target's program. */
+export interface InvokeFunctionCall {
+  /** A `Modal.Function` of the Stack whose program has RPC methods: its typed client. */
+  <Shape, Req = never>(
+    target: (Function & Rpc<Shape>) | Effect.Effect<Function & Rpc<Shape>, never, Req>,
+  ): Effect.Effect<FunctionStub<Shape>, never, InvokeFunction | Req>;
+  /** A deployed function by name, or an async program: `call`, `map` and `spawn`. */
+  <Req = never>(
+    target: Input<FunctionTarget> | Effect.Effect<FunctionTarget, never, Req>,
+  ): Effect.Effect<FunctionClient, never, InvokeFunction | Req>;
+}
+
+export const InvokeFunction = Binding.Service<InvokeFunction>(
+  "Modal.InvokeFunction",
+) as unknown as InvokeFunctionCall & InvokeFunction;

@@ -1,4 +1,6 @@
 import * as Binding from "alchemy/Binding";
+import type { Input } from "alchemy/Input";
+import type { Rpc } from "alchemy/Rpc";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type * as HttpClientError from "effect/http/HttpClientError";
@@ -7,7 +9,6 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { Endpoint } from "./Endpoint.ts";
 import type { ServerUrlMissing } from "./FetchServerHttp.ts";
 import type { Function } from "./Function.ts";
-import type { ShapeOf } from "./internal/Rpc.ts";
 import type { Server } from "./Server.ts";
 
 /** Send requests to a deployed Modal Server, web Function or model Endpoint. */
@@ -32,8 +33,7 @@ export interface ServerClient {
  * methods of a `Modal.Server` program (everything it returns besides
  * `fetch` and `run`).
  */
-export type FetchClient<T> = ServerClient &
-  ([ShapeOf<T>] extends [never] ? {} : Omit<ShapeOf<T>, "fetch" | "run" | "url">);
+export type FetchClient<Shape> = ServerClient & Omit<Shape, "fetch" | "run" | "url">;
 
 /**
  * Call a `Modal.Server`, a `Modal.Function` with `web`, or a model
@@ -102,7 +102,23 @@ export type FetchClient<T> = ServerClient &
 export interface FetchServer extends Binding.Service<
   FetchServer,
   "Modal.FetchServer",
-  <T extends Server | Function | Endpoint>(server: T) => Effect.Effect<FetchClient<T>>
+  (server: Server | Function | Endpoint) => Effect.Effect<ServerClient>
 > {}
 
-export const FetchServer = Binding.Service<FetchServer>("Modal.FetchServer");
+/** FetchServer's call signatures, typed from the target's program. */
+export interface FetchServerCall {
+  /** A `Modal.Server` of the Stack: `url`, `fetch` and its program's RPC methods. */
+  <Shape, Req = never>(
+    server: (Server & Rpc<Shape>) | Effect.Effect<Server & Rpc<Shape>, never, Req>,
+  ): Effect.Effect<FetchClient<Shape>, never, FetchServer | Req>;
+  /** A web Function, a model Endpoint, or an async Server: `url` and `fetch`. */
+  <Req = never>(
+    server:
+      | Input<Server | Function | Endpoint>
+      | Effect.Effect<Server | Function | Endpoint, never, Req>,
+  ): Effect.Effect<ServerClient, never, FetchServer | Req>;
+}
+
+export const FetchServer = Binding.Service<FetchServer>(
+  "Modal.FetchServer",
+) as unknown as FetchServerCall & FetchServer;
