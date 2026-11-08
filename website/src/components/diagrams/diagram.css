@@ -106,17 +106,17 @@
  * --wide and --narrow; one shows at a time, so text keeps its size instead of
  * shrinking with the column.
  */
-.alc-fig__svg--narrow {
+svg.alc-fig__svg--narrow {
   display: none;
 }
 @media (max-width: 40rem) {
   .alc-fig__panel {
     padding: 0.75rem;
   }
-  .alc-fig__svg--wide:has(+ .alc-fig__svg--narrow) {
+  svg.alc-fig__svg--wide:has(+ svg.alc-fig__svg--narrow) {
     display: none;
   }
-  .alc-fig__svg--narrow {
+  svg.alc-fig__svg--narrow {
     display: block;
   }
 }

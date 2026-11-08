@@ -1,4 +1,5 @@
 ---
+import "./diagrams/diagram.css";
 import DomainIcon from "./domain/DomainIcon.astro";
 import DomainNode from "./domain/DomainNode.astro";
 import { KIND_ORDER, KINDS, type Kind } from "./domain/kinds.ts";
@@ -99,9 +100,26 @@ interface Props {
   direction?: "LR" | "TB";
   /** Optional caption rendered below the graph. */
   caption?: string;
+  /**
+   * Internal: render only the phone layout's SVG, the graph turned on its side
+   * (grid columns become rows, left-to-right becomes top-to-bottom), when it is
+   * narrower than the desktop layout at `wideWidth`.
+   */
+  narrow?: boolean;
+  wideWidth?: number;
 }
 
-const { nodes: rawNodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+const props = Astro.props as Props;
+const { narrow = false, wideWidth = Infinity } = props;
+// The phone layout transposes the graph: a grid's columns become rows, and
+// left-to-right becomes top-to-bottom. An elbow keeps its shape by swapping
+// which side it leaves from.
+const rawNodes = narrow ? props.nodes.map((n) => ({ ...n, col: n.row, row: n.col })) : props.nodes;
+const edges = narrow
+  ? props.edges.map((e) => ({ ...e, exit: (e.exit === "side" ? "bottom" : "side") as EdgeIn["exit"] }))
+  : props.edges;
+const { groups = [], caption } = props;
+const direction = narrow ? (props.direction === "TB" ? "LR" : "TB") : (props.direction ?? "LR");
 // Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
 const uid = Math.random().toString(36).slice(2, 8);
 
@@ -139,8 +157,18 @@ const NODE_H = 56;
 const NODE_H_TYPED = 64; // slightly taller when subtitle present
 // Gaps fit the widest edge label; grouped diagrams need room for borders
 // and the labels on edges crossing them.
+// On a phone only edges that run across need room for their labels: labels on
+// edges that run down sit beside them.
+const across = (e: EdgeIn) => {
+  const a = nodes.find((n) => n.id === e.from);
+  const b = nodes.find((n) => n.id === e.to);
+  if (!a || !b) return true;
+  return a.row !== undefined && b.row !== undefined ? a.row === b.row || e.exit === "side" : direction === "LR";
+};
 const COL_GAP = Math.ceil(
-  Math.max(groups.length > 0 ? 116 : 80, ...edges.map((e) => textWidth(e.label ?? "", 10.5) + 28)),
+  narrow
+    ? Math.max(groups.length > 0 ? 56 : 40, ...edges.filter(across).map((e) => textWidth(e.label ?? "", 10.5) + 28))
+    : Math.max(groups.length > 0 ? 116 : 80, ...edges.map((e) => textWidth(e.label ?? "", 10.5) + 28)),
 );
 const ROW_GAP = 28;
 const PAD = 24;
@@ -534,10 +562,9 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 };
 ---
 
-<figure class="alc-dag not-content" data-nosnippet>
-  <div class="alc-dag__panel">
+{narrow ? (width < wideWidth * 0.8 && (
   <svg
-    class="alc-dag__svg"
+    class="alc-dag__svg alc-fig__svg--narrow"
     viewBox={`0 0 ${width} ${height}`}
     style={`max-width: ${Math.round(width * 1.15)}px`}
     role="img"
@@ -661,6 +688,135 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
       );
     })}
   </svg>
+)) : (
+<figure class="alc-dag not-content" data-nosnippet>
+  <div class="alc-dag__panel">
+  <svg
+    class="alc-dag__svg alc-fig__svg--wide"
+    viewBox={`0 0 ${width} ${height}`}
+    style={`max-width: ${Math.round(width * 1.15)}px`}
+    role="img"
+    aria-label={caption ?? "Dependency graph"}
+  >
+    <defs>
+      <marker
+        id={`alc-dag-arrow-${uid}`}
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+
+    {/* Group borders first, outermost at the back. */}
+    {[...groups]
+      .sort((a, b) => depthOf(a) - depthOf(b))
+      .map((g) => {
+        const b = boxes.get(g.id);
+        if (!b) return null;
+        return (
+          <g class="alc-dag__group">
+            <rect
+              x={b.x}
+              y={b.y}
+              width={b.w}
+              height={b.h}
+              rx="10"
+              ry="10"
+              class="alc-dag__group-bg"
+              stroke-dasharray={g.dashed ? "5 4" : undefined}
+            />
+            <text
+              x={labelPlace(g, b).x}
+              y={b.y + 17}
+              text-anchor={labelPlace(g, b).anchor}
+              class="alc-dag__group-label"
+            >
+              {g.label}
+            </text>
+          </g>
+        );
+      })}
+
+    {/* Edges next so they sit beneath nodes. */}
+    {edgeShapes.map((e) => (
+      <g class="alc-dag__edge">
+        <path
+          d={e.d}
+          fill="none"
+          stroke="var(--alc-accent-60)"
+          stroke-width="1.5"
+          stroke-dasharray={e.dashed ? "4 4" : undefined}
+          marker-end={`url(#alc-dag-arrow-${uid})`}
+        />
+        {e.label && (
+          <text
+            x={e.midX}
+            y={e.midY - 6}
+            class="alc-dag__edge-label"
+            text-anchor={e.beside ? "start" : "middle"}
+          >
+            {e.label}
+          </text>
+        )}
+      </g>
+    ))}
+
+    {/* Nodes. */}
+    {nodes.map((n) => {
+      const p = positions.get(n.id)!;
+      const tone = n.tone ?? "default";
+      if (n.kind) {
+        return (
+          <g transform={`translate(${p.x}, ${p.y})`}>
+            <DomainNode
+              kind={n.kind}
+              width={NODE_W}
+              height={p.h}
+              label={n.label ?? n.id}
+              type={n.type}
+            />
+          </g>
+        );
+      }
+      return (
+        <g class={`alc-dag__node alc-dag__node--${tone}`} transform={`translate(${p.x}, ${p.y})`}>
+          <rect
+            width={NODE_W}
+            height={p.h}
+            rx="8"
+            ry="8"
+            class="alc-dag__node-bg"
+          />
+          <text
+            x={NODE_W / 2}
+            y={n.type ? p.h / 2 - 4 : p.h / 2 + 1}
+            class="alc-dag__node-label"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >
+            {n.label ?? n.id}
+          </text>
+          {n.type && (
+            <text
+              x={NODE_W / 2}
+              y={p.h / 2 + 14}
+              class="alc-dag__node-type"
+              text-anchor="middle"
+              dominant-baseline="middle"
+            >
+              {n.type}
+            </text>
+          )}
+        </g>
+      );
+    })}
+  </svg>
+  <Astro.self {...props} narrow wideWidth={width} />
 
   {
     kindsShown.length > 0 && (
@@ -677,6 +833,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   </div>
   {caption && <figcaption class="alc-dag__caption">{caption}</figcaption>}
 </figure>
+)}
 
 <style>
   .alc-dag {
