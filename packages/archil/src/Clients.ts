@@ -611,7 +611,7 @@ export const makeBranchDiskClient = (
         const id = yield* diskId;
         const existing = yield* archil.getBranch({ id, name: options.name }).pipe(
           Effect.map(({ data }) => toBranchAttributes(data)),
-          Effect.catchTag("BranchNotFound", () => Effect.undefined),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
         if (existing) return existing;
         const { data } = yield* archil.createBranch({
@@ -629,7 +629,7 @@ export const makeBranchDiskClient = (
         const id = yield* diskId;
         return yield* archil.getBranch({ id, name }).pipe(
           Effect.map(({ data }) => toBranchAttributes(data)),
-          Effect.catchTag("BranchNotFound", () => Effect.undefined),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }),
     ),
@@ -721,8 +721,8 @@ export const makeSandboxOps = (
   authorize: Authorize,
   forkName: (name: string | undefined) => Effect.Effect<string | undefined> = Effect.succeed,
 ): SandboxOps => {
-  // A paused sandbox (idle TTL) refuses process connections; resume it and
-  // try once more.
+  // A paused sandbox (idle TTL) refuses process connections with
+  // `sandbox_terminated`; resume it and try once more.
   const awake = <A, E extends { readonly _tag: string }, R2>(
     use: (sid: string) => Effect.Effect<A, E, R2>,
   ) =>
@@ -730,7 +730,7 @@ export const makeSandboxOps = (
       Effect.flatMap(sid, (id) =>
         use(id).pipe(
           Effect.catchIf(
-            (e) => e._tag === "SandboxStateConflict",
+            (e) => e._tag === "SandboxTerminated",
             (e) =>
               archil
                 .getSandbox({ sid: id })

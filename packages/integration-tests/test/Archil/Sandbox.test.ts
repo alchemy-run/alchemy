@@ -10,7 +10,7 @@ const { test } = Test.make({ providers: Archil.providers() });
 const observe = (sid: string) =>
   archil.getSandbox({ sid }).pipe(
     Effect.map(({ data }) => (data.status === "deleted" ? undefined : data)),
-    Effect.catchTag("SandboxNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 test.provider(

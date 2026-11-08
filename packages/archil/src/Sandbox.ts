@@ -530,7 +530,7 @@ export const observeSandbox = Effect.fn(function* (
 ) {
   const ports = yield* archil.listSandboxPorts({ sid: sandbox.sandbox_id }).pipe(
     Effect.map(({ data }) => data.ports ?? []),
-    Effect.catchTag("SandboxNotFound", () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
   return toSandboxAttributes(sandbox, ports, program, derivedImage);
 });
@@ -562,10 +562,10 @@ const stopSandbox = Effect.fn(function* (sid: string) {
   const observed = yield* getSandbox(sid);
   if (observed === undefined || deletableSandboxStates.has(observed.status)) return;
   // Let a booting or pausing sandbox settle, then stop it.
-  yield* waitForSandbox(sid).pipe(Effect.catchTag("SandboxNotFound", () => Effect.undefined));
+  yield* waitForSandbox(sid).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   yield* archil.stopSandbox({ sid }).pipe(
     Effect.asVoid,
-    Effect.catchTag("SandboxNotFound", () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
   yield* waitForSandboxStopped(sid);
 });
@@ -581,7 +581,7 @@ export const deleteSandbox = Effect.fn(function* (sid: string) {
   yield* stopSandbox(sid);
   yield* archil.deleteSandbox({ sid }).pipe(
     Effect.asVoid,
-    Effect.catchTag("SandboxNotFound", () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
   yield* waitForSandboxGone(sid);
 });
@@ -898,17 +898,10 @@ export const SandboxProvider = () =>
             );
             sandbox = yield* archil.createSandbox(request).pipe(
               Effect.map(({ data }) => data),
-              Effect.catchTag("SandboxAlreadyExists", () =>
+              Effect.catchTag("SandboxNameConflict", (conflict) =>
                 findSandboxByName(name).pipe(
                   Effect.flatMap((found) =>
-                    found
-                      ? Effect.succeed(found)
-                      : Effect.fail(
-                          new archil.SandboxAlreadyExists({
-                            code: "sandbox_name_conflict",
-                            message: `Sandbox ${name} exists but is not visible to this key`,
-                          }),
-                        ),
+                    found ? Effect.succeed(found) : Effect.fail(conflict),
                   ),
                 ),
               ),
@@ -947,7 +940,7 @@ export const SandboxProvider = () =>
             if (output?.port !== undefined && output.port !== port) {
               yield* archil
                 .deleteSandboxPort({ sid, port: output.port })
-                .pipe(Effect.catchTag("SandboxNotFound", () => Effect.void));
+                .pipe(Effect.catchTag("NotFound", () => Effect.void));
             }
             yield* deployProgram({
               sid,
@@ -964,7 +957,7 @@ export const SandboxProvider = () =>
             if (output.port !== undefined && !(news.ports ?? []).includes(output.port)) {
               yield* archil
                 .deleteSandboxPort({ sid, port: output.port })
-                .pipe(Effect.catchTag("SandboxNotFound", () => Effect.void));
+                .pipe(Effect.catchTag("NotFound", () => Effect.void));
             }
           }
           // Return
