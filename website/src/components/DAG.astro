@@ -143,13 +143,13 @@ const textWidth = (text: string, px: number) => text.length * px * 0.6;
 const ICON_W = 20;
 const NODE_W = Math.ceil(
   Math.max(
-    nodes.some((n) => n.kind) ? 164 : 140,
+    narrow ? 96 : nodes.some((n) => n.kind) ? 164 : 140,
     ...nodes.map(
       (n) =>
         Math.max(
           textWidth(n.label ?? n.id, 13) + (n.kind ? ICON_W : 0),
           textWidth(n.type ?? "", 10.5),
-        ) + 28,
+        ) + (narrow ? 20 : 28),
     ),
   ),
 );
@@ -167,11 +167,11 @@ const across = (e: EdgeIn) => {
 };
 const COL_GAP = Math.ceil(
   narrow
-    ? Math.max(groups.length > 0 ? 56 : 40, ...edges.filter(across).map((e) => textWidth(e.label ?? "", 10.5) + 28))
+    ? Math.max(groups.length > 0 ? 40 : 28, ...edges.filter(across).map((e) => textWidth(e.label ?? "", 10.5) + 24))
     : Math.max(groups.length > 0 ? 116 : 80, ...edges.map((e) => textWidth(e.label ?? "", 10.5) + 28)),
 );
 const ROW_GAP = 28;
-const PAD = 24;
+const PAD = narrow ? 10 : 24;
 
 const idIndex = new Map(nodes.map((n, i) => [n.id, i]));
 
