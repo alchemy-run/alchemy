@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { ApiAccess, runtimeName, runtimePrefix } from "./ArchilBindings.ts";
 import { makeDiskHandle, type DiskHandle } from "./Clients.ts";
-import { deleteDisk, ensureDisk, type DiskIdMissing, type DiskStorage } from "./Disk.ts";
+import { deleteDisk, ensureDisk, type DiskStorage } from "./Disk.ts";
 import type { ArchilFailed, ArchilNotReady } from "./internal/archil.ts";
 import { findDiskByName, listAllDisks } from "./internal/archil.ts";
 
@@ -23,8 +23,7 @@ export type CreateDiskError =
   | archil.GetDiskError
   | archil.ListDisksError
   | ArchilFailed
-  | ArchilNotReady
-  | DiskIdMissing;
+  | ArchilNotReady;
 
 export interface CreateDiskClient {
   /**
