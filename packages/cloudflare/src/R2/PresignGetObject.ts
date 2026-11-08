@@ -23,7 +23,7 @@ export interface PresignGetObjectRequest extends Omit<S3.GetObjectRequest, "Buck
  * input without `Bucket`. Query fields (the `ResponseContent*` overrides,
  * `PartNumber`) are signed into the URL. Header fields (`Range`, `IfMatch`,
  * ...) come back in `headers`, which the downloader must send as they are.
- * R2 implements a subset of S3's fields; see [R2's S3 API
+ * R2 implements a subset of S3's fields. See [R2's S3 API
  * compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
  *
  * Presigning is a pure SigV4 computation against R2's S3-compatible API — no

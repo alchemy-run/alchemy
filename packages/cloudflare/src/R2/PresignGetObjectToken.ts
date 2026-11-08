@@ -1,8 +1,7 @@
-import * as Presign from "@distilled.cloud/aws/Presign";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PresignGetObject, type PresignGetObjectRequest } from "./PresignGetObject.ts";
+import { PresignGetObject } from "./PresignGetObject.ts";
 import { makePresignBinding } from "./PresignToken.ts";
 
 /**
@@ -26,8 +25,7 @@ export const PresignGetObjectToken = Layer.effect(
     makePresignBinding({
       name: "Cloudflare.R2.PresignGetObject",
       access: "read",
-      presign: (Bucket, { expiresIn, ...request }: PresignGetObjectRequest) =>
-        Presign.presignRequest(S3.getObject, { ...request, Bucket }, { expiresIn }),
+      operation: S3.getObject,
     }),
   ),
 );
