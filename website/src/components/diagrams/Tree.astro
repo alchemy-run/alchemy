@@ -177,6 +177,12 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
   .alc-tree__side > .alc-tree__box {
     flex: 1 1 auto;
   }
+  /* A side column is only as wide as its widest label, so labels never wrap
+     inside it. */
+  .alc-tree__side .alc-tree__label,
+  .alc-tree__side .alc-tree__type {
+    white-space: nowrap;
+  }
   @media (max-width: 40rem) {
     .alc-tree__split {
       flex-direction: column;

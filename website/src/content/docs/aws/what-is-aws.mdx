@@ -3,33 +3,23 @@ title: What is AWS?
 description: The concepts behind AWS — accounts, regions, IAM identities and policies, resources and ARNs, runtimes, event sources, VPCs and the edge — and how @alchemy.run/aws models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Amazon Web Services (AWS) is a cloud platform with services for databases, queues, object storage, functions, containers, virtual machines, networks, DNS and more. Each service creates **resources** in your **account**, and every call to a resource is checked against **IAM**, the service that decides who may do what.
 
 Take one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
 
-<DAG
+<Tree
   nodes={[
-    { id: "profile", label: "Profile", type: "you or CI", col: 0, row: 1 },
-    { id: "role", label: "Role", type: "IAM execution role", col: 1, row: 0 },
-    { id: "api", label: "Api", type: "Lambda Function", col: 1, row: 1 },
-    { id: "bucket", label: "Files", type: "S3 Bucket", col: 2, row: 1 },
-    { id: "queue", label: "Jobs", type: "SQS Queue", col: 2, row: 2 },
-    { id: "worker", label: "Worker", type: "Lambda Function", col: 3, row: 2 },
+    { id: "account", label: "123456789012", type: "account", icon: "brand:aws" },
+    { id: "role", label: "Role", type: "IAM role · every region", parent: "account", icon: "id-card" },
+    { id: "region", label: "us-east-1", type: "region", parent: "account", wide: true, dashed: true, icon: "map-pin" },
+    { id: "api", label: "Api", type: "Lambda Function", parent: "region", wide: true, tone: "accent", icon: "square-function", specs: [["runs as", "Role"], ["s3:PutObject", "Files"], ["sqs:SendMessage", "Jobs"]] },
+    { id: "files", label: "Files", type: "S3 Bucket", parent: "region", icon: "archive" },
+    { id: "jobs", label: "Jobs", type: "SQS Queue", parent: "region", icon: "inbox" },
+    { id: "worker", label: "Worker", type: "Lambda Function", parent: "region", icon: "square-function", specs: [["invoked by", "Jobs"]] },
   ]}
-  groups={[
-    { id: "account", label: "Account 123456789012", nodes: ["role"] },
-    { id: "region", label: "us-east-1", parent: "account", nodes: ["api", "bucket", "queue", "worker"], dashed: true },
-  ]}
-  edges={[
-    { from: "profile", to: "account", label: "deploy" },
-    { from: "role", to: "api", label: "runs as" },
-    { from: "api", to: "bucket", label: "s3:PutObject" },
-    { from: "api", to: "queue", label: "sqs:SendMessage" },
-    { from: "queue", to: "worker", dashed: true },
-  ]}
-  caption="IAM roles belong to the account and work in every region. The rest lives in one region. Dashed edges are events AWS delivers."
+  caption="IAM roles belong to the account and work in every region. The rest lives in one region. Api runs as Role, whose policy lets it write to Files and send to Jobs; Jobs invokes Worker."
 />
 
 ## Accounts: the boundary around everything
