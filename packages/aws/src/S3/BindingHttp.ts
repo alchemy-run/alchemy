@@ -1,3 +1,5 @@
+import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -20,8 +22,7 @@ import type { Bucket } from "./Bucket.ts";
  *   operation is resolved with `AWSBindings.withCredentials`, so a host with
  *   a created key signs with the assumed Role in the bucket's region.
  *
- * Genuinely-different bindings stay bespoke: `PresignGetObject` /
- * `PresignPutObject` (SigV4 presigners, not API operations).
+ * The presign bindings pass their operation through {@link presign}.
  */
 export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.S3.GetObject`. */
@@ -91,3 +92,22 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
       });
     });
   });
+
+/**
+ * A presigner in the shape `makeBucketHttpBinding` takes as its operation:
+ * `sign` runs with the host's credentials, on the request with `Bucket`
+ * injected.
+ */
+export const presign = <I extends { Bucket?: string }>(
+  sign: (
+    request: I,
+  ) => Effect.Effect<
+    Presign.PresignedRequest,
+    Presign.PresignRequestError,
+    Credentials.Credentials
+  >,
+) =>
+  Effect.map(
+    Effect.context<Credentials.Credentials>(),
+    (context) => (request: I) => sign(request).pipe(Effect.provideContext(context)),
+  );

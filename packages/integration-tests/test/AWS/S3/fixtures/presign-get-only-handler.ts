@@ -32,14 +32,14 @@ export default PresignGetOnlyTestFunction.make(
         const key = url.searchParams.get("key");
         if (!key) return HttpServerResponse.text("Missing key", { status: 400 });
         return yield* HttpServerResponse.json({
-          url: yield* presignGet({
-            key,
-            versionId: url.searchParams.get("versionId") ?? undefined,
-            contentType: url.searchParams.get("contentType") ?? undefined,
+          url: (yield* presignGet({
+            Key: key,
+            VersionId: url.searchParams.get("versionId") ?? undefined,
+            ResponseContentType: url.searchParams.get("contentType") ?? undefined,
             expiresIn: url.searchParams.has("expiresIn")
               ? Number(url.searchParams.get("expiresIn"))
               : undefined,
-          }),
+          })).url,
         });
       }).pipe(Effect.orDie),
     };

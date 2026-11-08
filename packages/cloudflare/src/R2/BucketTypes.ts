@@ -1,5 +1,5 @@
 import type * as runtime from "@cloudflare/workers-types";
-import type * as SigV4 from "@distilled.cloud/aws4signer";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -69,6 +69,7 @@ export interface UploadPartOptions extends runtime.R2UploadPartOptions {}
 
 /**
  * Failure while minting a presigned URL (`PresignGetObject` /
- * `PresignPutObject`): a malformed URL or header, or a WebCrypto error.
+ * `PresignPutObject`): an input the S3 API would refuse, a malformed URL or
+ * header, or a WebCrypto error.
  */
-export type PresignError = SigV4.SigningError;
+export type PresignError = Presign.PresignRequestError;
