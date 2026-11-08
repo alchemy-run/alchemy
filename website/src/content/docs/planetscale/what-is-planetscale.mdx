@@ -3,30 +3,22 @@ title: What is PlanetScale?
 description: The concepts behind PlanetScale — organizations, databases, the Postgres and Vitess engines, cluster sizes, branches, credentials, connections, migrations and backups — and how @alchemy.run/planetscale models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 PlanetScale runs databases for you: Postgres, or MySQL on Vitess. It runs each one as a **cluster** with replicas across zones, and lets you **branch** a database the way you branch code, so every pull request can have its own copy of the schema to test against.
 
 Take one small app: a Postgres database with a production branch, a branch per preview stage, and a role for the app to connect with. An organization holds the database. The database has a production branch and a branch per preview, and each branch has its own roles, which hand connection details to the app.
 
-<DAG
+<Tree
   nodes={[
-    { id: "prod", label: "Api", type: "prod stage", col: 0, row: 0 },
-    { id: "preview", label: "Api", type: "pr-42 stage", col: 0, row: 1 },
-    { id: "primary", label: "primary", type: "read · write", tone: "accent", col: 1, row: 0 },
-    { id: "replicas", label: "replicas", type: "read-only", col: 2, row: 0 },
-    { id: "dev", label: "primary", type: "development size", col: 1, row: 1 },
-  ]}
-  groups={[
-    { id: "org", label: "Organization acme", nodes: [] },
-    { id: "db", label: "Database app-db · Postgres · us-east", parent: "org", nodes: [], dashed: true },
-    { id: "main", label: "Branch main · production", parent: "db", nodes: ["primary", "replicas"], dashed: true },
-    { id: "pr", label: "Branch pr-42 · development", parent: "db", nodes: ["dev"], dashed: true },
-  ]}
-  edges={[
-    { from: "prod", to: "main", label: "role" },
-    { from: "preview", to: "pr", label: "role" },
-    { from: "primary", to: "replicas", label: "replicates", dashed: true },
+    { id: "org", label: "acme", type: "organization", icon: "brand:planetscale" },
+    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", wide: true, dashed: true, icon: "database" },
+    { id: "main", label: "main", type: "branch · production", parent: "db", dashed: true, icon: "git-branch" },
+    { id: "primary", label: "primary", type: "read · write", parent: "main", tone: "accent", icon: "server", specs: [["role", "prod stage"]] },
+    { id: "replicas", label: "replicas", type: "read-only", parent: "main", icon: "copy", specs: [["from", "primary"]] },
+    { id: "pr", label: "pr-42", type: "branch · development", parent: "db", dashed: true, icon: "git-branch" },
+    { id: "dev", label: "primary", type: "development size", parent: "pr", icon: "server", specs: [["role", "pr-42 stage"]] },
   ]}
   caption="An organization holds databases, each in one region. A database holds branches, and each branch is its own cluster: production with replicas, development as one small node. Each stage connects through a role on its branch."
 />

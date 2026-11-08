@@ -3,33 +3,24 @@ title: What is Docker?
 description: The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Docker packages a program with everything it needs to run, its runtime, libraries and files, into an **image**, and runs images as isolated **containers**. The same image runs the same way on your laptop, in CI and on a server, which is why most cloud platforms take images as the unit of deployment.
 
 Take one small setup: Postgres in a container, with its data on a volume, reachable by name on a network. A context points at an engine, which holds everything else. The engine runs images as containers, which reach each other by name on a network and keep their data on a volume.
 
-<DAG
+<Tree
   nodes={[
-    { id: "ctx", label: "context", type: "local or ssh://vps", col: 0, row: 1 },
-    { id: "pgImage", label: "postgres:18", type: "image", col: 1, row: 0 },
-    { id: "apiImage", label: "api", type: "image · built", col: 2, row: 0 },
-    { id: "pg", label: "postgres", type: "container", tone: "accent", col: 1, row: 1 },
-    { id: "api", label: "api", type: "container", col: 2, row: 1 },
-    { id: "vol", label: "postgres-data", type: "volume", col: 1, row: 2 },
+    { id: "engine", label: "dockerd", type: "engine · local or ssh://vps", icon: "brand:docker" },
+    { id: "pgImage", label: "postgres:18", type: "image", parent: "engine", icon: "package" },
+    { id: "apiImage", label: "api", type: "image · built", parent: "engine", icon: "package" },
+    { id: "vol", label: "postgres-data", type: "volume", parent: "engine", icon: "hard-drive" },
+    { id: "net", label: "app-network", type: "network", parent: "engine", wide: true, dashed: true, icon: "network" },
+    { id: "pg", label: "postgres", type: "container", parent: "net", tone: "accent", icon: "container", specs: [["runs", "postgres:18"], ["mounts", "postgres-data"]] },
+    { id: "api", label: "api", type: "container", parent: "net", icon: "container", specs: [["runs", "api"], ["calls", "postgres:5432"]] },
   ]}
-  groups={[
-    { id: "engine", label: "Engine dockerd", nodes: ["pgImage", "apiImage", "vol"] },
-    { id: "net", label: "Network app-network", parent: "engine", nodes: ["pg", "api"], dashed: true },
-  ]}
-  edges={[
-    { from: "ctx", to: "engine", label: "points at" },
-    { from: "pgImage", to: "pg", label: "runs as" },
-    { from: "apiImage", to: "api", label: "runs as" },
-    { from: "api", to: "pg", label: "postgres:5432" },
-    { from: "pg", to: "vol", label: "mounts" },
-  ]}
-  caption="An engine holds images, containers, networks and volumes. Containers run from images, reach each other by name on a shared network, and keep their data on volumes."
+  caption="A context points Alchemy at an engine, on your machine or a server over SSH. The engine holds images, containers, networks and volumes. Containers run from images, reach each other by name on a shared network, and keep their data on volumes."
 />
 
 ## The engine and contexts

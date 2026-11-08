@@ -3,32 +3,25 @@ title: What is Prisma?
 description: The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Prisma's data platform runs two things for you: **Prisma Postgres**, a serverless Postgres database, and **Prisma Compute**, a runtime for the apps that use it. A **project** holds both, so an app and its database are deployed side by side, and the app finds its database without any configuration.
 
 Take one small app: an API on Compute with a Postgres database, and a branch per preview. A workspace holds the project. Each branch of the project has its own database and app, and the app receives its database's `DATABASE_URL`.
 
-<DAG
+<Tree
   nodes={[
-    { id: "token", label: "Service token", type: "one workspace", col: 0, row: 0 },
-    { id: "db", label: "db", type: "Prisma Postgres", col: 1, row: 0 },
-    { id: "app", label: "api", type: "Compute app", tone: "accent", col: 2, row: 0 },
-    { id: "db2", label: "db", type: "Prisma Postgres", col: 1, row: 1 },
-    { id: "app2", label: "api", type: "Compute app", col: 2, row: 1 },
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:prisma" },
+    { id: "project", label: "app", type: "project · us-east-1", parent: "ws", wide: true, dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch · production", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "db", label: "db", type: "Prisma Postgres", parent: "main", icon: "database" },
+    { id: "app", label: "api", type: "Compute app", parent: "main", tone: "accent", icon: "server", specs: [["DATABASE_URL", "db"]] },
+    { id: "pr", label: "pr-42", type: "branch · preview", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "db2", label: "db", type: "Prisma Postgres", parent: "pr", icon: "database" },
+    { id: "app2", label: "api", type: "Compute app", parent: "pr", icon: "server", specs: [["DATABASE_URL", "db"]] },
   ]}
-  groups={[
-    { id: "ws", label: "Workspace acme", nodes: [] },
-    { id: "project", label: "Project app · us-east-1", parent: "ws", nodes: [], dashed: true },
-    { id: "main", label: "Branch main · production", parent: "project", nodes: ["db", "app"], dashed: true },
-    { id: "pr", label: "Branch pr-42 · preview", parent: "project", nodes: ["db2", "app2"], dashed: true },
-  ]}
-  edges={[
-    { from: "token", to: "ws", label: "deploy" },
-    { from: "db", to: "app", label: "DATABASE_URL" },
-    { from: "db2", to: "app2", label: "DATABASE_URL" },
-  ]}
-  caption="A workspace holds projects. Each branch of a project groups a database and the apps that use it. The first branch is production, the rest are previews."
+  caption="A workspace holds projects, and a service token deploys into one workspace. Each branch of a project groups a database and the apps that use it. The first branch is production, the rest are previews."
 />
 
 ## Workspaces and tokens
