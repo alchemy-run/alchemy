@@ -1,11 +1,10 @@
 import * as AwsCredentials from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
-import type * as Presign from "@distilled.cloud/aws/Presign";
+import * as Presign from "@distilled.cloud/aws/Presign";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
-import type { PresignError } from "./BucketTypes.ts";
 import { makeS3Credentials, type S3CredentialsAccess } from "./S3Credentials.ts";
 
 /**
@@ -18,17 +17,10 @@ import { makeS3Credentials, type S3CredentialsAccess } from "./S3Credentials.ts"
  *
  * NOT exported from `index.ts`.
  */
-export const makePresignBinding = <Request>(options: {
+export const makePresignBinding = <I, O, E, R>(options: {
   name: string;
   access: S3CredentialsAccess;
-  presign: (
-    bucketName: string,
-    request: Request,
-  ) => Effect.Effect<
-    Presign.PresignedRequest,
-    PresignError,
-    AwsCredentials.Credentials | AwsEndpoint.Endpoint
-  >;
+  operation: Parameters<typeof Presign.presignRequest<I, O, E, R>>[0];
 }) =>
   Effect.gen(function* () {
     // Resolved once at layer construction and provided to each bind, so the
@@ -38,9 +30,16 @@ export const makePresignBinding = <Request>(options: {
 
     return Effect.fn(function* (bucket: Bucket) {
       const credentials = yield* makeS3Credentials(host, env, bucket, options.access);
-      return Effect.fn(`${options.name}(${bucket.LogicalId})`)(function* (request: Request) {
+      return Effect.fn(`${options.name}(${bucket.LogicalId})`)(function* ({
+        expiresIn,
+        ...input
+      }: Omit<I, "Bucket" | "Body"> & { expiresIn?: number }) {
         const s3 = yield* credentials;
-        return yield* options.presign(s3.bucketName, request).pipe(
+        return yield* Presign.presignRequest(
+          options.operation,
+          { ...input, Bucket: s3.bucketName } as unknown as Omit<I, "Body">,
+          { expiresIn },
+        ).pipe(
           Effect.provideService(
             AwsCredentials.Credentials,
             Effect.succeed({
@@ -50,10 +49,7 @@ export const makePresignBinding = <Request>(options: {
               region: s3.region,
             }),
           ),
-          Effect.provideService(
-            AwsEndpoint.Endpoint,
-            Effect.succeed(s3.endpoint.replace(/\/+$/, "")),
-          ),
+          Effect.provide(AwsEndpoint.of(s3.endpoint.replace(/\/+$/, ""))),
         );
       });
     });

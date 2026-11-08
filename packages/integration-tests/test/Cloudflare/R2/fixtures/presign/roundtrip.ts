@@ -1,4 +1,5 @@
 import { expect } from "@alchemy.run/test";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
@@ -82,18 +83,12 @@ export const presignRoundTrip = (workerUrl: string, key: string) =>
     return { putUrl, getUrl };
   });
 
-interface Presigned {
-  method: string;
-  url: string;
-  headers: Record<string, string>;
-}
-
 const presign = (url: string, input: object) =>
   until(
     expectStatus(
       HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(input)),
       200,
-    ).pipe(Effect.map((body) => JSON.parse(body) as Presigned)),
+    ).pipe(Effect.map((body) => JSON.parse(body) as Presign.PresignedRequest)),
   );
 
 /**

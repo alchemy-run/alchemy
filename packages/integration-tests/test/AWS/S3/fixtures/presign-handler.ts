@@ -66,30 +66,6 @@ export default S3PresignTestFunction.make(
           return yield* HttpServerResponse.json({ bucketName });
         }
 
-        if (request.method === "GET" && pathname === "/presign-get") {
-          if (!key) return requireKey();
-          const expiresIn = url.searchParams.get("expiresIn");
-          const contentType = url.searchParams.get("contentType");
-          const presigned = yield* presignGetObject({
-            Key: key,
-            expiresIn: expiresIn ? Number(expiresIn) : undefined,
-            ResponseContentType: contentType ?? undefined,
-          });
-          return yield* HttpServerResponse.json({ url: presigned.url });
-        }
-
-        if (request.method === "GET" && pathname === "/presign-put") {
-          if (!key) return requireKey();
-          const expiresIn = url.searchParams.get("expiresIn");
-          const contentType = url.searchParams.get("contentType");
-          const presigned = yield* presignPutObject({
-            Key: key,
-            expiresIn: expiresIn ? Number(expiresIn) : undefined,
-            ContentType: contentType ?? undefined,
-          });
-          return yield* HttpServerResponse.json({ url: presigned.url });
-        }
-
         // The request as JSON (any field of the binding's input) → the
         // presigned request (`url`, `method`, `headers`).
         if (request.method === "POST" && pathname === "/presign-get") {

@@ -24,7 +24,7 @@ export interface PresignPutObjectRequest extends Omit<S3.PutObjectRequest, "Buck
  * signed into the URL, the others (`ContentType`, `ContentLength`,
  * `IfNoneMatch`, `ContentMD5`, checksums, ...) come back in `headers`, which
  * the uploader must send as they are or R2 rejects the upload. R2
- * implements a subset of S3's fields; see [R2's S3 API
+ * implements a subset of S3's fields. See [R2's S3 API
  * compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
  *
  * Presigning is a pure SigV4 computation against R2's S3-compatible API — no

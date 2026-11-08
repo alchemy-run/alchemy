@@ -1,5 +1,5 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
-import type * as Presign from "@distilled.cloud/aws/Presign";
+import * as Presign from "@distilled.cloud/aws/Presign";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -94,20 +94,19 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
   });
 
 /**
- * A presigner in the shape `makeBucketHttpBinding` takes as its operation:
- * `sign` runs with the host's credentials, on the request with `Bucket`
- * injected.
+ * `operation` presigned instead of sent, in the shape `makeBucketHttpBinding`
+ * takes: the callable takes the operation's input without `Body`, plus
+ * `expiresIn`, and returns the presigned request, signed with the host's
+ * credentials.
  */
-export const presign = <I extends { Bucket?: string }>(
-  sign: (
-    request: I,
-  ) => Effect.Effect<
-    Presign.PresignedRequest,
-    Presign.PresignRequestError,
-    Credentials.Credentials
-  >,
+export const presign = <I, O, E, R>(
+  operation: Parameters<typeof Presign.presignRequest<I, O, E, R>>[0],
 ) =>
   Effect.map(
     Effect.context<Credentials.Credentials>(),
-    (context) => (request: I) => sign(request).pipe(Effect.provideContext(context)),
+    (context) =>
+      ({ expiresIn, ...input }: Omit<I, "Body"> & { expiresIn?: number }) =>
+        Presign.presignRequest(operation, input as unknown as Omit<I, "Body">, {
+          expiresIn,
+        }).pipe(Effect.provideContext(context)),
   );

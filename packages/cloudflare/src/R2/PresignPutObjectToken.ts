@@ -1,8 +1,7 @@
-import * as Presign from "@distilled.cloud/aws/Presign";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PresignPutObject, type PresignPutObjectRequest } from "./PresignPutObject.ts";
+import { PresignPutObject } from "./PresignPutObject.ts";
 import { makePresignBinding } from "./PresignToken.ts";
 
 /**
@@ -26,8 +25,7 @@ export const PresignPutObjectToken = Layer.effect(
     makePresignBinding({
       name: "Cloudflare.R2.PresignPutObject",
       access: "write",
-      presign: (Bucket, { expiresIn, ...request }: PresignPutObjectRequest) =>
-        Presign.presignRequest(S3.putObject, { ...request, Bucket }, { expiresIn }),
+      operation: S3.putObject,
     }),
   ),
 );
