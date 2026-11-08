@@ -12,7 +12,7 @@ import {
 } from "alchemy/Mount";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import type { Resource, ResourceBinding } from "alchemy/Resource";
+import type { LookupMethod, Resource, ResourceBinding } from "alchemy/Resource";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
@@ -209,8 +209,18 @@ export type Sandbox = Resource<
   SandboxProps,
   SandboxAttributes,
   SandboxBinding,
-  Providers
+  Providers,
+  SandboxLookup
 >;
+
+/**
+ * Props for {@link Sandbox.lookup}: find a sandbox this stack
+ * doesn't manage by its name.
+ */
+export interface SandboxLookup {
+  /** Sandbox name. */
+  name: string;
+}
 
 export type SandboxShape = Main<ServerHost>;
 
@@ -447,31 +457,41 @@ export type SandboxShape = Main<ServerHost>;
  * const fork = yield* preview.fork({ name: "pr-42" });
  * ```
  *
+ * ### Looking up an existing sandbox
+ * `Sandbox.lookup` references a sandbox Alchemy doesn't manage (created in
+ * the Archil console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Its program fields are `undefined`: they come from the deploy that started
+ * the sandbox's program.
+ *
+ * **Example:** Reference an existing sandbox
+ * ```typescript
+ * const box = Archil.Sandbox.lookup({ name: "research" });
+ * ```
+ *
  * @resource
  * @product Sandbox
  */
-export const Sandbox: Platform<Sandbox, ServerHost, SandboxShape, HostRuntimeContext> = Platform(
-  "Archil.Sandbox",
-  {
-    createRuntimeContext: createHostRuntimeContext("Archil.Sandbox"),
-    // `{ disk: Workspace }` at module scope is an Effect: yield it here so
-    // the disk is registered and `news.mounts[i].disk` resolves to its
-    // attributes.
-    transformProps: (_id, props) =>
-      Effect.gen(function* () {
-        if (globalThis.__ALCHEMY_RUNTIME__ || props?.mounts === undefined) return props;
-        const mounts: DiskMount[] = [];
-        for (const mount of props.mounts as DiskMount[]) {
-          mounts.push(
-            Effect.isEffect(mount.disk)
-              ? { ...mount, disk: yield* mount.disk as Effect.Effect<Disk, never, Providers> }
-              : mount,
-          );
-        }
-        return { ...props, mounts };
-      }),
-  },
-);
+export const Sandbox: Platform<Sandbox, ServerHost, SandboxShape, HostRuntimeContext> &
+  LookupMethod<Sandbox> = Platform("Archil.Sandbox", {
+  createRuntimeContext: createHostRuntimeContext("Archil.Sandbox"),
+  // `{ disk: Workspace }` at module scope is an Effect: yield it here so
+  // the disk is registered and `news.mounts[i].disk` resolves to its
+  // attributes.
+  transformProps: (_id, props) =>
+    Effect.gen(function* () {
+      if (globalThis.__ALCHEMY_RUNTIME__ || props?.mounts === undefined) return props;
+      const mounts: DiskMount[] = [];
+      for (const mount of props.mounts as DiskMount[]) {
+        mounts.push(
+          Effect.isEffect(mount.disk)
+            ? { ...mount, disk: yield* mount.disk as Effect.Effect<Disk, never, Providers> }
+            : mount,
+        );
+      }
+      return { ...props, mounts };
+    }),
+});
 
 /**
  * Map a sandbox and its exposed ports to attributes. Archil lists port
@@ -824,6 +844,11 @@ export const SandboxProvider = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const sandbox = yield* findSandboxByName(name);
+          return sandbox ? yield* observeSandbox(sandbox) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* sandboxName(id, olds?.name));
           const sandbox =

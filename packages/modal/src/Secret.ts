@@ -118,12 +118,44 @@ export interface SecretAttributes {
  * yield* openai.put({ OPENAI_API_KEY: newKey });
  * ```
  *
+ * ### Looking up an existing secret
+ * `Secret.lookup` references a secret Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted. Its values are never read; `keys` lists their
+ * names.
+ *
+ * **Example:** Reference an existing secret
+ * ```typescript
+ * const openai = Modal.Secret.lookup({ name: "openai" });
+ * ```
+ *
  * @resource
  * @product Secret
  */
 export const Secret = declarable<Secret>()(Resource<Secret>("Modal.Secret"));
 
-export type Secret = Resource<"Modal.Secret", SecretProps, SecretAttributes, never, Providers>;
+export type Secret = Resource<
+  "Modal.Secret",
+  SecretProps,
+  SecretAttributes,
+  never,
+  Providers,
+  SecretLookup
+>;
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack
+ * doesn't manage by its name.
+ */
+export interface SecretLookup {
+  /** Secret name. */
+  name: string;
+  /**
+   * Modal environment the object lives in.
+   * @default the workspace's default environment
+   */
+  environment?: string;
+}
 
 const plainEnv = (env: Record<string, string | Redacted.Redacted<string>>) =>
   Object.fromEntries(
@@ -198,6 +230,10 @@ export const SecretProvider = () =>
           if (output !== undefined && name !== output.name) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name, environment }) {
+          return yield* lookupSecret(yield* secret.secretGetOrCreate, name, environment);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const observed = yield* lookupSecret(

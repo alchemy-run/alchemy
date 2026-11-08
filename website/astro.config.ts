@@ -46,6 +46,7 @@ function providersSidebarEntry() {
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
+      { label: "Boat", link: "/boat" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1490,18 +1491,38 @@ export default defineConfig({
           label: "Modal",
           items: [
             { label: "Overview", link: "/modal" },
+            { label: "What is Modal?", link: "/modal/what-is-modal" },
             { label: "Setup", link: "/modal/setup" },
-            { label: "Concepts", link: "/modal/concepts" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "modal/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces & tokens", link: "/modal/workspaces-and-tokens" },
+                { label: "Access control", link: "/modal/security/access-control" },
+                { label: "Secrets", link: "/modal/security/secrets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/modal/compute/choosing-a-runtime" },
+                { label: "Functions", link: "/modal/services/functions" },
+                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
+                { label: "Servers", link: "/modal/services/servers" },
+                { label: "Autoscaling", link: "/modal/services/autoscaling" },
+                { label: "Call Python functions", link: "/modal/services/calling-python" },
+                { label: "Operate services", link: "/modal/services/operating" },
+              ],
+            },
+            {
               label: "Sandboxes",
               items: [
                 { label: "Sandboxes", link: "/modal/sandboxes/sandboxes" },
-                { label: "Programs", link: "/modal/sandboxes/programs" },
                 { label: "Images", link: "/modal/sandboxes/images" },
+                { label: "Programs", link: "/modal/sandboxes/programs" },
                 { label: "Snapshots", link: "/modal/sandboxes/snapshots" },
                 { label: "Persistent sandboxes", link: "/modal/sandboxes/persistent" },
               ],
@@ -1515,22 +1536,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Security",
-              items: [
-                { label: "Network & secrets", link: "/modal/security/network-and-secrets" },
-                { label: "Access control", link: "/modal/security/access-control" },
-              ],
-            },
-            {
-              label: "Services",
-              items: [
-                { label: "Functions", link: "/modal/services/functions" },
-                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
-                { label: "Servers", link: "/modal/services/servers" },
-                { label: "Operate services", link: "/modal/services/operating" },
-                { label: "Call Python functions", link: "/modal/services/calling-python" },
-                { label: "Autoscaling", link: "/modal/services/autoscaling" },
-              ],
+              label: "Networking",
+              items: [{ label: "Network & tunnels", link: "/modal/networking/network" }],
             },
             providerResourcesEntry("Modal"),
           ],
@@ -1592,6 +1599,38 @@ export default defineConfig({
               ]),
             },
             providerResourcesEntry("Archil"),
+          ],
+        },
+        {
+          label: "Boat",
+          items: [
+            { label: "Overview", link: "/boat" },
+            { label: "What is Boat?", link: "/boat/what-is-boat" },
+            { label: "Setup", link: "/boat/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "boat/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Account & API keys", link: "/boat/account-and-keys" }],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Choosing a runtime", link: "/boat/choosing-a-runtime" },
+                { label: "Sandboxes", link: "/boat/sandboxes" },
+                { label: "Programs", link: "/boat/programs" },
+                { label: "Snapshots & forks", link: "/boat/snapshots" },
+                { label: "Environments", link: "/boat/environments" },
+                { label: "Ports", link: "/boat/ports" },
+              ],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Webhooks", link: "/boat/webhooks" }],
+            },
+            providerResourcesEntry("Boat"),
           ],
         },
         {
@@ -1860,14 +1899,31 @@ export default defineConfig({
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
-                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Cloudflare", link: "/domain/cloudflare" },
+                { label: "Rivet", link: "/domain/rivet" },
+                { label: "Effect Cluster", link: "/domain/effect-cluster" },
+                { label: "In memory", link: "/domain/in-memory" },
               ],
             },
             {
               label: "Testing",
               items: [
+                { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Clients",
+              items: [
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
+                { label: "Agents over MCP", link: "/domain/mcp" },
               ],
             },
             {
@@ -1879,10 +1935,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Agents",
-              items: [{ label: "MCP", link: "/domain/mcp" }],
-            },
-            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1891,20 +1943,16 @@ export default defineConfig({
               ],
             },
             {
-              label: "Consistency patterns",
+              label: "Patterns",
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
               ],
             },
             {
-              label: "Hosting",
+              label: "Operations",
               items: [
-                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
-                { label: "In memory", link: "/domain/in-memory" },
-                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
-                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },
@@ -2147,13 +2195,14 @@ export default defineConfig({
             {
               label: "Building Actors",
               items: [
-                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Four ways to build Actors", link: "/rivet/actors" },
                 { label: "Durable Objects", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
                 { label: "Concurrency", link: "/rivet/concurrency" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
                 { label: "RivetKit Actors", link: "/rivet/rivetkit" },
                 { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+                { label: "Rust Actors", link: "/rivet/rivetkit-rust" },
               ],
             },
             {

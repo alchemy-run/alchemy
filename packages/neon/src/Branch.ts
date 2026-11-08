@@ -184,8 +184,20 @@ export type Branch = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  BranchLookup
 >;
+
+/**
+ * Props for {@link Branch.lookup}: find a branch this stack
+ * doesn't manage by its project and id.
+ */
+export interface BranchLookup {
+  /** Neon project id. */
+  projectId: string;
+  /** Branch id, e.g. `"br-quiet-dawn-12345678"`. */
+  branchId: string;
+}
 
 /**
  * A branch of a Neon project.
@@ -243,6 +255,20 @@ export type Branch = Resource<
  * ```
  *
  * @see https://neon.tech/docs/manage/branches/
+ *
+ * ### Looking up an existing branch
+ * `Branch.lookup` references a branch Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing branch
+ * ```typescript
+ * const preview = Neon.Branch.lookup({
+ *   projectId: "plain-wave-12345678",
+ *   branchId: "br-quiet-dawn-12345678",
+ * });
+ * const url = preview.connectionUri;
+ * ```
  *
  * @resource
  * @product Branch
@@ -344,6 +370,14 @@ export const BranchProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ projectId, branchId }) {
+      const found = yield* getProjectBranch({ project_id: projectId, branch_id: branchId }).pipe(
+        Effect.map(({ branch }) => branch),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+      return found === undefined ? undefined : yield* hydrateBranch(projectId, found);
+    }),
+
     read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.branchId) {
         return yield* getProjectBranch({

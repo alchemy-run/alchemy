@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as queue from "@distilled.cloud/modal/queue";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -23,6 +24,7 @@ test.provider(
           return yield* Modal.Queue("Queue", {});
         }),
       );
+      yield* expectFound(Modal.Queue.lookup({ name: first.name }), first);
       expect(yield* exists(first.queueId)).toBe(true);
 
       const again = yield* stack.deploy(

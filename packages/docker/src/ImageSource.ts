@@ -1,7 +1,6 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -11,6 +10,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts";
+import { hashDockerBuildInputs } from "./BuildHash.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -374,19 +374,21 @@ export const computeStaticSourceHash = Effect.fn(function* (
         buildArgs: source.build?.args,
       })).slice(0, 16);
     }
-    const fs = yield* FileSystem.FileSystem;
     const { context, dockerfile } = yield* resolveContextPaths({
       context: source.context!,
       dockerfile: source.dockerfile,
     });
-    const contextHash = yield* hashDirectory({ cwd: context });
-    const dockerfileContent = yield* fs.readFileString(dockerfile);
-    return (yield* sha256Object({
-      contextHash,
-      dockerfile: dockerfileContent,
-      platform: platform ?? "linux/amd64",
-      buildArgs: source.build?.args,
-    })).slice(0, 16);
+    // Hash what Docker receives: the context `.dockerignore` keeps (never a
+    // lockfile above it), the Dockerfile, platform and build args.
+    return (yield* hashDockerBuildInputs(
+      {
+        context,
+        dockerfile,
+        platform: platform ?? "linux/amd64",
+        buildArgs: source.build?.args,
+      },
+      "effective",
+    )).slice(0, 16);
   }
   return undefined;
 });
@@ -507,14 +509,15 @@ export const makeContainerImageSource = Effect.gen(function* () {
     const isPathEnv = df !== undefined && !isInlineDockerfile(df);
     let envIdentity: Record<string, string> = {};
     if (isPathEnv) {
-      const fs = yield* FileSystem.FileSystem;
       const { context, dockerfile } = yield* resolveContextPaths({
         context: options.source.context!,
         dockerfile: df,
       });
       envIdentity = {
-        envContextHash: yield* hashDirectory({ cwd: context }),
-        envDockerfile: yield* fs.readFileString(dockerfile),
+        envContextHash: yield* hashDockerBuildInputs(
+          { context, dockerfile, platform: options.platform },
+          "effective",
+        ),
       };
     }
     const dockerfile = generateDockerfile(

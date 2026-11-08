@@ -3,37 +3,24 @@ title: What is Rivet?
 description: The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 [Rivet](https://rivet.dev) is an open-source platform for stateful programs called **Actors**. An Actor is a small, long-lived program with a name and its own data: one chat room, one game, one user's session. Rivet's **control plane** keeps every Actor's data and routes calls to it by name, and a **pool** of nodes runs the Actors' code.
 
 Take one small app: chat rooms. Each room is an Actor, and an API calls a room by its name. The API sends every call to the control plane's **gateway**, with a token. The control plane finds the room, starting it on a node in its pool if it's asleep, and the room answers from its own data. The nodes connect out to the control plane and take no traffic from anywhere else.
 
-<DAG
+<Tree
   nodes={[
-    { id: "api", label: "Api", type: "Worker or Lambda", col: 0, row: 1 },
-    { id: "gateway", label: "Gateway", type: "HTTPS", col: 1, row: 1, tone: "accent" },
-    { id: "engine", label: "Engine", type: "routes calls", col: 2, row: 1 },
-    { id: "data", label: "Instance data", type: "key-value, SQLite", col: 3, row: 1 },
-    { id: "lobby", label: "lobby", type: "Room", col: 0, row: 3 },
-    { id: "kitchen", label: "kitchen", type: "Room", col: 1, row: 3 },
-    { id: "studio", label: "studio", type: "Transcoder", col: 3, row: 3 },
+    { id: "cp", label: "Control plane", type: "Rivet", icon: "brand:rivet" },
+    { id: "gateway", label: "Gateway", type: "HTTPS + token", parent: "cp", wide: true, tone: "accent", icon: "shield-check" },
+    { id: "ns", label: "dev", type: "namespace", parent: "cp", dashed: true, wide: true, icon: "folder" },
+    { id: "default", label: "Default", type: "pool · 2 nodes on AWS", parent: "ns", icon: "brand:aws" },
+    { id: "lobby", label: "lobby", type: "Room", parent: "default", icon: "circle-user-round" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "default", icon: "circle-user-round" },
+    { id: "media", label: "Media", type: "pool · 1 node on Fly", parent: "ns", icon: "brand:fly" },
+    { id: "studio", label: "studio", type: "Transcoder", parent: "media", icon: "circle-user-round" },
   ]}
-  groups={[
-    { id: "cp", label: "Control plane", nodes: ["gateway", "engine"] },
-    { id: "ns", label: "Namespace dev", parent: "cp", nodes: ["data"], dashed: true },
-    { id: "default", label: "Pool Default, on AWS", nodes: [] },
-    { id: "node1", label: "node 1", parent: "default", nodes: ["lobby"] },
-    { id: "node2", label: "node 2", parent: "default", nodes: ["kitchen"] },
-    { id: "media", label: "Pool Media, on Fly", nodes: [] },
-    { id: "node3", label: "node 1", parent: "media", nodes: ["studio"] },
-  ]}
-  edges={[
-    { from: "api", to: "gateway", label: "join() + token" },
-    { from: "default", to: "cp", label: "connects out" },
-    { from: "media", to: "cp", label: "connects out" },
-  ]}
-  caption="Each pool is a set of nodes for its classes, on any cloud: Default runs the rooms, Media the transcoders. Both connect out to the control plane, which keeps every instance's data in the stage's namespace and routes each call to the node running it."
+  caption="Your Api calls a room through the gateway, with a token. The dev namespace holds the stage's pools and the actors they run. Each pool's nodes run on its own cloud and connect out to the control plane, which keeps every actor's data and routes each call to the node running it."
 />
 
 ## Durable Objects: a class and its instances
@@ -157,7 +144,7 @@ See [Rivet Cloud](/rivet/rivet-cloud).
 
 ## How @alchemy.run/rivet models these concepts
 
-A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects). Its methods, `fetch` and `alarm` become a Rivet Actor, its storage is `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway. Actors already written with RivetKit, async or Effect, deploy the same way; see [Three ways to build Actors](/rivet/actors).
+A Durable Object class is a [`Rivet.DurableObject`](/rivet/durable-objects). Its methods, `fetch` and `alarm` become a Rivet Actor, its storage is `Rivet.DurableObjectState`, and `yield* Room` gives any runtime a typed client that calls it through the gateway. Actors already written with RivetKit, in TypeScript, Effect or Rust, deploy the same way; see [Four ways to build Actors](/rivet/actors).
 
 A control plane is a Layer, one per place it can run. It creates the engines, disks, storage, HTTPS endpoint and admin token on that cloud, and a namespace for your stage. A pool is a Layer too, given the control plane it joins, and so is a Services pool:
 

@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as secret from "@distilled.cloud/modal/secret";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -24,6 +25,7 @@ test.provider(
           return yield* Modal.Secret("Secret", { env: { A: "1", B: Redacted.make("2") } });
         }),
       );
+      yield* expectFound(Modal.Secret.lookup({ name: created.name }), created);
       expect(yield* keysOf(created.secretId)).toEqual(["A", "B"]);
 
       const updated = yield* stack.deploy(

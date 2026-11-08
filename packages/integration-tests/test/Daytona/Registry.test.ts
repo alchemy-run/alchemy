@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as registries from "@distilled.cloud/daytona/docker_registry";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Daytona.providers() });
 
@@ -24,6 +25,7 @@ test.provider(
           project: "alchemy-run",
         }),
       );
+      yield* expectFound(Daytona.Registry.lookup({ name: created.name }), created);
       const observed = yield* registries.getRegistry({ id: created.registryId });
       expect(observed.url).toEqual("ghcr.io");
       expect(observed.username).toEqual("alchemy-test");

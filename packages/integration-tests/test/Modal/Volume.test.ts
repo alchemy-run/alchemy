@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as volume from "@distilled.cloud/modal/volume";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -23,6 +24,7 @@ test.provider(
           return yield* Modal.Volume("Volume", {});
         }),
       );
+      yield* expectFound(Modal.Volume.lookup({ name: created.name }), created);
       expect(created.version).toBe(2);
       expect(yield* named(created.volumeId)).toBe(created.name);
 

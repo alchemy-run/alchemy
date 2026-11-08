@@ -66,7 +66,23 @@ export interface ImageAttributes {
   hash: string;
 }
 
-export type Image = Resource<"Archil.Image", ImageProps, ImageAttributes, never, Providers>;
+export type Image = Resource<
+  "Archil.Image",
+  ImageProps,
+  ImageAttributes,
+  never,
+  Providers,
+  ImageLookup
+>;
+
+/**
+ * Props for {@link Image.lookup}: find an image this stack
+ * doesn't manage by its id.
+ */
+export interface ImageLookup {
+  /** Archil image id. */
+  imageId: string;
+}
 
 /**
  * The image needs instructions run on top of its base, and Archil only
@@ -126,6 +142,17 @@ export class ImageRequiresBuild extends Data.TaggedError("Archil.ImageRequiresBu
  * ```typescript
  * const sandboxes = yield* Archil.CreateSandbox(Agent);
  * const sandbox = yield* sandboxes.create({ name: "task-1" });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references an image Alchemy doesn't manage (created in
+ * the Archil console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * `hash` is empty: the image wasn't built by this stack.
+ *
+ * **Example:** Reference an existing image
+ * ```typescript
+ * const base = Archil.Image.lookup({ imageId: "img_123" });
  * ```
  *
  * @resource
@@ -236,6 +263,13 @@ export const ImageProvider = () =>
           if (plan.hash !== output.hash) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ imageId }) {
+          return yield* archil.getImage({ image_id: imageId }).pipe(
+            Effect.map(({ data }) => toImageAttributes(data, "")),
+            Effect.catchTag("ImageNotFound", () => Effect.undefined),
+          );
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           return yield* archil.getImage({ image_id: output.imageId }).pipe(

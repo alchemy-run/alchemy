@@ -23,6 +23,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -61,6 +62,10 @@ describe.concurrent(
             const branch = yield* Branch("ListBranch", { project });
             return { project, branch };
           }),
+        );
+        yield* expectFound(
+          Branch.lookup({ projectId: branch.projectId, branchId: branch.branchId }),
+          branch,
         );
 
         const provider = yield* Provider.findProvider(Branch);
