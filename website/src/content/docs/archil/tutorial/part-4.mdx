@@ -1,6 +1,6 @@
 ---
-title: "Part 4: Update the Disk"
-description: Add to the seeded Archil disk, redeploy, and see every new command and copy get it while existing copies keep theirs.
+title: "Part 4: Update the Sandbox"
+description: Change the commands that set up the Archil sandbox, redeploy, and see new forks start from the new one while existing forks keep theirs.
 sidebar:
   order: 4
 ---
@@ -9,30 +9,29 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Add a command
 
-Clone a second repository onto the disk:
+Clone a second repository onto `Golden`:
 
 ```diff lang="typescript"
-// src/Storage.ts
-  return yield* Archil.Checkpoint("Base", {
-    disk: repo.diskId,
-    run: [
-      "test -d is || git clone --depth 1 https://github.com/sindresorhus/is is",
-+      "test -d slugify || git clone --depth 1 https://github.com/sindresorhus/slugify slugify",
-    ],
-  });
+// src/Golden.ts
+export const Golden = Archil.Sandbox("Golden", {
+  run: [
+    "git clone --depth 1 https://github.com/sindresorhus/is /work/is",
++    "git clone --depth 1 https://github.com/sindresorhus/slugify /work/slugify",
+  ],
+});
 ```
 
-## Deploy the new base
+## Deploy the new sandbox
 
 <PackageManagers run="alchemy deploy" />
 
-The commands changed, so Alchemy runs them again against `Repo` and takes a new checkpoint. `is` is already there and is skipped; `slugify` is cloned. The program is unchanged and isn't redeployed.
+The commands changed, so Alchemy replaces `Golden`: it creates a new sandbox, runs every command in it, and deletes the old one. The program forks whatever `Golden` is now, and isn't redeployed.
 
 <PackageManagers script={`curl -X POST "$URL/run" -d 'ls ..'`} />
 
-## Existing copies keep theirs
+## Existing forks keep theirs
 
-Every command `POST /run` starts mounts `Repo`, so it sees `slugify` right away. A user's disk is a copy taken on their first request, so users who already have one keep it, with their changes and without `slugify`. Users who arrive after the deploy copy the new base. To move a user onto it, delete their disk; their next request copies it again.
+A fork is a copy taken when it was created. Users who already have one keep it, with their changes and without `slugify`. Users who arrive after the deploy fork the new `Golden`. To move a user onto it, delete their fork; their next request forks it again.
 
 ## Next
 

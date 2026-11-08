@@ -1,48 +1,47 @@
 ---
-title: "Part 2: Run Commands Against It"
-description: A program in its own Archil sandbox that runs each command in a fresh microVM with the seeded disk mounted read-only.
+title: "Part 2: Fork It for Each Request"
+description: A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
 sidebar:
   order: 2
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Write the program
+## Bind CreateSandbox to the sandbox
 
 ```typescript title="src/Api.ts"
 import * as Archil from "@alchemy.run/archil";
 import * as Effect from "effect/Effect";
-import { Repo } from "./Storage.ts";
+import { Golden } from "./Golden.ts";
 
 export default class Api extends Archil.Sandbox<Api>()(
   "Api",
   { main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    const repo = yield* Repo;
-    const repoId = yield* repo.diskId;
-    const exec = yield* Archil.ExecDisks();
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
     return {};
-  }).pipe(Effect.provide(Archil.ExecDisksHttp)),
+  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
 ) {}
 ```
 
-`Api` is a program Alchemy runs in an Archil sandbox of its own, at a public URL. `ExecDisks` runs commands against disks named while it runs. `repoId` reads `Repo`'s id when the program runs.
+`Api` is a program Alchemy runs in an Archil sandbox of its own, at a public URL. Bound to `Golden`, every sandbox this client creates is a fork of it: its memory and disk, with the repository already cloned.
 
-## Run a command in a fresh microVM
+## Run a command in a fresh fork
 
 ```diff lang="typescript"
 // src/Api.ts
-    const exec = yield* Archil.ExecDisks();
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
 +
 +    const run = Effect.fn("run")(function* (command: string) {
-+      return yield* exec.exec({
-+        disks: { base: { disk: yield* repoId, readOnly: true } },
-+        command: `cd /mnt/archil/base/is && ${command}`,
-+      });
++      const id = (yield* Random.nextIntBetween(0, 2 ** 31)).toString(36);
++      const sandbox = yield* Effect.acquireRelease(sandboxes.create({ name: `run-${id}` }), (sandbox) =>
++        Effect.ignore(sandbox.delete()),
++      );
++      return yield* sandbox.exec(command, { cwd: "/work/is" });
 +    });
 ```
 
-Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the command, and shuts it down. The repository is already there. The disk is mounted read-only, so no command can change it.
+A fork takes a fraction of a second whatever the disk's size, and writes to it never reach `Golden`. `acquireRelease` deletes the fork when the request's scope closes.
 
 ## Serve it
 
@@ -54,7 +53,7 @@ Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the co
 +        const request = yield* HttpServerRequest;
 +        const url = new URL(request.url, "http://api");
 +        if (request.method === "POST" && url.pathname === "/run") {
-+          return yield* HttpServerResponse.json(yield* run(yield* request.text));
++          return yield* HttpServerResponse.json(yield* run(yield* request.text).pipe(Effect.scoped));
 +        }
 +        return HttpServerResponse.text("not found", { status: 404 });
 +      }).pipe(Effect.orDie),
@@ -66,10 +65,10 @@ Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the co
 ```diff lang="typescript"
 // alchemy.run.ts
   Effect.gen(function* () {
-    const base = yield* Base;
--    return { checkpoint: base.name };
+    const golden = yield* Golden;
+-    return { sandbox: golden.name };
 +    const api = yield* Api;
-+    return { checkpoint: base.name, url: api.url };
++    return { sandbox: golden.name, url: api.url };
   }),
 ```
 
@@ -78,8 +77,8 @@ Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the co
 curl -X POST "$URL/run" -d 'git log -1 --format=%s'`}
 />
 
-`Base` is unchanged, so this deploy only adds the program.
+`Golden` is unchanged, so this deploy only adds the program.
 
 ## Next
 
-[Part 3](/archil/tutorial/part-3) gives each user a copy of their own.
+[Part 3](/archil/tutorial/part-3) gives each user a fork of their own.

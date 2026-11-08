@@ -1,6 +1,6 @@
 ---
-title: "Part 1: Seed a Disk"
-description: Install Alchemy, declare an Archil disk, and seed it with a repository at deploy time.
+title: "Part 1: Set Up a Sandbox"
+description: Install Alchemy, and declare an Archil sandbox that clones a repository onto its disk at deploy time.
 sidebar:
   order: 1
 ---
@@ -9,7 +9,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pkgs = `alchemy@latest @alchemy.run/archil@latest effect @effect/platform-node`;
 
-Build an API that runs commands against a repository. The slow setup runs once, when you deploy: a disk with the repository cloned onto it. While the app runs, every command starts in a fresh microVM with that disk mounted, already set up.
+Build an API that gives agents sandboxes. The slow setup runs once, when you deploy: a sandbox with a repository cloned onto its disk. While the app runs, every sandbox is a fork of it, already set up.
 
 The finished code is in [`examples/archil-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/archil-sandbox).
 
@@ -24,30 +24,17 @@ The finished code is in [`examples/archil-sandbox`](https://github.com/alchemy-r
 
 <PackageManagers add={pkgs} />
 
-## Declare the disk
+## Declare the sandbox
 
-```typescript title="src/Storage.ts"
+```typescript title="src/Golden.ts"
 import * as Archil from "@alchemy.run/archil";
-import * as Effect from "effect/Effect";
 
-export const Repo = Archil.Disk("Repo", {});
-```
-
-A disk is a filesystem stored in object storage. `Repo` holds the repository every command runs against.
-
-## Seed it at deploy
-
-```typescript title="src/Storage.ts"
-export const Base = Effect.gen(function* () {
-  const repo = yield* Repo;
-  return yield* Archil.Checkpoint("Base", {
-    disk: repo.diskId,
-    run: ["test -d is || git clone --depth 1 https://github.com/sindresorhus/is is"],
-  });
+export const Golden = Archil.Sandbox("Golden", {
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work/is"],
 });
 ```
 
-At deploy, Alchemy runs the commands in a serverless microVM with `Repo` mounted, then takes a checkpoint of what they produced. The commands run on the same disk every time they change, so each one skips work that's already done.
+A sandbox is a Firecracker microVM whose root filesystem is a disk of its own. At deploy, Alchemy creates `Golden` and runs the `run` commands in it, in order. A command that exits non-zero fails the deploy.
 
 ## Create the Stack
 
@@ -55,26 +42,26 @@ At deploy, Alchemy runs the commands in a serverless microVM with `Repo` mounted
 import * as Archil from "@alchemy.run/archil";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import { Base } from "./src/Storage.ts";
+import { Golden } from "./src/Golden.ts";
 
 export default Alchemy.Stack(
   "ArchilSandboxExample",
   { providers: Archil.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    const base = yield* Base;
-    return { checkpoint: base.name };
+    const golden = yield* Golden;
+    return { sandbox: golden.name };
   }),
 );
 ```
 
-`Archil.providers()` reads your key from your Alchemy profile, and `Base` creates `Repo` first.
+`Archil.providers()` reads your key from your Alchemy profile.
 
 ## Deploy
 
 <PackageManagers run="alchemy deploy" />
 
-The disk shows up under **Disks** in the [Archil console](https://console.archil.com), with the repository on it.
+`Golden` shows up under **Sandboxes** in the [Archil console](https://console.archil.com), with the repository in `/work/is`. A deploy that leaves the commands unchanged leaves it alone. When it's idle, it pauses.
 
 ## Next
 
-[Part 2](/archil/tutorial/part-2) runs commands against it while the app runs.
+[Part 2](/archil/tutorial/part-2) forks it while the app runs.

@@ -1,6 +1,6 @@
 ---
 title: "Part 6: Stages and CI"
-description: Deploy a stage per environment and per pull request, each with its own Archil base disk and program, from GitHub Actions.
+description: Deploy a stage per environment and per pull request, each with its own set-up Archil sandbox and program, from GitHub Actions.
 sidebar:
   order: 6
 ---
@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-Each stage gets its own `Repo` disk, seeded by its own checkpoint, and its own program at its own URL, so changing the disk in one stage never reaches another. Without `--stage`, Alchemy deploys to `live_$USER`.
+Each stage gets its own `Golden` sandbox, set up by its own commands, and its own program at its own URL, so changing `Golden` in one stage never reaches another. Without `--stage`, Alchemy deploys to `live_$USER`.
 
 ## Move state somewhere CI can read
 
@@ -89,7 +89,7 @@ jobs:
       - run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
 ```
 
-Pull requests deploy to `pr-<number>`, each with its own base, and `main` deploys to `prod`. The cleanup job destroys a closed pull request's stage, and refuses to destroy `prod`.
+Pull requests deploy to `pr-<number>`, each with its own `Golden`, and `main` deploys to `prod`. The cleanup job destroys a closed pull request's stage, and refuses to destroy `prod`.
 
 ## Rotate the key
 

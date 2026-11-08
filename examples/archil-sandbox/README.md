@@ -1,9 +1,9 @@
 # Archil Sandbox
 
-Seed a disk at deploy time, and run commands against it while the app runs.
+Set up a sandbox at deploy time, and fork it while the app runs.
 
-- `src/Storage.ts`: a `Repo` disk with repositories cloned onto it by an `Archil.Checkpoint` at deploy.
-- `src/Api.ts`: a program in its own `Archil.Sandbox`. `POST /run` runs a command in a fresh microVM with `Repo` mounted read-only. `/users/:user/...` gives each user a disk of their own, copied from the base on their first request.
+- `src/Golden.ts`: an `Archil.Sandbox` whose `run` commands clone repositories onto its disk at deploy.
+- `src/Api.ts`: a program in its own `Archil.Sandbox`, bound to `Archil.CreateSandbox(Golden)`. `POST /run` runs a command in a fresh fork, deleted when the request ends. `/users/:user/...` gives each user a fork of their own.
 
 ```sh
 alchemy profile edit --profile default --add Archil

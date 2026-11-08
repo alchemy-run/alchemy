@@ -38,21 +38,19 @@ const post = (url: string, command: string) =>
   );
 
 test(
-  "runs commands against the seeded disk, read-only",
+  "forks Golden for each request",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const name = yield* post(`${url}/run`, "grep -o '\"@sindresorhus/is\"' package.json");
     expect(name).toMatchObject({ stdout: '"@sindresorhus/is"\n', exitCode: 0 });
     const both = yield* post(`${url}/run`, "ls ..");
     expect(both.stdout).toContain("slugify");
-    const write = yield* post(`${url}/run`, "touch nope");
-    expect(write.exitCode).not.toBe(0);
   }),
-  { timeout: 180_000 },
+  { timeout: 300_000 },
 );
 
 test(
-  "gives each user a copy of the base",
+  "gives each user a fork of their own",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const put = yield* send(
@@ -60,16 +58,18 @@ test(
         HttpClientRequest.bodyText("hello"),
       ),
     );
-    expect(((yield* put.json) as { content: string }).content).toBe("hello");
+    const first = (yield* put.json) as { sandboxId: string; content: string };
+    expect(first.content).toBe("hello");
 
-    const mine = yield* post(`${url}/users/${user}/run`, "cat notes.md && test -f package.json");
-    expect(mine).toMatchObject({ stdout: "hello", exitCode: 0 });
+    const get = yield* send(HttpClientRequest.get(`${url}/users/${user}/files/notes.md`));
+    const second = (yield* get.json) as { sandboxId: string; content: string };
+    expect(second.sandboxId).toBe(first.sandboxId);
 
-    // The base doesn't have the user's change.
-    const base = yield* post(`${url}/run`, "test -f notes.md && echo yes || echo no");
-    expect(base.stdout).toBe("no\n");
+    // A fresh fork of Golden doesn't have the user's change.
+    const fresh = yield* post(`${url}/run`, "test -f notes.md && echo yes || echo no");
+    expect(fresh.stdout).toBe("no\n");
 
-    // The user's disk was created at runtime: delete it through the API.
+    // The user's fork was created at runtime: delete it through the API.
     const removed = yield* send(HttpClientRequest.delete(`${url}/users/${user}`));
     expect(removed.status).toBe(204);
   }),

@@ -745,12 +745,12 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 
 ## Archil — Tutorial
 
-- [Part 1: Seed a Disk](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, declare an Archil disk, and seed it with a repository at deploy time.
-- [Part 2: Run Commands Against It](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that runs each command in a fresh microVM with the seeded disk mounted read-only.
-- [Part 3: A Copy per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil disk of their own, copied from the seeded disk on their first request.
-- [Part 4: Update the Disk](https://alchemy.run/archil/tutorial/part-4) — Add to the seeded Archil disk, redeploy, and see every new command and copy get it while existing copies keep theirs.
-- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, run commands against the seeded disk, and check it stays read-only.
-- [Part 6: Stages and CI](https://alchemy.run/archil/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Archil base disk and program, from GitHub Actions.
+- [Part 1: Set Up a Sandbox](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, and declare an Archil sandbox that clones a repository onto its disk at deploy time.
+- [Part 2: Fork It for Each Request](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
+- [Part 3: A Fork per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil fork of the set-up sandbox, found again by name, which keeps their changes.
+- [Part 4: Update the Sandbox](https://alchemy.run/archil/tutorial/part-4) — Change the commands that set up the Archil sandbox, redeploy, and see new forks start from the new one while existing forks keep theirs.
+- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
+- [Part 6: Stages and CI](https://alchemy.run/archil/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own set-up Archil sandbox and program, from GitHub Actions.
 
 ## Archil — Accounts & access
 

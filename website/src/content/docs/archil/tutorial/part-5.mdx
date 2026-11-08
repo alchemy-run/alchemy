@@ -1,6 +1,6 @@
 ---
 title: "Part 5: Testing"
-description: Deploy the Stack in a test, run commands against the seeded disk, and check it stays read-only.
+description: Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
 sidebar:
   order: 5
 ---
@@ -36,7 +36,7 @@ const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
 ```
 
-The test deploys the Stack to a stage of its own, base disk included, and destroys it afterwards.
+The test deploys the Stack to a stage of its own, `Golden` included, and destroys it afterwards.
 
 ## Retry while the program starts
 
@@ -54,23 +54,21 @@ const run = (url: string, command: string) =>
   });
 ```
 
-## Check the seeded disk, and that it's read-only
+## Check a fork starts from Golden
 
 ```typescript title="test/integ.test.ts"
 test(
-  "runs commands against the seeded disk, read-only",
+  "forks Golden for each request",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const both = yield* run(url, "ls ..");
     expect(both.stdout).toContain("slugify");
-    const write = yield* run(url, "touch nope");
-    expect(write.exitCode).not.toBe(0);
   }),
-  { timeout: 180_000 },
+  { timeout: 300_000 },
 );
 ```
 
-`slugify` is only there if the deploy seeded the new base, and the write fails because `Repo` is mounted read-only.
+`slugify` is only there if the fork came from the new `Golden`. The program deletes the fork when the request ends, so none is left behind.
 
 ## Run it
 

@@ -1,71 +1,57 @@
 ---
-title: "Part 3: A Copy per User"
-description: Give each user an Archil disk of their own, copied from the seeded disk on their first request.
+title: "Part 3: A Fork per User"
+description: Give each user an Archil fork of the set-up sandbox, found again by name, which keeps their changes.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Copy the seeded disk onto a user's disk
+## Fork Golden for a user
 
 ```diff lang="typescript"
 // src/Api.ts
-    const exec = yield* Archil.ExecDisks();
-+    const disks = yield* Archil.CreateDisk();
-+
-+    const userDisk = Effect.fn("userDisk")(function* (user: string) {
-+      const existing = yield* disks.get(`user-${user}`);
-+      if (existing !== undefined) return existing;
-+      const home = yield* disks.create(`user-${user}`);
-+      yield* exec.exec({
-+        disks: { base: { disk: yield* repoId, readOnly: true }, home: home.diskId },
-+        command: "cp -a /mnt/archil/base/. /mnt/archil/home/",
-+      });
-+      return home;
++    const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
++      return (yield* sandboxes.get(`user-${user}`)) ?? (yield* sandboxes.create({ name: `user-${user}` }));
 +    });
 ```
 
-Provide `Archil.CreateDiskHttp` next to `Archil.ExecDisksHttp`, with `Layer.mergeAll`. A user's first request creates a disk for them and copies `Repo` onto it, in one microVM with both disks mounted. `disks.get` finds it again on their next request.
+A user's first request forks `Golden`, with the repository already cloned. The fork is named after the user, so `sandboxes.get` finds it again on their next request.
 
-## Their changes stay on their disk
+## Their changes stay in their fork
 
 ```diff lang="typescript"
 // src/Api.ts
-+        const runFor = /^\/users\/([a-z0-9-]+)\/run$/.exec(url.pathname)?.[1];
-+        if (request.method === "POST" && runFor !== undefined) {
-+          const home = yield* userDisk(runFor);
-+          return yield* HttpServerResponse.json(yield* home.exec(`cd /mnt/archil/is && ${yield* request.text}`));
-+        }
 +        const match = /^\/users\/([a-z0-9-]+)\/files\/(.+)$/.exec(url.pathname);
 +        if (match !== null) {
-+          const home = yield* userDisk(match[1]!);
-+          if (request.method === "PUT") yield* home.put(`is/${match[2]}`, yield* request.text);
-+          return yield* HttpServerResponse.json({ content: yield* home.getText(`is/${match[2]}`) });
++          const sandbox = yield* userSandbox(match[1]!);
++          const path = `/work/is/${match[2]}`;
++          if (request.method === "PUT") yield* sandbox.files.write(path, yield* request.text);
++          return yield* HttpServerResponse.json({ content: yield* sandbox.files.readText(path) });
 +        }
 ```
 
-Commands run against the user's own disk, read-write, and files go onto it straight from the program, with no microVM. `Repo` never changes, so the next user's copy doesn't see their edits.
+Each user edits their own copy of the repository. `Golden` never changes, so the next fork doesn't see their edits. A fork pauses when it's idle, keeping its memory, and resumes on the user's next request.
 
 <PackageManagers
   script={`{run} alchemy deploy
 curl -X PUT "$URL/users/ana/files/notes.md" -d 'hello'
-curl -X POST "$URL/users/ana/run" -d 'cat notes.md'`}
+curl "$URL/users/ana/files/notes.md"`}
 />
 
-## Delete a user's disk
+## Delete a user's fork
 
 ```diff lang="typescript"
 // src/Api.ts
 +        const user = /^\/users\/([a-z0-9-]+)$/.exec(url.pathname)?.[1];
 +        if (request.method === "DELETE" && user !== undefined) {
-+          yield* disks.delete(`user-${user}`);
++          yield* sandboxes.delete(`user-${user}`);
 +          return HttpServerResponse.empty({ status: 204 });
 +        }
 ```
 
-Disks the program creates aren't deleted with the Stack, so delete them when their owner goes away.
+Forks the program creates carry its name prefix and aren't deleted with the Stack, so delete them when their owner goes away.
 
 ## Next
 
-[Part 4](/archil/tutorial/part-4) changes the disk.
+[Part 4](/archil/tutorial/part-4) changes the sandbox.
