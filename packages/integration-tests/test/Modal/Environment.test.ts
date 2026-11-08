@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as environment from "@distilled.cloud/modal/environment";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -23,6 +24,7 @@ test.provider(
           return yield* Modal.Environment("Env", { maxConcurrentTasks: 10 });
         }),
       );
+      yield* expectFound(Modal.Environment.lookup({ name: env.name }), env);
       expect(env.environmentId).toMatch(/^en-/);
       const observed = yield* listed(env.name);
       expect(observed?.environmentId).toBe(env.environmentId);

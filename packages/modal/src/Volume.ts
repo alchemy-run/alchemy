@@ -119,12 +119,43 @@ export interface VolumeAttributes {
  * ) {}
  * ```
  *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const weights = Modal.Volume.lookup({ name: "model-weights" });
+ * ```
+ *
  * @resource
  * @product Volume
  */
 export const Volume = declarable<Volume>()(Resource<Volume>("Modal.Volume"));
 
-export type Volume = Resource<"Modal.Volume", VolumeProps, VolumeAttributes, never, Providers>;
+export type Volume = Resource<
+  "Modal.Volume",
+  VolumeProps,
+  VolumeAttributes,
+  never,
+  Providers,
+  VolumeLookup
+>;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its name.
+ */
+export interface VolumeLookup {
+  /** Volume name. */
+  name: string;
+  /**
+   * Modal environment the object lives in.
+   * @default the workspace's default environment
+   */
+  environment?: string;
+}
 
 const versionToWire = (version: 1 | 2 | undefined): volume.VolumeFsVersion =>
   version === 1 ? "VOLUME_FS_VERSION_V1" : "VOLUME_FS_VERSION_V2";
@@ -216,6 +247,10 @@ export const VolumeProvider = () =>
           if ((news.version ?? 2) !== (olds?.version ?? 2)) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name, environment }) {
+          return yield* observe(undefined, name, environment);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const observed = yield* observe(output?.volumeId, name, envNameOf(olds?.environment));

@@ -33,6 +33,9 @@
       "path": "./submodules/distilled/packages/archil/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/boat-dev/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/rivet/tsconfig.json"
     },
     {
@@ -133,6 +136,9 @@
       "path": "./packages/archil/tsconfig.json"
     },
     {
+      "path": "./packages/boat/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {
@@ -197,6 +203,18 @@
     },
     {
       "path": "./packages/integration-tests/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.ambient.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.module.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.cloudflare-module.json"
     },
     {
       "path": "./packages/pkg/tsconfig.json"
@@ -378,6 +396,12 @@
     },
     {
       "path": "./examples/e2b-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-program/tsconfig.json"
     },
     {
       "path": "./examples/e2b-program-async/tsconfig.json"

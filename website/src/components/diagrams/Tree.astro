@@ -21,9 +21,13 @@
  * `specs` lists [key, value] lines inside a box (an instance's type and image),
  * `tone: "muted"` greys out something finished or idle, and `side` stacks a
  * node in a column beside its siblings (small branches next to a big one, so
- * a short branch doesn't get a whole empty row).
+ * a short branch doesn't get a whole empty row). `icon` puts a symbol on a
+ * node, so kinds of thing read at a glance rather than by their type line:
+ * a lucide name (`database`, `server`) or `brand:<name>` (`brand:docker`).
+ * Give icons to every node of a kind, or to none of that kind.
  */
 import "./diagram.css";
+import { diagramIcon } from "../../docs-icons";
 
 interface TreeNode {
   id: string;
@@ -35,6 +39,7 @@ interface TreeNode {
   wide?: boolean;
   specs?: [string, string][];
   side?: boolean;
+  icon?: string;
 }
 interface Props {
   nodes: TreeNode[];
@@ -49,6 +54,7 @@ const kids = (id: string) => nodes.filter((n) => n.parent === id);
 const scopeOf = (id: string) => scopes.filter((s) => s.on === id);
 const roots = nodes.filter((n) => !n.parent);
 const node = at ? nodes.find((n) => n.id === at)! : undefined;
+const icon = node?.icon ? diagramIcon(node.icon) : undefined;
 ---
 
 {
@@ -63,6 +69,9 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
           node.specs && "alc-tree__leaf--specs",
         ]}
       >
+        {icon && (
+          <svg class="alc-tree__icon alc-tree__icon--leaf" viewBox="0 0 24 24" aria-hidden="true" set:html={icon} />
+        )}
         <span class="alc-tree__label">{node.label}</span>
         {node.type && <span class="alc-tree__type">{node.type}</span>}
         {node.specs && (
@@ -86,6 +95,7 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
         ]}
       >
         <div class="alc-tree__head">
+          {icon && <svg class="alc-tree__icon" viewBox="0 0 24 24" aria-hidden="true" set:html={icon} />}
           <span class="alc-tree__label">{node.label}</span>
           {node.type && <span class="alc-tree__type">{node.type}</span>}
           {scopeOf(node.id).map((s) => <span class="alc-tree__scope">{s.label}</span>)}
@@ -160,8 +170,9 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
   }
   .alc-tree__side > .alc-tree__leaf {
     align-self: stretch;
-    /* A column only stretches leaves across, never taller. */
-    flex: 0 0 auto;
+    /* Leaves share the column's height, so a tall branch beside them leaves
+       no empty space under the last one. */
+    flex: 1 1 auto;
   }
   .alc-tree__side > .alc-tree__box {
     flex: 1 1 auto;
@@ -227,6 +238,21 @@ const node = at ? nodes.find((n) => n.id === at)! : undefined;
   .alc-tree__specs dd {
     margin: 0;
     color: var(--alc-fg-1);
+  }
+  .alc-tree__icon {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    align-self: center;
+    color: var(--alc-accent);
+  }
+  .alc-tree__icon--leaf {
+    width: 22px;
+    height: 22px;
+    margin-bottom: 0.375rem;
+  }
+  .alc-tree__leaf--specs .alc-tree__icon--leaf {
+    align-self: center;
   }
   .alc-tree__label {
     font-size: 12.5px;

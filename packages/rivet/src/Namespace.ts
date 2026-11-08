@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
+import type * as Redacted from "effect/Redacted";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -32,8 +33,22 @@ export interface Namespace extends Resource<
     createdAt: number;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 > {}
+
+/**
+ * Props for {@link Namespace.lookup}: find a namespace this
+ * stack doesn't manage by its control plane and name.
+ */
+export interface NamespaceLookup {
+  /** Control plane endpoint. */
+  endpoint: string;
+  /** Admin token for the control plane. */
+  token: Redacted.Redacted<string>;
+  /** Namespace name. */
+  name: string;
+}
 
 /**
  * A namespace on a Rivet control plane: an isolated set of node pools and
@@ -49,6 +64,20 @@ export interface Namespace extends Resource<
  * const namespace = yield* Rivet.Namespace("App", {
  *   endpoint: "https://rivet.example.com",
  *   token: Redacted.make(adminToken),
+ * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created with
+ * the Rivet API or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const ns = Rivet.Namespace.lookup({
+ *   endpoint: "https://rivet.example.com",
+ *   token: Redacted.make(adminToken),
+ *   name: "production",
  * });
  * ```
  *
@@ -94,6 +123,12 @@ export const NamespaceProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ endpoint, token, name }) {
+          const connection = { endpoint, token };
+          const ns = yield* observe(connection, name);
+          return ns === undefined ? undefined : toAttrs(connection, ns);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* namespaceName(id, olds?.name));
           // A control plane that never came up (or is gone) has no namespace

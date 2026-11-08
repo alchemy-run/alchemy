@@ -147,8 +147,18 @@ export type Snapshot = Resource<
   SnapshotProps,
   SnapshotAttributes,
   never,
-  Providers
+  Providers,
+  SnapshotLookup
 >;
+
+/**
+ * Props for {@link Snapshot.lookup}: find a snapshot this stack
+ * doesn't manage by its name or id.
+ */
+export interface SnapshotLookup {
+  /** Snapshot name or id. */
+  name: string;
+}
 
 /**
  * A Daytona snapshot: the image sandboxes boot from, with its default
@@ -216,6 +226,17 @@ export type Snapshot = Resource<
  *     "cd /home/daytona/alchemy && pnpm install",
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing snapshot
+ * `Snapshot.lookup` references a snapshot Alchemy doesn't manage (created in
+ * the Daytona dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * `buildHash` is empty: the image wasn't built by this stack.
+ *
+ * **Example:** Start a sandbox from an existing snapshot
+ * ```typescript
+ * const base = Daytona.Snapshot.lookup({ name: "python-ml" });
  * ```
  *
  * @resource
@@ -595,6 +616,11 @@ export const SnapshotProvider = () =>
             return { action: "replace", deleteFirst: name === output.name } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* getSnapshot(name);
+          return found === undefined ? undefined : toSnapshotAttributes(found, "");
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = yield* resolveName(id, olds?.name, output?.name);
           const found =

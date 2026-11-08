@@ -8,6 +8,7 @@ import { createInternalTags, hasTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 import type { Providers } from "./Providers.ts";
@@ -86,8 +87,24 @@ export interface Pool extends Resource<
   PoolProps,
   PoolAttributes,
   PoolBindingContract,
-  Providers
+  Providers,
+  PoolLookup
 > {}
+
+/**
+ * Props for {@link Pool.lookup}: find a pool this stack doesn't
+ * manage by its control plane, namespace and name.
+ */
+export interface PoolLookup {
+  /** Control plane endpoint. */
+  endpoint: string;
+  /** Admin token for the control plane. */
+  token: Redacted.Redacted<string>;
+  /** Namespace the pool serves. */
+  namespace: string;
+  /** Pool name. */
+  name: string;
+}
 
 /**
  * A node pool on a Rivet control plane. Nodes that connect with the pool's
@@ -114,6 +131,23 @@ export interface Pool extends Resource<
  *   namespace: namespace.name,
  *   drainOnVersionUpgrade: true,
  *   actorEvictionPeriod: 60,
+ * });
+ * ```
+ *
+ * ### Looking up an existing pool
+ * `Pool.lookup` references a pool Alchemy doesn't manage (created with
+ * the Rivet API or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ * `durableObjects` and `env` are empty: they are what the deploy that runs
+ * the pool hosts.
+ *
+ * **Example:** Reference an existing pool
+ * ```typescript
+ * const nodes = Rivet.Pool.lookup({
+ *   endpoint: "https://rivet.example.com",
+ *   token: Redacted.make(adminToken),
+ *   namespace: "production",
+ *   name: "nodes",
  * });
  * ```
  *
@@ -209,6 +243,14 @@ export const PoolProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ endpoint, token, namespace, name }) {
+          const connection = { endpoint, token };
+          const pool = yield* observe(connection, namespace, name);
+          return pool === undefined
+            ? undefined
+            : toAttrs(connection, namespace, pool, { durableObjects: [], env: {} });
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* poolName(id, olds?.name));
           const namespace = output?.namespace ?? olds.namespace;

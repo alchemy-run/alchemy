@@ -4,6 +4,7 @@ import { serveRpc } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 import { RPC_METHODS_ENV, RPC_SERVE_ENV } from "./Entrypoint.ts";
+import { parseCallers, requireRpcCaller, RPC_CALLERS_ENV } from "./RpcAuth.ts";
 
 /** The RPC methods of a program's shape: every function besides `fetch` and `run`. */
 export const rpcMethodsOf = (shape: Record<string, unknown> | undefined) =>
@@ -29,8 +30,9 @@ export const rpcMethodNamesOf = (env: Record<string, unknown> | undefined): stri
  * The runtime context of a `Modal.Function` or `Modal.Server` program. At
  * plan it records the program's RPC methods in its env, so the Function's
  * definition can name them. At run time it serves them on `/__rpc__/*`
- * next to `fetch`, but only where the provider set {@link RPC_SERVE_ENV}:
- * where Modal authenticates every request.
+ * next to `fetch`, but only where the provider set {@link RPC_SERVE_ENV}
+ * (where Modal authenticates every request), and only to callers holding a
+ * key a binding issued (see `RpcAuth.ts`).
  */
 export const createModalRuntimeContext =
   (type: string) =>
@@ -45,8 +47,11 @@ export const createModalRuntimeContext =
           yield* base.set(RPC_METHODS_ENV, Output.literal(names));
         }
         const enabled = (yield* base.get<unknown>(RPC_SERVE_ENV)) !== undefined;
+        if (!enabled || names.length === 0) return yield* serveBase(handler, options);
+        const fallback = safeHttpEffect(handler);
+        const callers = parseCallers(yield* base.get<unknown>(RPC_CALLERS_ENV));
         return yield* serveBase(
-          enabled && names.length > 0 ? serveRpc(methods, safeHttpEffect(handler)) : handler,
+          requireRpcCaller(callers, serveRpc(methods, fallback), fallback),
           options,
         );
       }) as Effect.Effect<void, never, any>;

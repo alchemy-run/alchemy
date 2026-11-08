@@ -22,8 +22,18 @@ export type Dashboard = Resource<
     dashboard: Axiom.DashboardWriteResponse["dashboard"]["dashboard"];
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 >;
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack
+ * doesn't manage by its id.
+ */
+export interface DashboardLookup {
+  /** Axiom dashboard id. */
+  uid: string;
+}
 
 /**
  * An Axiom dashboard — a named, layout-driven collection of charts. Each
@@ -114,6 +124,16 @@ export type Dashboard = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const ref = Axiom.Dashboard.lookup({ uid: "abc123" });
+ * ```
+ *
  * @resource
  * @product Dashboard
  */
@@ -174,6 +194,13 @@ export const DashboardProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ uid: output.uid }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ uid }) {
+          return yield* get({ uid }).pipe(
+            Effect.map(toAttrsFromGet),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.uid) return undefined;
           return yield* get({ uid: output.uid }).pipe(

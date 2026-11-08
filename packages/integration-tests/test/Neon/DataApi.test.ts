@@ -9,6 +9,7 @@ import * as SDK from "@distilled.cloud/neon";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -72,6 +73,14 @@ test.provider(
           return { project, api };
         });
       const first = yield* stack.deploy(program("infer"));
+      yield* expectFound(
+        DataApi.lookup({
+          projectId: first.api.projectId,
+          branchId: first.api.branchId,
+          database: first.api.database,
+        }),
+        first.api,
+      );
       expect(first.api.database).toBe("selected_app");
       const request = {
         project_id: first.api.projectId,

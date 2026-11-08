@@ -99,12 +99,36 @@ export interface DictAttributes {
  * ) {}
  * ```
  *
+ * ### Looking up an existing dict
+ * `Dict.lookup` references a dict Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing dict
+ * ```typescript
+ * const cache = Modal.Dict.lookup({ name: "cache" });
+ * ```
+ *
  * @resource
  * @product Dict
  */
 export const Dict = declarable<Dict>()(Resource<Dict>("Modal.Dict"));
 
-export type Dict = Resource<"Modal.Dict", DictProps, DictAttributes, never, Providers>;
+export type Dict = Resource<"Modal.Dict", DictProps, DictAttributes, never, Providers, DictLookup>;
+
+/**
+ * Props for {@link Dict.lookup}: find a dict this stack
+ * doesn't manage by its name.
+ */
+export interface DictLookup {
+  /** Dict name. */
+  name: string;
+  /**
+   * Modal environment the object lives in.
+   * @default the workspace's default environment
+   */
+  environment?: string;
+}
 
 /** A dict by name, or `undefined` when missing. */
 export const lookupDict = Effect.fn(function* (
@@ -175,6 +199,10 @@ export const DictProvider = () =>
           if (output !== undefined && name !== output.name) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name, environment }) {
+          return yield* observe(undefined, name, environment);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const observed = yield* observe(output?.dictId, name, envNameOf(olds?.environment));

@@ -97,7 +97,7 @@ export type Function = Resource<
   "Modal.Function",
   FunctionProps,
   FunctionAttributes,
-  { env?: Record<string, any>; mounts?: MountContract },
+  { env?: Record<string, any>; mounts?: MountContract; rpcCallers?: string[] },
   Providers
 >;
 
