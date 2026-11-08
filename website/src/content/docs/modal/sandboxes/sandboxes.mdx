@@ -63,13 +63,13 @@ A name is unique among an app's running sandboxes. `idleTimeout` stops it once n
 ## Run a command
 
 ```typescript
-const result = yield* sandbox.exec(["pnpm", "test"], { cwd: "/work" });
+yield* sandbox.exec(["pnpm", "test"], { cwd: "/work" });
 ```
 
-`result` has `exitCode`, `stdout` and `stderr`; a non-zero exit is returned, not failed. A string runs with `sh -c`:
+The result has `exitCode`, `stdout` and `stderr`; a non-zero exit is returned, not failed. A string runs with `sh -c`:
 
 ```typescript
-const result = yield* sandbox.exec("pnpm install && pnpm test", { cwd: "/work" });
+yield* sandbox.exec("pnpm install && pnpm test", { cwd: "/work" });
 ```
 
 ## Follow a running command
@@ -120,7 +120,7 @@ For a browser that shouldn't hold Modal credentials, use `sandbox.connectToken({
 ## Size it with CPUs, memory and GPUs
 
 ```typescript
-const sandbox = yield* sandboxes.create({ cpu: 2, memory: 4096, gpu: "A10G" });
+yield* sandboxes.create({ cpu: 2, memory: 4096, gpu: "A10G" });
 ```
 
 ## Find what your app created
@@ -128,7 +128,7 @@ const sandbox = yield* sandboxes.create({ cpu: 2, memory: 4096, gpu: "A10G" });
 Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. List them by those tags to clean them up:
 
 ```typescript
-const mine = yield* sandboxes.list({ tags: { "alchemy::stack": "my-app", "alchemy::stage": "prod" } });
+yield* sandboxes.list({ tags: { "alchemy::stack": "my-app", "alchemy::stage": "prod" } });
 ```
 
 Your own `tags` merge under the three. Stopping the App still terminates every sandbox in it.

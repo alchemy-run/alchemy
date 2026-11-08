@@ -86,7 +86,7 @@ Before a sandbox has a snapshot, `fork` fails with `ForkNeedsSnapshot`. Boat nev
 A handle saves its sandbox under a name of your own, and waits until it's ready:
 
 ```typescript
-const saved = yield* sandbox.snapshot("after-install");
+yield* sandbox.snapshot("after-install");
 ```
 
 Snapshots your code saves aren't deleted with the Stack.

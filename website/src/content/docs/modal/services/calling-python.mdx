@@ -33,7 +33,7 @@ Arguments and results are CBOR: numbers, strings, bytes, lists, dicts, booleans 
 ## Call a class method
 
 ```typescript
-const model = yield* Modal.InvokeFunction({ app: "inference", function: "Model.generate" });
+yield* Modal.InvokeFunction({ app: "inference", function: "Model.generate" });
 ```
 
 `Class.method` names a method of a Modal class.

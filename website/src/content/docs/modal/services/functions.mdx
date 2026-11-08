@@ -201,7 +201,7 @@ A function without RPC methods, like this one, takes positional and keyword argu
 ## Fan out over many inputs
 
 ```typescript
-const results = yield* embed.map<{ tokens: number }>([["a"], ["b c"], ["d e f"]]);
+yield* embed.map<{ tokens: number }>([["a"], ["b c"], ["d e f"]]);
 ```
 
 Modal spreads the inputs across containers and returns the results in order.

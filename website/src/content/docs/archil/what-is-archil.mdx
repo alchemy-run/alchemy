@@ -92,7 +92,7 @@ See [Images](/archil/compute/images).
 A **mount** puts a disk at a path, in a sandbox or on any Linux machine running Archil's FUSE client. Its **mode** decides who can write: `exclusive` (the default) gives one client the whole disk, `conditional` lets many write anywhere, `shared` lets many write the paths they check out, and `read-only` never writes.
 
 ```typescript
-const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
 ```
 
 See [Mounting](/archil/storage/mounting).
@@ -102,7 +102,7 @@ See [Mounting](/archil/storage/mounting).
 A **disk user** is access to one disk: a mount token, an S3 key pair, or an AWS role that mounts with its own identity. Archil checks it itself, so a host holding one can't reach any other disk. Alchemy creates one per host for the bindings that need them:
 
 ```typescript
-const dataset = yield* Archil.ReadDisk(Dataset);
+yield* Archil.ReadDisk(Dataset);
 ```
 
 See [Credentials and bindings](/archil/security/credentials).

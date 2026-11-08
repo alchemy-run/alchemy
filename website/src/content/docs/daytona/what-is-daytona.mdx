@@ -40,7 +40,7 @@ Every call to Daytona carries an **API key**. A key belongs to one organization 
 Each binding creates a key of its own for its Worker or Lambda, with only the permissions its calls need:
 
 ```typescript
-const sandboxes = yield* Daytona.CreateSandbox(Base);
+yield* Daytona.CreateSandbox(Base);
 ```
 
 See [Organizations and API keys](/daytona/organizations-and-keys).
@@ -93,7 +93,7 @@ Create sandboxes per request or per user from a Worker, or declare a long-lived 
 The **toolbox** is the API inside every sandbox. Alchemy hands you a sandbox as a handle with all of it:
 
 ```typescript
-const result = yield* sandbox.exec("npm test", { cwd: "/home/daytona/repo" });
+yield* sandbox.exec("npm test", { cwd: "/home/daytona/repo" });
 ```
 
 See [Toolbox](/daytona/sandboxes/toolbox).

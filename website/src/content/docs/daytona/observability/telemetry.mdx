@@ -40,7 +40,7 @@ Every sandbox in the organization sends its logs, traces and metrics to your bac
 ## Read a sandbox's logs
 
 ```typescript
-const logs = yield* sandbox.getSandboxLogs({ from, to });
+yield* sandbox.getSandboxLogs({ from, to });
 ```
 
 ## Turn on webhooks

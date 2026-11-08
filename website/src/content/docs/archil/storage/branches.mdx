@@ -75,7 +75,7 @@ export const Staging = Effect.gen(function* () {
 A sandbox's root filesystem is a disk too, so `fork` uses the same checkpoint and branch to copy a sandbox in milliseconds. A sandbox with mounted disks has to be stopped first.
 
 ```typescript
-const copy = yield* sandbox.fork({ name: "task-1-retry" });
+yield* sandbox.fork({ name: "task-1-retry" });
 ```
 
 ## Branches go when the disk does

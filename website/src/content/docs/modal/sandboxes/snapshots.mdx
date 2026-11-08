@@ -36,7 +36,7 @@ const image = yield* sandbox.snapshotFilesystem();
 The result is an image. Pass it to `create`:
 
 ```typescript
-const next = yield* sandboxes.create({ image });
+yield* sandboxes.create({ image });
 ```
 
 ## Save memory and running processes

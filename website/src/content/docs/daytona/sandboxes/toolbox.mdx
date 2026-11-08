@@ -102,7 +102,7 @@ const entries = yield* sandbox.files.list("/home/daytona/out");
 `files` also has `read` (bytes), `stat` and `remove`. Daytona's own file API is on `fs`, with search and replace:
 
 ```typescript
-const hits = yield* sandbox.fs.findInFiles({ path: "/home/daytona/repo/src", pattern: "TODO" });
+yield* sandbox.fs.findInFiles({ path: "/home/daytona/repo/src", pattern: "TODO" });
 ```
 
 ## Move many files at once
@@ -138,7 +138,7 @@ const res = yield* port.fetch(HttpClientRequest.get("/health"));
 ## Open an SSH session
 
 ```typescript
-const ssh = yield* sandbox.createSshAccess({ expiresInMinutes: 60 });
+yield* sandbox.createSshAccess({ expiresInMinutes: 60 });
 ```
 
 ## Run a language server or code interpreter
@@ -168,7 +168,7 @@ Computer use needs a snapshot with a desktop. It is billed like any running sand
 ## Read a sandbox's telemetry
 
 ```typescript
-const logs = yield* sandbox.getSandboxLogs({ from, to });
+yield* sandbox.getSandboxLogs({ from, to });
 ```
 
 Point the whole organization's telemetry at your own backend with [OrganizationOtelConfig](/daytona/observability/telemetry#export-telemetry-to-your-backend).
