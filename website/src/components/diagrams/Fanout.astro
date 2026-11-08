@@ -63,6 +63,22 @@ const H = Math.max(BOTTOM, ITEM_H + 16) + 8;
 const itemY = Math.max(8, (H - ITEM_H) / 2);
 const itemMid = itemY + ITEM_H / 2;
 const matched = (r: Route) => r.match !== false;
+// Phones get the routes stacked under the item: a trunk down the left, and for
+// each route its condition, then the target it reaches, so text keeps its size.
+const N_FIT = 318;
+const N_ITEM_W = Math.min(N_FIT, ITEM_W);
+const N_X = 22;
+const N_W = N_FIT - N_X - (group && hasCond ? 8 : 0);
+const N_TW = Math.min(N_W, TW);
+let ny = ITEM_H + 26 + (group && hasCond ? 26 : 0);
+const nRows = routes.map((r) => {
+  const ch = r.condition ? rowH(r) : 0;
+  const row = { r, y: ny, ch, ty: ny + (r.condition ? ch + 30 : 0) };
+  ny = row.ty + 46 + 18;
+  return row;
+});
+const N_BOTTOM = ny - 18;
+const N_H = N_BOTTOM + (group && hasCond ? 10 : 4);
 const curve = (x1: number, y1: number, x2: number, y2: number) => {
   const dx = (x2 - x1) / 2;
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
@@ -71,7 +87,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
 
 <figure class="alc-fig not-content" data-nosnippet>
   <div class="alc-fig__panel">
-  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
+  <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
     <defs>
       <marker id="alc-fan-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
@@ -117,6 +133,50 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
         );
       })
     }
+  </svg>
+  <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_FIT} ${N_H}`} style={`max-width: ${Math.round(N_FIT * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
+    <defs>
+      <marker id="alc-fan-arrow-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {group && hasCond && (
+      <g>
+        <rect x={N_X - 8} y={ITEM_H + 14} width={N_W + 16} height={N_BOTTOM - ITEM_H - 6} rx="10" class="alc-fig__box alc-fig__box--group" />
+        <text x={N_X + 2} y={ITEM_H + 32} class="alc-fig__strong">{group}</text>
+      </g>
+    )}
+    <rect x={0} y={0} width={N_ITEM_W} height={ITEM_H} rx="8" class="alc-fig__box alc-fig__box--accent" />
+    <text x={12} y={20} class="alc-fig__label">{item.title}</text>
+    {item.lines.map((l, i) => <text x={12} y={40 + i * LINE} class="alc-fig__small" xml:space="preserve">{l}</text>)}
+    <line x1={8} y1={ITEM_H} x2={8} y2={nRows.at(-1)!.y + (nRows.at(-1)!.r.condition ? nRows.at(-1)!.ch / 2 : 23)} class="alc-fig__line" />
+    {nRows.map(({ r, y: ry, ch, ty }) => {
+      const ok = matched(r);
+      const entry = r.condition ? ry + ch / 2 : ty + 23;
+      const tx = N_X + (N_W - N_TW) / 2;
+      return (
+        <g>
+          <line x1={8} y1={entry} x2={N_X - 2} y2={entry} class:list={["alc-fig__line", !ok && "alc-fig__line--muted alc-fig__line--dashed"]} marker-end={ok ? "url(#alc-fan-arrow-n)" : undefined} />
+          {r.condition && (
+            <g>
+              <rect x={N_X} y={ry} width={N_W} height={ch} rx="7" class:list={["alc-fig__box", !ok && "alc-fig__box--muted"]} />
+              {r.label && <text x={N_X + 12} y={ry + 17} class="alc-fig__type">{r.label}</text>}
+              {r.condition.map((l, i) => (
+                <text x={N_X + 12} y={ry + (r.label ? 33 : 22) + i * LINE + (ch - 20 - r.condition!.length * LINE - (r.label ? 14 : 0)) / 2} class="alc-fig__small" xml:space="preserve">{l}</text>
+              ))}
+              {ok ? (
+                <line x1={N_X + N_W / 2} y1={ry + ch} x2={N_X + N_W / 2} y2={ty - 2} class="alc-fig__line" marker-end="url(#alc-fan-arrow-n)" />
+              ) : (
+                <text x={N_X + N_W / 2} y={ry + ch + 19} text-anchor="middle" class="alc-fig__type">no match</text>
+              )}
+            </g>
+          )}
+          <rect x={tx} y={ty} width={N_TW} height={46} rx="8" class:list={["alc-fig__box", !ok && "alc-fig__box--muted"]} opacity={ok ? 1 : 0.6} />
+          <text x={tx + N_TW / 2} y={ty + 23 + (r.target.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label" opacity={ok ? 1 : 0.6}>{r.target.label}</text>
+          {r.target.type && <text x={tx + N_TW / 2} y={ty + 36} text-anchor="middle" class="alc-fig__type">{r.target.type}</text>}
+        </g>
+      );
+    })}
   </svg>
   </div>
   {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
