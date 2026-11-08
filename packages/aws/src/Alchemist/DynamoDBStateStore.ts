@@ -14,11 +14,18 @@ import {
   provisionStateTable,
   stateTableExists,
 } from "../StateStore/DynamoDBState.ts";
-import { provisionStateBucket, stateBucketExists, stateEnvironment } from "../StateStore/State.ts";
+import { createStateKeyAlias, ensureStateKey, removeStateKey } from "../StateStore/Key.ts";
+import {
+  createStateBucketName,
+  provisionStateBucket,
+  stateBucketExists,
+  stateEnvironment,
+} from "../StateStore/State.ts";
 
 /**
- * Ensure a state table and its overflow bucket (by default the account's in
- * this region), with the settings first use would give them.
+ * Ensure a state table, its overflow bucket and its KMS key (by default the
+ * account's in this region), with the settings first use would give them.
+ * An existing table and bucket are moved to SSE-KMS under the key.
  */
 const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -26,18 +33,20 @@ const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: s
   const tableName = createStateTableName(name);
   const bucketName = createOverflowBucketName(accountId, region, name);
   const existed = yield* stateTableExists(tableName);
-  yield* provisionStateTable(tableName);
+  const keyArn = yield* ensureStateKey(createStateKeyAlias(name));
+  yield* provisionStateTable(tableName, keyArn);
   // Provisioned ahead too, so a record that overflows mid-deploy in CI
   // does not need to create it.
-  yield* provisionStateBucket(bucketName, region);
+  yield* provisionStateBucket(bucketName, region, keyArn);
   return { accountId, region, tableName, existed };
 });
 
 /**
  * Delete a state table, lifting its deletion protection, and empty and
  * delete its overflow bucket, every object version included. The S3 store it
- * replaced is kept: `--backend aws-s3` tears that down. A missing table or
- * bucket is not an error.
+ * replaced is kept: `--backend aws-s3` tears that down. The KMS key the two
+ * share is scheduled for deletion once neither is left. A missing table,
+ * bucket or key is not an error.
  */
 const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -91,6 +100,11 @@ const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?
       }),
     );
     deleted.push(bucketName);
+  }
+  // Records moved from the S3 store, or back to it, are sealed under it.
+  if (!(yield* stateBucketExists(createStateBucketName(accountId, region, name)))) {
+    const alias = yield* removeStateKey(createStateKeyAlias(name));
+    if (alias !== undefined) deleted.push(alias);
   }
   return { deleted };
 });

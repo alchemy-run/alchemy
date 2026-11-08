@@ -2407,6 +2407,15 @@ const readBucketEncryption = (bucket: string) =>
     .getBucketEncryption({ Bucket: bucket })
     .pipe(Effect.map((result) => result.ServerSideEncryptionConfiguration?.Rules?.[0]));
 
+/** Whether the bucket's default encryption already is `encryption`. */
+export const bucketEncryptionMatches = (bucket: string, encryption?: BucketEncryption) =>
+  readBucketEncryption(bucket).pipe(
+    Effect.map(
+      (rule) =>
+        encryptionFingerprint(rule) === encryptionFingerprint(desiredEncryptionRule(encryption)),
+    ),
+  );
+
 export const syncBucketEncryption = Effect.fn(function* (
   bucket: string,
   encryption?: BucketEncryption,

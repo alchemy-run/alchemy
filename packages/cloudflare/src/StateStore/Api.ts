@@ -39,7 +39,11 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
 // (v7 encoded them through `Unauthorized`'s schema and answered a bare 500),
 // FQNs longer than 100 URI-encoded chars are routed, secret reads retry, and
 // requests for the legacy bootstrap stack are refused.
-export const STATE_STORE_VERSION = 8 as const;
+// v9: records may carry secrets a client encrypted with a StateEncryption
+// layer. The Worker stores them as before; the bump makes every Alchemy from
+// before StateEncryption refuse the store, instead of reading a ciphertext
+// envelope as the secret.
+export const STATE_STORE_VERSION = 9 as const;
 
 /**
  * The stack older Alchemy versions deployed the store itself with. Those

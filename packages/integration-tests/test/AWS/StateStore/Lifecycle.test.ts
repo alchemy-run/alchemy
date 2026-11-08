@@ -2,11 +2,13 @@ import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Redacted from "effect/Redacted";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -56,8 +58,17 @@ test.provider(
       const store = yield* Alchemist.State.store(target).pipe(Effect.provide(alchemist));
       expect(yield* store.listStacks()).toEqual([]);
 
+      // Encrypted at rest with the store's own KMS key.
+      const alias = `alias/alchemy-state-${name}`;
+      const key = (yield* kms.describeKey({ KeyId: alias })).KeyMetadata;
+      const rule = (yield* s3.getBucketEncryption({ Bucket: bucket }))
+        .ServerSideEncryptionConfiguration?.Rules?.[0];
+      expect(rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
+      const keyId = rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+      expect(Redacted.isRedacted(keyId) ? Redacted.value(keyId) : keyId).toBe(key?.Arn);
+
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
-      expect(torn.deleted).toEqual([bucket]);
+      expect(torn.deleted).toEqual([bucket, alias]);
       expect(yield* bucketExists(bucket)).toBe(false);
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
@@ -82,7 +93,13 @@ test.provider(
     }),
   // Exclusive: sets `CI` on the process.
   {
-    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:kms",
+      "provider:aws:statestore",
+      "live",
+    ],
     timeout: 180_000,
     exclusive: true,
   },

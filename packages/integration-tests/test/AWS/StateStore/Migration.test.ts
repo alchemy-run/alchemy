@@ -648,13 +648,18 @@ test.provider(
       expect(Redacted.value(second.secret)).toBe(Redacted.value(first.secret));
 
       yield* destroy(OnDynamoDB);
-      // Tearing down the DynamoDB store keeps the S3 store it replaced.
+      // Tearing down the DynamoDB store keeps the S3 store it replaced, and
+      // the KMS key the two share.
       const torn = yield* Alchemist.State.teardown(awsStore).pipe(Effect.provide(alchemist));
       expect([...torn.deleted].sort()).toEqual(
         [`alchemy-state-${name}`, createOverflowBucketName(accountId, region, name)].sort(),
       );
       const tornS3 = yield* Alchemist.State.teardown(s3Store).pipe(Effect.provide(alchemist));
-      expect(tornS3.deleted).toEqual([`alchemy-state-${name}-${accountId}-${region}-an`]);
+      // With both stores gone, so is their key.
+      expect(tornS3.deleted).toEqual([
+        `alchemy-state-${name}-${accountId}-${region}-an`,
+        `alias/alchemy-state-${name}`,
+      ]);
     }),
   { tags, timeout: 300_000 },
 );

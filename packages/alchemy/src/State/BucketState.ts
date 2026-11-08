@@ -8,7 +8,7 @@ import * as Semaphore from "effect/Semaphore";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
-import { encodeState, reviveState } from "./StateEncoding.ts";
+import { type SealingScope, type StateCodec, stateCodec } from "./StateEncryption.ts";
 
 /**
  * A state store over an object storage bucket (S3, Cloud Storage, …).
@@ -108,6 +108,14 @@ export interface BucketStateOptions {
    * cached: ensure the bucket exists here, never at construction.
    */
   readonly objects: Effect.Effect<BucketObjects, StateStoreError>;
+  /**
+   * How records are written and read back. A sealing codec encrypts the
+   * secrets in them, and seals a record still holding one in plaintext the
+   * first time this store reads it.
+   *
+   * @default the codec of the StateEncryption provided to the store, or plaintext secrets without one
+   */
+  readonly codec?: StateCodec;
 }
 
 /**
@@ -185,24 +193,29 @@ export const makeBucketState = (options: BucketStateOptions) =>
     const leaseKey = (request: { stack: string; stage: string }) =>
       `${stagePrefix(request)}${LEASE_FILE}`;
 
-    const readJson = <T>(key: string) =>
-      use((o) => o.read(key)).pipe(
-        Effect.flatMap((object) =>
-          object === undefined
-            ? Effect.undefined
-            : Effect.try({
-                try: () => JSON.parse(object.text, reviveState) as T,
-                catch: (cause) =>
-                  new StateStoreError({
-                    message: `Failed to parse state object '${key}'`,
-                    cause: cause instanceof Error ? cause : undefined,
-                  }),
-              }),
-        ),
+    const codec = options.codec ?? (yield* stateCodec);
+
+    /**
+     * Read an object. A record with a secret still in plaintext is sealed in
+     * place, on condition nobody wrote it since, so state written before the
+     * store sealed secrets doesn't keep them in plaintext.
+     */
+    const readJson = <T>(scope: SealingScope, key: string) =>
+      use((o) =>
+        Effect.gen(function* () {
+          const object = yield* o.read(key);
+          if (object === undefined) return undefined;
+          const value = yield* codec.decode<T>(scope, object.text, `state object '${key}'`);
+          if (codec.unsealed(object.text)) {
+            const sealed = yield* codec.encode(scope, value, 2);
+            yield* o.write(key, sealed, { ifVersion: object.version });
+          }
+          return value;
+        }),
       );
 
-    const writeJson = (key: string, value: unknown) =>
-      use((o) => o.write(key, JSON.stringify(encodeState(value), null, 2)));
+    const writeJson = (scope: SealingScope, key: string, value: unknown) =>
+      codec.encode(scope, value, 2).pipe(Effect.flatMap((text) => use((o) => o.write(key, text))));
 
     /** Delete every object under `keyPrefix`, except leases. Idempotent. */
     const deleteAll = (keyPrefix: string) =>
@@ -423,7 +436,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       listStacks: () => verifyHeldLeases.pipe(Effect.andThen(listChildren(prefix))),
       listStages: (stack: string) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),
-      get: (request) => guarded(request, readJson<PersistedState>(resourceKey(request))),
+      get: (request) => guarded(request, readJson<PersistedState>(request, resourceKey(request))),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
           state.get({
@@ -436,7 +449,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       set: (request) =>
         guarded(
           request,
-          writeJson(resourceKey(request), request.value).pipe(Effect.as(request.value)),
+          writeJson(request, resourceKey(request), request.value).pipe(Effect.as(request.value)),
         ),
       delete: (request) =>
         guarded(
@@ -480,11 +493,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
             ),
           ),
         ),
-      getOutput: (request) => guarded(request, readJson(outputKey(request))),
+      getOutput: (request) => guarded(request, readJson(request, outputKey(request))),
       setOutput: (request) =>
         guarded(
           request,
-          writeJson(outputKey(request), request.value).pipe(Effect.as(request.value)),
+          writeJson(request, outputKey(request), request.value).pipe(Effect.as(request.value)),
         ),
     };
     return state;

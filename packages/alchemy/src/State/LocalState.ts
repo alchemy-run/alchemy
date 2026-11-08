@@ -11,7 +11,7 @@ import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
-import { encodeState, reviveState } from "./StateEncoding.ts";
+import { type SealingScope, stateCodec } from "./StateEncryption.ts";
 
 export const localState = () =>
   Layer.effect(
@@ -32,6 +32,8 @@ export const makeLocalState = () =>
     const dotAlchemy = yield* dotAlchemyDirectory;
     // Keep the store anchored across deploy/destroy even if another task changes cwd.
     const stateDir = path.resolve(initialCwd, dotAlchemy, "state");
+    // Secrets are encrypted when a StateEncryption is provided to the store.
+    const codec = yield* stateCodec;
 
     const fail = (err: PlatformError) =>
       Effect.fail(
@@ -103,8 +105,18 @@ export const makeLocalState = () =>
     // linger from a write that was interrupted before this atomic-write change
     // (or any non-atomic external writer); treat it as "absent" rather than
     // throwing a JSON parse error that would abort the whole operation.
-    const parseState = (contents: string) =>
-      contents.trim().length === 0 ? undefined : JSON.parse(contents, reviveState);
+    const parseState = <T>(scope: SealingScope, file: string, contents: string) =>
+      contents.trim().length === 0
+        ? Effect.undefined
+        : codec.decode<T>(scope, contents, `state file '${file}'`);
+
+    const readState = <T>(scope: SealingScope, file: string) =>
+      fs.readFileString(file).pipe(
+        recover,
+        Effect.flatMap((contents) =>
+          contents === undefined ? Effect.undefined : parseState<T>(scope, file, contents),
+        ),
+      );
 
     const created = new Set<string>();
 
@@ -128,11 +140,7 @@ export const makeLocalState = () =>
           recover,
           Effect.map((files) => files ?? []),
         ),
-      get: (request) =>
-        fs.readFile(resource(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
-          recover,
-        ),
+      get: (request) => readState(request, resource(request)),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
           state.get({
@@ -143,11 +151,13 @@ export const makeLocalState = () =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
-            writeAtomic(resource(request), JSON.stringify(encodeState(request.value), null, 2)),
+        codec.encode(request, request.value, 2).pipe(
+          Effect.flatMap((text) =>
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() => writeAtomic(resource(request), text)),
+              recover,
+            ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
@@ -206,20 +216,15 @@ export const makeLocalState = () =>
               .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),
-      getOutput: (request) =>
-        fs.readFile(outputFile(request)).pipe(
-          Effect.map((file) => parseState(file.toString())),
-          recover,
-        ),
+      getOutput: (request) => readState(request, outputFile(request)),
       setOutput: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
-            writeAtomic(
-              outputFile(request),
-              JSON.stringify(encodeState(request.value as any), null, 2),
+        codec.encode(request, request.value, 2).pipe(
+          Effect.flatMap((text) =>
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() => writeAtomic(outputFile(request), text)),
+              recover,
             ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
     };

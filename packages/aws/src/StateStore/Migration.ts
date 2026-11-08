@@ -197,8 +197,14 @@ const rollbackStage = Effect.fn(function* (
         // no S3 store writes the stage while it is copied back.
         const fence = yield* s3(fenceLegacyStage(legacy, stack, stage, table));
         if (!fence.fenced) return heldInS3(stack, stage, fence.expiresAt);
-        // A destroyed stage has no contents, which empties its S3 copy.
-        const contents = yield* migration.readStage(stack, stage);
+        // A destroyed stage has no contents, which empties its S3 copy. The
+        // copy is for a version from before sealing, so its secrets are
+        // opened.
+        const contents = yield* migration.openStage(
+          stack,
+          stage,
+          yield* migration.readStage(stack, stage),
+        );
         yield* s3(writeLegacyStage(legacy, stack, stage, contents));
         // The switch back. Past it, the S3 copy is the stage's state.
         yield* migration.markRolledBack(stack, stage, lease);
@@ -267,7 +273,8 @@ export const migrateToDynamoDB = Effect.fn("AWS.state.migrate")(function* (
 
 /**
  * Move every DynamoDB stage (or the selected ones) back to the S3 store,
- * for going back to a version of alchemy that only has the S3 store.
+ * for going back to a version of alchemy that only has the S3 store. That
+ * version can't open sealed secrets, so the copy holds them in plaintext.
  */
 export const rollbackToS3 = Effect.fn("AWS.state.rollback")(function* (
   store: DynamoDBStateService,

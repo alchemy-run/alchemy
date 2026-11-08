@@ -11,7 +11,7 @@ import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi, StateStoreFailure } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
-import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
+import { stateCodec } from "./StateEncryption.ts";
 
 /**
  * Persisted shape of an HTTP state store endpoint — `{ url, authToken }`.
@@ -76,6 +76,8 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
       ),
     });
     const state = apiClient.state;
+    // Secrets are encrypted in place when a StateEncryption is provided.
+    const codec = yield* stateCodec;
 
     const service: StateService = {
       id,
@@ -101,15 +103,21 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
             },
           })
           .pipe(
-            Effect.map((s) => (s == null ? undefined : (reviveStateRecursive(s) as ResourceState))),
             mapStateStoreError,
+            Effect.flatMap((s) =>
+              s == null
+                ? Effect.undefined
+                : codec.decodeJson<ResourceState>(request, s, `state '${request.fqn}'`),
+            ),
           ),
       getReplacedResources: (request) =>
         state.getReplacedResources({ params: request }).pipe(
-          Effect.map((resources) =>
-            resources.map((s) => reviveStateRecursive(s) as ReplacedResourceState),
-          ),
           mapStateStoreError,
+          Effect.flatMap((resources) =>
+            Effect.forEach(resources, (s) =>
+              codec.decodeJson<ReplacedResourceState>(request, s, "replaced resource state"),
+            ),
+          ),
         ),
       set: <V extends PersistedState>(request: {
         stack: string;
@@ -117,22 +125,24 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
         fqn: string;
         value: V;
       }) =>
-        state
-          .setState({
-            params: {
-              stack: request.stack,
-              stage: request.stage,
-              fqn: encodeURIComponent(request.fqn),
-            },
-            payload: encodeState(request.value),
-          })
-          .pipe(
-            // Server echoes the stored value, but the client already
-            // has the canonical object (including any Redacted<T>
-            // instances); returning the input avoids a lossy round-trip.
-            Effect.map(() => request.value),
-            mapStateStoreError,
+        codec.encodeJson(request, request.value).pipe(
+          Effect.flatMap((payload) =>
+            state
+              .setState({
+                params: {
+                  stack: request.stack,
+                  stage: request.stage,
+                  fqn: encodeURIComponent(request.fqn),
+                },
+                payload,
+              })
+              .pipe(mapStateStoreError),
           ),
+          // Server echoes the stored value, but the client already
+          // has the canonical object (including any Redacted<T>
+          // instances); returning the input avoids a lossy round-trip.
+          Effect.map(() => request.value),
+        ),
       delete: (request) =>
         state
           .deleteState({
@@ -156,19 +166,23 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
             params: { stack: request.stack, stage: request.stage },
           })
           .pipe(
-            Effect.map((s) => (s == null ? undefined : reviveStateRecursive(s))),
             mapStateStoreError,
+            Effect.flatMap((s) =>
+              s == null ? Effect.undefined : codec.decodeJson<unknown>(request, s, "stack output"),
+            ),
           ),
       setOutput: (request) =>
-        state
-          .setStackOutput({
-            params: { stack: request.stack, stage: request.stage },
-            payload: encodeState(request.value as any),
-          })
-          .pipe(
-            Effect.map(() => request.value),
-            mapStateStoreError,
+        codec.encodeJson(request, request.value).pipe(
+          Effect.flatMap((payload) =>
+            state
+              .setStackOutput({
+                params: { stack: request.stack, stage: request.stage },
+                payload,
+              })
+              .pipe(mapStateStoreError),
           ),
+          Effect.map(() => request.value),
+        ),
     };
     return service;
   });

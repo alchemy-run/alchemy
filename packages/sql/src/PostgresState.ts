@@ -7,12 +7,14 @@ import {
   type StateService,
 } from "alchemy/State/State";
 import { encodeState, reviveStateRecursive } from "alchemy/State/StateEncoding";
+import { StateEncryption } from "alchemy/State/StateEncryption";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -198,6 +200,11 @@ export const makePostgresState = <E = never, R = never>(
     // ConfigProvider, say) can still be resolved later — from inside the
     // service methods, whose own requirements are fixed at `never`.
     const context = yield* Effect.context<R>();
+    // Rows are jsonb, and versions of alchemy before StateEncryption would
+    // read an encrypted row's ciphertext as the secret: nothing in this
+    // store's schema fences them out yet. Refuse rather than store the
+    // secrets in plaintext the user asked to encrypt.
+    const encryption = yield* Effect.serviceOption(StateEncryption);
 
     const toError = (cause: unknown): StateStoreError =>
       cause instanceof StateStoreError
@@ -277,6 +284,11 @@ export const makePostgresState = <E = never, R = never>(
     // this cached Effect, which runs once on the first state operation.
     const ready = yield* Effect.cached(
       Effect.gen(function* () {
+        if (Option.isSome(encryption)) {
+          return yield* new StateStoreError({
+            message: `postgresState can't encrypt state yet; remove the StateEncryption ('${encryption.value.id}') provided to it`,
+          });
+        }
         const { client, url } = options;
         const resolved: SqlClient.SqlClient =
           client !== undefined && url === undefined

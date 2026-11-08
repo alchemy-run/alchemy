@@ -11,7 +11,11 @@ import {
   type StateService,
   StateStoreError,
 } from "alchemy/State/State";
-import { encodeState, reviveState } from "alchemy/State/StateEncoding";
+import {
+  makeSealingCodec,
+  type SealingScope,
+  StateEncryption,
+} from "alchemy/State/StateEncryption";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
@@ -22,11 +26,14 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { bucketEncryptionMatches, syncBucketEncryption } from "../S3/Bucket.ts";
+import { kmsKeyring, resolveStateKey } from "./Key.ts";
 import {
   fenceLegacyStage,
   HELD_PREFIX,
@@ -42,6 +49,7 @@ import { type CatalogStatus, migrateToDynamoDB, ownsStage, rollbackToS3 } from "
 import {
   createStateBucketName,
   provisionStateBucket,
+  stateBucketEncryption,
   stateBucketExists,
   stateEnvironment,
   withoutSdkDebugLogs,
@@ -82,10 +90,11 @@ export interface DynamoDBStateOptions {
    */
   migrateFrom?: { readonly bucketName?: string; readonly prefix?: string } | false;
   /**
-   * A customer-managed KMS key (id, ARN or alias) that encrypts the table
-   * and the overflow bucket. Applied when the store creates them.
+   * The KMS key (id, ARN or alias) that encrypts the table and the overflow
+   * bucket at rest, and seals the secrets in state. An existing table or
+   * bucket is moved to it.
    *
-   * @default AWS-owned keys
+   * @default the store's own key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created on first use
    */
   kmsKeyId?: string;
   /**
@@ -382,14 +391,55 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
 
-  const provision = (table: string, bucket: string, region: string) =>
-    Effect.all(
+  const provision = (table: string, bucket: string, region: string, keyArn: string) =>
+    Effect.all([ensureStateTable(table, keyArn), provisionStateBucket(bucket, region, keyArn)], {
+      concurrency: 2,
+      discard: true,
+    });
+
+  const storeRef = {
+    backend: DYNAMODB_STATE_BACKEND,
+    flags: { name: options.name },
+    configured,
+  };
+
+  /**
+   * Move an existing table and overflow bucket to SSE-KMS under `keyArn`.
+   * Outside CI only (or with `--yes`): the store works without it, and a
+   * CI role may not be allowed to change the table.
+   */
+  const convergeAtRest = Effect.fn(function* (
+    table: string,
+    observed: dynamodb.TableDescription,
+    bucket: string,
+    keyArn: string,
+    bucketCreated: boolean,
+  ) {
+    const encryption = stateBucketEncryption(keyArn);
+    const [tableEncrypted, bucketEncrypted] = yield* Effect.all(
       [
-        ensureStateTable(table, options.kmsKeyId),
-        provisionStateBucket(bucket, region, options.kmsKeyId),
+        Effect.succeed(tableUsesKey(observed, keyArn)),
+        // A bucket this run just created already has the key.
+        bucketCreated ? Effect.succeed(true) : bucketEncryptionMatches(bucket, encryption),
       ],
-      { concurrency: 2, discard: true },
+      { concurrency: 2 },
     );
+    if (tableEncrypted && bucketEncrypted) return;
+    yield* Provisioning.convergeSettings(
+      {
+        ...storeRef,
+        label: `DynamoDB state table '${table}'`,
+        problem: `is not encrypted at rest with the state store's KMS key`,
+      },
+      Effect.all(
+        [
+          tableEncrypted ? Effect.void : encryptTable(table, observed, keyArn),
+          bucketEncrypted ? Effect.void : syncBucketEncryption(bucket, encryption),
+        ],
+        { concurrency: 2, discard: true },
+      ),
+    );
+  });
 
   // Ensure the table and overflow bucket exist on the first operation, so a
   // missing one fails the run before it changes anything.
@@ -400,32 +450,28 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         [describeStateTable(table), stateBucketExists(bucket)],
         { concurrency: 2 },
       );
+      const keyArn = yield* resolveStateKey({
+        kmsKeyId: options.kmsKeyId,
+        name: options.name,
+        store: { ...storeRef, label: `DynamoDB state table '${table}'` },
+      });
       if (observed === undefined) {
         yield* Provisioning.deployMissing(
-          {
-            backend: DYNAMODB_STATE_BACKEND,
-            flags: { name: options.name },
-            configured,
-            label: `DynamoDB state table '${table}'`,
-          },
-          provision(table, bucket, region),
+          { ...storeRef, label: `DynamoDB state table '${table}'` },
+          provision(table, bucket, region, keyArn),
         );
       } else {
         yield* validateKeySchema(observed);
         if (observed.TableStatus !== "ACTIVE") yield* waitForTableActive(table);
         if (!bucketExists) {
           yield* Provisioning.deployMissing(
-            {
-              backend: DYNAMODB_STATE_BACKEND,
-              flags: { name: options.name },
-              configured,
-              label: `DynamoDB state overflow bucket '${bucket}'`,
-            },
-            provisionStateBucket(bucket, region, options.kmsKeyId),
+            { ...storeRef, label: `DynamoDB state overflow bucket '${bucket}'` },
+            provisionStateBucket(bucket, region, keyArn),
           );
         }
+        yield* convergeAtRest(table, observed, bucket, keyArn, !bucketExists);
       }
-      return { table, bucket, region, legacy };
+      return { table, bucket, region, legacy, keyArn };
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
 
@@ -475,15 +521,18 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     return text;
   });
 
-  const parse = <T>(text: string, what: string) =>
-    Effect.try({
-      try: () => JSON.parse(text, reviveState) as T,
-      catch: (cause) =>
-        new StateStoreError({
-          message: `Failed to parse DynamoDB state ${what}`,
-          cause: cause instanceof Error ? cause : undefined,
-        }),
-    });
+  // Secrets are sealed under data keys from the store's KMS key.
+  // Secrets are encrypted with the StateEncryption provided to the store,
+  // and otherwise with data keys from the store's own KMS key.
+  const encryption = yield* Effect.serviceOption(StateEncryption);
+  const codec = makeSealingCodec(
+    Option.getOrElse(encryption, () =>
+      kmsKeyring(target.pipe(Effect.map(({ keyArn }) => keyArn)), run),
+    ),
+  );
+
+  const parse = <T>(scope: SealingScope, text: string, what: string) =>
+    codec.decode<T>(scope, text, `DynamoDB state ${what}`);
 
   /**
    * Write an item holding `value`, inline or as an overflow reference.
@@ -863,7 +912,28 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }),
       { concurrency: 16 },
     );
-    return { records: new Map<string, StoredRecord>(records), status } satisfies Snapshot;
+    // Seal the secrets of records written before the store sealed them, so
+    // a stage's secrets don't stay in plaintext until each resource changes.
+    // The caller holds the stage's lease.
+    const scope = { stack, stage };
+    const resealed = yield* Effect.forEach(
+      records,
+      ([fqn, record]) =>
+        codec.unsealed(record.text)
+          ? Effect.gen(function* () {
+              const value = yield* parse<unknown>(scope, record.text, `record '${fqn}'`);
+              const text = yield* codec.encode(scope, value);
+              yield* putPayload(
+                { PK: stagePk(stack, stage), SK: yield* recordSk(fqn), stack, stage },
+                text,
+                { fqn: S(fqn) },
+              );
+              return [fqn, { text }] as const;
+            })
+          : Effect.succeed([fqn, record] as const),
+      { concurrency: 16 },
+    );
+    return { records: new Map<string, StoredRecord>(resealed), status } satisfies Snapshot;
   });
 
   // One lease per (stack, stage), taken on the first operation and held
@@ -1088,19 +1158,19 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         const record = records.get(request.fqn);
         return record === undefined
           ? Effect.undefined
-          : parse<PersistedState>(record.text, `record '${request.fqn}'`);
+          : parse<PersistedState>(request, record.text, `record '${request.fqn}'`);
       }),
     getReplacedResources: (request) =>
       guarded(request, ({ records }) =>
         Effect.forEach(Array.from(records), ([fqn, record]) =>
-          parse<PersistedState>(record.text, `record '${fqn}'`),
+          parse<PersistedState>(request, record.text, `record '${fqn}'`),
         ).pipe(Effect.map((values) => values.filter((value) => value.status === "replaced"))),
       ) as ReturnType<StateService["getReplacedResources"]>,
     set: (request) =>
       guarded(request, (snapshot, lease) =>
         Effect.gen(function* () {
           yield* register(request.stack, request.stage, snapshot, lease);
-          const text = JSON.stringify(encodeState(request.value));
+          const text = yield* codec.encode(request, request.value);
           yield* putPayload(
             {
               PK: stagePk(request.stack, request.stage),
@@ -1155,14 +1225,14 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }),
       );
       if (result.Item !== undefined) {
-        return yield* parse<unknown>(yield* itemText(result.Item), "stack output");
+        return yield* parse<unknown>(request, yield* itemText(result.Item), "stack output");
       }
       // A stage that hasn't moved yet keeps its output in the S3 store.
       // Reading it takes no lease, so a reference to it still resolves.
       const { legacy } = yield* names;
       if (legacy === undefined) return undefined;
       if (ownsStage(yield* catalogStatus(request.stack, request.stage))) return undefined;
-      return yield* use(() => readLegacyOutput(legacy, request.stack, request.stage));
+      return yield* use(() => readLegacyOutput(legacy, request.stack, request.stage, codec));
     }),
     setOutput: (request) =>
       guarded(request, (snapshot, lease) =>
@@ -1186,7 +1256,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
               stack: request.stack,
               stage: request.stage,
             },
-            JSON.stringify(encodeState(request.value)),
+            yield* codec.encode(request, request.value),
             {},
           );
           return request.value;
@@ -1302,12 +1372,39 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     migration: {
       names,
       provision: names.pipe(
-        Effect.tap((resolved) => run(provision(resolved.table, resolved.bucket, resolved.region))),
+        Effect.tap((resolved) =>
+          resolveStateKey({
+            kmsKeyId: options.kmsKeyId,
+            name: options.name,
+            store: { ...storeRef, label: `DynamoDB state table '${resolved.table}'` },
+          }).pipe(
+            Effect.flatMap((keyArn) =>
+              provision(resolved.table, resolved.bucket, resolved.region, keyArn),
+            ),
+            Effect.provideContext(context),
+            Effect.mapError(toError),
+          ),
+        ),
       ),
       catalog: () => catalog(),
       status: catalogStatus,
       exclusive,
       readStage,
+      openStage: (stack, stage, contents) =>
+        Effect.gen(function* () {
+          const scope = { stack, stage };
+          const records = yield* Effect.forEach(
+            Array.from(contents.records),
+            ([fqn, text]) =>
+              codec.open(scope, text).pipe(Effect.map((open) => [fqn, open] as const)),
+            { concurrency: 16 },
+          );
+          return {
+            records: new Map(records),
+            output:
+              contents.output === undefined ? undefined : yield* codec.open(scope, contents.output),
+          } satisfies StageContents;
+        }),
       commitStage,
       markRolledBack,
       deleteStageItems: (stack, stage, lease) =>
@@ -1344,7 +1441,7 @@ export interface DynamoDBStateService extends StateService {
       { table: string; bucket: string; region: string; legacy: LegacyLocation | undefined },
       StateStoreError
     >;
-    /** {@link names}, after creating the table and overflow bucket if missing. */
+    /** {@link names}, after creating the table, overflow bucket and key if missing. */
     readonly provision: Effect.Effect<
       { table: string; bucket: string; region: string; legacy: LegacyLocation | undefined },
       StateStoreError
@@ -1365,6 +1462,15 @@ export interface DynamoDBStateService extends StateService {
     readonly readStage: (
       stack: string,
       stage: string,
+    ) => Effect.Effect<StageContents, StateStoreError>;
+    /**
+     * The stage's contents with every sealed secret opened, for an S3 store
+     * written for a version of alchemy from before sealing.
+     */
+    readonly openStage: (
+      stack: string,
+      stage: string,
+      contents: StageContents,
     ) => Effect.Effect<StageContents, StateStoreError>;
     readonly commitStage: (
       stack: string,
@@ -1430,12 +1536,40 @@ const waitForTableActive = (table: string) =>
     ),
   );
 
+/** Whether the table is encrypted at rest with `keyArn`. */
+const tableUsesKey = (table: dynamodb.TableDescription, keyArn: string) =>
+  table.SSEDescription?.SSEType === "KMS" && table.SSEDescription.KMSMasterKeyArn === keyArn;
+
+/**
+ * Move a table to SSE-KMS under `keyArn`. DynamoDB re-encrypts it in the
+ * background, and it keeps serving reads and writes meanwhile.
+ */
+const encryptTable = (table: string, observed: dynamodb.TableDescription, keyArn: string) =>
+  // Already moving to a key. The move takes minutes, and DynamoDB reports
+  // no key until it finishes.
+  observed.SSEDescription?.Status === "UPDATING"
+    ? Effect.void
+    : dynamodb
+        .updateTable({
+          TableName: table,
+          SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: keyArn },
+        })
+        .pipe(
+          Effect.tap(() =>
+            Effect.logInfo(`DynamoDB state store: encrypting table ${table} with ${keyArn}`),
+          ),
+          Effect.asVoid,
+          // Another first caller is updating it.
+          Effect.catchTag("ResourceInUseException", () => Effect.void),
+        );
+
 /**
  * Observe-then-ensure the state table: create it if missing (tolerating
- * create races), with deletion protection and, given `kmsKeyId`, that KMS
- * key; wait for it to become ACTIVE, and enable point-in-time recovery.
+ * create races), with deletion protection and SSE-KMS under `keyArn`; move
+ * an existing table to that key; wait for it to become ACTIVE, and enable
+ * point-in-time recovery.
  */
-const ensureStateTable = Effect.fn(function* (table: string, kmsKeyId?: string) {
+const ensureStateTable = Effect.fn(function* (table: string, keyArn: string) {
   const observed = yield* describeStateTable(table);
   if (observed === undefined) {
     yield* Effect.logInfo(`DynamoDB state store: creating table ${table}`);
@@ -1453,16 +1587,15 @@ const ensureStateTable = Effect.fn(function* (table: string, kmsKeyId?: string) 
         BillingMode: "PAY_PER_REQUEST",
         // The table holds the state of every stack on the account.
         DeletionProtectionEnabled: true,
-        ...(kmsKeyId === undefined
-          ? {}
-          : { SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: kmsKeyId } }),
+        SSESpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: keyArn },
       })
       // Another first caller is creating it.
       .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
   } else {
     yield* validateKeySchema(observed);
   }
-  yield* waitForTableActive(table);
+  const active = yield* waitForTableActive(table);
+  if (!tableUsesKey(active, keyArn)) yield* encryptTable(table, active, keyArn);
 
   const backups = yield* dynamodb.describeContinuousBackups({ TableName: table });
   if (
@@ -1491,9 +1624,9 @@ const ensureStateTable = Effect.fn(function* (table: string, kmsKeyId?: string) 
  */
 export const provisionStateTable = (
   table: string,
-  kmsKeyId?: string,
+  keyArn: string,
 ): Effect.Effect<void, StateStoreError, AwsDeps> =>
-  ensureStateTable(table, kmsKeyId).pipe(Effect.mapError(toError));
+  ensureStateTable(table, keyArn).pipe(Effect.mapError(toError));
 
 /** Whether a state table exists. */
 export const stateTableExists = (table: string) =>

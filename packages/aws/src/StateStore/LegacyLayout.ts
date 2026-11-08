@@ -1,6 +1,7 @@
 import * as s3 from "@distilled.cloud/aws/s3";
 import { decodeFqn, encodeFqn } from "alchemy/FQN";
 import { encodeState, reviveState } from "alchemy/State/StateEncoding";
+import { isSealed, type StateCodec } from "alchemy/State/StateEncryption";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -132,11 +133,21 @@ const parse = (text: string, key: string) =>
   });
 
 /** The stage's output, read without the S3 store's lease. */
-export const readLegacyOutput = (location: LegacyLocation, stack: string, stage: string) => {
+export const readLegacyOutput = (
+  location: LegacyLocation,
+  stack: string,
+  stage: string,
+  codec: StateCodec,
+) => {
   const key = `${stagePrefix(location, stack, stage)}${OUTPUT_FILE}`;
-  return readText(location.bucket, key).pipe(
-    Effect.flatMap((object) => (object === undefined ? Effect.undefined : parse(object.text, key))),
-  );
+  return Effect.gen(function* () {
+    const object = yield* readText(location.bucket, key);
+    if (object === undefined) return undefined;
+    if (!isSealed(object.text)) return yield* parse(object.text, key);
+    return yield* codec
+      .decode<unknown>({ stack, stage }, object.text, `S3 state object '${key}'`)
+      .pipe(Effect.mapError((error) => new LegacyStateError({ message: error.message })));
+  });
 };
 
 /** A stage's contents, each value encoded the way the DynamoDB store stores it. */
@@ -146,9 +157,14 @@ export interface StageContents {
   readonly output: string | undefined;
 }
 
-/** Re-encode stored JSON into the DynamoDB store's canonical form. */
+/**
+ * Re-encode stored JSON into the DynamoDB store's canonical form. A sealed
+ * record is already in it: both stores seal with the same codec.
+ */
 const canonical = (text: string, key: string) =>
-  parse(text, key).pipe(Effect.map((value) => JSON.stringify(encodeState(value))));
+  isSealed(text)
+    ? Effect.succeed(text)
+    : parse(text, key).pipe(Effect.map((value) => JSON.stringify(encodeState(value))));
 
 /** Read every record and the output of a stage. */
 export const readLegacyStage = Effect.fn(function* (
