@@ -1,5 +1,5 @@
 ---
-title: "Part 1: Build a Shared Base"
+title: "Part 1: Seed a Disk"
 description: Install Alchemy, declare an Archil disk, and seed it with a repository at deploy time.
 sidebar:
   order: 1
@@ -33,7 +33,7 @@ import * as Effect from "effect/Effect";
 export const Repo = Archil.Disk("Repo", {});
 ```
 
-A disk is a filesystem stored in object storage. `Repo` holds the shared base.
+A disk is a filesystem stored in object storage. `Repo` holds the repository every command runs against.
 
 ## Seed it at deploy
 

@@ -1,7 +1,7 @@
 import * as Boat from "@alchemy.run/boat";
 
 /**
- * The shared base every sandbox starts from, built at deploy: the repository
+ * The snapshot every sandbox starts from, built at deploy: the repository
  * cloned and the tools installed, saved as a snapshot.
  */
 export const Golden = Boat.Snapshot("Golden", {

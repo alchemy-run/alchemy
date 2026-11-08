@@ -9,7 +9,7 @@ export const Base = Daytona.Snapshot("Base", {
   disk: 3,
 });
 
-/** The shared base every sandbox starts from: Base with the repository cloned, captured at deploy. */
+/** The warm snapshot every sandbox starts from: Base with the repository cloned, captured at deploy. */
 export const Warm = Daytona.Snapshot("Warm", {
   from: Base,
   run: ["git clone --depth 1 https://github.com/sindresorhus/is /home/daytona/repo"],

@@ -1,13 +1,13 @@
 ---
 title: "Part 3: A Copy per User"
-description: Give each user a Boat sandbox started from the shared snapshot, which keeps their changes and resumes when they come back.
+description: Give each user a Boat sandbox started from the Golden snapshot, which keeps their changes and resumes when they come back.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Start a user's sandbox from the base
+## Start a user's sandbox from Golden
 
 ```diff lang="typescript"
 // src/Api.ts
@@ -54,4 +54,4 @@ curl "$URL/users/ana/files/notes.md"`}
 
 ## Next
 
-[Part 4](/boat/tutorial/part-4) changes the base.
+[Part 4](/boat/tutorial/part-4) changes the snapshot.

@@ -13,7 +13,7 @@ export const Agent = E2B.Template("Agent", {
   memoryMB: 2048,
 });
 
-/** The shared base every sandbox starts from: the repository cloned into the image, snapshotted at deploy. */
+/** The snapshot every sandbox starts from: the repository cloned into the image, snapshotted at deploy. */
 export const Warm = E2B.Snapshot("Warm", {
   template: Agent,
   run: ["git clone --depth 1 https://github.com/sindresorhus/is repo"],

@@ -38,7 +38,7 @@ const post = (url: string, command: string) =>
   );
 
 test(
-  "runs commands against the shared base, read-only",
+  "runs commands against the seeded disk, read-only",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const name = yield* post(`${url}/run`, "grep -o '\"@sindresorhus/is\"' package.json");

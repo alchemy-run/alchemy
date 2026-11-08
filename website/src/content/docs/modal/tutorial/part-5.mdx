@@ -1,6 +1,6 @@
 ---
 title: "Part 5: Testing"
-description: Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the base and the user's files.
+description: Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
 sidebar:
   order: 5
 ---
@@ -32,7 +32,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 The test deploys the Stack to a stage of its own, with its own environment and images, and destroys it afterwards.
 
-## Check a sandbox sees the base and the user's files
+## Check a sandbox sees the warm image and the user's files
 
 ```typescript title="test/integ.test.ts"
 test(

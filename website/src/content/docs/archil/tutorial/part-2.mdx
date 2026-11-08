@@ -1,6 +1,6 @@
 ---
 title: "Part 2: Run Commands Against It"
-description: A program in its own Archil sandbox that runs each command in a fresh microVM with the shared disk mounted read-only.
+description: A program in its own Archil sandbox that runs each command in a fresh microVM with the seeded disk mounted read-only.
 sidebar:
   order: 2
 ---
@@ -42,7 +42,7 @@ export default class Api extends Archil.Sandbox<Api>()(
 +    });
 ```
 
-Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the command, and shuts it down. The repository is already there. The disk is mounted read-only, so no command can change the shared base.
+Each call boots a microVM with `Repo` mounted at `/mnt/archil/base`, runs the command, and shuts it down. The repository is already there. The disk is mounted read-only, so no command can change it.
 
 ## Serve it
 

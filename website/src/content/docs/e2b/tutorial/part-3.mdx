@@ -1,13 +1,13 @@
 ---
 title: "Part 3: A Copy per User"
-description: Give each user an E2B sandbox started from the shared snapshot, which pauses with their changes and resumes when they come back.
+description: Give each user an E2B sandbox started from the Warm snapshot, which pauses with their changes and resumes when they come back.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Start a user's sandbox from the base
+## Start a user's sandbox from Warm
 
 ```diff lang="typescript"
 // src/Api.ts
@@ -49,4 +49,4 @@ curl "$URL/users/ana/files/notes.md"`}
 
 ## Next
 
-[Part 4](/e2b/tutorial/part-4) changes the base.
+[Part 4](/e2b/tutorial/part-4) changes the template.

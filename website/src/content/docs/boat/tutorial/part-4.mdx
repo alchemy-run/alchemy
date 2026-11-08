@@ -1,6 +1,6 @@
 ---
-title: "Part 4: Update the Base"
-description: Change the shared Boat snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
+title: "Part 4: Update the Snapshot"
+description: Change the Golden snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
 sidebar:
   order: 4
 ---
@@ -9,7 +9,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Add a command
 
-Install pnpm into the base:
+Install pnpm into the snapshot:
 
 ```diff lang="typescript"
 // src/Golden.ts

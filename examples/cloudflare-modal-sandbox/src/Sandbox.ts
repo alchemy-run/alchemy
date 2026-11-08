@@ -14,7 +14,7 @@ export const Node = Modal.Image("Node", {
   commands: ["RUN apt-get update && apt-get install -y git"],
 });
 
-/** The shared base every sandbox starts from: the repository cloned and pnpm installed, saved as an image at deploy. */
+/** The warm image every sandbox starts from: the repository cloned and pnpm installed, saved as an image at deploy. */
 export const Warm = Modal.Image("Warm", {
   app: Coder,
   from: Node,

@@ -1,5 +1,5 @@
 ---
-title: "Part 1: Build a Shared Base"
+title: "Part 1: Build a Template and a Snapshot"
 description: Declare an E2B template and a snapshot of it with a repository cloned, both built at deploy time, so every sandbox starts ready.
 sidebar:
   order: 1
@@ -46,7 +46,7 @@ export const Warm = E2B.Snapshot("Warm", {
 });
 ```
 
-`Warm` is the shared base. Every sandbox the app starts boots from it, with the repository already in `/home/user/repo`.
+Every sandbox the app starts boots from `Warm`, with the repository already in `/home/user/repo`.
 
 ## Add it to the Stack
 

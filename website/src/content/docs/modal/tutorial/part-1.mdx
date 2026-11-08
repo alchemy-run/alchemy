@@ -1,5 +1,5 @@
 ---
-title: "Part 1: Build a Shared Base"
+title: "Part 1: Build a Warm Image"
 description: Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
 sidebar:
   order: 1
@@ -60,7 +60,7 @@ Modal builds it on its own builders, so you don't need Docker.
 +});
 ```
 
-`run` executes in a sandbox once, at deploy, then saves the sandbox's files as an image. `Warm` is the shared base: every sandbox the app starts boots from it, with the repository already in `/work`.
+`run` executes in a sandbox once, at deploy, then saves the sandbox's files as an image. Every sandbox the app starts boots from it, with the repository already in `/work`.
 
 ## Deploy
 

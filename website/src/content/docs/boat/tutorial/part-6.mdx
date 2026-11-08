@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-Each stage builds its own `Golden` snapshot and its own Worker, with its own Boat key, so changing the base in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
+Each stage builds its own `Golden` snapshot and its own Worker, with its own Boat key, so changing the snapshot in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
 
 Stages share your Boat account. Sandboxes a stage's Worker creates carry the stage as a label (`alchemy.stage`), so you can list one stage's sandboxes without touching another's:
 

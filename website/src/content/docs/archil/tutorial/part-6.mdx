@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-Each stage gets its own `Repo` disk, seeded by its own checkpoint, and its own program at its own URL, so changing the base in one stage never reaches another. Without `--stage`, Alchemy deploys to `live_$USER`.
+Each stage gets its own `Repo` disk, seeded by its own checkpoint, and its own program at its own URL, so changing the disk in one stage never reaches another. Without `--stage`, Alchemy deploys to `live_$USER`.
 
 ## Move state somewhere CI can read
 

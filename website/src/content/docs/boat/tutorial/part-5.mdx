@@ -1,6 +1,6 @@
 ---
 title: "Part 5: Testing"
-description: Deploy the Stack in a test, start sandboxes from the shared snapshot, and check what they contain.
+description: Deploy the Stack in a test, start sandboxes from the Golden snapshot, and check what they contain.
 sidebar:
   order: 5
 ---
@@ -31,7 +31,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 The test deploys the Stack to a stage of its own, snapshot included, and destroys it afterwards.
 
-## Check a sandbox starts from the base
+## Check a sandbox starts from Golden
 
 ```typescript title="test/integ.test.ts"
 test(

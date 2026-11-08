@@ -1,6 +1,6 @@
 ---
 title: "Part 5: Testing"
-description: Deploy the Stack in a test, run commands against the shared disk, and check it stays read-only.
+description: Deploy the Stack in a test, run commands against the seeded disk, and check it stays read-only.
 sidebar:
   order: 5
 ---
@@ -54,11 +54,11 @@ const run = (url: string, command: string) =>
   });
 ```
 
-## Check the base, and that it's read-only
+## Check the seeded disk, and that it's read-only
 
 ```typescript title="test/integ.test.ts"
 test(
-  "runs commands against the shared base, read-only",
+  "runs commands against the seeded disk, read-only",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const both = yield* run(url, "ls ..");

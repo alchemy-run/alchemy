@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-Each stage builds its own template and snapshot, named after the stage, and its own Worker, so changing the base in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
+Each stage builds its own template and snapshot, named after the stage, and its own Worker, so changing the template or snapshot in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
 
 Stages share your E2B team. Sandboxes a stage's Worker creates carry the stage in their metadata (`alchemy::stage`), so you can list one stage's sandboxes without touching another's:
 

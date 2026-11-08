@@ -1,10 +1,10 @@
 import * as Archil from "@alchemy.run/archil";
 import * as Effect from "effect/Effect";
 
-/** The disk that holds the shared base. */
+/** The disk every command runs against. */
 export const Repo = Archil.Disk("Repo", {});
 
-/** The shared base, built at deploy: the repository cloned onto Repo, then checkpointed. */
+/** Built at deploy: the repository cloned onto Repo, then checkpointed. */
 export const Base = Effect.gen(function* () {
   const repo = yield* Repo;
   return yield* Archil.Checkpoint("Base", {

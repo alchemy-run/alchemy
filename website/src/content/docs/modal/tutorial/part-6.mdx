@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-The `Agents` environment's name includes the stage, so `staging` gets its own environment, app, images and volumes, and changing the base in one stage never reaches another. Your own stage is untouched.
+The `Agents` environment's name includes the stage, so `staging` gets its own environment, app, images and volumes, and changing the image in one stage never reaches another. Your own stage is untouched.
 
 ## Limit what a stage can spend
 

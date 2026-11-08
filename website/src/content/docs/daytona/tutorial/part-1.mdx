@@ -1,5 +1,5 @@
 ---
-title: "Part 1: Build a Shared Base"
+title: "Part 1: Build a Warm Snapshot"
 description: Declare a Daytona snapshot of an image, and a warm snapshot of it with a repository cloned, both built at deploy time.
 sidebar:
   order: 1
@@ -41,7 +41,7 @@ export const Warm = Daytona.Snapshot("Warm", {
 });
 ```
 
-At deploy, Alchemy starts a sandbox from `Base`, runs the commands, captures its disk as `Warm`, and deletes the sandbox. `Warm` is the shared base: every sandbox the app starts boots from it, with the repository already in `/home/daytona/repo`.
+At deploy, Alchemy starts a sandbox from `Base`, runs the commands, captures its disk as `Warm`, and deletes the sandbox. Every sandbox the app starts boots from it, with the repository already in `/home/daytona/repo`.
 
 ## Add it to the Stack
 

@@ -11,7 +11,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 <PackageManagers run="alchemy deploy --stage staging" />
 
-Each stage builds its own snapshots, named after the stage, and its own Worker and API key, so changing the base in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
+Each stage builds its own snapshots, named after the stage, and its own Worker and API key, so changing the snapshots in one stage never reaches another. Without `--stage`, you deploy to `live_$USER`.
 
 Sandboxes a stage's Worker creates carry the stage in their `alchemy.stage` label. Destroying a stage doesn't delete them, so list a stage's sandboxes by that label to clean them up.
 

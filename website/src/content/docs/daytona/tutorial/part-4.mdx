@@ -1,5 +1,5 @@
 ---
-title: "Part 4: Update the Base"
+title: "Part 4: Update the Snapshot"
 description: Move the Daytona snapshots to a new Node.js version, redeploy, and see new sandboxes start from it while existing ones keep theirs.
 sidebar:
   order: 4
@@ -9,7 +9,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Change the image
 
-Move the base to Node.js 24:
+Move the snapshots to Node.js 24:
 
 ```diff lang="typescript"
 // src/Images.ts

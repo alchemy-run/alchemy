@@ -1,13 +1,13 @@
 ---
 title: "Part 3: A Copy per User"
-description: Give each user an Archil disk of their own, copied from the shared base on their first request.
+description: Give each user an Archil disk of their own, copied from the seeded disk on their first request.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Copy the base onto a user's disk
+## Copy the seeded disk onto a user's disk
 
 ```diff lang="typescript"
 // src/Api.ts
@@ -26,7 +26,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 +    });
 ```
 
-Provide `Archil.CreateDiskHttp` next to `Archil.ExecDisksHttp`, with `Layer.mergeAll`. A user's first request creates a disk for them and copies the base onto it, in one microVM with both disks mounted. `disks.get` finds it again on their next request.
+Provide `Archil.CreateDiskHttp` next to `Archil.ExecDisksHttp`, with `Layer.mergeAll`. A user's first request creates a disk for them and copies `Repo` onto it, in one microVM with both disks mounted. `disks.get` finds it again on their next request.
 
 ## Their changes stay on their disk
 
@@ -68,4 +68,4 @@ Disks the program creates aren't deleted with the Stack, so delete them when the
 
 ## Next
 
-[Part 4](/archil/tutorial/part-4) changes the base.
+[Part 4](/archil/tutorial/part-4) changes the disk.
