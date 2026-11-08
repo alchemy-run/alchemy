@@ -6,15 +6,14 @@ import {
   type PersistedState,
   type StateService,
 } from "alchemy/State/State";
-import { encodeState, reviveStateRecursive } from "alchemy/State/StateEncoding";
-import { StateEncryption } from "alchemy/State/StateEncryption";
+import { stateCodec } from "alchemy/State/StateEncryption";
+import { checkStoreFormat, STATE_STORE_FORMAT } from "alchemy/State/StoreFormat";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -200,11 +199,8 @@ export const makePostgresState = <E = never, R = never>(
     // ConfigProvider, say) can still be resolved later — from inside the
     // service methods, whose own requirements are fixed at `never`.
     const context = yield* Effect.context<R>();
-    // Rows are jsonb, and versions of alchemy before StateEncryption would
-    // read an encrypted row's ciphertext as the secret: nothing in this
-    // store's schema fences them out yet. Refuse rather than store the
-    // secrets in plaintext the user asked to encrypt.
-    const encryption = yield* Effect.serviceOption(StateEncryption);
+    // Secrets are encrypted in place when a StateEncryption is provided.
+    const codec = yield* stateCodec;
 
     const toError = (cause: unknown): StateStoreError =>
       cause instanceof StateStoreError
@@ -234,12 +230,25 @@ export const makePostgresState = <E = never, R = never>(
         .withTransaction(
           Effect.gen(function* () {
             yield* sql`select pg_advisory_xact_lock(hashtextextended(${`${prefix}:schema`}, 0))`;
+            // The store's format record. A newer format is refused before
+            // anything is changed.
+            yield* sql`
+              create table if not exists alchemy_state_store (
+                id boolean primary key default true check (id),
+                format integer not null
+              )
+            `;
+            const [stored] = yield* sql`select format from alchemy_state_store`;
+            yield* checkStoreFormat(
+              "Postgres state store",
+              stored === undefined ? undefined : Number(stored.format),
+            );
             yield* sql`
               create table if not exists alchemy_resource_state (
                 stack text not null,
                 stage text not null,
                 fqn text not null,
-                value jsonb not null,
+                data jsonb not null,
                 updated_at timestamptz not null default now(),
                 primary key (stack, stage, fqn)
               )
@@ -248,10 +257,27 @@ export const makePostgresState = <E = never, R = never>(
               create table if not exists alchemy_stack_output (
                 stack text not null,
                 stage text not null,
-                value jsonb not null,
+                data jsonb not null,
                 updated_at timestamptz not null default now(),
                 primary key (stack, stage)
               )
+            `;
+            // Format 1 renamed the record column from `value` to `data`.
+            // Versions from before the format record read and write `value`,
+            // so they fail on this store instead of reading an encrypted
+            // secret's ciphertext as the secret.
+            const legacy = yield* sql`
+              select table_name from information_schema.columns
+              where table_schema = current_schema()
+                and table_name in ('alchemy_resource_state', 'alchemy_stack_output')
+                and column_name = 'value'
+            `;
+            for (const row of legacy) {
+              yield* sql`alter table ${sql(String(row.table_name))} rename column value to data`;
+            }
+            yield* sql`
+              insert into alchemy_state_store (id, format) values (true, ${STATE_STORE_FORMAT})
+              on conflict (id) do update set format = excluded.format
             `;
           }),
         )
@@ -284,11 +310,6 @@ export const makePostgresState = <E = never, R = never>(
     // this cached Effect, which runs once on the first state operation.
     const ready = yield* Effect.cached(
       Effect.gen(function* () {
-        if (Option.isSome(encryption)) {
-          return yield* new StateStoreError({
-            message: `postgresState can't encrypt state yet; remove the StateEncryption ('${encryption.value.id}') provided to it`,
-          });
-        }
         const { client, url } = options;
         const resolved: SqlClient.SqlClient =
           client !== undefined && url === undefined
@@ -467,7 +488,22 @@ export const makePostgresState = <E = never, R = never>(
       ),
     );
 
-    const jsonParam = (value: unknown) => JSON.stringify(encodeState(value));
+    const jsonParam = (scope: { stack: string; stage: string }, value: unknown) =>
+      codec.encodeJson(scope, value).pipe(Effect.map((json) => JSON.stringify(json)));
+
+    const writeRecord = (request: { stack: string; stage: string; fqn: string }, value: unknown) =>
+      jsonParam(request, value).pipe(
+        Effect.flatMap((json) =>
+          run(
+            (sql) => sql`
+              insert into alchemy_resource_state (stack, stage, fqn, data, updated_at)
+              values (${request.stack}, ${request.stage}, ${request.fqn}, ${json}::jsonb, now())
+              on conflict (stack, stage, fqn) do update
+                set data = excluded.data, updated_at = excluded.updated_at
+            `,
+          ),
+        ),
+      );
 
     const deleteStage = (stack: string, stage: string) =>
       run(
@@ -511,15 +547,22 @@ export const makePostgresState = <E = never, R = never>(
           request,
           run(
             (sql) =>
-              sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and fqn = ${request.fqn}`,
+              sql`select data from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and fqn = ${request.fqn}`,
           ).pipe(
-            Effect.map((rows) => {
+            Effect.flatMap((rows) => {
               const row = rows[0];
-              // Every row was written by `set` through `encodeState`, so
-              // reviving it recovers a PersistedState by construction.
-              return row === undefined
-                ? undefined
-                : (reviveStateRecursive(row.value) as PersistedState);
+              if (row === undefined) return Effect.undefined;
+              // Every row was written by `set` through the codec, so
+              // decoding it recovers a PersistedState by construction.
+              return codec
+                .decodeJson<PersistedState>(request, row.data, `state '${request.fqn}'`)
+                .pipe(
+                  // Seal a secret still in plaintext, or open a sealed one
+                  // while turning encryption off. The stage's lock is held.
+                  Effect.tap((value) =>
+                    codec.staleJson(row.data) ? writeRecord(request, value) : Effect.void,
+                  ),
+                );
             }),
           ),
         ),
@@ -531,25 +574,21 @@ export const makePostgresState = <E = never, R = never>(
           request,
           run(
             (sql) =>
-              sql`select value from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and value ->> 'status' = 'replaced'`,
+              sql`select data from alchemy_resource_state where stack = ${request.stack} and stage = ${request.stage} and data ->> 'status' = 'replaced'`,
           ).pipe(
-            Effect.map((rows) =>
-              rows.map((row) => reviveStateRecursive(row.value) as ReplacedResourceState),
+            Effect.flatMap((rows) =>
+              Effect.forEach(rows, (row) =>
+                codec.decodeJson<ReplacedResourceState>(
+                  request,
+                  row.data,
+                  "replaced resource state",
+                ),
+              ),
             ),
           ),
         ),
       set: (request) =>
-        guarded(
-          request,
-          run(
-            (sql) => sql`
-              insert into alchemy_resource_state (stack, stage, fqn, value, updated_at)
-              values (${request.stack}, ${request.stage}, ${request.fqn}, ${jsonParam(request.value)}::jsonb, now())
-              on conflict (stack, stage, fqn) do update
-                set value = excluded.value, updated_at = excluded.updated_at
-            `,
-          ).pipe(Effect.map(() => request.value)),
-        ),
+        guarded(request, writeRecord(request, request.value).pipe(Effect.map(() => request.value))),
       delete: (request) =>
         guarded(
           request,
@@ -595,25 +634,32 @@ export const makePostgresState = <E = never, R = never>(
           request,
           run(
             (sql) =>
-              sql`select value from alchemy_stack_output where stack = ${request.stack} and stage = ${request.stage}`,
+              sql`select data from alchemy_stack_output where stack = ${request.stack} and stage = ${request.stage}`,
           ).pipe(
-            Effect.map((rows) => {
+            Effect.flatMap((rows) => {
               const row = rows[0];
-              return row === undefined ? undefined : reviveStateRecursive(row.value);
+              return row === undefined
+                ? Effect.undefined
+                : codec.decodeJson<unknown>(request, row.data, "stack output");
             }),
           ),
         ),
       setOutput: (request) =>
         guarded(
           request,
-          run(
-            (sql) => sql`
-              insert into alchemy_stack_output (stack, stage, value, updated_at)
-              values (${request.stack}, ${request.stage}, ${jsonParam(request.value)}::jsonb, now())
-              on conflict (stack, stage) do update
-                set value = excluded.value, updated_at = excluded.updated_at
-            `,
-          ).pipe(Effect.map(() => request.value)),
+          jsonParam(request, request.value).pipe(
+            Effect.flatMap((json) =>
+              run(
+                (sql) => sql`
+                  insert into alchemy_stack_output (stack, stage, data, updated_at)
+                  values (${request.stack}, ${request.stage}, ${json}::jsonb, now())
+                  on conflict (stack, stage) do update
+                    set data = excluded.data, updated_at = excluded.updated_at
+                `,
+              ),
+            ),
+            Effect.map(() => request.value),
+          ),
         ),
     };
     return service;

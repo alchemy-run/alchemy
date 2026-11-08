@@ -107,7 +107,13 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
             Effect.flatMap((s) =>
               s == null
                 ? Effect.undefined
-                : codec.decodeJson<ResourceState>(request, s, `state '${request.fqn}'`),
+                : codec.decodeJson<ResourceState>(request, s, `state '${request.fqn}'`).pipe(
+                    // Seal a secret still in plaintext, or open a sealed one
+                    // while turning encryption off.
+                    Effect.tap((value) =>
+                      codec.staleJson(s) ? service.set({ ...request, value }) : Effect.void,
+                    ),
+                  ),
             ),
           ),
       getReplacedResources: (request) =>
@@ -168,7 +174,11 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
           .pipe(
             mapStateStoreError,
             Effect.flatMap((s) =>
-              s == null ? Effect.undefined : codec.decodeJson<unknown>(request, s, "stack output"),
+              s == null
+                ? Effect.undefined
+                : // Not rewritten here: other stacks read it without the stage's
+                  // lock, and its own deploy writes it again anyway.
+                  codec.decodeJson<unknown>(request, s, "stack output"),
             ),
           ),
       setOutput: (request) =>

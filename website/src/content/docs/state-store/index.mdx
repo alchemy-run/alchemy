@@ -321,7 +321,17 @@ Reading a stage's secrets takes `kms:Decrypt` on the key, and writing them takes
 }
 ```
 
-A record names the layer that encrypted it, and a store refuses a record another layer encrypted. Records written before you added a layer still read, and the bucket and AWS stores encrypt them the first time they load them. Versions of alchemy from before `StateEncryption` refuse an encrypted store: text records aren't valid JSON to them, and the Cloudflare store reports a newer version. `postgresState` can't encrypt yet, and fails if you provide a layer to it.
+Encryption happens in the client, so every store supports it, including Postgres, and none of them ever sees a plaintext secret. A record names the layer that encrypted it, and a store refuses a record another layer encrypted. Records written before you added a layer still read, and are encrypted as each stage loads.
+
+To turn encryption off, keep the layer and set `disable`, since decrypting needs the key. Deploy every stage once, so each decrypts its secrets as it loads, then remove the layer:
+
+```typescript
+state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
+
+A stage that still holds encrypted secrets fails to load without the layer, and says how to fix it. The AWS stores encrypt by default, so keep `disable` on them to store secrets in plaintext.
+
+Every store records the format of what it holds, and a version of alchemy refuses a store in a newer format than it knows. Versions from before the format record are kept out of an encrypted store too: text records aren't valid JSON to them, the Cloudflare store reports a newer version, and Postgres renames the column they read.
 
 To encrypt with another key service, implement `StateEncryption` from `alchemy/State/StateEncryption`: an `id`, `generate` for a stage's data key, and `unwrap` to recover it.
 

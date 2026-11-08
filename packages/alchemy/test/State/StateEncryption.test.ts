@@ -1,12 +1,15 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { describe, expect, test } from "@alchemy.run/test";
+import { describe, expect, it, test } from "@alchemy.run/test";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { makeBucketState, type BucketObjects } from "@/State/BucketState.ts";
+import { makeLocalState } from "@/State/LocalState.ts";
 import { StateStoreError } from "@/State/State.ts";
 import { encodeState, reviveState } from "@/State/StateEncoding.ts";
 import {
@@ -19,6 +22,9 @@ import {
   type StateEncryptionService,
   stateCodec,
 } from "@/State/StateEncryption.ts";
+import { STATE_STORE_FORMAT, STORE_FORMAT_FILE } from "@/State/StoreFormat.ts";
+import { initialCwd } from "@/Util/Node.ts";
+import { PlatformServices } from "@/Util/PlatformServices";
 
 /**
  * A keyring that wraps data keys under one in-memory master key, binding
@@ -156,13 +162,13 @@ describe("sealing codec", { tags: ["unit", "local"] }, () => {
     const { keyring } = memoryKeyring();
     const codec = makeSealingCodec(keyring);
     const legacy = JSON.stringify(encodeState(record));
-    expect(codec.unsealed(legacy)).toBe(true);
-    expect(codec.unsealed(JSON.stringify({ attr: { arn: "a" } }))).toBe(false);
+    expect(codec.stale(legacy)).toBe(true);
+    expect(codec.stale(JSON.stringify({ attr: { arn: "a" } }))).toBe(false);
 
     const decoded = await run(codec.decode<typeof record>(scope, legacy, "record"));
     expect(Redacted.value(decoded.props.password)).toBe("hunter2");
     const sealed = await run(codec.encode(scope, decoded));
-    expect(codec.unsealed(sealed)).toBe(false);
+    expect(codec.stale(sealed)).toBe(false);
   });
 
   test("opens a sealed record into the plain JSON older versions read", async () => {
@@ -328,4 +334,113 @@ describe("BucketState with a sealing codec", { tags: ["unit", "local"] }, () => 
     expect(objects.get(key)?.text).not.toContain("hunter2");
     expect(objects.get("app/prod/Cache.json")?.text.startsWith(SEALED_PREFIX)).toBe(true);
   });
+});
+
+describe("turning encryption off", { tags: ["unit", "local"] }, () => {
+  test("a decrypt-only codec writes plaintext and calls sealed records stale", async () => {
+    const { keyring } = memoryKeyring();
+    const sealed = await run(makeSealingCodec(keyring).encode(scope, record));
+    const off = makeSealingCodec({ ...keyring, decryptOnly: true });
+
+    expect(off.stale(sealed)).toBe(true);
+    const decoded = await run(off.decode<typeof record>(scope, sealed, "record"));
+    expect(Redacted.value(decoded.props.password)).toBe("hunter2");
+    const plain = await run(off.encode(scope, decoded));
+    expect(plain).toBe(JSON.stringify(encodeState(record)));
+    expect(off.stale(plain)).toBe(false);
+
+    const sealedJson = await run(makeSealingCodec(keyring).encodeJson(scope, record));
+    expect(off.staleJson(sealedJson)).toBe(true);
+    expect(off.staleJson(await run(off.encodeJson(scope, record)))).toBe(false);
+  });
+
+  test("a bucket store opens a sealed record when it reads it", async () => {
+    const { objects, bucket } = memoryObjects();
+    const { keyring } = memoryKeyring();
+    const key = "app/prod/Database.json";
+    const sealed = await run(makeSealingCodec(keyring).encode(scope, record, 2));
+    objects.set(key, { text: sealed, version: "0" });
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const state = yield* makeBucketState({
+          id: "memory",
+          label: "memory",
+          objects: Effect.succeed(bucket),
+          codec: makeSealingCodec({ ...keyring, decryptOnly: true }),
+        });
+        yield* state.get({ ...scope, fqn: "Database" });
+      }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto)),
+    );
+    expect(objects.get(key)?.text).toBe(JSON.stringify(encodeState(record), null, 2));
+  });
+});
+
+describe("store format record", { tags: ["unit", "local"] }, () => {
+  const open = (bucket: BucketObjects) =>
+    makeBucketState({ id: "memory", label: "memory", objects: Effect.succeed(bucket) }).pipe(
+      Effect.flatMap((state) => state.listStacks()),
+      Effect.scoped,
+      Effect.provide(SecureRandom.layerWebCrypto),
+    );
+
+  test("a bucket store records its format before its first write, not on a read", async () => {
+    const { objects, bucket } = memoryObjects();
+    await Effect.runPromise(open(bucket));
+    expect(objects.has(STORE_FORMAT_FILE)).toBe(false);
+    await Effect.runPromise(
+      makeBucketState({ id: "memory", label: "memory", objects: Effect.succeed(bucket) }).pipe(
+        Effect.flatMap((state) => state.setOutput({ ...scope, value: { url: "u" } })),
+        Effect.scoped,
+        Effect.provide(SecureRandom.layerWebCrypto),
+      ),
+    );
+    expect(JSON.parse(objects.get(STORE_FORMAT_FILE)!.text)).toEqual({
+      format: STATE_STORE_FORMAT,
+    });
+  });
+
+  test("a store in a newer format is refused", async () => {
+    const { objects, bucket } = memoryObjects();
+    objects.set(STORE_FORMAT_FILE, {
+      text: JSON.stringify({ format: STATE_STORE_FORMAT + 1 }),
+      version: "0",
+    });
+    const exit = await Effect.runPromiseExit(open(bucket));
+    expect(String(Exit.isFailure(exit) ? exit.cause : "")).toContain(
+      `format ${STATE_STORE_FORMAT + 1}, newer than this version of alchemy's`,
+    );
+  });
+});
+
+describe("local state with StateEncryption", { tags: ["unit", "local"] }, () => {
+  it.effect("seals the secrets it writes, and opens them again with disable", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { keyring } = memoryKeyring();
+      const local = { stack: "local-state-encryption-test", stage: "test" };
+      const file = path.join(
+        initialCwd,
+        ".alchemy",
+        "state",
+        local.stack,
+        local.stage,
+        "Database.json",
+      );
+      const withEncryption = (service: StateEncryptionService) =>
+        makeLocalState().pipe(Effect.provide(Layer.succeed(StateEncryption, service)));
+
+      const sealing = yield* withEncryption(keyring);
+      yield* sealing.set({ ...local, fqn: "Database", value: record as never });
+      expect((yield* fs.readFileString(file)).startsWith(`${SEALED_PREFIX}memory:`)).toBe(true);
+      expect(yield* sealing.listStacks()).not.toContain(STORE_FORMAT_FILE);
+
+      const off = yield* withEncryption({ ...keyring, decryptOnly: true });
+      const read = (yield* off.get({ ...local, fqn: "Database" })) as unknown as typeof record;
+      expect(Redacted.value(read.props.password)).toBe("hunter2");
+      expect(yield* fs.readFileString(file)).toBe(JSON.stringify(encodeState(record), null, 2));
+      yield* off.deleteStack({ stack: local.stack });
+    }).pipe(Effect.provide(PlatformServices)),
+  );
 });

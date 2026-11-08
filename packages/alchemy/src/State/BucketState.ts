@@ -9,6 +9,13 @@ import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { type SealingScope, type StateCodec, stateCodec } from "./StateEncryption.ts";
+import {
+  checkStoreFormat,
+  currentStoreFormat,
+  parseStoreFormat,
+  STATE_STORE_FORMAT,
+  STORE_FORMAT_FILE,
+} from "./StoreFormat.ts";
 
 /**
  * A state store over an object storage bucket (S3, Cloud Storage, …).
@@ -179,7 +186,42 @@ export const makeBucketState = (options: BucketStateOptions) =>
     const leaseScope = yield* Effect.scope;
     const random = yield* SecureRandom.SecureRandom;
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
-    const objects = yield* Effect.cached(options.objects);
+    // The store's format record: checked before the first operation, and
+    // written before the first write, so a store that is only read stays as
+    // it was.
+    const formatKey = `${prefix}${STORE_FORMAT_FILE}`;
+    const readFormat = (o: BucketObjects) =>
+      o
+        .read(formatKey)
+        .pipe(
+          Effect.tap((existing) =>
+            checkStoreFormat(
+              `${options.label} state store`,
+              existing === undefined ? undefined : parseStoreFormat(existing.text)?.format,
+            ),
+          ),
+        );
+    const objects = yield* Effect.cached(options.objects.pipe(Effect.tap(readFormat)));
+    const stampFormat = yield* Effect.cached(
+      objects.pipe(
+        Effect.flatMap(
+          Effect.fn(function* (o) {
+            const existing = yield* readFormat(o);
+            if (
+              existing !== undefined &&
+              parseStoreFormat(existing.text)?.format === STATE_STORE_FORMAT
+            ) {
+              return;
+            }
+            yield* o.write(
+              formatKey,
+              JSON.stringify(currentStoreFormat()),
+              existing === undefined ? { ifAbsent: true } : { ifVersion: existing.version },
+            );
+          }),
+        ),
+      ),
+    );
     const use = <A>(
       f: (objects: BucketObjects) => Effect.Effect<A, StateStoreError>,
     ): Effect.Effect<A, StateStoreError> => objects.pipe(Effect.flatMap(f));
@@ -196,9 +238,9 @@ export const makeBucketState = (options: BucketStateOptions) =>
     const codec = options.codec ?? (yield* stateCodec);
 
     /**
-     * Read an object. A record with a secret still in plaintext is sealed in
-     * place, on condition nobody wrote it since, so state written before the
-     * store sealed secrets doesn't keep them in plaintext.
+     * Read an object. A record the codec calls stale (a secret in plaintext
+     * while encrypting, or sealed while turning encryption off) is written
+     * again, on condition nobody wrote it since.
      */
     const readJson = <T>(scope: SealingScope, key: string) =>
       use((o) =>
@@ -206,16 +248,19 @@ export const makeBucketState = (options: BucketStateOptions) =>
           const object = yield* o.read(key);
           if (object === undefined) return undefined;
           const value = yield* codec.decode<T>(scope, object.text, `state object '${key}'`);
-          if (codec.unsealed(object.text)) {
-            const sealed = yield* codec.encode(scope, value, 2);
-            yield* o.write(key, sealed, { ifVersion: object.version });
+          if (codec.stale(object.text)) {
+            const rewritten = yield* codec.encode(scope, value, 2);
+            yield* o.write(key, rewritten, { ifVersion: object.version });
           }
           return value;
         }),
       );
 
     const writeJson = (scope: SealingScope, key: string, value: unknown) =>
-      codec.encode(scope, value, 2).pipe(Effect.flatMap((text) => use((o) => o.write(key, text))));
+      stampFormat.pipe(
+        Effect.andThen(codec.encode(scope, value, 2)),
+        Effect.flatMap((text) => use((o) => o.write(key, text))),
+      );
 
     /** Delete every object under `keyPrefix`, except leases. Idempotent. */
     const deleteAll = (keyPrefix: string) =>

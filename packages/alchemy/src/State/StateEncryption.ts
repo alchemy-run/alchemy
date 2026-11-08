@@ -85,6 +85,12 @@ export interface StateEncryptionService {
     wrapped: string,
     scope: SealingScope,
   ) => Effect.Effect<Uint8Array, StateStoreError>;
+  /**
+   * Turn encryption off: write every secret in plaintext again, and open the
+   * ones this implementation sealed as each stage loads. Deploy every stage
+   * this way, then remove the layer.
+   */
+  readonly decryptOnly?: boolean;
 }
 
 /**
@@ -123,8 +129,14 @@ export interface StateCodec {
   ) => Effect.Effect<T, StateStoreError>;
   /** Plain JSON for stored text, every sealed secret opened. */
   readonly open: (scope: SealingScope, text: string) => Effect.Effect<string, StateStoreError>;
-  /** Whether stored text keeps a secret in plaintext that {@link StateCodec.encode} would seal. */
-  readonly unsealed: (text: string) => boolean;
+  /**
+   * Whether stored text should be written again: it holds a secret in
+   * plaintext and this codec encrypts, or it is sealed and this codec is
+   * turning encryption off. Stores rewrite such a record when they load it.
+   */
+  readonly stale: (text: string) => boolean;
+  /** {@link StateCodec.stale} for a stored JSON value. */
+  readonly staleJson: (json: unknown) => boolean;
 }
 
 /** Whether stored text is a sealed record. */
@@ -221,7 +233,8 @@ const splitSealedJson = (json: unknown): (SealedHeader & { body: unknown }) | un
   return { by, key, body };
 };
 
-const unsealed = (text: string) => {
+/** Whether plain stored text holds a secret in plaintext. */
+const holdsPlainSecret = (text: string) => {
   if (isSealed(text) || !text.includes(`"${REDACTED_MARKER}"`)) return false;
   try {
     return holdsSecret(JSON.parse(text));
@@ -232,7 +245,7 @@ const unsealed = (text: string) => {
 
 const noEncryption = (what: string, by: string) =>
   new StateStoreError({
-    message: `Failed to read ${what}: its secrets are encrypted with '${by}', and this state store has no StateEncryption to open them. Provide the one that wrote them, e.g. AWS.stateEncryption().`,
+    message: `Failed to read ${what}: its secrets are encrypted with '${by}', and this state store has no StateEncryption to open them. Provide the one that wrote them, e.g. AWS.stateEncryption(); to turn encryption off, deploy each stage with it set to disable: true first.`,
   });
 
 /**
@@ -259,7 +272,8 @@ export const plainCodec: StateCodec = {
     isSealed(text)
       ? Effect.fail(noEncryption("sealed state", splitSealed(text)?.by ?? "unknown"))
       : Effect.succeed(text),
-  unsealed: () => false,
+  stale: () => false,
+  staleJson: () => false,
 };
 
 /**
@@ -381,10 +395,13 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
     return JSON.stringify(yield* openBody(scope, parts, body, what));
   });
 
+  // Turning encryption off: write plaintext, and open what was sealed.
+  const off = encryption.decryptOnly === true;
+
   return {
     encode: Effect.fn(function* (scope, value, space) {
       const encoded = yield* Effect.sync(() => encodeState(value));
-      if (!holdsSecret(encoded)) return JSON.stringify(encoded, null, space);
+      if (off || !holdsSecret(encoded)) return JSON.stringify(encoded, null, space);
       const { header, body } = yield* seal(scope, encoded);
       return `${SEALED_PREFIX}${header.by}:${header.key}\n${JSON.stringify(body, null, space)}`;
     }),
@@ -397,7 +414,7 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
         : parsePlain<T>(text, what),
     encodeJson: Effect.fn(function* (scope, value) {
       const encoded = yield* Effect.sync(() => encodeState(value));
-      if (!holdsSecret(encoded)) return encoded;
+      if (off || !holdsSecret(encoded)) return encoded;
       const { header, body } = yield* seal(scope, encoded);
       // A record keeps its top-level fields, so a store can still read its
       // status; any other value is carried in the header.
@@ -415,7 +432,11 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
     },
     open: (scope, text) =>
       isSealed(text) ? openText(scope, text, "sealed state") : Effect.succeed(text),
-    unsealed,
+    stale: (text) => (off ? isSealed(text) : holdsPlainSecret(text)),
+    staleJson: (json) =>
+      off
+        ? splitSealedJson(json) !== undefined
+        : splitSealedJson(json) === undefined && holdsSecret(json),
   };
 };
 

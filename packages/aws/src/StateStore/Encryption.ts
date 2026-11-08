@@ -17,6 +17,14 @@ export interface StateEncryptionOptions {
   readonly kmsKeyId?: string;
   /** Use the key of the AWS state store of this name. */
   readonly name?: string;
+  /**
+   * Turn encryption off: write secrets in plaintext again, and decrypt each
+   * stage's encrypted secrets as it loads. Deploy every stage with this set,
+   * then remove the layer.
+   *
+   * @default false
+   */
+  readonly disable?: boolean;
 }
 
 /** Context required by the distilled KMS operations. */
@@ -81,6 +89,18 @@ const toError = (cause: { readonly _tag?: string; readonly message?: string }) =
  * );
  * ```
  *
+ * ### Turning Encryption Off
+ * Decrypting needs the key, so turn encryption off with the layer still in
+ * place: set `disable`, deploy every stage (each decrypts its secrets as it
+ * loads), then remove the layer. A stage still encrypted fails to load
+ * without the layer, and says so. The AWS state stores encrypt by default,
+ * so keep `disable` on them to store secrets in plaintext.
+ *
+ * **Example:** Decrypting a Cloudflare store's secrets
+ * ```typescript
+ * state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+ * ```
+ *
  * @layer
  * @provides StateEncryption
  * @provides AWS.StateKmsKey
@@ -96,7 +116,8 @@ export const stateEncryption = (options: StateEncryptionOptions = {}) =>
       const run = <A, E extends { readonly _tag?: string; readonly message?: string }>(
         effect: Effect.Effect<A, E, KmsDeps>,
       ) => effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
-      return kmsKeyring(key.arn, run);
+      const keyring = kmsKeyring(key.arn, run);
+      return options.disable === true ? { ...keyring, decryptOnly: true } : keyring;
     }).pipe(withoutSdkDebugLogs),
   ).pipe(Layer.provideMerge(stateKmsKey(options)), Layer.provide(stateEnvironment()));
 

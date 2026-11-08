@@ -283,6 +283,62 @@ test.provider(
   { tags: [...tags, "provider:aws:kms"], timeout: 180_000 },
 );
 
+// Turning encryption off: with the layer set to disable, a stage's secrets
+// are decrypted as it loads and written in plaintext from then on.
+test.provider(
+  "a store given AWS.stateEncryption({ disable: true }) decrypts a stage as it loads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "disable";
+      const secret = "dynamodb-disable-secret-0123456789";
+      const sealed = resource("Sealed", { password: Redacted.make(secret) });
+      const { kmsKeyId, ...options } = storage;
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) =>
+          state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed }),
+        ),
+      );
+      expect((yield* recordItem(storage.tableName, stage, sealed.fqn))?.data?.S).not.toContain(
+        secret,
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeDynamoDBState(options).pipe(
+            Effect.provide(AWS.stateEncryption({ kmsKeyId, disable: true })),
+          );
+          const read = (yield* state.get({
+            stack: STACK,
+            stage,
+            fqn: sealed.fqn,
+          })) as ResourceState;
+          expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+          yield* state.set({
+            stack: STACK,
+            stage,
+            fqn: "Fresh",
+            value: resource("Fresh", { token: Redacted.make(secret) }),
+          });
+        }),
+      );
+      // Both the loaded record and a new one are in plaintext.
+      for (const fqn of [sealed.fqn, "Fresh"]) {
+        const text = (yield* recordItem(storage.tableName, stage, fqn))?.data?.S ?? "";
+        expect(text.startsWith(SEALED_PREFIX)).toBe(false);
+        expect(text).toContain(secret);
+      }
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) => state.deleteStack({ stack: STACK, stage })),
+      );
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:aws:kms"], timeout: 180_000 },
+);
+
 test.provider(
   "a new store loads the state another store wrote",
   (stack) =>

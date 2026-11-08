@@ -16,6 +16,7 @@ import {
   type SealingScope,
   StateEncryption,
 } from "alchemy/State/StateEncryption";
+import { checkStoreFormat, STATE_STORE_FORMAT } from "alchemy/State/StoreFormat";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
@@ -137,6 +138,9 @@ const OUTPUT = "OUTPUT";
 const LEASE = "LEASE";
 /** Partition key of the stage catalog. */
 const CATALOG = "CATALOG";
+/** Partition and sort key of the store's format record. */
+const STORE = "STORE";
+const FORMAT = "FORMAT";
 
 /** Escape the key separator out of a stack or stage name. */
 const part = (name: string) => name.replaceAll("%", "%25").replaceAll("#", "%23");
@@ -444,6 +448,29 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
 
   // Ensure the table and overflow bucket exist on the first operation, so a
   // missing one fails the run before it changes anything.
+  /**
+   * Check the store's format record, and write this version's for a store
+   * it hasn't used yet. A newer format is refused before anything changes.
+   */
+  const ensureFormat = Effect.fn(function* (table: string) {
+    const key = { PK: S(STORE), SK: S(FORMAT) };
+    const existing = yield* dynamodb.getItem({ TableName: table, Key: key, ConsistentRead: true });
+    const observed =
+      existing.Item?.format?.N === undefined ? undefined : Number(existing.Item.format.N);
+    yield* checkStoreFormat(`DynamoDB state table '${table}'`, observed);
+    if (observed === STATE_STORE_FORMAT) return;
+    yield* dynamodb
+      .putItem({
+        TableName: table,
+        Item: { ...key, format: N(STATE_STORE_FORMAT) },
+        ConditionExpression: "attribute_not_exists(PK) OR #format < :format",
+        ExpressionAttributeNames: { "#format": "format" },
+        ExpressionAttributeValues: { ":format": N(STATE_STORE_FORMAT) },
+      })
+      // Another first caller wrote it.
+      .pipe(Effect.catchTag("ConditionalCheckFailedException", () => Effect.void));
+  });
+
   const target = yield* Effect.cached(
     Effect.gen(function* () {
       const { table, bucket, region, legacy } = yield* names;
@@ -468,6 +495,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }
         yield* convergeAtRest(table, observed, bucket, keyArn, !bucketExists);
       }
+      yield* ensureFormat(table);
       return { table, bucket, region, legacy, keyArn };
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
@@ -907,14 +935,15 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }),
       { concurrency: 16 },
     );
-    // Seal the secrets of records written before the store sealed them, so
-    // a stage's secrets don't stay in plaintext until each resource changes.
+    // Rewrite records the codec calls stale: seal secrets written before the
+    // store encrypted them, or open them while encryption is being turned
+    // off. A stage converts when it loads, not when each resource changes.
     // The caller holds the stage's lease.
     const scope = { stack, stage };
     const resealed = yield* Effect.forEach(
       records,
       ([fqn, record]) =>
-        codec.unsealed(record.text)
+        codec.stale(record.text)
           ? Effect.gen(function* () {
               const value = yield* parse<unknown>(scope, record.text, `record '${fqn}'`);
               const text = yield* codec.encode(scope, value);
