@@ -179,6 +179,23 @@ const presign = (
     return body.url;
   });
 
+// Presign any input of the binding via the deployed Lambda fixture.
+const presignRequest = <Op extends "presign-get" | "presign-put">(
+  op: Op,
+  input: Op extends "presign-get" ? AWS.S3.PresignGetObjectRequest : AWS.S3.PresignPutObjectRequest,
+) =>
+  Effect.gen(function* () {
+    const response = yield* send(
+      HttpClientRequest.post(`${baseUrl}/${op}`).pipe(HttpClientRequest.bodyJsonUnsafe(input)),
+    );
+    expect(response.status).toBe(200);
+    return (yield* response.json) as {
+      method: string;
+      url: string;
+      headers: Record<string, string>;
+    };
+  });
+
 class IamNotPropagated extends Data.TaggedError("IamNotPropagated")<{
   readonly status: number;
   readonly body: string;
@@ -337,9 +354,80 @@ describe(
           }),
         { timeout: 120_000 },
       );
+
+      test.provider(
+        "pins the size, refuses an overwrite and applies metadata and tagging",
+        (_stack) =>
+          Effect.gen(function* () {
+            const key = "presign/pinned.txt";
+            const body = "exactly this many bytes";
+            const signed = yield* presignRequest("presign-put", {
+              Key: key,
+              ContentType: "text/plain",
+              ContentLength: body.length,
+              IfNoneMatch: "*",
+              Metadata: { owner: "u1" },
+              Tagging: "team=a",
+            });
+            expect(signed.headers).toEqual({
+              "content-length": String(body.length),
+              "content-type": "text/plain",
+              "if-none-match": "*",
+            });
+            const url = new URL(signed.url);
+            expect(url.searchParams.get("x-amz-meta-owner")).toBe("u1");
+            expect(url.searchParams.get("x-amz-tagging")).toBe("team=a");
+
+            const upload = (text: string) =>
+              HttpClientRequest.put(signed.url).pipe(
+                HttpClientRequest.setHeader("if-none-match", "*"),
+                HttpClientRequest.bodyText(text, "text/plain"),
+              );
+            const put = yield* sendPresigned(upload(body));
+            expect(put.status).toBe(200);
+
+            const head = yield* S3.headObject({ Bucket: bucketName, Key: key });
+            expect(head.Metadata).toEqual({ owner: "u1" });
+            const tagging = yield* S3.getObjectTagging({ Bucket: bucketName, Key: key });
+            expect(tagging.TagSet).toEqual([{ Key: "team", Value: "a" }]);
+
+            const overwrite = yield* HttpClient.execute(upload(body));
+            expect(overwrite.status).toBe(412);
+            const resized = yield* HttpClient.execute(upload(`${body}!`));
+            expect(resized.status).toBe(403);
+          }),
+        { timeout: 120_000 },
+      );
     });
 
     describe("PresignGetObject", () => {
+      test.provider(
+        "signs a response Content-Disposition and pins a Range",
+        (_stack) =>
+          Effect.gen(function* () {
+            const key = "presign/range.txt";
+            yield* S3.putObject({ Bucket: bucketName, Key: key, Body: "0123456789" });
+
+            const signed = yield* presignRequest("presign-get", {
+              Key: key,
+              ResponseContentDisposition: 'attachment; filename="a b.txt"',
+              Range: "bytes=2-4",
+            });
+            expect(signed.headers).toEqual({ range: "bytes=2-4" });
+
+            const ranged = yield* sendPresigned(
+              HttpClientRequest.get(signed.url).pipe(HttpClientRequest.setHeaders(signed.headers)),
+            );
+            expect(ranged.status).toBe(206);
+            expect(ranged.headers["content-disposition"]).toBe('attachment; filename="a b.txt"');
+            expect(yield* ranged.text).toBe("234");
+
+            const unranged = yield* HttpClient.execute(HttpClientRequest.get(signed.url));
+            expect(unranged.status).toBe(403);
+          }),
+        { timeout: 120_000 },
+      );
+
       test.provider(
         "round-trips a body through presigned PUT and GET URLs",
         (_stack) =>

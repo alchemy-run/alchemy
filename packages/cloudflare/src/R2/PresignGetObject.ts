@@ -1,36 +1,30 @@
+import type * as Presign from "@distilled.cloud/aws/Presign";
+import type * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Bucket } from "./Bucket.ts";
 import type { PresignError } from "./BucketTypes.ts";
 
-export interface PresignGetObjectRequest {
-  /**
-   * Key of the object to mint a presigned download URL for.
-   */
-  key: string;
+export interface PresignGetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {
   /**
    * Number of seconds the URL remains valid (at most 7 days).
    * @default 900
    */
   expiresIn?: number;
-  /**
-   * `Content-Type` the object is served with, signed into the URL as a
-   * `response-content-type` override. The downloader sends nothing extra.
-   */
-  contentType?: string;
-  /**
-   * `Content-Disposition` the object is served with (e.g.
-   * `attachment; filename="report.pdf"`), signed into the URL as a
-   * `response-content-disposition` override.
-   */
-  contentDisposition?: string;
 }
 
 /**
  * Mint presigned download (GET) URLs for objects in an R2 {@link Bucket}, so
  * a browser or any HTTP client can read an object without credentials or a
  * Worker in the request path.
+ *
+ * Takes the same input as `AWS.S3.PresignGetObject`: S3's `GetObject`
+ * input without `Bucket`. Query fields (the `ResponseContent*` overrides,
+ * `PartNumber`) are signed into the URL. Header fields (`Range`, `IfMatch`,
+ * ...) come back in `headers`, which the downloader must send as they are.
+ * R2 implements a subset of S3's fields; see [R2's S3 API
+ * compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
  *
  * Presigning is a pure SigV4 computation against R2's S3-compatible API — no
  * request is made. When deployed, the binding mints a scoped account API
@@ -45,16 +39,16 @@ export interface PresignGetObjectRequest {
  * **Example:** Mint a presigned GET URL
  * ```typescript
  * const presignGet = yield* Cloudflare.R2.PresignGetObject(bucket);
- * const url = yield* presignGet({ key: "reports/2026-09.pdf" });
+ * const { url } = yield* presignGet({ Key: "reports/2026-09.pdf" });
  * // hand `url` to a browser — it can GET the object without credentials
  * ```
  *
  * **Example:** Force a download with a short-lived URL
  * ```typescript
- * const url = yield* presignGet({
- *   key: "reports/2026-09.pdf",
+ * const { url } = yield* presignGet({
+ *   Key: "reports/2026-09.pdf",
+ *   ResponseContentDisposition: 'attachment; filename="report.pdf"',
  *   expiresIn: 60,
- *   contentDisposition: 'attachment; filename="report.pdf"',
  * });
  * ```
  *
@@ -67,7 +61,7 @@ export interface PresignGetObjectRequest {
  *     const presignGet = yield* Cloudflare.R2.PresignGetObject(Files);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const url = yield* presignGet({ key: "hello.txt" });
+ *         const { url } = yield* presignGet({ Key: "hello.txt" });
  *         return HttpServerResponse.redirect(url);
  *       }),
  *     };
@@ -85,7 +79,9 @@ export interface PresignGetObject extends Binding.Service<
   (
     bucket: Bucket,
   ) => Effect.Effect<
-    (request: PresignGetObjectRequest) => Effect.Effect<string, PresignError, RuntimeContext>
+    (
+      request: PresignGetObjectRequest,
+    ) => Effect.Effect<Presign.PresignedRequest, PresignError, RuntimeContext>
   >
 > {}
 

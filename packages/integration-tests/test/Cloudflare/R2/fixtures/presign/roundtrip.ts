@@ -81,3 +81,65 @@ export const presignRoundTrip = (workerUrl: string, key: string) =>
 
     return { putUrl, getUrl };
   });
+
+interface Presigned {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
+const presign = (url: string, input: object) =>
+  until(
+    expectStatus(
+      HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(input)),
+      200,
+    ).pipe(Effect.map((body) => JSON.parse(body) as Presigned)),
+  );
+
+/**
+ * Drive the bindings' S3 fields through a deployed presign fixture
+ * (`routes.ts`): an upload pinned to its size that may not overwrite, and a
+ * download with a signed `Content-Disposition` and `Range`.
+ */
+export const presignFields = (workerUrl: string, key: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const body = "exactly this many bytes";
+    const upload = yield* presign(`${workerUrl}/presign-put`, {
+      Key: key,
+      ContentType: "text/plain",
+      ContentLength: body.length,
+      IfNoneMatch: "*",
+    });
+    expect(upload.headers).toEqual({
+      "content-length": String(body.length),
+      "content-type": "text/plain",
+      "if-none-match": "*",
+    });
+    const put = (text: string) =>
+      HttpClientRequest.put(upload.url).pipe(
+        HttpClientRequest.setHeader("if-none-match", "*"),
+        HttpClientRequest.setBody(HttpBody.text(text, "text/plain")),
+      );
+
+    const resized = yield* client.execute(put(`${body}!`));
+    expect(resized.status).toBe(403);
+    yield* until(expectStatus(put(body), 200));
+    const overwrite = yield* client.execute(put(body));
+    expect(overwrite.status).toBe(412);
+
+    const download = yield* presign(`${workerUrl}/presign-get`, {
+      Key: key,
+      ResponseContentDisposition: 'attachment; filename="a b.txt"',
+      Range: "bytes=0-6",
+    });
+    expect(download.headers).toEqual({ range: "bytes=0-6" });
+    const ranged = yield* client.execute(
+      HttpClientRequest.get(download.url).pipe(HttpClientRequest.setHeaders(download.headers)),
+    );
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers["content-disposition"]).toBe('attachment; filename="a b.txt"');
+    expect(yield* ranged.text).toBe("exactly");
+    const unranged = yield* client.execute(HttpClientRequest.get(download.url));
+    expect(unranged.status).toBe(403);
+  });
