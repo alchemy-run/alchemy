@@ -32,6 +32,12 @@ import {
   publishFunction,
 } from "./Deploy.ts";
 import { ENTRYPOINT_MODULE } from "./Entrypoint.ts";
+import { RPC_CALLERS_ENV, type RpcCallerBinding, rpcCallersOf } from "./RpcAuth.ts";
+
+/** What a runtime's bindings attach: mounts, and the keys of RPC callers. */
+type RuntimeBindings = ReadonlyArray<{
+  readonly data: { readonly mounts?: MountBindings[number]["data"]["mounts"] } & RpcCallerBinding;
+}>;
 
 /** Attributes shared by `Modal.Function` and `Modal.Server`. */
 export interface RuntimeAttributes {
@@ -187,7 +193,7 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
   Effect.gen(function* () {
     const stack = yield* Stack;
 
-    const prepare = Effect.fn(function* (id: string, news: P, bindings: MountBindings) {
+    const prepare = Effect.fn(function* (id: string, news: P, bindings: RuntimeBindings) {
       const port = news.port ?? DEFAULT_PORT;
       const tag = news.name ?? id;
       const app = appOf(news.app);
@@ -221,6 +227,10 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
           Object.entries(news.env ?? {}).map(([key, value]) => [key, envText(value)]),
         ),
         ...kind.env?.(news),
+        // The callers whose keys open the program's RPC methods.
+        ...(rpcCallersOf(bindings).length > 0
+          ? { [RPC_CALLERS_ENV]: JSON.stringify(rpcCallersOf(bindings)) }
+          : {}),
       };
       const hash = yield* sha256Object({ image: image.hash, definition, secretIds, env });
       return { port, tag, app, image, definition, secretIds, env, hash };
@@ -237,7 +247,7 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
         id: string;
         news: Input<P>;
         output: RuntimeAttributes | undefined;
-        newBindings: Input<MountBindings>;
+        newBindings: Input<RuntimeBindings>;
       }) {
         if (!isResolved(news) || !isResolved(newBindings) || output === undefined) {
           return undefined;
@@ -265,7 +275,7 @@ export const runtimeLifecycle = <P extends ContainerProps>(kind: RuntimeKind<P>)
         news: P;
         output: RuntimeAttributes | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
-        bindings: MountBindings;
+        bindings: RuntimeBindings;
       }) {
         const {
           port,

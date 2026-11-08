@@ -44,6 +44,7 @@ export MODAL_TOKEN_SECRET=as-alchemy-fake-local
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 export ARCHIL_API_KEY=alchemy-fake-local-archil-key
+export BOAT_API_KEY=boat_alchemy-fake-local-key
 
 export PLANETSCALE_API_TOKEN_ID=alchemy-fake-local-planetscale-id
 export PLANETSCALE_API_TOKEN=alchemy-fake-local-planetscale-token

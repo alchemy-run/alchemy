@@ -18,11 +18,15 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import {
   DurableObjectHasNoPool,
   PlatformDeclaration,
   type DurableObjectRuntimeContext,
+  type HostedDurableObject,
 } from "../DurableObject.ts";
+import { NodeHost } from "./NodeHost.ts";
 import { runDurableObjects } from "./Runtime.ts";
 
 /** Build each entrypoint's class phase, then run the node until it is stopped. */
@@ -43,15 +47,25 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
   );
 
   const program = Effect.gen(function* () {
-    const hosted = [];
+    // Every class this node hosts: its exported ones, and those Layers host themselves.
+    const hosted = yield* Ref.make<ReadonlyArray<HostedDurableObject>>([]);
+    const host = (built: HostedDurableObject) =>
+      Ref.update(hosted, (all) =>
+        all.some((other) => other.name === built.name) ? all : [...all, built],
+      );
     for (const entrypoint of entrypoints) {
       // A class's `yield*` is its namespace; the node builds its Platform.
       const declaration =
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
-      const context = yield* Layer.build(entrypointLayer(declaration));
-      const runtime = Context.get(context, entrypointTag)
-        .RuntimeContext as DurableObjectRuntimeContext;
+      const context = yield* Layer.build(entrypointLayer(declaration)).pipe(
+        Effect.provideService(NodeHost, NodeHost.of({ host })),
+      );
+      // A Layer that hosts its classes itself (a Domain model's) provides
+      // none: it handed them to `NodeHost`.
+      const self = Context.getOption(context, entrypointTag);
+      if (Option.isNone(self)) continue;
+      const runtime = self.value.RuntimeContext as DurableObjectRuntimeContext;
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
@@ -60,9 +74,9 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
           }),
         );
       }
-      hosted.push(built);
+      yield* host(built);
     }
-    return yield* runDurableObjects(hosted);
+    return yield* runDurableObjects(yield* Ref.get(hosted));
   }).pipe(Effect.provide(platform), Effect.scoped);
 
   return runProcess("Rivet node", program);

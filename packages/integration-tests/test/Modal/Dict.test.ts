@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dict from "@distilled.cloud/modal/dict";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Modal.providers() });
 
@@ -23,6 +24,7 @@ test.provider(
           return yield* Modal.Dict("Dict", {});
         }),
       );
+      yield* expectFound(Modal.Dict.lookup({ name: first.name }), first);
       expect(yield* exists(first.dictId)).toBe(true);
 
       const again = yield* stack.deploy(

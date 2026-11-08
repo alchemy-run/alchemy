@@ -147,6 +147,16 @@ export interface EnvironmentAttributes {
  * export const Workspace = Modal.Volume("Workspace", { environment: Agents });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const staging = Modal.Environment.lookup({ name: "staging" });
+ * ```
+ *
  * @resource
  * @product Environment
  */
@@ -157,8 +167,18 @@ export type Environment = Resource<
   EnvironmentProps,
   EnvironmentAttributes,
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 >;
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this
+ * stack doesn't manage by its name.
+ */
+export interface EnvironmentLookup {
+  /** Environment name. */
+  name: string;
+}
 
 const blockToWire = (
   value: boolean | undefined,
@@ -191,6 +211,11 @@ export const EnvironmentProvider = () =>
 
       return {
         stables: ["environmentId"],
+        lookup: Effect.fn(function* ({ name }) {
+          const item = yield* observe(name);
+          return item ? toAttrs(item) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const item = yield* observe(name);

@@ -110,12 +110,36 @@ import * as Schedule from "effect/Schedule";
  * ) {}
  * ```
  *
+ * ### Looking up an existing App
+ * `App.lookup` references a App Alchemy doesn't manage (created with
+ * the Modal CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Reference an existing App
+ * ```typescript
+ * const app = Modal.App.lookup({ name: "inference" });
+ * ```
+ *
  * @resource
  * @product App
  */
 export const App = declarable<App>()(Resource<App>("Modal.App"));
 
-export type App = Resource<"Modal.App", AppProps, AppAttributes, never, Providers>;
+export type App = Resource<"Modal.App", AppProps, AppAttributes, never, Providers, AppLookup>;
+
+/**
+ * Props for {@link App.lookup}: find a App this stack
+ * doesn't manage by its name.
+ */
+export interface AppLookup {
+  /** App name. */
+  name: string;
+  /**
+   * Modal environment the object lives in.
+   * @default the workspace's default environment
+   */
+  environment?: string;
+}
 
 const isStopped = (state: string | undefined) =>
   state === "APP_STATE_STOPPED" || state === "APP_STATE_STOPPING";
@@ -152,6 +176,10 @@ export const AppProvider = () =>
           if (output !== undefined && name !== output.name) return { action: "replace" } as const;
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ name, environment }) {
+          return yield* observe(name, environment);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* objectName(id, olds?.name));
           const observed = yield* observe(

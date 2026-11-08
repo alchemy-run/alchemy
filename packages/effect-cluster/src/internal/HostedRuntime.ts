@@ -39,7 +39,7 @@ export interface HostedRuntimeContext<Hosted> extends HostRuntimeContext {
 export interface HostedClass {
   readonly Type: string;
   readonly LogicalId: string;
-  readonly Props: { readonly main: string };
+  readonly Props: { readonly main: string; readonly handler?: string };
   readonly registerPool: (deploy: DeployToPool) => Effect.Effect<void>;
   readonly provideServices: (services: Context.Context<never>) => Effect.Effect<void>;
   readonly bind: any;

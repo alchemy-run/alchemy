@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { repoOf, expectFound } from "./lookup.ts";
 import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
@@ -72,6 +73,10 @@ test.provider(
           name: "Version 1.0.0",
           body: "First release",
         }),
+      );
+      yield* expectFound(
+        GitHub.Release.lookup({ ...repoOf(created.htmlUrl), tag: created.tagName }),
+        created,
       );
       expect(created.tagName).toBe("v1.0.0");
       expect(created.name).toBe("Version 1.0.0");

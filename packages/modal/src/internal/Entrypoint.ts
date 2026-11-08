@@ -10,7 +10,9 @@
  * - `Rpc` (a class function) has one method per RPC method of the program
  *   (`ALCHEMY_MODAL_RPC_METHODS`, from the function's env secret); a call is
  *   sent to the program's `POST /__rpc__/<method>` with the positional
- *   arguments as a JSON array, and returns the JSON result (a value, or an
+ *   arguments as a JSON array and the caller's key (the
+ *   `__alchemy_rpc_key__` keyword argument) as `x-alchemy-rpc-key`, and
+ *   returns the JSON result (a value, or an
  *   error envelope the caller fails with). A streamed result is read to its
  *   end and returned as its list of values;
  * - `call` and `schedule` forward each input as `POST /__modal/call` or
@@ -123,11 +125,11 @@ def _forward(path, args, kwargs):
     return data.decode(errors="replace")
 
 
-def _post(path, body):
+def _post(path, body, headers=None):
     _wait_until_listening(_start())
     connection = http.client.HTTPConnection("127.0.0.1", _PORT)
     try:
-        connection.request("POST", path, body=body, headers={"content-type": "application/json"})
+        connection.request("POST", path, body=body, headers={"content-type": "application/json", **(headers or {})})
         response = connection.getresponse()
         return response, response.read()
     finally:
@@ -136,10 +138,12 @@ def _post(path, body):
 
 def _rpc(name):
     def method(self, *args, **kwargs):
+        key = kwargs.pop("__alchemy_rpc_key__", None)
         if kwargs:
             raise TypeError(f"RPC method {name} takes positional arguments only")
         body = json.dumps(list(args), default=_json_default).encode()
-        response, data = _post("/__rpc__/" + name, body)
+        headers = {"x-alchemy-rpc-key": key} if isinstance(key, str) else {}
+        response, data = _post("/__rpc__/" + name, body, headers)
         if response.status >= 400:
             raise RuntimeError(f"RPC method {name} returned {response.status}: {data.decode(errors='replace')}")
         if response.getheader("x-alchemy-rpc-stream") is not None:

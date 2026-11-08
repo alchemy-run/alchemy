@@ -29,7 +29,23 @@ export interface VolumeAttributes {
   createdAt: string;
 }
 
-export type Volume = Resource<"Daytona.Volume", VolumeProps, VolumeAttributes, never, Providers>;
+export type Volume = Resource<
+  "Daytona.Volume",
+  VolumeProps,
+  VolumeAttributes,
+  never,
+  Providers,
+  VolumeLookup
+>;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its name.
+ */
+export interface VolumeLookup {
+  /** Volume name. */
+  name: string;
+}
 
 /**
  * A Daytona volume: a persistent disk, backed by object storage, that
@@ -60,6 +76,16 @@ export type Volume = Resource<"Daytona.Volume", VolumeProps, VolumeAttributes, n
  * ```typescript
  * const cache = yield* Daytona.MountVolume(Cache, { path: "/cache" });
  * const sandbox = yield* sandboxes.create({ mounts: [cache] });
+ * ```
+ *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in
+ * the Daytona dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Mount an existing volume
+ * ```typescript
+ * const data = Daytona.Volume.lookup({ name: "datasets" });
  * ```
  *
  * @resource
@@ -169,6 +195,11 @@ export const VolumeProvider = () =>
         );
         if (name !== output.name) return { action: "replace", deleteFirst: true } as const;
       }),
+      lookup: Effect.fn(function* ({ name }) {
+        const found = yield* getVolumeByName(name);
+        return found === undefined ? undefined : toVolumeAttributes(found);
+      }),
+
       read: Effect.fn(function* ({ id, olds, output }) {
         const name = yield* resolveName(id, olds?.name, output?.name);
         const found =

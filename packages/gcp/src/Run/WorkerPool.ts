@@ -229,11 +229,29 @@ export type WorkerPoolProps = PlatformProps & {
   /**
    * Environment image for `main`: a Dockerfile path, or inline content
    * (`{ content }`), the bundled program is layered on top of. Use it to
-   * install packages the bundle keeps external.
+   * install packages the bundle keeps external. Without `main`, with
+   * {@link context}, the Dockerfile that builds the whole image.
    * @default a bun base image
    */
   dockerfile?: string | InlineDockerfile;
+  /**
+   * A Docker build context the pool's image is built from as it is, with
+   * its `Dockerfile` (or {@link dockerfile}), and pushed to Artifact
+   * Registry. The image's own `CMD` runs. Set this or {@link main}.
+   */
+  context?: string;
 };
+
+/** The image a pool's `main` program or `context` build makes. */
+const imageSourceOf = (props: WorkerPoolProps, handler = props.handler) =>
+  props.main !== undefined
+    ? {
+        main: props.main,
+        handler,
+        build: props.build,
+        dockerfile: props.dockerfile,
+      }
+    : { context: props.context, dockerfile: props.dockerfile };
 
 export type WorkerPool = Resource<
   "GCP.Run.WorkerPool",
@@ -372,6 +390,15 @@ export type WorkerPoolShape =
  * ```typescript
  * const getWorkerPool = yield* GCP.Run.GetWorkerPool(pool);
  * const live = yield* getWorkerPool();
+ * ```
+ *
+ * ### Worker Pool from a Dockerfile
+ * **Example:** Build a directory's Dockerfile and run its image
+ * ```typescript
+ * const workers = yield* GCP.Run.WorkerPool("Workers", {
+ *   context: "./worker",
+ *   scaling: { manualInstanceCount: 1 },
+ * });
  * ```
  *
  * ### Effect-native Worker Pool with bindings
@@ -884,15 +911,10 @@ export const WorkerPoolProvider = () =>
       }
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
-      if (output !== undefined && news.main !== undefined) {
+      if (output !== undefined && (news.main !== undefined || news.context !== undefined)) {
         const images = yield* makeImageSource;
         const hash = yield* images.hash({
-          source: {
-            main: news.main,
-            handler: news.handler,
-            build: news.build,
-            dockerfile: news.dockerfile,
-          },
+          source: imageSourceOf(news),
           isExternal: news.isExternal,
           bootstrap: bootstrapFor(news),
         });
@@ -975,17 +997,12 @@ export const WorkerPoolProvider = () =>
       });
       template.serviceAccount = identity.serviceAccount;
       let codeHash: string | undefined;
-      if (news.main !== undefined) {
+      if (news.main !== undefined || news.context !== undefined) {
         const images = yield* makeImageSource;
         const image = yield* images
           .resolve({
             id,
-            source: {
-              main: news.main,
-              handler: news.handler ?? "default",
-              build: news.build,
-              dockerfile: news.dockerfile,
-            },
+            source: imageSourceOf(news, news.handler ?? "default"),
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,
             isExternal: news.isExternal,

@@ -1,0 +1,111 @@
+---
+title: "Part 2: Sandboxes from a Worker"
+description: A Cloudflare Worker that runs code in a fresh Boat sandbox per request, and keeps one sandbox per user.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Bind CreateSandbox
+
+```typescript title="src/Api.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* Boat.CreateSandbox();
+    return {};
+  }).pipe(Effect.provide(Boat.CreateSandboxHttp)),
+) {}
+```
+
+At deploy, the Worker gets a Boat key of its own that creates sandboxes, works in them, and deletes only the ones it created.
+
+## Run code in a one-shot sandbox
+
+```diff lang="typescript"
+// src/Api.ts
+  Effect.gen(function* () {
+    const sandboxes = yield* Boat.CreateSandbox();
++
++    const run = Effect.fn("run")(function* (code: string) {
++      const sandbox = yield* Effect.acquireRelease(
++        sandboxes.create({ type: "small", noEnv: true, autoStop: "5 minutes" }),
++        (sandbox) => Effect.ignore(sandbox.delete()),
++      );
++      yield* sandbox.files.write("main.mjs", code);
++      return yield* sandbox.exec("node main.mjs", { timeout: "1 minute" });
++    });
+```
+
+`acquireRelease` deletes the sandbox when the request's scope closes, whatever happens.
+
+## Keep a sandbox per user
+
+```diff lang="typescript"
+// src/Api.ts
++    const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
++      const [existing] = yield* sandboxes.list({ labels: { user } });
++      if (existing === undefined) {
++        return yield* sandboxes.create({ type: "small", noEnv: true, autoStop: "10 minutes", labels: { user } });
++      }
++      const sandbox = yield* sandboxes.connect(existing.id);
++      yield* sandbox.resume({ autoStop: "10 minutes" });
++      return sandbox;
++    });
+```
+
+The label finds the user's sandbox on their next request. If it stopped in the meantime, `resume` brings it back with their files.
+
+## Serve both
+
+```diff lang="typescript"
+// src/Api.ts
+-    return {};
++    return {
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://api");
++        if (request.method === "POST" && url.pathname === "/run") {
++          const result = yield* run(yield* request.text).pipe(Effect.scoped);
++          return yield* HttpServerResponse.json(result);
++        }
++        const match = /^\/users\/([a-z0-9-]+)\/files\/(.+)$/.exec(url.pathname);
++        if (match !== null) {
++          const sandbox = yield* userSandbox(match[1]!);
++          if (request.method === "PUT") yield* sandbox.files.write(`work/${match[2]}`, yield* request.text);
++          return yield* HttpServerResponse.json({ content: yield* sandbox.files.readText(`work/${match[2]}`) });
++        }
++        return HttpServerResponse.text("not found", { status: 404 });
++      }).pipe(Effect.orDie),
++    };
+```
+
+## Deploy it
+
+Replace the scratch sandbox with the Worker:
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+-    const box = yield* Boat.Sandbox("Scratch", { type: "small", noEnv: true, autoStop: "10 minutes" });
+-    return { sandboxId: box.sandboxId };
++    const api = yield* Api;
++    return { url: api.url.as<string>() };
+  }),
+```
+
+<PackageManagers run="alchemy deploy" />
+
+Removing `Scratch` from the Stack deletes it.
+
+<PackageManagers script={`curl -X POST "$URL/run" -d 'console.log(6 * 7)'`} />
+
+## Next
+
+[Part 3](/boat/tutorial/part-3) tests it.
