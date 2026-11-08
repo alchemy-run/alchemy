@@ -1,0 +1,28 @@
+---
+title: "Part 4: Stages"
+description: Deploy separate copies of the Stack, each with its own Worker and key.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Deploy another stage
+
+<PackageManagers run="alchemy deploy --stage staging" />
+
+Each stage gets its own Worker and its own Boat key. Without `--stage`, you deploy to `live_$USER`.
+
+## Share one Boat account
+
+Stages share your Boat account. Sandboxes a stage's Worker creates carry the stage as a label (`alchemy.stage`), so you can list one stage's sandboxes without touching another's:
+
+```typescript
+const staging = yield* sandboxes.list({ labels: { "alchemy.stage": "staging" } });
+```
+
+Destroying a stage deletes its Worker's key and leaves its sandboxes to stop on their timers. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
+
+## Next
+
+[Part 5](/boat/tutorial/part-5) deploys from CI.

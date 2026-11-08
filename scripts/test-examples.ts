@@ -79,6 +79,8 @@ const examples = [
   "./examples/e2b-agent-sandbox",
   "./examples/e2b-program",
   "./examples/e2b-program-async",
+  "./examples/boat-agent-sandbox",
+  "./examples/boat-program",
   "./examples/cloudflare-modal-sandbox",
   "./examples/modal-functions",
   "./examples/aws-dev",

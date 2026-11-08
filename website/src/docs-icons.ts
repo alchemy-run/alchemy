@@ -57,6 +57,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Daytona: b("daytona"),
   Modal: b("modal"),
   Archil: b("archil"),
+  Boat: b("boat"),
   Prisma: b("prisma"),
   // Brand-colored prism for marketing surfaces.
   PrismaColor: b("prisma-color"),
@@ -158,6 +159,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Daytona: b("daytona"),
   Modal: b("modal"),
   Archil: b("archil"),
+  Boat: b("boat"),
   Planetscale: b("planetscale"),
   PlanetScale: b("planetscale"),
   Prisma: b("prisma"),

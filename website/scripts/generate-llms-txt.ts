@@ -621,6 +621,31 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/storage" },
   },
   {
+    heading: "Boat",
+    intro:
+      "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",
+    pages: {
+      slugs: [
+        "boat/index",
+        "boat/what-is-boat",
+        "boat/setup",
+        "boat/tutorial/part-1",
+        "boat/tutorial/part-2",
+        "boat/tutorial/part-3",
+        "boat/tutorial/part-4",
+        "boat/tutorial/part-5",
+        "boat/account-and-keys",
+        "boat/choosing-a-runtime",
+        "boat/sandboxes",
+        "boat/programs",
+        "boat/snapshots",
+        "boat/environments",
+        "boat/ports",
+        "boat/webhooks",
+      ],
+    },
+  },
+  {
     heading: "Rivet",
     intro:
       "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",

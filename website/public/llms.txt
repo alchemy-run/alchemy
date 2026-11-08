@@ -788,6 +788,27 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 - [Branches and checkpoints](https://alchemy.run/archil/storage/branches) — Seed a disk once, checkpoint it at deploy time, and copy a writable branch per session in milliseconds.
 - [Your own bucket](https://alchemy.run/archil/storage/your-own-bucket) — Keep a disk's files as ordinary objects in your own S3, R2, GCS or Azure bucket, with no keys for S3.
 
+## Boat
+
+Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
+
+- [Boat](https://alchemy.run/boat) — Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
+- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
+- [Setup](https://alchemy.run/boat/setup) — Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
+- [Part 1: Your First Sandbox](https://alchemy.run/boat/tutorial/part-1) — Add the Boat provider to a Stack and deploy a sandbox.
+- [Part 2: Sandboxes from a Worker](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that runs code in a fresh Boat sandbox per request, and keeps one sandbox per user.
+- [Part 3: Testing](https://alchemy.run/boat/tutorial/part-3) — Deploy the Stack in a test, call the API, and check the result.
+- [Part 4: Stages](https://alchemy.run/boat/tutorial/part-4) — Deploy separate copies of the Stack, each with its own Worker and key.
+- [Part 5: CI/CD](https://alchemy.run/boat/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
+- [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
+- [Choosing a runtime](https://alchemy.run/boat/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
+- [Sandboxes](https://alchemy.run/boat/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
+- [Programs](https://alchemy.run/boat/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
+- [Snapshots & forks](https://alchemy.run/boat/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
+- [Environments](https://alchemy.run/boat/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
+- [Ports](https://alchemy.run/boat/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
+- [Webhooks](https://alchemy.run/boat/webhooks) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
+
 ## Rivet
 
 Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
@@ -1190,4 +1211,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~249 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.
