@@ -405,6 +405,18 @@ const testServicesLayer =
         .map((services) => services.layer)
         .reduce((merged, layer) => Layer.merge(merged, layer));
 
+/**
+ * The stack's state store under the emulator: a store that reads the cloud
+ * environment (an AWS S3 store) gets the test services too, so its bucket
+ * lives in the emulator alongside the stack's resources instead of needing
+ * live credentials.
+ */
+const testStateLayer = <E>(state: Layer.Layer<State.State, E, never>) =>
+  testServicesLayer === undefined
+    ? state
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services the store would otherwise resolve itself
+      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, never>);
+
 const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
   testServicesLayer === undefined
@@ -561,7 +573,7 @@ export const toEffect = <A, ROut = any>(
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
-    Effect.provide(options.state ?? State.localState()),
+    Effect.provide(testStateLayer(options.state ?? State.localState())),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
