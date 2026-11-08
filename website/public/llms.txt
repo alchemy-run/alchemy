@@ -939,7 +939,7 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Services
 
-- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed Modal function.
 - [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
 - [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
 - [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
@@ -948,16 +948,16 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Sandboxes
 
-- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image.
-- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One sandbox whose filesystem outlives its sessions.
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image, and start sandboxes with a repository already installed.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One Modal sandbox whose filesystem outlives its sessions, resumed from a Worker.
 - [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
 - [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
-- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a sandbox's files or memory and start new sandboxes from it.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a Modal sandbox's files, its memory, or one directory, and start new sandboxes from it.
 
 ## Modal — Storage
 
-- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between sandboxes, functions and Workers.
-- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between Modal sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, Modal sandboxes and Python functions with a Modal Queue.
 - [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
 
 ## Modal — Networking
