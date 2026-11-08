@@ -380,7 +380,7 @@ export const syncDiskSettings = Effect.fn(function* (
 
 /** Archil reported a disk created but returned no id, and no disk has its name. */
 export class DiskIdMissing extends Data.TaggedError("Archil.DiskIdMissing")<{
-  readonly name: string;
+  readonly diskName: string;
 }> {}
 
 /** Ensure a disk with this name exists and is available (create-or-observe). */
@@ -400,7 +400,7 @@ export const ensureDisk = Effect.fn(function* (
     .createDisk({ name, mounts: storage ? [toMountConfig(storage)] : undefined })
     .pipe(Effect.map(({ data }) => data.diskId));
   const id = created ?? (yield* findDiskByName(name))?.id;
-  if (!id) return yield* new DiskIdMissing({ name });
+  if (!id) return yield* new DiskIdMissing({ diskName: name });
   return yield* waitForDisk(id);
 });
 
