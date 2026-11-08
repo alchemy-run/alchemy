@@ -86,11 +86,47 @@ const cy = (i: number) => {
 };
 const H = QTOP + QH + 10;
 const qMid = QTOP + QH / 2;
+
+// Phones get the queue turned upright: producer on top, the queue's messages
+// wrapped to the width, consumers underneath, so text keeps its size.
+const N_FIT = 318;
+const N_PW = producer ? Math.min(N_FIT, PW) : 0;
+const N_PH = producer ? 46 : 0;
+const N_QTOP = producer ? N_PH + 44 : 22;
+const N_GAP = 10;
+type NPlaced = Message & { x: number; y: number };
+const nPlaced: NPlaced[] = [];
+const nGroupLabels: { label: string; y: number }[] = [];
+let N_QH = 0;
+if (groups.length) {
+  const labelW = Math.max(...groups.map((g) => g.label.length * 6.6)) + 12;
+  const per = Math.max(1, Math.floor((N_FIT - 24 - labelW + N_GAP) / (MW + N_GAP)));
+  let y = N_QTOP + 12;
+  for (const g of groups) {
+    nGroupLabels.push({ label: g.label, y });
+    const shown = g.messages.slice(0, per);
+    shown.forEach((m, i) => nPlaced.push({ ...m, x: N_FIT - 12 - (i + 1) * MW - i * N_GAP, y }));
+    y += MH + (note && shown.some((m) => m.to) ? 26 : 12);
+  }
+  N_QH = y - N_QTOP;
+} else {
+  const per = Math.max(1, Math.floor((N_FIT - 24 + N_GAP) / (MW + N_GAP)));
+  messages.forEach((m, i) => {
+    const r = Math.floor(i / per);
+    const c = i % per;
+    nPlaced.push({ ...m, x: 12 + c * (MW + N_GAP), y: N_QTOP + 12 + r * (MH + (note ? 26 : 12)) });
+  });
+  N_QH = 12 + Math.ceil(messages.length / per) * (MH + (note ? 26 : 12));
+}
+const N_CTOP = N_QTOP + N_QH + 56;
+const N_CW = Math.min(CW, (N_FIT - (consumers.length - 1) * N_GAP) / consumers.length);
+const ncx = (i: number) => (N_FIT - (consumers.length * N_CW + (consumers.length - 1) * N_GAP)) / 2 + i * (N_CW + N_GAP);
+const N_H = N_CTOP + CH + 6;
 ---
 
 <figure class="alc-fig not-content" data-nosnippet>
   <div class="alc-fig__panel">
-  <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
+  <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
     <defs>
       <marker id="alc-q-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
@@ -141,6 +177,51 @@ const qMid = QTOP + QH / 2;
         <rect x={X_C} y={cy(i)} width={CW} height={CH} rx="8" class="alc-fig__box" />
         <text x={X_C + CW / 2} y={cy(i) + CH / 2 + (c.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{c.label}</text>
         {c.type && <text x={X_C + CW / 2} y={cy(i) + CH / 2 + 13} text-anchor="middle" class="alc-fig__type">{c.type}</text>}
+      </g>
+    ))}
+  </svg>
+  <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_FIT} ${N_H}`} style={`max-width: ${Math.round(N_FIT * 1.15)}px`} role="img" aria-label={caption ?? title}>
+    <defs>
+      <marker id="alc-q-arrow-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {producer && (
+      <g>
+        <rect x={(N_FIT - N_PW) / 2} y={0} width={N_PW} height={N_PH} rx="8" class="alc-fig__box" />
+        <text x={N_FIT / 2} y={N_PH / 2 + (producer.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{producer.label}</text>
+        {producer.type && <text x={N_FIT / 2} y={N_PH / 2 + 13} text-anchor="middle" class="alc-fig__type">{producer.type}</text>}
+        <line x1={N_FIT / 2} y1={N_PH} x2={N_FIT / 2} y2={N_QTOP - 22} class="alc-fig__line" marker-end="url(#alc-q-arrow-n)" />
+        {producer.send && <text x={N_FIT / 2 + 8} y={N_PH + 18} class="alc-fig__small">{producer.send}</text>}
+      </g>
+    )}
+    <text x={4} y={N_QTOP - 8} class="alc-fig__strong">{title}</text>
+    <rect x={0} y={N_QTOP} width={N_FIT} height={N_QH} rx="10" class="alc-fig__box alc-q__queue" />
+    {nGroupLabels.map((g) => <text x={12} y={g.y + MH / 2 + 4} class="alc-fig__type">{g.label}</text>)}
+    {nPlaced.map((m) => {
+      const ci = consumers.findIndex((c) => c.id === m.to);
+      if (ci < 0) return null;
+      const tx = ncx(ci) + N_CW / 2;
+      const qb = N_QTOP + N_QH;
+      return (
+        <path d={`M ${m.x + MW / 2} ${m.y + MH} V ${qb + 6} C ${m.x + MW / 2} ${qb + 30}, ${tx} ${qb + 20}, ${tx} ${N_CTOP - 2}`} class="alc-fig__line alc-fig__line--dashed" marker-end="url(#alc-q-arrow-n)" />
+      );
+    })}
+    {nPlaced.map((m) => {
+      const inFlight = consumers.some((c) => c.id === m.to);
+      return (
+        <g>
+          <rect x={m.x} y={m.y} width={MW} height={MH} rx="5" class:list={["alc-fig__box", inFlight ? "alc-fig__box--muted" : "alc-fig__box--accent"]} style={inFlight ? "fill: var(--alc-bg-elev-1)" : ""} />
+          <text x={m.x + MW / 2} y={m.y + 19} text-anchor="middle" class="alc-fig__small" opacity={inFlight ? 0.75 : 1}>{m.label}</text>
+          {inFlight && note && <text x={m.x + MW / 2} y={m.y + MH + 12} text-anchor="middle" class="alc-fig__type alc-fig__haloed">{note}</text>}
+        </g>
+      );
+    })}
+    {consumers.map((c, i) => (
+      <g>
+        <rect x={ncx(i)} y={N_CTOP} width={N_CW} height={CH} rx="8" class="alc-fig__box" />
+        <text x={ncx(i) + N_CW / 2} y={N_CTOP + CH / 2 + (c.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{c.label}</text>
+        {c.type && <text x={ncx(i) + N_CW / 2} y={N_CTOP + CH / 2 + 13} text-anchor="middle" class="alc-fig__type">{c.type}</text>}
       </g>
     ))}
   </svg>
