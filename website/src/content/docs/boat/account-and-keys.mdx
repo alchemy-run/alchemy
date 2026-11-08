@@ -74,9 +74,7 @@ A key can't do more, or live longer, than the key that creates it. A key your br
 
 ## What each host gets
 
-Each binding gets its own key, created at deploy and deleted when the host is destroyed. Your key never reaches the host.
-
-`Boat.ConnectSandbox(box)` gets a key that reaches only `box`: it runs commands, uses files, hosts ports, and stops, resumes and snapshots that one sandbox. `Boat.CreateSandbox()` gets a key that creates sandboxes and works in them, and deletes only the sandboxes it created. `Boat.consumeSandboxEvents` gets a key that can only read sandboxes, to tell which ones are the stack's, and the webhook's signing secret to check each delivery; see [Webhooks](/boat/webhooks#the-workers-two-keys). None of them can read your environments, webhooks or other keys. On a Cloudflare Worker, every key and secret deploys as a Cloudflare secret.
+Each binding gets a key of its own, narrowed to what it does, and your key never reaches the host. See [Credentials & bindings](/boat/security/credentials#what-each-host-gets).
 
 ## In CI
 
@@ -92,4 +90,4 @@ Your plan caps how many sandboxes may run at once and how many may start each mi
 
 ## Next
 
-What a sandbox starts with, its variables, secret files and credentials, is in [Environments](/boat/environments). Where to run your code is in [Choosing a runtime](/boat/choosing-a-runtime).
+What a sandbox starts with, its variables, secret files and credentials, is in [Environments & secrets](/boat/security/environments). Where to run your code is in [Choosing a runtime](/boat/sandboxes/choosing-a-runtime).

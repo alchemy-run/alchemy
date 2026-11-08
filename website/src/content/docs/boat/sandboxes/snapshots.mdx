@@ -3,7 +3,7 @@ title: Snapshots & forks
 description: Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
 ---
 
-import BranchGraph from "../../../components/diagrams/BranchGraph.astro";
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
 
 A **snapshot** is a sandbox's disk saved under a name: installed packages, a cloned repository, a warm build cache. A sandbox started from it begins exactly there. A **fork** copies one sandbox into a new one from its last snapshot, which Boat takes now and then while it runs, and every time it stops.
 
@@ -89,4 +89,4 @@ Snapshots your code saves aren't deleted with the Stack.
 
 ## Next
 
-Give sandboxes variables, secret files and credentials: [Environments](/boat/environments).
+Give sandboxes variables, secret files and credentials: [Environments & secrets](/boat/security/environments).

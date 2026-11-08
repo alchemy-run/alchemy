@@ -3,7 +3,7 @@ title: Programs
 description: Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
 ---
 
-import Timeline from "../../../components/diagrams/Timeline.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A **program** is your own server, run in a sandbox the Stack declares. Alchemy bundles it, uploads it into the sandbox and starts it with Node.js 24, then serves its port at `https://<subdomain>-3000.on.boat.dev`.
 
@@ -81,7 +81,7 @@ const api = yield* Api;
 return { url: api.url, token: api.urlToken };
 ```
 
-See [Ports](/boat/ports).
+See [Ports & URLs](/boat/sandboxes/ports).
 
 ## Use bindings in the program
 
@@ -101,4 +101,4 @@ Effect.gen(function* () {
 
 ## Next
 
-Start sandboxes with a project already set up: [Snapshots & forks](/boat/snapshots).
+Start sandboxes with a project already set up: [Snapshots & forks](/boat/sandboxes/snapshots).

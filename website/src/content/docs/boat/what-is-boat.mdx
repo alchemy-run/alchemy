@@ -45,13 +45,13 @@ A **sandbox** is one machine, in one of four sizes. You run commands in it, read
 const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { task } });
 ```
 
-See [Sandboxes](/boat/sandboxes).
+See [Sandboxes](/boat/sandboxes/sandboxes).
 
 ## Programs
 
 A sandbox can run your own **program**: an Effect HTTP server that Alchemy bundles, uploads and starts with Node.js, served at the sandbox's URL. A code change restarts it in place, in the same sandbox.
 
-See [Programs](/boat/programs).
+See [Programs](/boat/sandboxes/programs).
 
 ## Snapshots and forks
 
@@ -61,7 +61,7 @@ A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it,
 export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
 ```
 
-See [Snapshots & forks](/boat/snapshots).
+See [Snapshots & forks](/boat/sandboxes/snapshots).
 
 ## Environments
 
@@ -71,13 +71,13 @@ An **environment** is what a sandbox starts with: environment variables, secret 
 export const Agents = Boat.Environment("Agents", { env: { NODE_ENV: "production" } });
 ```
 
-See [Environments](/boat/environments).
+See [Environments & secrets](/boat/security/environments).
 
 ## Ports
 
 A program that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public.
 
-See [Ports](/boat/ports).
+See [Ports & URLs](/boat/sandboxes/ports).
 
 ## Webhooks
 
@@ -89,7 +89,7 @@ yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
 );
 ```
 
-See [Webhooks](/boat/webhooks).
+See [Lifecycle events](/boat/sandboxes/lifecycle-events).
 
 ## State: where Alchemy keeps its record
 

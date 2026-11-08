@@ -1,10 +1,10 @@
 ---
-title: Webhooks
+title: Lifecycle events
 description: Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
 ---
 
-import Fanout from "../../../components/diagrams/Fanout.astro";
-import StateMachine from "../../../components/diagrams/StateMachine.astro";
+import Fanout from "../../../../components/diagrams/Fanout.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you subscribe to. Every event is about one sandbox:
 

@@ -1,9 +1,9 @@
 ---
-title: Environments
+title: Environments & secrets
 description: Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
 ---
 
-import Timeline from "../../../components/diagrams/Timeline.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 An **environment** is what a sandbox starts with: environment variables, secret files, and which of your credentials it gets — a GitHub token for your repositories, the AI logins from Boat's Agents page, the sandbox's own Boat key. Your account has a default environment, `base`, which sandboxes get unless they name another.
 
@@ -118,4 +118,4 @@ export default Alchemy.Stack(
 
 ## Next
 
-Call a server running in a sandbox: [Ports](/boat/ports).
+Call a server running in a sandbox: [Ports & URLs](/boat/sandboxes/ports).
