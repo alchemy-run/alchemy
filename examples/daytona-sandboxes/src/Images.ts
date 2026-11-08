@@ -1,10 +1,16 @@
 // src/Images.ts
 import * as Daytona from "@alchemy.run/daytona";
 
-// The image every sandbox boots from, with its default size.
+/** The image: Node 24 with git, and the size every sandbox gets. */
 export const Base = Daytona.Snapshot("Base", {
-  image: "node:22-bookworm-slim",
+  image: "node:24-bookworm",
   cpu: 1,
   memory: 1,
   disk: 3,
+});
+
+/** The shared base every sandbox starts from: Base with the repository cloned, captured at deploy. */
+export const Warm = Daytona.Snapshot("Warm", {
+  from: Base,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /home/daytona/repo"],
 });

@@ -1,38 +1,61 @@
 ---
-title: "Part 5: Stages and CI"
-description: Deploy a copy of the app per stage, and from CI.
+title: "Part 5: Testing"
+description: Deploy the Stack in a test, start sandboxes from the warm snapshot, and check what they contain.
 sidebar:
   order: 5
 ---
 
-## Deploy a stage
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
-```sh
-alchemy deploy --stage pr-42
+## Deploy once per test file
+
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Daytona from "@alchemy.run/daytona";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), Daytona.providers()),
+  state: Alchemy.localState(),
+});
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 ```
 
-Each stage gets its own snapshot, Worker and API key, named after the stage. Sandboxes the Worker creates carry the stage in their `alchemy.stage` label, and volumes carry your prefix in their name. `alchemy destroy --stage pr-42` doesn't delete them, so list a stage's sandboxes by that label to clean them up.
+The test deploys the Stack to a stage of its own, snapshots included, and destroys it afterwards.
 
-## Deploy from CI
+## Check a sandbox starts from the base
 
-Daytona has no keyless CI login. Store an API key as the `DAYTONA_API_KEY` secret:
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-on:
-  push:
-    branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bunx alchemy deploy --stage prod
-        env:
-          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```typescript title="test/integ.test.ts"
+test(
+  "starts each sandbox from the Warm snapshot",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const res = yield* Test.executeWhenReady(
+      HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText("node --version")),
+    );
+    const body = (yield* res.json) as { exitCode: number; result: string };
+    expect(body.result).toMatch(/^v24\./);
+  }),
+  { timeout: 300_000 },
+);
 ```
+
+Node.js 24 is only there if the sandbox booted from the new `Warm`. The Worker deletes the sandbox when the request ends, so none is left behind.
+
+## Run it
+
+<PackageManagers script={`bun test`} />
+
+Set `NO_DESTROY=1` to keep the deployment, and the snapshots, between runs while you iterate.
+
+## Next
+
+[Part 6](/daytona/tutorial/part-6) deploys more copies, from CI.
