@@ -20,7 +20,7 @@ const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "p
 const waitUntilGone = (sid: string) =>
   archil.getSandbox({ sid }).pipe(
     Effect.map(({ data }) => (data.status === "deleted" ? ("gone" as const) : ("found" as const))),
-    Effect.catchTag("SandboxNotFound", () => Effect.succeed("gone" as const)),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",

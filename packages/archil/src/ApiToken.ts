@@ -83,7 +83,7 @@ const observe = Effect.fn(function* (match: { tokenId?: string; name: string }) 
 const revoke = (tokenId: string) =>
   archil.deleteToken({ id: tokenId }).pipe(
     Effect.asVoid,
-    Effect.catchTag("ApiTokenNotFound", () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 
 /** Create an API key and return its attributes. */

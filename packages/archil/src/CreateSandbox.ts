@@ -182,7 +182,7 @@ export const CreateSandboxHttp = Layer.effect(
                   toCreateSandboxRequest(name, { ...request, image: defaultImage }, mounts),
                 )
                 .pipe(
-                  Effect.catchTag("SandboxAlreadyExists", (conflict) =>
+                  Effect.catchTag("SandboxNameConflict", (conflict) =>
                     findSandboxByName(name).pipe(
                       Effect.flatMap((found) =>
                         found ? Effect.succeed({ data: found }) : Effect.fail(conflict),

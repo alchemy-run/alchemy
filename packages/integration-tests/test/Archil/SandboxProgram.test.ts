@@ -24,7 +24,7 @@ const getText = (url: string) =>
 const gone = (sid: string) =>
   archil.getSandbox({ sid }).pipe(
     Effect.map(({ data }) => data.status === "deleted"),
-    Effect.catchTag("SandboxNotFound", () => Effect.succeed(true)),
+    Effect.catchTag("NotFound", () => Effect.succeed(true)),
   );
 
 const putText = (diskId: string, key: string, text: string) =>
