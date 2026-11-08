@@ -262,6 +262,44 @@ describe("BranchDisk", () => {
   );
 });
 
+describe("concurrent creates", () => {
+  test(
+    "BranchDisk: two creates of one branch both return it",
+    Effect.gen(function* () {
+      const { ids } = yield* json<{ ids: string[] }>("/branch-race?name=session-race");
+      expect(ids[0]).toBe(ids[1]);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateDisk: two creates of one disk both return it",
+    Effect.gen(function* () {
+      const { ids } = yield* json<{ ids: string[] }>("/disk-race?name=race-1");
+      expect(ids[0]).toBe(ids[1]);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateSandbox: two creates of one sandbox both return it",
+    Effect.gen(function* () {
+      const { ids } = yield* json<{ ids: string[] }>("/sandbox-race?name=race-1");
+      expect(ids[0]).toBe(ids[1]);
+    }),
+    { tags, timeout: 180_000 },
+  );
+});
+
+describe("CreateSandbox on a paused sandbox", () => {
+  test(
+    "exec resumes a paused sandbox and runs",
+    Effect.gen(function* () {
+      const body = yield* json<{ paused: string; stdout: string }>("/paused?name=paused-1");
+      expect(body).toEqual({ paused: "paused", stdout: "awake" });
+    }),
+    { tags, timeout: 240_000 },
+  );
+});
+
 describe("CreateImage", () => {
   test(
     "an image builds at run time",

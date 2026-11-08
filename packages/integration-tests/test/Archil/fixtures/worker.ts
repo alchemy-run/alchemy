@@ -7,6 +7,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { MountObject } from "./mount-object.ts";
 import { Agent, Dataset, Preview, Seed, SEED_CHECKPOINT } from "./resources.ts";
@@ -175,6 +176,40 @@ export default class ArchilWorker extends Cloudflare.Worker<ArchilWorker>()(
             });
             const all = (yield* seeds.listBranches()).map((b) => b.name);
             return yield* HttpServerResponse.json({ branch, all });
+          }
+          // Two creates of one name at once: each binding converges on the
+          // one object instead of failing the create that loses the race.
+          case "/branch-race": {
+            const branch = () => seeds.branch({ name: q("name"), fromCheckpoint: SEED_CHECKPOINT });
+            const [a, b] = yield* Effect.all([branch(), branch()], { concurrency: "unbounded" });
+            return yield* HttpServerResponse.json({ ids: [a.filesystemId, b.filesystemId] });
+          }
+          case "/disk-race": {
+            const [a, b] = yield* Effect.all([disks.create(q("name")), disks.create(q("name"))], {
+              concurrency: "unbounded",
+            });
+            yield* disks.delete(q("name"));
+            return yield* HttpServerResponse.json({ ids: [a.diskId, b.diskId] });
+          }
+          case "/sandbox-race": {
+            const create = () => sandboxes.create({ name: q("name") });
+            const [a, b] = yield* Effect.all([create(), create()], { concurrency: "unbounded" });
+            yield* sandboxes.delete(q("name"));
+            return yield* HttpServerResponse.json({ ids: [a.sandboxId, b.sandboxId] });
+          }
+          // A paused sandbox refuses process connections; exec resumes it.
+          case "/paused": {
+            const sandbox = yield* sandboxes.create({ name: q("name") });
+            const paused = yield* sandbox.pause().pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (attrs) => attrs.status === "paused",
+                times: 60,
+              }),
+            );
+            const out = yield* sandbox.exec("echo -n awake");
+            yield* sandboxes.delete(q("name"));
+            return yield* HttpServerResponse.json({ paused: paused.status, stdout: out.stdout });
           }
           case "/disk": {
             const disk = yield* disks.create(q("name"));
