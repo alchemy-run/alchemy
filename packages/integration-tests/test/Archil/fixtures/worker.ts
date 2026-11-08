@@ -177,26 +177,21 @@ export default class ArchilWorker extends Cloudflare.Worker<ArchilWorker>()(
             const all = (yield* seeds.listBranches()).map((b) => b.name);
             return yield* HttpServerResponse.json({ branch, all });
           }
-          // Two creates of one name at once: each binding converges on the
-          // one object instead of failing the create that loses the race.
-          case "/branch-race": {
-            const branch = () => seeds.branch({ name: q("name"), fromCheckpoint: SEED_CHECKPOINT });
-            const [a, b] = yield* Effect.all([branch(), branch()], { concurrency: "unbounded" });
-            return yield* HttpServerResponse.json({ ids: [a.filesystemId, b.filesystemId] });
+          // The concurrent-create tests call these from many requests at once.
+          case "/create-disk": {
+            const disk = yield* disks.create(q("name"));
+            return yield* HttpServerResponse.json({ id: disk.diskId });
           }
-          case "/disk-race": {
-            const [a, b] = yield* Effect.all([disks.create(q("name")), disks.create(q("name"))], {
-              concurrency: "unbounded",
-            });
+          case "/delete-disk":
             yield* disks.delete(q("name"));
-            return yield* HttpServerResponse.json({ ids: [a.diskId, b.diskId] });
+            return HttpServerResponse.text("ok");
+          case "/create-sandbox": {
+            const sandbox = yield* sandboxes.create({ name: q("name") });
+            return yield* HttpServerResponse.json({ id: sandbox.sandboxId });
           }
-          case "/sandbox-race": {
-            const create = () => sandboxes.create({ name: q("name") });
-            const [a, b] = yield* Effect.all([create(), create()], { concurrency: "unbounded" });
+          case "/delete-sandbox":
             yield* sandboxes.delete(q("name"));
-            return yield* HttpServerResponse.json({ ids: [a.sandboxId, b.sandboxId] });
-          }
+            return HttpServerResponse.text("ok");
           // A paused sandbox refuses process connections; exec resumes it.
           case "/paused": {
             const sandbox = yield* sandboxes.create({ name: q("name") });
