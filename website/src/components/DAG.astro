@@ -574,7 +574,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 };
 ---
 
-{narrow && (width > 440 || width >= wideWidth * 0.8) && mode !== "compact" ? (
+{narrow && (width > 500 || width >= wideWidth * 0.8) && mode !== "compact" ? (
   <Astro.self {...props} narrow mode={mode === "transpose" && grid && groups.length === 0 ? "auto" : "compact"} wideWidth={wideWidth} />
 ) : narrow ? (width < wideWidth * 0.8 && (
   <svg
