@@ -32,6 +32,14 @@ const brandMarks: Record<string, string> = Object.fromEntries(
 const l = (name: string): string | undefined => lucide.icons[name]?.body;
 const b = (name: string): string | undefined => brandMarks[name];
 
+/**
+ * An icon for a diagram node: a lucide name (`database`, `server`), or a
+ * vendored brand mark as `brand:<name>` (`brand:docker`, `brand:postgresql`).
+ */
+export function diagramIcon(name: string): string | undefined {
+  return name.startsWith("brand:") ? b(name.slice("brand:".length)) : l(name);
+}
+
 /** Tab bar icons, keyed by tab label (see docs-tabs.ts). */
 export const TAB_ICONS: Record<string, string | undefined> = {
   Core: l("book-open"),

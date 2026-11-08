@@ -104,7 +104,9 @@ export type FunctionStub<Shape> = Omit<Shape, "fetch" | "run">;
  * each call goes through Modal (queued, retried and autoscaled like any
  * Modal call) to the method of that name. Arguments and results are JSON
  * values, and a typed failure reaches the caller by its `_tag`. A method
- * that returns a `Stream` arrives whole, once the call finishes.
+ * that returns a `Stream` arrives whole, once the call finishes. The
+ * binding gives the host its own key for the function, which every call
+ * carries: the program answers only callers bound to it.
  *
  * A Python function, or an async program, gets a {@link FunctionClient}
  * instead: `call`, `map` and `spawn` with CBOR arguments (Modal's

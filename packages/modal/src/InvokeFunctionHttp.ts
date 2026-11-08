@@ -13,6 +13,7 @@ import { decodeCbor, encodeCbor } from "./Cbor.ts";
 import { isFunctionRef, makeFunctionBinding, type ResolvedFunction } from "./FunctionTarget.ts";
 import { operations, seconds } from "./internal.ts";
 import { RPC_STREAM_KEY } from "./internal/Entrypoint.ts";
+import { RPC_KEY_KWARG, RpcCaller } from "./internal/RpcAuth.ts";
 import {
   FunctionCallFailed,
   FunctionCallTimeout,
@@ -224,26 +225,32 @@ export const makeRpcClient = (
   resolved: ResolvedFunction,
   ops: InvokeOps,
   methods: Effect.Effect<ReadonlyArray<string> | undefined>,
+  key: Effect.Effect<string | undefined>,
 ): Record<string, unknown> => {
   const client = makeFunctionClient(resolved, ops);
   const callMethod = (name: string, args: ReadonlyArray<unknown>) =>
-    makeFunctionClient({ ...resolved, method: name }, ops)
-      .call(args)
-      .pipe(
-        Effect.flatMap((value) =>
-          isStreamResult(value)
-            ? // The stream's values, re-encoded as the NDJSON the RPC codec
-              // decodes (byte chunks and a trailing failure marker included).
-              Effect.succeed(
-                Stream.fromIterable(value[RPC_STREAM_KEY]).pipe(
-                  Stream.map((item) => `${JSON.stringify(item)}\n`),
-                  Stream.encodeText,
-                  decodeRpcResponseStream,
-                ),
-              )
-            : decodeRpcResult(value),
+    key.pipe(
+      Effect.flatMap((value) =>
+        makeFunctionClient({ ...resolved, method: name }, ops).call(
+          args,
+          // The binding's key: the program serves only callers it issued keys to.
+          value === undefined ? {} : { [RPC_KEY_KWARG]: value },
         ),
-      );
+      ),
+      Effect.flatMap((value) =>
+        isStreamResult(value)
+          ? // The stream's values, re-encoded as the NDJSON the RPC codec
+            // decodes (byte chunks and a trailing failure marker included).
+            Effect.succeed(
+              Stream.fromIterable(value[RPC_STREAM_KEY]).pipe(
+                Stream.map((item) => `${JSON.stringify(item)}\n`),
+                Stream.encodeText,
+                decodeRpcResponseStream,
+              ),
+            )
+          : decodeRpcResult(value),
+      ),
+    );
   return new Proxy(
     {},
     {
@@ -285,20 +292,25 @@ export const makeRpcClient = (
  */
 export const InvokeFunctionHttp = Layer.effect(
   InvokeFunction,
-  makeFunctionBinding({
-    tag: "Modal.InvokeFunction",
-    operations: InvokeOps,
-    role: "contributor",
-    make: Effect.fn(function* (resolved, ops, target: FunctionTarget) {
-      if (isFunctionRef(target)) return makeFunctionClient(resolved, ops);
-      // The program's methods, recorded at deploy (an attribute of the Function).
-      const methods = yield* (
-        target as unknown as {
-          readonly methods: Effect.Effect<Effect.Effect<ReadonlyArray<string> | undefined>>;
-        }
-      ).methods;
-      // Typed by `InvokeFunction`'s call signatures from the target's program.
-      return makeRpcClient(resolved, ops, methods) as unknown as FunctionClient;
-    }),
+  Effect.gen(function* () {
+    const caller = yield* RpcCaller;
+    return yield* makeFunctionBinding({
+      tag: "Modal.InvokeFunction",
+      operations: InvokeOps,
+      role: "contributor",
+      make: Effect.fn(function* (resolved, ops, target: FunctionTarget) {
+        if (isFunctionRef(target)) return makeFunctionClient(resolved, ops);
+        // This host's key for the Function's RPC methods (minted at deploy).
+        const key = yield* caller(target as unknown as { readonly LogicalId: string });
+        // The program's methods, recorded at deploy (an attribute of the Function).
+        const methods = yield* (
+          target as unknown as {
+            readonly methods: Effect.Effect<Effect.Effect<ReadonlyArray<string> | undefined>>;
+          }
+        ).methods;
+        // Typed by `InvokeFunction`'s call signatures from the target's program.
+        return makeRpcClient(resolved, ops, methods, key) as unknown as FunctionClient;
+      }),
+    });
   }),
 );

@@ -39,7 +39,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
-      expect(Redacted.value(env.serviceToken)).toBe("test-token");
+      expect(env.serviceToken && Redacted.value(env.serviceToken)).toBe("test-token");
       expect(env.baseUrl).toBe("https://control-plane.prisma.test");
     }).pipe(
       Effect.provide(
@@ -75,7 +75,7 @@ describe("PrismaEnvironment", { tags: ["unit", "provider:prisma", "local"] }, ()
 
       expect(env.type).toBe("serviceToken");
       expect(env.source).toEqual({ type: "stored" });
-      expect(Redacted.value(env.serviceToken)).toBe("stored-token");
+      expect(env.serviceToken && Redacted.value(env.serviceToken)).toBe("stored-token");
       expect(env.baseUrl).toBe("https://api.prisma.io");
     }).pipe(Effect.provide(testLayer({}, { storedToken: "stored-token" }))),
   );

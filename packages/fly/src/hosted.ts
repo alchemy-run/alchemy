@@ -9,6 +9,7 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { hashDirectory } from "alchemy/Command/Memo";
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
@@ -592,7 +593,79 @@ export const createFlyHostedSupport = ({
     return codeHash;
   });
 
-  return { alchemyEnv, bundleProgram, computeCodeHash, resolveImage, hash };
+  /** A Docker build context's content hash: its image changes when any file in it does. */
+  const contextHash = Effect.fn(function* (context: string) {
+    return (yield* hashDirectory({ cwd: context })).slice(0, 16);
+  });
+
+  /**
+   * Build the image a `context` directory's `Dockerfile` describes, as it
+   * is, and push it to `registry.fly.io/{appName}:{logicalId}-{hash}`.
+   * When `previousHash` matches, skip build and push.
+   */
+  const resolveContextImage = Effect.fn(function* (input: {
+    id: string;
+    appName: string;
+    context: string;
+    remote: boolean | undefined;
+    previousHash?: string;
+    session?: { note: (message: string) => Effect.Effect<void> };
+  }) {
+    const note = input.session?.note ?? ((_message: string) => Effect.void);
+    const codeHash = yield* contextHash(input.context);
+    const imageRef = `${FLY_REGISTRY}/${input.appName}:${sanitizeImageRepo(input.id)}-${codeHash}`;
+    if (input.previousHash === codeHash) return { imageRef, codeHash };
+
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName: input.appName });
+    }
+    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+
+    if (input.remote !== false) {
+      yield* note(`Building ${imageRef} on a Fly remote builder...`);
+      yield* buildOnRemoteBuilder({
+        docker,
+        appName: input.appName,
+        contextDir: input.context,
+        imageRef,
+        platform: MACHINE_PLATFORM,
+        registry,
+        note,
+      });
+      yield* note(`Pushed ${imageRef}`);
+      return { imageRef, codeHash };
+    }
+
+    if (!(yield* imageExists(imageRef))) {
+      yield* note(`Building container image ${imageRef}...`);
+      yield* docker.image.build({
+        context: input.context,
+        tag: imageRef,
+        platform: MACHINE_PLATFORM,
+      });
+    }
+    yield* note(`Pushing ${imageRef}...`);
+    yield* docker.image
+      .push(imageRef, registry)
+      .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
+    yield* note(`Pushed ${imageRef}`);
+    return { imageRef, codeHash };
+  });
+
+  return {
+    alchemyEnv,
+    bundleProgram,
+    computeCodeHash,
+    resolveImage,
+    hash,
+    contextHash,
+    resolveContextImage,
+  };
 };
 
 /**

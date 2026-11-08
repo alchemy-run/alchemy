@@ -1489,18 +1489,38 @@ export default defineConfig({
           label: "Modal",
           items: [
             { label: "Overview", link: "/modal" },
+            { label: "What is Modal?", link: "/modal/what-is-modal" },
             { label: "Setup", link: "/modal/setup" },
-            { label: "Concepts", link: "/modal/concepts" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "modal/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces & tokens", link: "/modal/workspaces-and-tokens" },
+                { label: "Access control", link: "/modal/security/access-control" },
+                { label: "Secrets", link: "/modal/security/secrets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/modal/compute/choosing-a-runtime" },
+                { label: "Functions", link: "/modal/services/functions" },
+                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
+                { label: "Servers", link: "/modal/services/servers" },
+                { label: "Autoscaling", link: "/modal/services/autoscaling" },
+                { label: "Call Python functions", link: "/modal/services/calling-python" },
+                { label: "Operate services", link: "/modal/services/operating" },
+              ],
+            },
+            {
               label: "Sandboxes",
               items: [
                 { label: "Sandboxes", link: "/modal/sandboxes/sandboxes" },
-                { label: "Programs", link: "/modal/sandboxes/programs" },
                 { label: "Images", link: "/modal/sandboxes/images" },
+                { label: "Programs", link: "/modal/sandboxes/programs" },
                 { label: "Snapshots", link: "/modal/sandboxes/snapshots" },
                 { label: "Persistent sandboxes", link: "/modal/sandboxes/persistent" },
               ],
@@ -1514,22 +1534,8 @@ export default defineConfig({
               ],
             },
             {
-              label: "Security",
-              items: [
-                { label: "Network & secrets", link: "/modal/security/network-and-secrets" },
-                { label: "Access control", link: "/modal/security/access-control" },
-              ],
-            },
-            {
-              label: "Services",
-              items: [
-                { label: "Functions", link: "/modal/services/functions" },
-                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
-                { label: "Servers", link: "/modal/services/servers" },
-                { label: "Operate services", link: "/modal/services/operating" },
-                { label: "Call Python functions", link: "/modal/services/calling-python" },
-                { label: "Autoscaling", link: "/modal/services/autoscaling" },
-              ],
+              label: "Networking",
+              items: [{ label: "Network & tunnels", link: "/modal/networking/network" }],
             },
             providerResourcesEntry("Modal"),
           ],
@@ -2146,13 +2152,14 @@ export default defineConfig({
             {
               label: "Building Actors",
               items: [
-                { label: "Three ways to build Actors", link: "/rivet/actors" },
+                { label: "Four ways to build Actors", link: "/rivet/actors" },
                 { label: "Durable Objects", link: "/rivet/durable-objects" },
                 { label: "Storage", link: "/rivet/storage" },
                 { label: "Concurrency", link: "/rivet/concurrency" },
                 { label: "Calling a Durable Object", link: "/rivet/calling" },
                 { label: "RivetKit Actors", link: "/rivet/rivetkit" },
                 { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+                { label: "Rust Actors", link: "/rivet/rivetkit-rust" },
               ],
             },
             {

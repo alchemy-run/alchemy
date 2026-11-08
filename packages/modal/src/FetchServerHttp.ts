@@ -10,6 +10,7 @@ import * as Redacted from "effect/Redacted";
 import type { Endpoint } from "./Endpoint.ts";
 import { FetchServer, type ServerClient } from "./FetchServer.ts";
 import type { Function } from "./Function.ts";
+import { RPC_KEY_HEADER, RpcCaller } from "./internal/RpcAuth.ts";
 import * as ModalBindings from "./ModalBindings.ts";
 import type { Server } from "./Server.ts";
 import { WebhookToken } from "./WebhookToken.ts";
@@ -39,6 +40,7 @@ export const FetchServerHttp = Layer.effect(
     const runtime = yield* CurrentRuntimeContext;
     // Deploy only: a host bundle never creates the token.
     const Token = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* WebhookToken;
+    const caller = yield* RpcCaller;
 
     return Effect.fn("Modal.FetchServer")(function* (server: Server | Function | Endpoint) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
@@ -50,6 +52,8 @@ export const FetchServerHttp = Layer.effect(
           });
         }
       }
+      // This host's key for the Server's RPC methods (minted at deploy).
+      const key = yield* caller(server);
       const url = yield* server.url;
       const resolvedUrl = Effect.flatMap(url, (value) =>
         value
@@ -89,7 +93,18 @@ export const FetchServerHttp = Layer.effect(
           }),
       } satisfies ServerClient;
       // Every other member is an RPC method of the Server's program.
-      return makeFetchRpcStub<ServerClient>({ fetch: client.fetch, base: client });
+      return makeFetchRpcStub<ServerClient>({
+        // RPC calls carry the key; the Server serves only callers it issued keys to.
+        fetch: (request) =>
+          Effect.flatMap(key, (value) =>
+            client.fetch(
+              value === undefined
+                ? request
+                : request.pipe(HttpClientRequest.setHeader(RPC_KEY_HEADER, value)),
+            ),
+          ),
+        base: client,
+      });
     });
   }),
 );
