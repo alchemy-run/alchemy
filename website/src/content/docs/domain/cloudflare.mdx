@@ -168,9 +168,9 @@ Renaming a model renames its classes, and the model starts empty under the new n
 
 ## Upgrade without losing data
 
-Each Worker records the Domain version it was deployed with. When a later Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout: it renames classes in place, so every aggregate, view row and running saga carries over.
+Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The next deploy renames each to the model's class with the Durable Object's [`renamedFrom`](/providers/cloudflare/workers/durableobject), so every aggregate, view row and running saga carries over.
 
-Models deployed before versions existed named classes after the definition alone, like `AccountAggregate`. If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails until you choose:
+If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `DurableObjectRenameConflict` until the others set `legacyData: false`:
 
 ```typescript
 import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
@@ -180,10 +180,10 @@ import { Billing, BillingHandlers } from "./Billing.ts";
 
 const Platform = DomainCloudflare.layerDurableObjects();
 // Billing keeps the accounts both models wrote; Audit starts empty.
-export const BillingLive = Billing.layer(BillingHandlers, { legacyData: true }).pipe(
+export const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
+export const AuditLive = Audit.layer(AuditHandlers, { legacyData: false }).pipe(
   Layer.provide(Platform),
 );
-export const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
 ```
 
 ## Count on these guarantees
