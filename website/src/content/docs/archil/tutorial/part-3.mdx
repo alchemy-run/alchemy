@@ -1,125 +1,71 @@
 ---
-title: "Part 3: Testing"
-description: Deploy the stack in a test, call the program over HTTP, and check the file landed on the disk.
+title: "Part 3: A Copy per User"
+description: Give each user an Archil disk of their own, copied from the shared base on their first request.
 sidebar:
   order: 3
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-Write an integration test that deploys the stack from
-[Part 2](/archil/tutorial/part-2), calls the program, and checks the disk
-directly.
-
-## Install the test harness
-
-<PackageManagers dev="@alchemy.run/test" />
-
-## Create the test file
-
-`Test.make` takes the same providers and state as your Stack:
-
-```typescript
-// test/integ.test.ts
-import { expect } from "bun:test";
-import * as Archil from "@alchemy.run/archil";
-import * as Test from "@alchemy.run/test/Bun";
-import * as Alchemy from "alchemy";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import * as Schedule from "effect/Schedule";
-import Stack from "../alchemy.run.ts";
-
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Archil.providers(),
-  state: Alchemy.localState(),
-  profile: process.env.ALCHEMY_PROFILE,
-});
-```
-
-## Deploy before the tests
-
-`beforeAll(deploy(Stack))` deploys once for the whole file and hands back
-the stack's outputs. `afterAll` destroys it unless `NO_DESTROY` is set:
+## Copy the base onto a user's disk
 
 ```diff lang="typescript"
-// test/integ.test.ts
-+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
-+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
+// src/Api.ts
+    const exec = yield* Archil.ExecDisks();
++    const disks = yield* Archil.CreateDisk();
++
++    const userDisk = Effect.fn("userDisk")(function* (user: string) {
++      const existing = yield* disks.get(`user-${user}`);
++      if (existing !== undefined) return existing;
++      const home = yield* disks.create(`user-${user}`);
++      yield* exec.exec({
++        disks: { base: { disk: yield* repoId, readOnly: true }, home: home.diskId },
++        command: "cp -a /mnt/archil/base/. /mnt/archil/home/",
++      });
++      return home;
++    });
 ```
 
-## Retry while the program starts
+Provide `Archil.CreateDiskHttp` next to `Archil.ExecDisksHttp`, with `Layer.mergeAll`. A user's first request creates a disk for them and copies the base onto it, in one microVM with both disks mounted. `disks.get` finds it again on their next request.
 
-A fresh hostname, or a sandbox waking up, can take a few seconds to
-answer:
+## Their changes stay on their disk
 
 ```diff lang="typescript"
-// test/integ.test.ts
-+const send = (request: HttpClientRequest.HttpClientRequest) =>
-+  Effect.gen(function* () {
-+    const client = yield* HttpClient.HttpClient;
-+    return yield* client.execute(request).pipe(
-+      Effect.flatMap((res) =>
-+        res.status >= 500 ? Effect.fail(new Error(`HTTP ${res.status}`)) : Effect.succeed(res),
-+      ),
-+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
-+    );
-+  });
+// src/Api.ts
++        const runFor = /^\/users\/([a-z0-9-]+)\/run$/.exec(url.pathname)?.[1];
++        if (request.method === "POST" && runFor !== undefined) {
++          const home = yield* userDisk(runFor);
++          return yield* HttpServerResponse.json(yield* home.exec(`cd /mnt/archil/is && ${yield* request.text}`));
++        }
++        const match = /^\/users\/([a-z0-9-]+)\/files\/(.+)$/.exec(url.pathname);
++        if (match !== null) {
++          const home = yield* userDisk(match[1]!);
++          if (request.method === "PUT") yield* home.put(`is/${match[2]}`, yield* request.text);
++          return yield* HttpServerResponse.json({ content: yield* home.getText(`is/${match[2]}`) });
++        }
 ```
 
-## Test the routes
+Commands run against the user's own disk, read-write, and files go onto it straight from the program, with no microVM. `Repo` never changes, so the next user's copy doesn't see their edits.
+
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X PUT "$URL/users/ana/files/notes.md" -d 'hello'
+curl -X POST "$URL/users/ana/run" -d 'cat notes.md'`}
+/>
+
+## Delete a user's disk
 
 ```diff lang="typescript"
-// test/integ.test.ts
-+test(
-+  "GET of a missing file is a 404",
-+  Effect.gen(function* () {
-+    const { url } = yield* stack;
-+    const res = yield* send(HttpClientRequest.get(`${url}/missing.txt`));
-+    expect(res.status).toBe(404);
-+  }),
-+  { timeout: 180_000 },
-+);
+// src/Api.ts
++        const user = /^\/users\/([a-z0-9-]+)$/.exec(url.pathname)?.[1];
++        if (request.method === "DELETE" && user !== undefined) {
++          yield* disks.delete(`user-${user}`);
++          return HttpServerResponse.empty({ status: 204 });
++        }
 ```
 
-## Check the disk directly
+Disks the program creates aren't deleted with the Stack, so delete them when their owner goes away.
 
-`test.provider` runs with your Archil credentials, so the test can read
-the disk out of band and confirm the file is really there:
+## Next
 
-```diff lang="typescript"
-// test/integ.test.ts
-+import * as Objects from "@distilled.cloud/archil/Objects";
-
-+test.provider(
-+  "PUT writes a file to the disk and GET reads it back",
-+  () =>
-+    Effect.gen(function* () {
-+      const { url, diskId } = yield* stack;
-+      const key = `notes/${crypto.randomUUID()}.txt`;
-+      yield* send(
-+        HttpClientRequest.put(`${url}/${key}`).pipe(HttpClientRequest.bodyText("on the disk")),
-+      );
-+      const text = yield* Objects.getObjectText({ disk: String(diskId) }, key).pipe(
-+        Effect.provide(Objects.ObjectCredentialsFromApiKey),
-+      );
-+      expect(text).toBe("on the disk");
-+    }),
-+  { timeout: 180_000 },
-+);
-```
-
-## Run the tests
-
-```sh
-ALCHEMY_PROFILE=default bun test
-```
-
-Set `NO_DESTROY=1` to keep the stack between runs while you iterate.
-
-## Recap
-
-The test deploys the real stack, calls it over HTTP, and checks Archil
-directly. In [Part 4](/archil/tutorial/part-4) you'll deploy separate
-copies with stages.
+[Part 4](/archil/tutorial/part-4) changes the base.

@@ -1,4 +1,17 @@
 import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
 
-/** The disk the API stores files on. */
-export const Files = Archil.Disk("Files", {});
+/** The disk that holds the shared base. */
+export const Repo = Archil.Disk("Repo", {});
+
+/** The shared base, built at deploy: the repository cloned onto Repo, then checkpointed. */
+export const Base = Effect.gen(function* () {
+  const repo = yield* Repo;
+  return yield* Archil.Checkpoint("Base", {
+    disk: repo.diskId,
+    run: [
+      "test -d is || git clone --depth 1 https://github.com/sindresorhus/is is",
+      "test -d slugify || git clone --depth 1 https://github.com/sindresorhus/slugify slugify",
+    ],
+  });
+});
