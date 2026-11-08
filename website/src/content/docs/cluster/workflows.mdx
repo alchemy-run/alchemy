@@ -164,76 +164,40 @@ A run's `status` is `NotStarted`, `Running`, `Completed` with its result, `Faile
 
 ## Sleep durably
 
-`DurableClock.sleep` waits without holding a runner: the wake-up is a persisted message, delivered when it's due.
+In a workflow's handler, `DurableClock.sleep` from `effect/workflow` waits without holding a runner: the wake-up is a persisted message, delivered when it's due. Here is the handler of a `Reminder` workflow, declared like `Invite` with a `room` in its payload:
 
-```typescript title="src/ReminderLive.ts"
-import * as Effect from "effect/Effect";
-import { Activity, DurableClock } from "effect/workflow";
-import { Default } from "./Cluster.ts";
-import { Reminder } from "./Reminder.ts";
-
-export default Reminder.make(
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    return Reminder.of(
-      Effect.fn(function* ({ room }) {
-        yield* DurableClock.sleep({ name: "wait", duration: "1 day" });
-        yield* Activity.make({ name: "remind", execute: Effect.logInfo(`remind ${room}`) });
-      }),
-    );
-  }).pipe(Effect.provide(Default)),
-);
+```typescript
+Effect.fn(function* ({ room }) {
+  yield* DurableClock.sleep({ name: "wait", duration: "1 day" });
+  yield* Activity.make({ name: "remind", execute: Effect.logInfo(`remind ${room}`) });
+});
 ```
 
 Runners pick up due messages every 10 seconds, so a sleep wakes up to 10 seconds late.
 
 ## Undo a step
 
-`withCompensation` attaches an undo to an activity. If the workflow fails later, the compensations run, newest first:
+A workflow class's `withCompensation` attaches an undo to an activity. If the workflow fails later, the compensations run, newest first. Here is the handler of a `Checkout` workflow, with an `orderId` in its payload:
 
-```typescript title="src/CheckoutLive.ts"
-import * as Effect from "effect/Effect";
-import { Activity } from "effect/workflow";
-import { Checkout } from "./Checkout.ts";
-import { Default } from "./Cluster.ts";
-
-export default Checkout.make(
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    return Checkout.of(
-      Effect.fn(function* ({ orderId }) {
-        yield* Activity.make({ name: "reserve", execute: Effect.logInfo(`reserve ${orderId}`) }).pipe(
-          Checkout.withCompensation(() =>
-            Activity.make({ name: "release", execute: Effect.logInfo(`release ${orderId}`) }),
-          ),
-        );
-        yield* Activity.make({ name: "charge", execute: Effect.logInfo(`charge ${orderId}`) });
-      }),
-    );
-  }).pipe(Effect.provide(Default)),
-);
+```typescript
+Effect.fn(function* ({ orderId }) {
+  yield* Activity.make({ name: "reserve", execute: Effect.logInfo(`reserve ${orderId}`) }).pipe(
+    Checkout.withCompensation(() =>
+      Activity.make({ name: "release", execute: Effect.logInfo(`release ${orderId}`) }),
+    ),
+  );
+  yield* Activity.make({ name: "charge", execute: Effect.logInfo(`charge ${orderId}`) });
+});
 ```
 
 ## Child workflows
 
-Inside a workflow, `execute` runs another workflow as a child and waits for it:
+Inside a workflow, the other workflow class's `execute` runs it as a child and waits for it. Here an `Onboard` workflow, with a `guest` in its payload, runs `Invite` for the lobby:
 
-```typescript title="src/OnboardLive.ts"
-import * as Effect from "effect/Effect";
-import { Default } from "./Cluster.ts";
-import { Invite } from "./Invite.ts";
-import { Onboard } from "./Onboard.ts";
-
-export default Onboard.make(
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    return Onboard.of(
-      Effect.fn(function* ({ guest }) {
-        return yield* Invite.execute({ room: "lobby", guest });
-      }),
-    );
-  }).pipe(Effect.provide(Default)),
-);
+```typescript
+Effect.fn(function* ({ guest }) {
+  return yield* Invite.execute({ room: "lobby", guest });
+});
 ```
 
 Run a child in the same pool as its parent.

@@ -143,8 +143,17 @@ export interface ServiceProps extends PlatformProps {
    * Module entrypoint bundled with rolldown and baked into a Docker
    * image pushed to `registry.fly.io`. Typically `import.meta.url`.
    * A content-hash change updates the workload using the selected deployment strategy.
+   * Set this or {@link context}.
    */
-  main: string;
+  main?: string;
+  /**
+   * A Docker build context whose `Dockerfile` builds the Service's image
+   * as it is, on a Fly remote builder (or locally with
+   * `build: { remote: false }`), for `linux/amd64`. The image's own
+   * `CMD` runs. A change to any file in it updates the workload. Set this
+   * or {@link main}.
+   */
+  context?: string;
   /**
    * Region or regions to run in (`"iad"`, `["iad", "lhr"]`). The
    * Service runs `count` Machines in each region behind one hostname;
@@ -877,6 +886,20 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *     };
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Run your own image
+ * `context` builds a directory's `Dockerfile` as it is, on a Fly remote
+ * builder, and runs the image's own `CMD`. A change to any file in the
+ * directory updates the Machines.
+ *
+ * **Example:** A Dockerfile build
+ * ```typescript
+ * const worker = yield* Fly.Service("Worker", {
+ *   context: "./worker",
+ *   public: false,
+ *   services: [],
+ * });
  * ```
  *
  * ### Custom proxy services
@@ -1709,8 +1732,15 @@ export const ServiceProvider = () =>
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<ServiceProps, "main" | "build" | "image" | "port" | "extraFiles" | "isExternal">
+            Pick<
+              ServiceProps,
+              "main" | "context" | "build" | "image" | "port" | "extraFiles" | "isExternal"
+            >
           >;
+          if (typeof statics.context === "string") {
+            const hash = yield* hosted.contextHash(statics.context);
+            if (hash !== output.code.hash) return { action: "update" as const };
+          }
           if (
             isResolved({
               main: statics.main,
@@ -1874,13 +1904,23 @@ export const ServiceProvider = () =>
           if (published.added) env[BINDING_PORT_ENV] = String(bindingPort);
           const statics = toFlyStatics(props.statics);
 
-          const { imageRef, codeHash } = yield* hosted.resolveImage({
-            id,
-            appName,
-            props,
-            previousHash: output?.code.hash,
-            session,
-          });
+          const { imageRef, codeHash } =
+            props.context !== undefined
+              ? yield* hosted.resolveContextImage({
+                  id,
+                  appName,
+                  context: props.context,
+                  remote: props.build?.remote,
+                  previousHash: output?.code.hash,
+                  session,
+                })
+              : yield* hosted.resolveImage({
+                  id,
+                  appName,
+                  props: props as HostedProgramProps,
+                  previousHash: output?.code.hash,
+                  session,
+                });
 
           const set = yield* reconcileReplicas({
             id,

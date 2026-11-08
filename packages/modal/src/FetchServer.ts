@@ -44,7 +44,9 @@ export type FetchClient<Shape> = ServerClient & Omit<Shape, "fetch" | "run" | "u
  * A `Modal.Server` program's RPC methods come back on the client too. Each
  * call is a `POST /__rpc__/<method>` to the Server through Modal's proxy,
  * with the arguments and result as JSON; a method that returns a `Stream`
- * streams. A Server serves its methods only behind proxy auth, so an
+ * streams. The binding gives the host its own key for the Server, which
+ * every method call carries: the Server answers methods only for callers
+ * bound to it. It serves them only behind proxy auth, so an
  * `unauthenticated` Server answers them with `404`.
  *
  * ### Call a Server

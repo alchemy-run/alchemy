@@ -9,6 +9,7 @@ import * as Users from "@distilled.cloud/github/users";
 import * as Output from "alchemy/Output";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
+import { repoOf, expectFound } from "./lookup.ts";
 import { gh } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
@@ -110,6 +111,10 @@ test.provider(
         assignees: [user.login],
         milestone: milestone.number,
       });
+      yield* expectFound(
+        GitHub.PullRequest.lookup({ ...repoOf(created.htmlUrl), number: created.prNumber }),
+        created,
+      );
       expect(created.prNumber).toBeGreaterThan(0);
       expect(created.htmlUrl).toBe(`https://github.com/${owner}/${repo}/pull/${created.prNumber}`);
       expect(created.draft).toBe(true);

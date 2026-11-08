@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as sandboxes from "@distilled.cloud/daytona/sandbox";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Daytona.providers() });
 
@@ -30,6 +31,7 @@ test.provider(
           autoStopInterval: "30 minutes",
         }),
       );
+      yield* expectFound(Daytona.Sandbox.lookup({ name: created.name }), created);
       expect(created.state).toEqual("started");
       expect(created.labels).toEqual({ team: "alchemy" });
       const observed = yield* sandboxes.getSandbox({ sandboxIdOrName: created.sandboxId });

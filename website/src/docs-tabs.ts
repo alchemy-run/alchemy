@@ -73,14 +73,9 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "start",
   },
 
-  hub(
-    "Cloudflare",
-    "cloudflare",
-    "Clouds",
-    "workers · durable objects · R2 · D1",
-    ["/providers/cloudflare"],
-    ["Actors"],
-  ),
+  hub("Cloudflare", "cloudflare", "Clouds", "workers · durable objects · R2 · D1", [
+    "/providers/cloudflare",
+  ]),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
@@ -120,6 +115,7 @@ export const DOCS_TABS: DocsTab[] = [
     "/providers/modal",
   ]),
   hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
+  hub("Boat", "boat", "Sandboxes", "sandboxes · snapshots · environments", ["/providers/boat"]),
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [

@@ -11,6 +11,7 @@ import * as Stream from "effect/Stream";
 import Api from "./api-server.ts";
 import { AsyncEmbed } from "./async-function.ts";
 import Embed from "./embed-function.ts";
+import Relay from "./relay-function.ts";
 import { Services } from "./services.ts";
 import Web from "./web-function.ts";
 
@@ -38,6 +39,7 @@ export default class ServicesFunction extends AWS.Lambda.Function<ServicesFuncti
   { main: import.meta.url, timeout: Duration.minutes(14), memorySize: 1024 },
   Effect.gen(function* () {
     const embed = yield* Modal.InvokeFunction(Embed);
+    const relayer = yield* Modal.InvokeFunction(Relay);
     const asyncEmbed = yield* Modal.InvokeFunction(AsyncEmbed);
     const readEmbed = yield* Modal.ReadFunction(Embed);
     const scaleEmbed = yield* Modal.ScaleFunction(Embed);
@@ -72,6 +74,17 @@ export default class ServicesFunction extends AWS.Lambda.Function<ServicesFuncti
             return yield* HttpServerResponse.json(
               yield* asyncEmbed.call(["ping"], { source: "lambda" }),
             );
+          case "/relay":
+            return yield* HttpServerResponse.json(yield* relayer.relay("from modal"));
+          case "/server-rpc-without-key": {
+            // An RPC request through proxy auth, without this binding's key.
+            const response = yield* api.fetch(
+              HttpClientRequest.post("/__rpc__/greet").pipe(
+                HttpClientRequest.bodyText(JSON.stringify(["intruder"]), "application/json"),
+              ),
+            );
+            return yield* HttpServerResponse.json({ status: response.status });
+          }
           case "/server-rpc":
             return yield* HttpServerResponse.json({
               greeting: yield* api.greet("modal"),

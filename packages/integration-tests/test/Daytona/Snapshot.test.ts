@@ -5,6 +5,7 @@ import * as sandboxes from "@distilled.cloud/daytona/sandbox";
 import * as snapshots from "@distilled.cloud/daytona/snapshots";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Daytona.providers() });
 
@@ -72,6 +73,10 @@ test.provider.skipIf(!!process.env.FAST)(
           return { pulled, built, context, warm };
         }),
       );
+      yield* expectFound(Daytona.Snapshot.lookup({ name: pulled.name }), pulled, {
+        // The build hash is this stack's record.
+        ignore: ["buildHash"],
+      });
       expect(pulled.state).toEqual("active");
       expect(built.state).toEqual("active");
       // The build ran check.js from the uploaded context with the baked ARG.

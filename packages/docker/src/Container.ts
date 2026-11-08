@@ -235,8 +235,23 @@ export interface Container extends Resource<
     devices?: Container.DeviceMapping[];
   },
   never,
-  Providers
+  Providers,
+  ContainerLookup
 > {}
+
+/**
+ * Props for {@link Container.lookup}: find a container this stack
+ * doesn't manage by its name.
+ */
+export interface ContainerLookup {
+  /** Container name. */
+  name: string;
+  /**
+   * Docker context the engine is reached through.
+   * @default the current context
+   */
+  context?: string;
+}
 
 /**
  * A Docker container managed through the active Docker context.
@@ -436,6 +451,16 @@ export interface Container extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing container
+ * `Container.lookup` references a container Alchemy doesn't manage (created with
+ * the Docker CLI, Compose or another stack). It is read during plan/deploy,
+ * never created, updated or removed.
+ *
+ * **Example:** Reference an existing container
+ * ```typescript
+ * const db = Docker.Container.lookup({ name: "postgres" });
+ * ```
+ *
  * @resource
  * @product Container
  */
@@ -562,6 +587,11 @@ export const ContainerProvider = () =>
 
       return Container.Provider.of({
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ name, context }) {
+          const info = yield* inspect(name, context);
+          return info ? toContainerAttributes(info, info.Config.Image) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);

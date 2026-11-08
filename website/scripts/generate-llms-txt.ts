@@ -621,6 +621,31 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/storage" },
   },
   {
+    heading: "Boat",
+    intro:
+      "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",
+    pages: {
+      slugs: [
+        "boat/index",
+        "boat/what-is-boat",
+        "boat/setup",
+        "boat/tutorial/part-1",
+        "boat/tutorial/part-2",
+        "boat/tutorial/part-3",
+        "boat/tutorial/part-4",
+        "boat/tutorial/part-5",
+        "boat/account-and-keys",
+        "boat/choosing-a-runtime",
+        "boat/sandboxes",
+        "boat/programs",
+        "boat/snapshots",
+        "boat/environments",
+        "boat/ports",
+        "boat/webhooks",
+      ],
+    },
+  },
+  {
     heading: "Rivet",
     intro:
       "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",
@@ -643,6 +668,7 @@ const SECTIONS: Section[] = [
         "rivet/calling",
         "rivet/rivetkit",
         "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
         "rivet/durable-streams",
         "rivet/control-planes",
         "rivet/pools",
@@ -726,16 +752,27 @@ const SECTIONS: Section[] = [
   {
     heading: "Modal",
     intro:
-      "Modal sandboxes, images, volumes, dicts, queues and secrets as Stack resources, created and driven from Workers and Lambdas.",
+      "Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.",
     pages: {
-      slugs: ["modal/index", "modal/setup", "modal/concepts"],
+      slugs: ["modal/index", "modal/what-is-modal", "modal/setup"],
     },
   },
   { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  {
+    heading: "Modal — Accounts & access",
+    pages: {
+      slugs: [
+        "modal/workspaces-and-tokens",
+        "modal/security/access-control",
+        "modal/security/secrets",
+      ],
+    },
+  },
+  { heading: "Modal — Compute", pages: { directory: "modal/compute" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
   { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
   { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
-  { heading: "Modal — Security", pages: { directory: "modal/security" } },
-  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  { heading: "Modal — Networking", pages: { directory: "modal/networking" } },
   {
     heading: "Better Auth",
     intro:
@@ -962,7 +999,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Domain",
     intro:
-      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Durable Objects or in memory.",
+      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.",
     pages: {
       slugs: [
         "domain/index",
@@ -989,23 +1026,25 @@ const SECTIONS: Section[] = [
         "domain/external-system",
         "domain/api",
         "domain/annotations",
+        "domain/cloudflare",
+        "domain/rivet",
+        "domain/effect-cluster",
+        "domain/in-memory",
         "domain/story",
         "domain/testing-models",
         "domain/testing-apis",
+        "domain/http-api",
+        "domain/cli",
+        "domain/mcp",
         "domain/foldkit",
         "domain/optimistic-updates",
         "domain/local-first",
-        "domain/mcp",
         "domain/sessions",
         "domain/better-auth",
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
-        "domain/cloudflare",
         "domain/backfill",
-        "domain/in-memory",
-        "domain/http-api",
-        "domain/cli",
         "domain/observability",
       ],
     },

@@ -4,6 +4,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Archil.providers() });
 
@@ -13,6 +14,11 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const image = yield* stack.deploy(Archil.Image("Base", { image: "alpine:3.20" }));
+      yield* expectFound(Archil.Image.lookup({ imageId: image.imageId }), image, {
+        // The hash, and the source as written, are this stack's record:
+        // Archil reports the reference it normalized.
+        ignore: ["hash", "source"],
+      });
       expect(image.imageId).toMatch(/^[0-9a-f]{64}$/);
       expect(image.private).toBe(false);
       expect((yield* archil.getImage({ image_id: image.imageId })).data.status).toBe("ready");

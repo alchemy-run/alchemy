@@ -47,8 +47,18 @@ export type Registry = Resource<
   RegistryProps,
   RegistryAttributes,
   never,
-  Providers
+  Providers,
+  RegistryLookup
 >;
+
+/**
+ * Props for {@link Registry.lookup}: find a container registry this
+ * stack doesn't manage by its name.
+ */
+export interface RegistryLookup {
+  /** Registry name. */
+  name: string;
+}
 
 /**
  * Credentials for a private container registry, so Daytona can pull
@@ -69,6 +79,16 @@ export type Registry = Resource<
  *   image: "ghcr.io/alchemy-run/base:1.0.0",
  *   registry: Ghcr,
  * });
+ * ```
+ *
+ * ### Looking up an existing registry
+ * `Registry.lookup` references a registry Alchemy doesn't manage (created in
+ * the Daytona dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing registry
+ * ```typescript
+ * const ghcr = Daytona.Registry.lookup({ name: "ghcr" });
  * ```
  *
  * @resource
@@ -100,6 +120,11 @@ export const RegistryProvider = () =>
         const all = yield* registries.listRegistries({});
         return all.filter((r) => r.registryType === "organization").map(toAttributes);
       }),
+      lookup: Effect.fn(function* ({ name }) {
+        const found = yield* findByName(name);
+        return found === undefined ? undefined : toAttributes(found);
+      }),
+
       read: Effect.fn(function* ({ id, olds, output }) {
         const name = yield* resolveName(id, olds?.name, output?.name);
         const found =

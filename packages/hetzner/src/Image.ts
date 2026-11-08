@@ -148,8 +148,18 @@ export type Image = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ImageLookup
 >;
+
+/**
+ * Props for {@link Image.lookup}: find a snapshot or backup
+ * image this stack doesn't manage by its id.
+ */
+export interface ImageLookup {
+  /** Numeric image id. */
+  id: number;
+}
 
 /**
  * A Hetzner Cloud custom Image — a snapshot (or backup) of a Server's
@@ -194,6 +204,17 @@ export type Image = Resource<
  *   labels: { role: "golden", env: "prod" },
  *   deleteProtection: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references a image Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing snapshot
+ * ```typescript
+ * const snapshot = Hetzner.Image.lookup({ id: 123456 });
+ * const size = snapshot.diskSize;
  * ```
  *
  * @resource
@@ -407,6 +428,11 @@ export const ImageProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ id }) {
+      const found = yield* getById(id);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, output, previous }) {
       const found = yield* observe({
         id,
