@@ -185,7 +185,7 @@ See [Secrets](/modal/security/secrets).
 A Sandbox reaches the internet unless you limit it. Block its network, or allow only some domains and address ranges, and change either while it runs. Its ports reach the outside through **tunnels**, at a public URL per port.
 
 ```typescript
-yield* sandboxes.create({ allowedDomains: ["github.com"], encryptedPorts: [3000] });
+const sandbox = yield* sandboxes.create({ allowedDomains: ["github.com"], encryptedPorts: [3000] });
 ```
 
 See [Network & tunnels](/modal/networking/network).

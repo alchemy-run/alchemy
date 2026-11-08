@@ -140,7 +140,7 @@ return yield* port.fetch(yield* HttpServerRequest);
 Anyone with the URL can call a public port. Give a browser a port token instead, which it sends in the `X-Archil-Token` header:
 
 ```typescript
-yield* sandbox.createPortToken(3000, "1h");
+const token = yield* sandbox.createPortToken(3000, "1h");
 ```
 
 ## Drive a declared sandbox from a Worker

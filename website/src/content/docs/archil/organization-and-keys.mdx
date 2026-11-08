@@ -59,7 +59,7 @@ Archil has no tags, so Alchemy tells stages apart by name. Each stage's disks an
 Archil can't scope an API key, and only creates new ones from a console session, so a deployed host never gets a key of its own. Bindings that touch one disk give their host a **disk user** instead: an S3 key pair for `ReadDisk`, `WriteDisk` and `ReadWriteDisk`, or a mount token for `MountDisk` on your own hosts. Archil checks each one, and destroying the Stack removes them.
 
 ```typescript
-yield* Archil.ReadDisk(Dataset);
+const files = yield* Archil.ReadDisk(Dataset);
 ```
 
 Bindings that call the control plane (`ExecDisk`, `CreateDisk`, `BranchDisk`, `CreateSandbox`, `ConnectSandbox`, `CreateImage`) run with the key you deploy with. Rotate it in the console and redeploy.

@@ -82,7 +82,7 @@ Many stages can share a workspace, each in its own environment. Give production 
 Your runtimes never get your token. When a Worker or Lambda binds a Modal object, deploy creates a **service user** for it and grants it a role in the bound object's environment: `viewer` to read, `contributor` to write or create.
 
 ```typescript
-yield* Modal.CreateSandbox(Warm);
+const sandboxes = yield* Modal.CreateSandbox(Warm);
 ```
 
 This Worker's service user is a `contributor` in `Warm`'s environment, and nothing in any other. Keep workloads that shouldn't touch each other in separate environments.

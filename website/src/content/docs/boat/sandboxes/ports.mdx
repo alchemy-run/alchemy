@@ -50,7 +50,7 @@ fetch: Effect.gen(function* () {
 ## Open a port to anyone
 
 ```typescript
-yield* sandbox.getTcpPort(3000, { public: true });
+const port = yield* sandbox.getTcpPort(3000, { public: true });
 ```
 
 Anyone with the URL can call it. For a program, set `public: true` on its `Boat.Sandbox`.
@@ -60,7 +60,7 @@ Anyone with the URL can call it. For a program, set `public: true` on its `Boat.
 Boat relays to a server bound to `0.0.0.0`. For one that listens on `127.0.0.1` only, pass `localhost: true`:
 
 ```typescript
-yield* sandbox.getTcpPort(5173, { localhost: true });
+const port = yield* sandbox.getTcpPort(5173, { localhost: true });
 ```
 
 ## Hand the URL to a browser

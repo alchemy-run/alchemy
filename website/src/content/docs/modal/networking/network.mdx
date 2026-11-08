@@ -27,7 +27,7 @@ A Modal Sandbox reaches the internet unless you limit it. Modal enforces the lim
 ## Block the network
 
 ```typescript
-yield* sandboxes.create({ blockNetwork: true });
+const sandbox = yield* sandboxes.create({ blockNetwork: true });
 ```
 
 Nothing leaves the sandbox. Commands, files and tunnels still work, because they go through Modal.

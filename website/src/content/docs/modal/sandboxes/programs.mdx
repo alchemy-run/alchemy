@@ -58,7 +58,7 @@ Provide `Modal.CreateSandboxHttp`. `getTcpPort()` is the program's port, reached
 ## Use bindings from the program
 
 ```typescript
-yield* Modal.ReadVolume(Models);
+const models = yield* Modal.ReadVolume(Models);
 ```
 
 The token the binding needs is in the program's env, never in the image.

@@ -48,7 +48,7 @@ See [Templates](/e2b/templates).
 A **sandbox** is one microVM, created from a template while your app runs, usually one per user or per task. You run commands in it, read and write its files, open a terminal, and call its ports at `https://<port>-<sandboxId>.e2b.app`. It runs for its **timeout**, which you can extend. When the timeout runs out, E2B kills it, or with `autoPause` pauses it with its memory, files and processes, until you resume it.
 
 ```typescript
-yield* sandboxes.create({ metadata: { user }, autoPause: true, timeout: 600 });
+const sandbox = yield* sandboxes.create({ metadata: { user }, autoPause: true, timeout: 600 });
 ```
 
 See [Sandboxes](/e2b/sandboxes).
