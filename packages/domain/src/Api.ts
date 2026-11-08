@@ -291,21 +291,47 @@ export type QueryError<Q extends Query.Any> =
   | Middleware.Errors<Q["middleware"]>
   | RpcClientError.RpcClientError;
 
-/** The typed client of a query exposed in an Api: one method. */
-export type QueryClient<Q extends Query.Any> = (
+/** How a client asks a query. */
+export interface QueryOptions extends CallOptions {
+  /**
+   * Wait until the query's projections have handled this write (a
+   * command's receipt), or each of these writes, one receipt per command.
+   */
+  readonly atLeast?: Query.AtLeastInput;
+  /** The cursor of the previous page, for a paged query. */
+  readonly after?: string;
+  /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */
+  readonly take?: number;
+}
+
+/** One entry of a paged query's pages. */
+export type EntryOf<Q extends Query.Any> =
+  Query.ResultOf<Q> extends Query.Page<infer Row> ? Row : never;
+
+/**
+ * The typed client of a query exposed in an Api: one method. A paged query's
+ * method also streams its pages (`pages`) or its entries (`entries`), following
+ * each cursor until the last page.
+ */
+export type QueryClient<Q extends Query.Any> = ((
   input: Query.InputOf<Q>,
-  options?: CallOptions & {
-    /**
-     * Wait until the query's projections have handled this write (a
-     * command's receipt), or each of these writes, one receipt per command.
-     */
-    readonly atLeast?: Query.AtLeastInput;
-    /** The cursor of the previous page, for a paged query. */
-    readonly after?: string;
-    /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */
-    readonly take?: number;
-  },
-) => Effect.Effect<Query.ResultOf<Q>, QueryError<Q>>;
+  options?: QueryOptions,
+) => Effect.Effect<Query.ResultOf<Q>, QueryError<Q>>) &
+  (NonNullable<Q["definition"]["paged"]> extends true ? PagedQueryClient<Q> : {});
+
+/** A paged query's Streams. `after` starts mid-way; `atLeast` waits before the first page. */
+export interface PagedQueryClient<Q extends Query.Any> {
+  /** Every page, from `after` (or the first) to the last. */
+  readonly pages: (
+    input: Query.InputOf<Q>,
+    options?: QueryOptions,
+  ) => Stream.Stream<Query.ResultOf<Q>, QueryError<Q>>;
+  /** Every entry of every page, in order. */
+  readonly entries: (
+    input: Query.InputOf<Q>,
+    options?: QueryOptions,
+  ) => Stream.Stream<EntryOf<Q>, QueryError<Q>>;
+}
 
 /**
  * The typed client of an Api: commands and queries as methods
@@ -897,10 +923,37 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
     }
     if (entry.kind === "Query") {
       const name = entry.queryName;
-      client[name] = (input: unknown, options: CallOptions & Query.RunOptions = {}) => {
+      const ask = (input: unknown, options: QueryOptions = {}) => {
         const { headers, ...rest } = options;
-        return flat[name]!({ input, ...rest }, { headers });
+        return flat[name]!({ input, ...rest }, { headers }) as Effect.Effect<unknown, unknown>;
       };
+      if (!entry.definition.paged) {
+        client[name] = ask;
+        continue;
+      }
+      const pages = (input: unknown, { after, atLeast, ...options }: QueryOptions = {}) =>
+        Stream.unfold({ after, atLeast, done: false }, (state) =>
+          state.done
+            ? Effect.succeed(undefined)
+            : Effect.map(
+                ask(input, { ...options, after: state.after, atLeast: state.atLeast }),
+                (result) => {
+                  const page = result as Query.Page<unknown>;
+                  // The first page already waited for `atLeast`; later pages read the same store.
+                  const next = {
+                    after: page.cursor ?? undefined,
+                    atLeast: undefined,
+                    done: page.cursor === null,
+                  };
+                  return [page, next] as const;
+                },
+              ),
+        );
+      client[name] = Object.assign(ask, {
+        pages,
+        entries: (input: unknown, options?: QueryOptions) =>
+          Stream.flatMap(pages(input, options), (page) => Stream.fromIterable(page.entries)),
+      });
       continue;
     }
     const name = nameOf(entry);
