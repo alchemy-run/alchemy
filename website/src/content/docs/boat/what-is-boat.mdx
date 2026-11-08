@@ -3,6 +3,7 @@ title: What is Boat?
 description: The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
 ---
 
+import PackageManagers from "../../../components/PackageManagers.astro";
 import Tree from "../../../components/diagrams/Tree.astro";
 
 Boat runs sandboxes: Linux machines for agents, untrusted code and dev boxes. A **sandbox** starts in under a second, with Ubuntu, Docker, Node.js, Bun and Python, and `sudo` that needs no password. It runs until its **auto-stop** timer, then Boat stops it and saves its disk, and it picks up where it left off when you resume it. Everything belongs to your **account**, or to an organization you bill to: its sandboxes, snapshots, environments, webhooks and API keys.
@@ -20,37 +21,54 @@ Take one small app: an `Agents` environment holding an npm token, and a `Golden`
   caption="Everything belongs to the account acme. task-42 starts from the Golden snapshot on the Agents environment, and serves port 3000 at its own URL. DevBox stopped on its timer and keeps its disk until it resumes. A Cloudflare Worker outside Boat creates the sandbox, runs commands in it and calls its port."
 />
 
-## Accounts and API keys
+## Accounts: where everything lives
 
-Your **account** owns what you create on Boat. An organization's members can bill sandboxes to it instead, and each sandbox stays private to the person who created it.
+Your **account** owns what you create on Boat: its sandboxes, snapshots, environments, webhooks and API keys. An organization's members can bill sandboxes to it instead, and each sandbox stays private to the person who created it. Your profile signs you in to it:
 
-An **API key** can be narrowed. It carries a list of **actions** (create sandboxes, run commands, read files, host a port, …) and can be limited to some sandboxes or environments, and to a lifetime. A key can never do more, or live longer, than the key that created it.
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+See [Account & API keys](/boat/account-and-keys).
+
+## API keys: only the actions a caller needs
+
+An **API key** carries a list of **actions** (create sandboxes, run commands, read files, host a port, …) and can be limited to some sandboxes or environments, and to a lifetime. A key can never do more, or live longer, than the key that created it.
 
 ```typescript
 export const Ci = Boat.ApiKey("Ci", { preset: "ci" });
 ```
 
-See [Account & API keys](/boat/account-and-keys).
+See [Account & API keys](/boat/account-and-keys#keys-narrower-than-yours).
 
-## Sandboxes
+## Sandboxes: machines that stop and resume
 
-A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for its `autoStop` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files, and any sandbox can be forked into a copy from its last snapshot. **Labels** tag a sandbox when it's created, so you can find it again.
+A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for its `autoStop` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files. **Labels** tag a sandbox when it's created, so you can find it again.
 
 ```typescript
 const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { task } });
+const result = yield* sandbox.exec("npm test");
 ```
 
 See [Sandboxes](/boat/sandboxes/sandboxes).
 
-## Programs
+## Programs: your server in a sandbox
 
 A sandbox can run your own **program**: an Effect HTTP server that Alchemy bundles, uploads and starts with Node.js, served at the sandbox's URL. A code change restarts it in place, in the same sandbox.
 
+```typescript
+export default class Api extends Boat.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, type: "small" },
+  Effect.gen(function* () {
+    return { fetch: HttpServerResponse.json({ ok: true }) };
+  }),
+) {}
+```
+
 See [Programs](/boat/sandboxes/programs).
 
-## Snapshots and forks
+## Snapshots: a disk to start from
 
-A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it, with a repository cloned and dependencies installed. A **fork** copies a sandbox from its last snapshot, and Boat takes one whenever a sandbox stops.
+A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it, with a repository cloned and dependencies installed. A **fork** copies one sandbox from its last snapshot, which Boat takes whenever a sandbox stops.
 
 ```typescript
 export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
@@ -58,9 +76,9 @@ export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
 
 See [Snapshots & forks](/boat/sandboxes/snapshots).
 
-## Environments
+## Environments: what a sandbox starts with
 
-An **environment** is what a sandbox starts with: environment variables, secret files, and which of your credentials it gets (a GitHub token, your AI logins, its own Boat key). Every change makes a new version; a running sandbox keeps the version it started on.
+An **environment** holds environment variables, secret files, and which of your credentials a sandbox gets (a GitHub token, your AI logins, its own Boat key). Every change makes a new version; a running sandbox keeps the version it started on.
 
 ```typescript
 export const Agents = Boat.Environment("Agents", { env: { NODE_ENV: "production" } });
@@ -68,13 +86,18 @@ export const Agents = Boat.Environment("Agents", { env: { NODE_ENV: "production"
 
 See [Environments & secrets](/boat/security/environments).
 
-## Ports
+## Ports: a URL for each server
 
-A program that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public.
+A server that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public, and a port's `fetch` sends it for you:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
 
 See [Ports & URLs](/boat/sandboxes/ports).
 
-## Webhooks
+## Webhooks: Boat calls you when a sandbox changes
 
 Boat reports what happens to each sandbox (ready, stopped, failed, restored) to a **webhook**: a URL you register for the account, called with each event, signed with a secret. A Worker receives them with `consumeSandboxEvents`, which checks the signature and hands it only your stack's sandboxes.
 
@@ -88,7 +111,17 @@ See [Lifecycle events](/boat/sandboxes/lifecycle-events).
 
 ## State: where Alchemy keeps its record
 
-Boat has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+Boat has no storage for Alchemy's own record of what each Stack created. Keep it on disk, or share it with your team and CI through another cloud's state store:
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
 
 ## How @alchemy.run/boat models these concepts
 

@@ -21,7 +21,7 @@ Take one small app: an `Agent` template with Node.js and git, and a `Warm` snaps
   caption="Everything belongs to the team acme. The sandbox boots from the Warm snapshot of the Agent template, with the home-42 volume mounted at /home/user. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
 />
 
-## Teams and API keys
+## Teams: who owns and pays
 
 A **team** owns everything you create on E2B, and pays for it. You sign in as yourself, and your account can belong to several teams.
 
@@ -33,7 +33,7 @@ export const Ci = E2B.ApiKey("Ci", {});
 
 See [Team & API keys](/e2b/api-keys).
 
-## Templates
+## Templates: the image a sandbox boots
 
 A **template** is the image a sandbox boots from. E2B builds it on its side, from a registry image, a Dockerfile or another template, then boots it once, runs its start command, and snapshots the running microVM. Every sandbox from it starts from that snapshot.
 
@@ -43,7 +43,7 @@ export const Agent = E2B.Template("Agent", { image: "node:22-bookworm" });
 
 See [Templates](/e2b/templates).
 
-## Sandboxes
+## Sandboxes: a microVM per user or task
 
 A **sandbox** is one microVM, created from a template while your app runs, usually one per user or per task. You run commands in it, read and write its files, open a terminal, and call its ports at `https://<port>-<sandboxId>.e2b.app`. It runs for its **timeout**, which you can extend. When the timeout runs out, E2B kills it, or with `autoPause` pauses it with its memory, files and processes, until you resume it.
 
@@ -53,7 +53,7 @@ const sandbox = yield* sandboxes.create({ metadata: { user }, autoPause: true, t
 
 See [Sandboxes](/e2b/sandboxes).
 
-## Snapshots and forks
+## Snapshots: start where another sandbox was
 
 A **snapshot** captures a running sandbox, memory and disk, as a template of its own. Sandboxes from it start where the original was: a repository cloned, dependencies installed, a server listening. A **fork** snapshots a sandbox and starts copies of it straight away, while the original keeps running.
 
@@ -63,7 +63,7 @@ export const Warm = E2B.Snapshot("Warm", { template: Agent, run: ["npm ci"] });
 
 See [Snapshots & forks](/e2b/snapshots).
 
-## Volumes
+## Volumes: files that outlive the sandbox
 
 A **volume** is a filesystem that lives outside any sandbox. A sandbox mounts it at a path when it's created, and the files stay when the sandbox is gone. You can also read and write a volume's files without a sandbox. E2B turns volumes on per team.
 
@@ -73,7 +73,7 @@ export const Cache = E2B.Volume("Cache", {});
 
 See [Volumes](/e2b/volumes).
 
-## Network rules and secrets
+## Network rules and secrets: what leaves the sandbox
 
 A sandbox reaches the internet unless you limit it. Its **network rules** list the only hosts it may call, or block it entirely, and you can change them while it runs. A **secret** is a value E2B stores for the team and adds to a sandbox's outgoing requests, on the host and only for the hosts you choose, so code in the sandbox never sees it.
 
@@ -83,9 +83,15 @@ export const GitHubToken = E2B.Secret("GitHubToken", { value: Config.Redacted("G
 
 See [Network & secrets](/e2b/network-and-secrets).
 
-## Lifecycle events
+## Lifecycle events: E2B calls you when a sandbox changes
 
-E2B reports what happens to each sandbox (created, paused, resumed, checkpointed, killed) to a **webhook**: a URL you register for the team, called with each event, signed with a secret.
+E2B reports what happens to each sandbox (created, paused, resumed, checkpointed, killed) to a **webhook**: a URL you register for the team, called with each event, signed with a secret. A Worker receives them with `consumeSandboxEvents`:
+
+```typescript
+yield* E2B.consumeSandboxEvents({ events: ["sandbox.lifecycle.killed"] }, (event) =>
+  Effect.log(`${event.sandbox_id} killed`),
+);
+```
 
 See [Lifecycle events](/e2b/lifecycle-events).
 
