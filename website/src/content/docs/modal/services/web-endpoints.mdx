@@ -13,9 +13,9 @@ A web endpoint answers anyone unless it requires proxy auth. Then Modal's proxy 
 
 <Boundaries
   nodes={[
-    { id: "worker", label: "Api", type: "Worker · FetchServer", col: 0, row: 0 },
-    { id: "anyone", label: "anyone", type: "no token", col: 0, row: 1 },
-    { id: "site", label: "Site", type: "Function · web", col: 1, row: 0, tone: "accent" },
+    { id: "anyone", label: "anyone", type: "no token", col: 0, row: 0 },
+    { id: "worker", label: "Api", type: "Worker · FetchServer", col: 0, row: 1 },
+    { id: "site", label: "Site", type: "Function · web", col: 1, row: 1, tone: "accent" },
   ]}
   zones={[{ id: "proxy", label: "acme--site.modal.run", type: "requiresProxyAuth", nodes: ["site"], tone: "warn" }]}
   links={[
