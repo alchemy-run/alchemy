@@ -1,5 +1,6 @@
 import { ensureFloci } from "@alchemy.run/aws/Local/Floci";
 import { expect, it } from "@alchemy.run/test";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 
 for (const mode of ["config", "environment"] as const) {
@@ -7,26 +8,17 @@ for (const mode of ["config", "environment"] as const) {
     `external Floci fails without Docker fallback (${mode})`,
     () =>
       Effect.gen(function* () {
+        // An empty PATH hides `docker` from the spawn.
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            const previous = {
-              PATH: process.env.PATH,
-              ALCHEMY_FLOCI_EXTERNAL: process.env.ALCHEMY_FLOCI_EXTERNAL,
-            };
+            const previous = process.env.PATH;
             process.env.PATH = "";
-            if (mode === "environment") {
-              process.env.ALCHEMY_FLOCI_EXTERNAL = "1";
-            } else {
-              delete process.env.ALCHEMY_FLOCI_EXTERNAL;
-            }
             return previous;
           }),
           (previous) =>
             Effect.sync(() => {
-              for (const [key, value] of Object.entries(previous)) {
-                if (value === undefined) delete process.env[key];
-                else process.env[key] = value;
-              }
+              if (previous === undefined) delete process.env.PATH;
+              else process.env.PATH = previous;
             }),
         );
         // Port zero cannot be a reachable gateway; Docker is also unavailable.
@@ -36,7 +28,17 @@ for (const mode of ["config", "environment"] as const) {
           port: 0,
           elbListenerPorts: [],
           cloudfrontEdgePorts: [],
-        }).pipe(Effect.flip);
+        }).pipe(
+          Effect.flip,
+          // Config reads a snapshot of the environment, so set the variable
+          // through the provider rather than on `process.env`.
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnvRecord(
+              mode === "environment" ? { ALCHEMY_FLOCI_EXTERNAL: "1" } : {},
+            ),
+          ),
+        );
         expect(error._tag).toBe("FlociError");
         expect(error.message).toBe("external floci server unavailable at http://localhost:0");
       }),
