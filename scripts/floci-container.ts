@@ -68,5 +68,11 @@ export const startFlociForTests = Effect.fn(function* (label: string, image?: st
       )
       .pipe(Effect.ignore);
   }
-  yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, image, env: { ...flociTestEnv } });
+  // `managed: true` means the container was just started, so the emulator's
+  // state is new; a reused one reports `managed: false`.
+  return yield* Floci.ensureFloci({
+    port: Floci.DEFAULT_FLOCI_PORT,
+    image,
+    env: { ...flociTestEnv },
+  });
 });

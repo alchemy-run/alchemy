@@ -38,6 +38,7 @@ import { startFlociForTests } from "./floci-container.ts";
 import { provisionFlociStandingFixtures } from "./floci-fixtures.ts";
 import { preferLocalFlociImage } from "./floci-image.ts";
 import { resolveFlociDefaultNetwork } from "./floci-network.ts";
+import { defaultTestStage } from "./test-stage.ts";
 
 const LABEL = "test:aws:floci";
 
@@ -211,6 +212,29 @@ const findTestFiles = Effect.fn(function* (root: string) {
 
 const optionalEnv = (name: string) => Config.String(name).pipe(Config.withDefault(""));
 
+/**
+ * Removes `stage`'s local state (`<stateDir>/<stack>/<stage>`) from every
+ * stack: the records of an emulator that no longer has the resources.
+ */
+const clearLocalStageState = Effect.fn(function* (stateDir: string, stage: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  if (!(yield* fs.exists(stateDir))) return;
+  let cleared = 0;
+  for (const stack of yield* fs.readDirectory(stateDir)) {
+    const dir = path.join(stateDir, stack, stage);
+    if (yield* fs.exists(dir)) {
+      yield* fs.remove(dir, { recursive: true });
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    yield* Console.log(
+      `${LABEL}: cleared ${cleared} stale local state stack(s) for stage ${stage}`,
+    );
+  }
+});
+
 const command = Command.make(
   "test-aws-floci",
   {
@@ -348,6 +372,15 @@ const command = Command.make(
           if (overwrite || process.env[name] === undefined) process.env[name] = value;
         }
       });
+    // Floci runs deploy under their own stage. Everything such a stage
+    // describes lives only in the emulator, so its local state (stacks that
+    // use `Alchemy.localState()`) is dropped whenever the emulator starts
+    // fresh; sharing the live stage would let a live run and an emulated one
+    // read each other's records. An explicit ALCHEMY_TEST_STAGE is kept and
+    // never cleared.
+    const explicitStage = yield* optionalEnv("ALCHEMY_TEST_STAGE");
+    const flociStage = explicitStage !== "" ? undefined : `${yield* defaultTestStage()}_floci`;
+    if (flociStage !== undefined) yield* setEnv({ ALCHEMY_TEST_STAGE: flociStage }, true);
     yield* setEnv(
       {
         ALCHEMY_TEST_DEV: "1",
@@ -373,13 +406,16 @@ const command = Command.make(
     if (external) {
       yield* Console.log(`${LABEL}: using the existing Floci server (no Docker fallback)`);
     } else {
-      yield* startFlociForTests(LABEL, image).pipe(
+      const instance = yield* startFlociForTests(LABEL, image).pipe(
         Effect.catch((error) =>
           fail(
             `could not start the Floci container: ${errorMessage(error)}; tests were not started`,
           ),
         ),
       );
+      if (instance.managed && flociStage !== undefined) {
+        yield* clearLocalStageState(path.join(testPackageRoot, ".alchemy", "state"), flociStage);
+      }
     }
 
     // Suites that take subnet/security-group IDs from the environment (e.g.
