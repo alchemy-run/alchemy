@@ -18,7 +18,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity, Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
 import type { Worker } from "../Workers/Worker.ts";
-import { Workflow, type WorkflowHandle } from "./Workflow.ts";
+import { Workflow, type WorkflowHandle, type WorkflowStepConfig } from "./Workflow.ts";
 import { WorkflowStep } from "./WorkflowRuntime.ts";
 
 /** What each Cloudflare Workflow instance runs: one execution of one Effect workflow. */
@@ -54,6 +54,21 @@ const currentRun = (operation: string) =>
       ? Effect.succeed(run.value)
       : Effect.die(new Error(`NativeEngine: ${operation} only runs inside a workflow run`)),
   );
+
+/**
+ * The Cloudflare `step.do` config (timeout, native retries) for every attempt
+ * of one Activity. Annotate the Activity with it:
+ *
+ * ```ts
+ * Activity.make({ ... }).annotate(ActivityStepConfig, { timeout: "20 minutes" })
+ * ```
+ *
+ * Unset, Cloudflare's defaults apply (a 10-minute timeout, 5 retries).
+ */
+export const ActivityStepConfig = Context.Reference<WorkflowStepConfig | undefined>(
+  "alchemy/Cloudflare/Workflows/NativeEngine/ActivityStepConfig",
+  { defaultValue: () => undefined },
+);
 
 /**
  * A name Cloudflare accepts for an instance id or event type: up to 100
@@ -353,6 +368,7 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           for (let generation = 0; ; generation++) {
             const text = yield* run.step
               .do({
+                ...Context.get(activity.annotations, ActivityStepConfig),
                 name:
                   generation === 0
                     ? `${activity.name}/${attempt}`
