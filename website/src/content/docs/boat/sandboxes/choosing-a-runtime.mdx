@@ -9,6 +9,10 @@ import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Every way of running code on Boat is a sandbox: a Linux machine that stops on a timer with its disk saved. They differ in who starts the work, and who decides when the machine comes and goes.
 
+## Boat manages less as you decide more
+
+Each runtime hands you more of the machine:
+
 <Responsibility
   platform="Boat"
   columns={[
@@ -68,7 +72,7 @@ yield* devBox.resume({ autoStop: "30 minutes" });
 yield* devBox.exec("git pull && npm test", { cwd: "/home/user/app" });
 ```
 
-It stops after its `autoStop` with its disk saved, so you pay for it only while it works. Choose it for an agent's home, a preview environment, or a build box. See [Sandboxes](/boat/sandboxes/sandboxes#work-in-a-declared-sandbox).
+It stops after its `autoStop` with its disk saved, so you pay for it only while it works. Choose it for an agent's home, a preview environment, or a build box. See [Sandboxes](/boat/sandboxes/sandboxes#drive-a-declared-sandbox-from-a-worker).
 
 <Timeline
   end={10}

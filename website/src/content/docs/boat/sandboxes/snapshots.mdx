@@ -7,6 +7,10 @@ import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
 
 A **snapshot** is a sandbox's disk saved under a name: installed packages, a cloned repository, a warm build cache. A sandbox started from it begins exactly there. A **fork** copies one sandbox into a new one from its last snapshot, which Boat takes now and then while it runs, and every time it stops.
 
+## Every sandbox starts from the same disk
+
+The setup runs once, at deploy. Every sandbox after it starts with the work already done, and changes only its own copy:
+
 <BranchGraph
   end={6}
   branches={[
@@ -22,7 +26,7 @@ A **snapshot** is a sandbox's disk saved under a name: installed packages, a clo
   caption="Alchemy runs the snapshot's commands in a sandbox of its own, saves it as Golden and deletes it. Every task sandbox starts from Golden, with the setup already done, and changes only its own copy."
 />
 
-## Build a snapshot
+## Build a snapshot from commands
 
 List the commands that set it up:
 
@@ -46,7 +50,7 @@ export const Tools = Boat.Snapshot("Tools", { run: ["npm i -g pnpm"] });
 export const Golden = Boat.Snapshot("Golden", { from: Tools, run: ["pnpm dlx playwright install"] });
 ```
 
-## Start sandboxes from it
+## Start sandboxes from a snapshot
 
 A declared sandbox starts from a snapshot with `snapshot`:
 
@@ -65,7 +69,7 @@ const sandbox = yield* sandboxes.create({ autoStop: "10 minutes" });
 
 A sandbox from a snapshot takes its machine size unless you pass `type`.
 
-## Fork a sandbox
+## Fork a sandbox into a copy
 
 `fork` starts a copy of a sandbox your code created, from its last snapshot:
 
@@ -77,7 +81,7 @@ yield* sandbox.resume();
 
 Before a sandbox has a snapshot, `fork` fails with `ForkNeedsSnapshot`. Boat never copies labels onto a fork; Alchemy adds the host's `alchemy.*` labels again.
 
-## Save from a running sandbox
+## Save a running sandbox under a name
 
 A handle saves its sandbox under a name of your own, and waits until it's ready:
 
@@ -87,6 +91,4 @@ const saved = yield* sandbox.snapshot("after-install");
 
 Snapshots your code saves aren't deleted with the Stack.
 
-## Next
-
-Give sandboxes variables, secret files and credentials: [Environments & secrets](/boat/security/environments).
+To give sandboxes variables, secret files and credentials, see [Environments & secrets](/boat/security/environments).
