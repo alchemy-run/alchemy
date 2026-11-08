@@ -9,7 +9,7 @@ import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 `Archil.MountDisk(disk, { path, mode })` returns a mount reference: the fields of a sandbox `mounts` entry, plus `mount()`. Where it mounts depends on the host it's bound to.
 
-## In a program sandbox
+## Mount it in a program sandbox
 
 An [`Archil.Sandbox` with `main`](/archil/compute/programs) mounts the disk itself. The binding adds it to the sandbox's mounts, and the disk is there when the program starts:
 
@@ -18,7 +18,7 @@ const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-on
 const names = yield* fs.readDirectory(dataset.path);
 ```
 
-## On your own hosts
+## Mount it on your own hosts
 
 On a Cloudflare Container or an ECS task on EC2, the binding installs the Archil client into the host's image, and the plan fails if the host can't provide FUSE. `mount()` runs the client:
 
@@ -83,7 +83,7 @@ const path = yield* archil.mount({ disk: job.diskId, token: job.token, path: "/w
 
 The Worker makes the token with `home.createToken(name)` and revokes it with `home.removeToken(id)`.
 
-## Sharing a disk between hosts
+## Share a disk between hosts
 
 `mode` picks how this mount shares the disk. An `exclusive` mount, the default, locks the whole disk for one writer, and every other client can only mount it read-only:
 
@@ -119,7 +119,7 @@ const sandboxes = yield* Archil.CreateSandbox();
 const sandbox = yield* sandboxes.create({ name: `task-${id}`, mounts: [workspace] });
 ```
 
-## ECS tasks
+## Mount it in an ECS task
 
 ECS tasks need the EC2 launch type, since Fargate has no FUSE:
 

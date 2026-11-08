@@ -44,16 +44,14 @@ Pick **Sign in**. Alchemy opens Daytona's device login, the same one `daytona lo
 
 Signing in is what lets Alchemy create a key for each Worker that uses a binding. Daytona only lets a signed-in user create API keys, organizations, roles and invitations.
 
-## Use an API key instead
+## Paste an API key instead
 
 Pick **API key** and paste a key from **Keys** in the dashboard. An API key covers sandboxes, snapshots, volumes, secrets and registries.
 
 It can't create the per-Worker keys bindings need unless Daytona has enabled [managed API keys](https://www.daytona.io/docs/en/api-keys/) for your organization. Give that key every permission, including `manage:api_keys`.
 
-## CI
+## Deploy from CI
 
 With `CI=true`, Alchemy reads `DAYTONA_API_KEY` instead of a profile, so set it as a secret in your CI. A Stack with bindings needs a key with `manage:api_keys`. `DAYTONA_ORGANIZATION_ID` picks the organization when the key's own isn't the one you want, and `DAYTONA_API_URL` is only for a self-hosted Daytona. See [CI](/environments/ci).
-
-## Next
 
 [Organizations and API keys](/daytona/organizations-and-keys) covers where a deploy goes and the key each Worker gets. Then build the [tutorial](/daytona/tutorial/part-1).

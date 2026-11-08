@@ -801,13 +801,14 @@ Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any W
 - [Part 4: Stages](https://alchemy.run/boat/tutorial/part-4) — Deploy separate copies of the Stack, each with its own Worker and key.
 - [Part 5: CI/CD](https://alchemy.run/boat/tutorial/part-5) — Deploy a stage per pull request from GitHub Actions.
 - [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
-- [Choosing a runtime](https://alchemy.run/boat/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
-- [Sandboxes](https://alchemy.run/boat/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
-- [Programs](https://alchemy.run/boat/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
-- [Snapshots & forks](https://alchemy.run/boat/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
-- [Environments](https://alchemy.run/boat/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
-- [Ports](https://alchemy.run/boat/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
-- [Webhooks](https://alchemy.run/boat/webhooks) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
+- [Credentials & bindings](https://alchemy.run/boat/security/credentials) — What each host gets to reach Boat, deploy-time resources vs clients your app runs, and who owns the sandboxes your app creates.
+- [Environments & secrets](https://alchemy.run/boat/security/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
+- [Choosing a runtime](https://alchemy.run/boat/sandboxes/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
+- [Sandboxes](https://alchemy.run/boat/sandboxes/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
+- [Programs](https://alchemy.run/boat/sandboxes/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
+- [Snapshots & forks](https://alchemy.run/boat/sandboxes/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
+- [Ports & URLs](https://alchemy.run/boat/sandboxes/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
+- [Lifecycle events](https://alchemy.run/boat/sandboxes/lifecycle-events) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
 
 ## Rivet
 
@@ -938,7 +939,7 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Services
 
-- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed function.
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed Modal function.
 - [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
 - [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
 - [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
@@ -947,16 +948,16 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Sandboxes
 
-- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image.
-- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One sandbox whose filesystem outlives its sessions.
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image, and start sandboxes with a repository already installed.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One Modal sandbox whose filesystem outlives its sessions, resumed from a Worker.
 - [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
 - [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
-- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a sandbox's files or memory and start new sandboxes from it.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a Modal sandbox's files, its memory, or one directory, and start new sandboxes from it.
 
 ## Modal — Storage
 
-- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between sandboxes, functions and Workers.
-- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, sandboxes and Python functions.
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between Modal sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, Modal sandboxes and Python functions with a Modal Queue.
 - [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
 
 ## Modal — Networking
@@ -1211,4 +1212,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~254 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -7,6 +7,8 @@ import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 Daytona controls a sandbox's network from outside the sandbox, so nothing running inside it can turn the limits off. Two layers decide what goes out. Your organization's **tier** sets the floor: below Tier 3, sandboxes reach only an allowlist of essential services, such as package registries, GitHub, AI APIs and Daytona's own API, and from Tier 3 they reach the whole internet. On top of that, each sandbox can narrow it further.
 
+## Your tier sets the floor, each sandbox narrows it
+
 <Boundaries
   nodes={[
     { id: "box", label: "DevBox", type: "domainAllowList", col: 0, row: 0, tone: "accent" },
@@ -101,7 +103,5 @@ export const DevBox = Daytona.Sandbox("DevBox", { snapshot: Base, public: true }
 ```
 
 `public` changes in place.
-
-## Next
 
 Credentials a sandbox can use but not read are in [Secrets](/daytona/security/secrets).

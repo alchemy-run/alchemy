@@ -3,11 +3,11 @@ title: Programs
 description: Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
 ---
 
-import Timeline from "../../../components/diagrams/Timeline.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A **program** is your own server, run in a sandbox the Stack declares. Alchemy bundles it, uploads it into the sandbox and starts it with Node.js 24, then serves its port at `https://<subdomain>-3000.on.boat.dev`.
 
-## Declare a program
+## Give a sandbox a program
 
 Give `Boat.Sandbox` a `main` and an implementation:
 
@@ -49,7 +49,7 @@ export default Alchemy.Stack(
 
 The program listens on `port` (3000 unless you say otherwise), and reads `PORT` from its environment.
 
-## Deploys restart it in place
+## A deploy restarts the process, not the sandbox
 
 A program's sandbox stays the same across deploys; only the process changes.
 
@@ -72,7 +72,7 @@ An unchanged deploy leaves the process alone. A program sandbox never stops on i
 
 `env` on a program sandbox is the program's: changing it restarts the process, without replacing the sandbox.
 
-## Private and public URLs
+## Its URL needs a token unless it's public
 
 A program's URL needs its token unless you set `public: true`. The token is `urlToken`, sent as the `_token` query parameter or the `_port_auth` cookie:
 
@@ -81,9 +81,9 @@ const api = yield* Api;
 return { url: api.url, token: api.urlToken };
 ```
 
-See [Ports](/boat/ports).
+See [Ports & URLs](/boat/sandboxes/ports).
 
-## Use bindings in the program
+## Use bindings from the program
 
 A program uses bindings like any other host. Each gets its own key, which can do only what that binding needs:
 
@@ -99,6 +99,4 @@ Effect.gen(function* () {
 }).pipe(Effect.provide(Boat.CreateSandboxHttp));
 ```
 
-## Next
-
-Start sandboxes with a project already set up: [Snapshots & forks](/boat/snapshots).
+To start sandboxes with a project already set up, see [Snapshots & forks](/boat/sandboxes/snapshots).

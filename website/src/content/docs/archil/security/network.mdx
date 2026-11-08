@@ -9,6 +9,8 @@ import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 Every sandbox has an outbound policy. Archil enforces it outside the microVM, so code inside can't change it, and it can add headers to requests as they leave, so a key the sandbox uses never sits inside it.
 
+## The policy is enforced outside the microVM
+
 <Boundaries
   nodes={[
     { id: "agent", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
@@ -26,7 +28,7 @@ Every sandbox has an outbound policy. Archil enforces it outside the microVM, so
   caption="With default: deny, a sandbox reaches only the hosts it allows. The policy adds the Authorization header to requests for api.github.com, so the token never enters the sandbox."
 />
 
-## Deny by default
+## Deny everything but a list of hosts
 
 ```typescript title="src/agent.ts"
 export const Agent = Archil.Sandbox("Agent", {
@@ -57,7 +59,7 @@ export const Agent = Archil.Sandbox("Agent", {
 
 Archil has no secret store, so the value lives in the sandbox's policy.
 
-## Change it while it runs
+## Change the policy while it runs
 
 ```typescript
 yield* sandbox.setEgress({ default: "deny", allow: ["api.openai.com"] });
@@ -65,6 +67,6 @@ yield* sandbox.setEgress({ default: "deny", allow: ["api.openai.com"] });
 
 The new policy applies at once. On a declared `Archil.Sandbox`, changing `network` updates it in place.
 
-## Plans
+## Your plan sets the default
 
 On Archil's Free plan, sandboxes reach only a managed allowlist of package registries, Git hosts and model APIs, and adding headers needs the Developer plan or above. A sandbox created on a paid plan with no policy reaches anything.

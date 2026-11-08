@@ -7,6 +7,8 @@ import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A sandbox can run a program you write, the same way a Worker or a Lambda does. Alchemy bundles it, uploads it into the sandbox, and runs it with Node in a session of its own. The program serves HTTP on a port, reached through the sandbox's preview URL, and keeps running as long as the sandbox does.
 
+## The sandbox outlives the program
+
 The sandbox outlives the program. A code change restarts the process in the same sandbox, at the same URL. Only a change Daytona can't make to a running sandbox, like a new mount, replaces it.
 
 <Timeline
@@ -50,7 +52,7 @@ export default class Agent extends Daytona.Sandbox<Agent>()(
 
 `agent.url` is the preview URL of port 3000. `public` opens it to anyone; a private sandbox's preview needs its token in `X-Daytona-Preview-Token`. See [Network and previews](/daytona/networking/network).
 
-## Redeploy it
+## A deploy restarts the process
 
 A code change uploads the new bundle and restarts the process. The sandbox and its URL stay the same.
 
@@ -89,6 +91,6 @@ A mount binding that needs a client in the image, such as an `alchemy/Mount` cap
 
 Daytona sandboxes provide FUSE, so FUSE clients work. A client that needs NFS fails the deploy with `MountUnsupported`.
 
-## What the program can reach
+## The program reaches what its sandbox does
 
 The program reaches the network the way its sandbox does. Below Daytona's Tier 3, that is only an allowlist of essential services, so bindings that call Daytona's API work, but calls to another sandbox's toolbox are refused. From Tier 3, the program reaches the whole internet. See [Network and previews](/daytona/networking/network).

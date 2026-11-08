@@ -3,7 +3,28 @@ title: Volumes
 description: Keep files on Modal volumes and read or write them without a sandbox.
 ---
 
-## Create a volume
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **Volume** is a filesystem in an environment that Functions, Servers and Sandboxes mount at a path. Containers come and go; the Volume keeps their files, and a Worker can read and write them without any container at all.
+
+## The files outlive every container
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "vol", label: "home-sam", type: "Volume" },
+    { id: "s1", label: "session 1", type: "Sandbox" },
+    { id: "s2", label: "session 2", type: "Sandbox" },
+  ]}
+  bars={[
+    { lane: "vol", start: 0, end: 10, label: "/home/user", tone: "accent" },
+    { lane: "s1", start: 1, end: 4, label: "writes notes.md" },
+    { lane: "s2", start: 6, end: 9, label: "reads notes.md" },
+  ]}
+  caption="Session 1 writes a file to the Volume and stops. Session 2 mounts the same Volume later and finds it there."
+/>
+
+## Declare a Volume
 
 ```typescript
 // src/Storage.ts

@@ -8,6 +8,8 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything you create on E2B belongs to a **team**: its templates, sandboxes, volumes, secrets and API keys, and the bill for them. Your account can belong to several teams, and one of them is your default.
 
+## A key reaches its whole team
+
 An **API key** reaches everything in its team. A sandbox has its own **access token** too, which its envd daemon checks for commands and files in that one sandbox.
 
 <Tree
@@ -27,7 +29,7 @@ An **API key** reaches everything in its team. A sandbox has its own **access to
   caption="An API key reaches every template, sandbox, volume and secret in its team. A sandbox's access token reaches only that sandbox's commands and files."
 />
 
-## Your profile picks the team
+## Sign in with a profile, pick a team
 
 Alchemy deploys with the credentials in a [profile](/environments/profiles):
 
@@ -37,7 +39,7 @@ Pick **Browser login** for most setups: you sign in to E2B in your browser, and 
 
 Pick **Access token or API key** to paste one instead. An access token acts for you, so give the team id too when you deploy to a team other than your default. An API key already belongs to one team.
 
-## One profile per environment
+## Give production its own team
 
 A [stage](/environments/stages) decides what you deploy. The profile decides where. Give production its own team, and its own profile:
 
@@ -49,7 +51,7 @@ A [stage](/environments/stages) decides what you deploy. The profile decides whe
 
 Each stage's templates get names generated from the app, stage and id, so stages in one team don't collide.
 
-## Access narrower than yours
+## Each host gets a key of its own
 
 E2B can't narrow an API key, so Alchemy gives each host that uses a binding a key of its own, created at deploy and deleted when the host is destroyed. Your access token never reaches the host. The host's key still reaches the whole team, so put production in a team of its own.
 
@@ -72,7 +74,7 @@ const events = yield* team.events({ limit: 50 });
 
 Provide `E2B.ReadTeamHttp`.
 
-## In CI
+## Deploy from CI with a token
 
 When `E2B_ACCESS_TOKEN` is set, Alchemy uses it instead of the profile. Set `E2B_TEAM_ID` to deploy to a team other than your default:
 
@@ -81,7 +83,5 @@ When `E2B_ACCESS_TOKEN` is set, Alchemy uses it instead of the profile. Set `E2B
 />
 
 `E2B_API_KEY` is enough to deploy templates, snapshots and other resources, but not bindings or `E2B.ApiKey`: those create keys, which takes the access token. Set `E2B_DOMAIN` if you run E2B on your own domain. See [CI](/environments/ci).
-
-## Next
 
 What a sandbox can reach, and how secrets reach it without entering it, is in [Network & secrets](/e2b/network-and-secrets).

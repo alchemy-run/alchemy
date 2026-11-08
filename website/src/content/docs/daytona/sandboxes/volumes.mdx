@@ -7,6 +7,8 @@ import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A **volume** is a persistent disk, backed by object storage, that sandboxes mount at a path. Its files outlive every sandbox that mounts it, and several sandboxes can mount it at once. Daytona mounts volumes only when it creates a sandbox, so a sandbox's mounts are fixed for its life.
 
+## Files outlive every sandbox
+
 <Timeline
   end={10}
   lanes={[

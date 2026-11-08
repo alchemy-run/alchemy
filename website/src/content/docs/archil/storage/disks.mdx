@@ -9,6 +9,8 @@ import DAG from "../../../../components/DAG.astro";
 
 A disk is a POSIX filesystem stored in object storage. The data clients are using sits in Archil's storage layer, in front of the bucket, so reads and writes run at disk speed while the bucket holds everything. A write is durable once `fsync` returns. The bucket is Archil's, or [your own](/archil/storage/your-own-bucket).
 
+## One disk, three ways in
+
 One disk is reachable three ways at once: mounted as a filesystem, through serverless exec, and as an S3-style bucket of objects.
 
 <DAG
@@ -53,7 +55,7 @@ export const Dataset = Archil.Disk("Dataset", {});
 
 Restrict where it can be mounted from with `allowedIps`, and stop sandboxes and exec from mounting it with `allowSandboxMount: false`.
 
-## Run commands and search
+## Run commands against a disk
 
 ```typescript
 const dataset = yield* Archil.ExecDisk(Dataset);
@@ -75,6 +77,6 @@ const url = yield* files.share("notes/today.md", 3600);
 
 A write that conflicts with a mounted client's lock fails with `ObjectConflict`.
 
-## Branches and your own bucket
+## Branch it, or keep it in your bucket
 
 Copy a disk per session from a checkpoint with [Branches and checkpoints](/archil/storage/branches). Keep a disk's files as ordinary objects in your S3 bucket with [Your own bucket](/archil/storage/your-own-bucket).

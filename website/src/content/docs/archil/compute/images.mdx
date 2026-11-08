@@ -9,6 +9,8 @@ import DAG from "../../../../components/DAG.astro";
 
 A sandbox boots an OCI image for `linux/amd64`. Archil pulls the image once, records the digest it resolved, and every sandbox booted from it starts from that digest. Archil has no builder: it pulls images, so an image from a Dockerfile is built on your machine and pushed to a registry first.
 
+## Archil pulls, you build
+
 <DAG
   nodes={[
     { id: "dockerfile", label: "Dockerfile", type: "./agent", col: 0, row: 0 },
@@ -26,7 +28,7 @@ A sandbox boots an OCI image for `linux/amd64`. Archil pulls the image once, rec
   caption="Alchemy builds the Dockerfile with your Docker and pushes it to your registry. Archil pulls it from there and boots sandboxes from the digest it pulled."
 />
 
-## Use a public image directly
+## Boot a public image directly
 
 A public image needs no resource. Name it as a sandbox's `baseImage`:
 
@@ -36,7 +38,7 @@ export const DevBox = Archil.Sandbox("DevBox", { baseImage: "python:3.13" });
 
 A sandbox with neither `baseImage` nor `image` boots `node:24-bookworm`.
 
-## Pin an image
+## Pin an image by its digest
 
 `Archil.Image` pulls an image once and keeps its digest, so every sandbox boots the same bits even after the tag moves:
 
@@ -70,7 +72,7 @@ export const Agent = Archil.Image("Agent", {
 });
 ```
 
-## Build a Dockerfile
+## Build a Dockerfile on your machine
 
 Give a `dockerfile` and where to `push` it. Alchemy builds it with your local Docker, pushes it tagged with the build's hash, and Archil pulls it:
 
@@ -87,7 +89,7 @@ export const Agent = Archil.Image("Agent", {
 
 The credentials need to push to the repository and pull from it. A change to the Dockerfile or its context builds and pushes a new tag.
 
-## Build images while the app runs
+## Pull images while your app runs
 
 `Archil.CreateImage` pulls images at run time, e.g. one per customer repository, with the same props as `Archil.Image`:
 
@@ -101,6 +103,6 @@ const sandbox = yield* sandboxes.create({ name: tenant, image: image.imageId });
 
 A [program sandbox](/archil/compute/programs) boots a public image. When one of its bindings installs a filesystem client, like a mount for another storage service, Alchemy builds an image of the base plus that client the same way, so give the sandbox a `push` too.
 
-## Deleting
+## Images stay in your registry
 
 Archil has no API to delete an image. Destroying an `Archil.Image` removes it from Alchemy's state only, and the image pushed to your registry stays there.

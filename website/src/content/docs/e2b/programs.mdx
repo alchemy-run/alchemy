@@ -7,6 +7,8 @@ import Shell from "../../../components/diagrams/Shell.astro";
 
 Give a template a `main`, and every sandbox from it boots with your program already serving HTTP. Alchemy bundles it, copies it into the template, and E2B snapshots the template once the program answers. The program shares its microVM with whatever else runs there, so anything it can read, the sandbox's other code can read too.
 
+## The program shares the sandbox
+
 <Shell
   shell={{
     label: "user-42",
@@ -20,7 +22,7 @@ Give a template a `main`, and every sandbox from it boots with your program alre
   caption="The program, its config and binding values, and any code you run in the sandbox all sit in the same microVM."
 />
 
-## An Effect program
+## Write an Effect program
 
 ```typescript title="src/Program.ts"
 import * as E2B from "@alchemy.run/e2b";
@@ -40,7 +42,7 @@ export default class Program extends E2B.Template<Program>()(
 
 The program runs with Bun from `/app`, on `oven/bun:1` by default. Set `image` or `dockerfile` for your own environment; it needs Bun.
 
-## Call it
+## Call it from a Worker
 
 ```typescript
 const sandboxes = yield* E2B.CreateSandbox(Program);
@@ -73,7 +75,7 @@ export default Alchemy.Stack(
 
 An `E2B.Sandbox` gives the program a stable URL. The sandbox pauses when it is idle and the next request resumes it, memory included. A new build of the program replaces the sandbox.
 
-## Bindings inside the sandbox
+## Use bindings from the program
 
 ```typescript
 export default class Program extends E2B.Template<Program>()(
@@ -97,7 +99,7 @@ Any binding works in a template program, from E2B or another provider.
 Config and binding values are written into the template, so any code in a sandbox from it can read them, including `Redacted` ones. Don't bind credentials that the sandbox's untrusted code must not see; use [egress secrets](/e2b/network-and-secrets) instead.
 :::
 
-## A plain JavaScript program
+## Write a plain JavaScript program
 
 ```typescript title="src/Templates.ts"
 export const Server = E2B.Template("Server", {
@@ -117,6 +119,6 @@ createServer((_request, response) => {
 
 A `main` without an Effect is bundled and run as-is. It must listen on `PORT`.
 
-## Deploys
+## A deploy rebuilds the template
 
 A deploy rebuilds the template when the program's bundle changes. Sandboxes already running keep the old build, except an `E2B.Sandbox` declared from the template, which is replaced by one on the new build.

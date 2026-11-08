@@ -9,6 +9,8 @@ import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 A sandbox is a Firecracker microVM that stays around between calls. Its root filesystem is a disk of its own, so files and installed packages survive a stop. It can mount other disks, serve ports, and run for up to 24 hours per session. After 30 minutes without a connection it pauses, keeping its memory and processes, and the next connection resumes it.
 
+## A sandbox pauses when idle and resumes on the next connection
+
 <StateMachine
   states={[
     { id: "running", label: "running", type: "billed", col: 0, row: 0, start: true, tone: "accent" },
@@ -26,7 +28,7 @@ A sandbox is a Firecracker microVM that stays around between calls. Its root fil
   caption="A paused sandbox keeps its memory and running processes. A stopped one keeps only its disks. Neither is billed for compute."
 />
 
-## A long-lived dev box
+## Declare a long-lived dev box
 
 Declare a sandbox in your Stack to keep it across deploys. Each `mounts` entry names a disk and a `path`:
 
@@ -42,7 +44,7 @@ export const DevBox = Archil.Sandbox("DevBox", {
 
 A mount change updates the same sandbox: it stops, then starts with the new mounts.
 
-## Mount modes
+## Pick a mount mode
 
 An entry takes Archil's own options: `mode` (`exclusive`, `conditional`, or `read-only`), `subdirectory`, and `queueMs`:
 
@@ -100,7 +102,7 @@ yield* pty.write("ls -la\n");
 yield* pty.resize({ cols: 160, rows: 50 });
 ```
 
-## Move files
+## Move files in and out
 
 ```typescript
 yield* sandbox.files.write("/home/user/app/.env", "MODE=test");
@@ -109,7 +111,7 @@ const env = yield* sandbox.files.readText("/home/user/app/.env");
 
 Archil's process API moves whole files. List, remove or create directories with `exec`.
 
-## Pause, resume, fork
+## Pause, resume or fork it
 
 ```typescript
 yield* sandbox.pause();
@@ -141,7 +143,7 @@ Anyone with the URL can call a public port. Give a browser a port token instead,
 const token = yield* sandbox.createPortToken(3000, "1h");
 ```
 
-## Drive a declared sandbox
+## Drive a declared sandbox from a Worker
 
 `ConnectSandbox` returns the same handle for a sandbox in your Stack:
 

@@ -3,11 +3,15 @@ title: Choosing a runtime
 description: Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
 ---
 
-import DAG from "../../../components/DAG.astro";
-import Responsibility from "../../../components/Responsibility.astro";
-import Timeline from "../../../components/diagrams/Timeline.astro";
+import DAG from "../../../../components/DAG.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Every way of running code on Boat is a sandbox: a Linux machine that stops on a timer with its disk saved. They differ in who starts the work, and who decides when the machine comes and goes.
+
+## Boat manages less as you decide more
+
+Each runtime hands you more of the machine:
 
 <Responsibility
   platform="Boat"
@@ -43,7 +47,7 @@ export default class Api extends Boat.Sandbox<Api>()(
 ) {}
 ```
 
-A program sandbox never stops on its own. Choose it for an API or a service that needs a whole machine: Docker, a desktop, a long-lived process. See [Programs](/boat/programs).
+A program sandbox never stops on its own. Choose it for an API or a service that needs a whole machine: Docker, a desktop, a long-lived process. See [Programs](/boat/sandboxes/programs).
 
 <Timeline
   end={10}
@@ -68,7 +72,7 @@ yield* devBox.resume({ autoStop: "30 minutes" });
 yield* devBox.exec("git pull && npm test", { cwd: "/home/user/app" });
 ```
 
-It stops after its `autoStop` with its disk saved, so you pay for it only while it works. Choose it for an agent's home, a preview environment, or a build box. See [Sandboxes](/boat/sandboxes#work-in-a-declared-sandbox).
+It stops after its `autoStop` with its disk saved, so you pay for it only while it works. Choose it for an agent's home, a preview environment, or a build box. See [Sandboxes](/boat/sandboxes/sandboxes#drive-a-declared-sandbox-from-a-worker).
 
 <Timeline
   end={10}
@@ -94,7 +98,7 @@ yield* sandbox.exec("npm test");
 yield* sandbox.delete();
 ```
 
-Choose it for agent loops, code a user sends, and anything that needs a fresh machine each time. See [Sandboxes](/boat/sandboxes#create-sandboxes-while-your-app-runs).
+Choose it for agent loops, code a user sends, and anything that needs a fresh machine each time. See [Sandboxes](/boat/sandboxes/sandboxes#create-sandboxes-while-your-app-runs).
 
 <Timeline
   end={10}
