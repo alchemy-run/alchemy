@@ -411,11 +411,11 @@ const testServicesLayer =
  * lives in the emulator alongside the stack's resources instead of needing
  * live credentials.
  */
-const testStateLayer = <E>(state: Layer.Layer<State.State, E, never>) =>
+const testStateLayer = <E, R>(state: Layer.Layer<State.State, E, R>) =>
   testServicesLayer === undefined
     ? state
     : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services the store would otherwise resolve itself
-      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, never>);
+      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, R>);
 
 const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
