@@ -333,6 +333,16 @@ A stage that still holds encrypted secrets fails to load without the layer, and 
 
 Every store records the format of what it holds, and a version of alchemy refuses a store in a newer format than it knows. Versions from before the format record are kept out of an encrypted store too: text records aren't valid JSON to them, the Cloudflare store reports a newer version, and Postgres renames the column they read.
 
+Without a key service, `passphraseEncryption()` encrypts with a passphrase. It reads `ALCHEMY_STATE_PASSPHRASE` and wraps each stage's data key with a key derived from it by scrypt:
+
+```typescript
+import { passphraseEncryption } from "alchemy/State/PassphraseEncryption";
+
+state: Cloudflare.state().pipe(Layer.provide(passphraseEncryption())),
+```
+
+Whoever has the passphrase can read every secret, and losing it loses them. A key service like AWS KMS is the safer choice: nobody holds the key, access is an IAM grant that can be scoped to one stage, and every decrypt is logged.
+
 To encrypt with another key service, implement `StateEncryption` from `alchemy/State/StateEncryption`: an `id`, `generate` for a stage's data key, and `unwrap` to recover it.
 
 ## In-memory state (testing)
