@@ -3,6 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as IAM from "@distilled.cloud/aws/iam";
+import type * as Presign from "@distilled.cloud/aws/Presign";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -159,24 +160,19 @@ const getTag = (path: string) =>
     }),
   );
 
-// Mint a presigned URL via the deployed Lambda fixture.
-const presign = (
-  op: "presign-get" | "presign-put",
-  params: { key: string; expiresIn?: number; contentType?: string },
+// Presign any input of the binding via the deployed Lambda fixture.
+const presign = <Op extends "presign-get" | "presign-put">(
+  op: Op,
+  input: Op extends "presign-get" ? AWS.S3.PresignGetObjectRequest : AWS.S3.PresignPutObjectRequest,
 ) =>
   Effect.gen(function* () {
-    const search = new URLSearchParams({ key: params.key });
-    if (params.expiresIn !== undefined) {
-      search.set("expiresIn", String(params.expiresIn));
-    }
-    if (params.contentType !== undefined) {
-      search.set("contentType", params.contentType);
-    }
-    const response = yield* send(HttpClientRequest.get(`${baseUrl}/${op}?${search.toString()}`));
+    const response = yield* send(
+      HttpClientRequest.post(`${baseUrl}/${op}`).pipe(HttpClientRequest.bodyJsonUnsafe(input)),
+    );
     expect(response.status).toBe(200);
-    const body = (yield* response.json) as { url: string };
-    expect(body.url).toContain("X-Amz-Signature=");
-    return body.url;
+    const presigned = (yield* response.json) as unknown as Presign.PresignedRequest;
+    expect(presigned.url).toContain("X-Amz-Signature=");
+    return presigned;
   });
 
 class IamNotPropagated extends Data.TaggedError("IamNotPropagated")<{
@@ -304,7 +300,7 @@ describe(
             const key = "presign/upload.txt";
             const body = "uploaded through a presigned PUT URL";
 
-            const url = yield* presign("presign-put", { key, contentType: "text/plain" });
+            const { url } = yield* presign("presign-put", { Key: key, ContentType: "text/plain" });
 
             const putResponse = yield* sendPresigned(
               HttpClientRequest.put(url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
@@ -323,9 +319,9 @@ describe(
         "rejects an upload whose Content-Type does not match the signature",
         (_stack) =>
           Effect.gen(function* () {
-            const url = yield* presign("presign-put", {
-              key: "presign/mismatched.txt",
-              contentType: "text/plain",
+            const { url } = yield* presign("presign-put", {
+              Key: "presign/mismatched.txt",
+              ContentType: "text/plain",
             });
 
             // Signed for text/plain but sent as application/json — the
@@ -337,9 +333,80 @@ describe(
           }),
         { timeout: 120_000 },
       );
+
+      test.provider(
+        "pins the size, refuses an overwrite and applies metadata and tagging",
+        (_stack) =>
+          Effect.gen(function* () {
+            const key = "presign/pinned.txt";
+            const body = "exactly this many bytes";
+            const signed = yield* presign("presign-put", {
+              Key: key,
+              ContentType: "text/plain",
+              ContentLength: body.length,
+              IfNoneMatch: "*",
+              Metadata: { owner: "u1" },
+              Tagging: "team=a",
+            });
+            expect(signed.headers).toEqual({
+              "content-length": String(body.length),
+              "content-type": "text/plain",
+              "if-none-match": "*",
+            });
+            const url = new URL(signed.url);
+            expect(url.searchParams.get("x-amz-meta-owner")).toBe("u1");
+            expect(url.searchParams.get("x-amz-tagging")).toBe("team=a");
+
+            const upload = (text: string) =>
+              HttpClientRequest.put(signed.url).pipe(
+                HttpClientRequest.setHeader("if-none-match", "*"),
+                HttpClientRequest.bodyText(text, "text/plain"),
+              );
+            const put = yield* sendPresigned(upload(body));
+            expect(put.status).toBe(200);
+
+            const head = yield* S3.headObject({ Bucket: bucketName, Key: key });
+            expect(head.Metadata).toEqual({ owner: "u1" });
+            const tagging = yield* S3.getObjectTagging({ Bucket: bucketName, Key: key });
+            expect(tagging.TagSet).toEqual([{ Key: "team", Value: "a" }]);
+
+            const overwrite = yield* HttpClient.execute(upload(body));
+            expect(overwrite.status).toBe(412);
+            const resized = yield* HttpClient.execute(upload(`${body}!`));
+            expect(resized.status).toBe(403);
+          }),
+        { timeout: 120_000 },
+      );
     });
 
     describe("PresignGetObject", () => {
+      test.provider(
+        "signs a response Content-Disposition and pins a Range",
+        (_stack) =>
+          Effect.gen(function* () {
+            const key = "presign/range.txt";
+            yield* S3.putObject({ Bucket: bucketName, Key: key, Body: "0123456789" });
+
+            const signed = yield* presign("presign-get", {
+              Key: key,
+              ResponseContentDisposition: 'attachment; filename="a b.txt"',
+              Range: "bytes=2-4",
+            });
+            expect(signed.headers).toEqual({ range: "bytes=2-4" });
+
+            const ranged = yield* sendPresigned(
+              HttpClientRequest.get(signed.url).pipe(HttpClientRequest.setHeaders(signed.headers)),
+            );
+            expect(ranged.status).toBe(206);
+            expect(ranged.headers["content-disposition"]).toBe('attachment; filename="a b.txt"');
+            expect(yield* ranged.text).toBe("234");
+
+            const unranged = yield* HttpClient.execute(HttpClientRequest.get(signed.url));
+            expect(unranged.status).toBe(403);
+          }),
+        { timeout: 120_000 },
+      );
+
       test.provider(
         "round-trips a body through presigned PUT and GET URLs",
         (_stack) =>
@@ -347,14 +414,14 @@ describe(
             const key = "presign/round-trip.txt";
             const body = "presigned round trip payload";
 
-            const putUrl = yield* presign("presign-put", { key, contentType: "text/plain" });
+            const put = yield* presign("presign-put", { Key: key, ContentType: "text/plain" });
             const putResponse = yield* sendPresigned(
-              HttpClientRequest.put(putUrl).pipe(HttpClientRequest.bodyText(body, "text/plain")),
+              HttpClientRequest.put(put.url).pipe(HttpClientRequest.bodyText(body, "text/plain")),
             );
             expect(putResponse.status).toBe(200);
 
-            const getUrl = yield* presign("presign-get", { key });
-            const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
+            const get = yield* presign("presign-get", { Key: key });
+            const getResponse = yield* sendPresigned(HttpClientRequest.get(get.url));
             expect(getResponse.status).toBe(200);
             expect(yield* getResponse.text).toBe(body);
           }),
@@ -375,11 +442,11 @@ describe(
               ContentType: "text/plain",
             });
 
-            const getUrl = yield* presign("presign-get", {
-              key,
-              contentType: "application/octet-stream",
+            const get = yield* presign("presign-get", {
+              Key: key,
+              ResponseContentType: "application/octet-stream",
             });
-            const getResponse = yield* sendPresigned(HttpClientRequest.get(getUrl));
+            const getResponse = yield* sendPresigned(HttpClientRequest.get(get.url));
             expect(getResponse.status).toBe(200);
             expect(getResponse.headers["content-type"]).toBe("application/octet-stream");
             expect(yield* getResponse.text).toBe("override me");
@@ -394,7 +461,7 @@ describe(
             const key = "presign/expiring.txt";
             yield* S3.putObject({ Bucket: bucketName, Key: key, Body: "short lived" });
 
-            const getUrl = yield* presign("presign-get", { key, expiresIn: 1 });
+            const { url: getUrl } = yield* presign("presign-get", { Key: key, expiresIn: 1 });
 
             // Poll until S3 reports the URL expired (bounded — expiry is 1s,
             // allow a little clock skew between the Lambda signer and S3).

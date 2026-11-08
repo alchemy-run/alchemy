@@ -120,10 +120,23 @@ A browser can't call S3 with your role's credentials, and you don't want every u
 
 ```typescript title="src/api.ts"
 const presignGetObject = yield* AWS.S3.PresignGetObject(Files);
-const url = yield* presignGetObject({ key: "reports/2026/q1.pdf", expiresIn: 3600 });
+const { url } = yield* presignGetObject({ Key: "reports/2026/q1.pdf", expiresIn: 3600 });
 ```
 
 Anyone holding the link can download that object for the next hour, straight from S3. `S3.PresignPutObject` does the same for uploads. Signing makes no network call, but the link can only do what the signer may do, so the binding grants the role the matching permission.
+
+The presign bindings take the same input as `S3.GetObject` and `S3.PutObject`, and every field you set is signed. Fields S3 reads as headers come back in `headers`, and the client has to send them:
+
+```typescript title="src/api.ts"
+const presignPutObject = yield* AWS.S3.PresignPutObject(Files);
+const upload = yield* presignPutObject({
+  Key: `uploads/${id}`,
+  ContentType: "application/pdf",
+  ContentLength: size, // the upload must be exactly this many bytes
+  IfNoneMatch: "*", // and must not replace an existing object
+});
+// the browser: fetch(upload.url, { method: "PUT", headers: upload.headers, body })
+```
 
 See [R2 presigned URLs](/cloudflare/data/r2-presigned-urls) for the same pattern on Cloudflare.
 

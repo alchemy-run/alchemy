@@ -161,12 +161,12 @@ export const SmokeApiFunctionLive = SmokeApiFunction.make(
             return HttpServerResponse.text("Missing key", { status: 400 });
           }
           const contentType = url.searchParams.get("contentType");
-          const presignedUrl = yield* presignPutObject({
-            key,
+          const presigned = yield* presignPutObject({
+            Key: key,
             expiresIn: 300,
-            contentType: contentType ?? undefined,
+            ContentType: contentType ?? undefined,
           });
-          return yield* HttpServerResponse.json({ url: presignedUrl });
+          return yield* HttpServerResponse.json({ url: presigned.url });
         }
 
         if (request.method === "POST" && pathname === "/enqueue") {
