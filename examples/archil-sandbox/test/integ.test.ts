@@ -1,7 +1,6 @@
 import { expect } from "bun:test";
 import * as Archil from "@alchemy.run/archil";
 import * as Test from "@alchemy.run/test/Bun";
-import * as Objects from "@distilled.cloud/archil/Objects";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -18,6 +17,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
 
+const user = `user-${Test.defaultStage()}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+
 /** A fresh hostname (or a waking sandbox) can take a few seconds to answer. */
 const send = (request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function* () {
@@ -30,44 +31,47 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     );
   });
 
-test.provider(
-  "PUT writes a file to the disk and GET reads it back",
-  () =>
-    Effect.gen(function* () {
-      const { url, diskId } = yield* stack;
-      const key = `notes/${crypto.randomUUID()}.txt`;
-      const put = yield* send(
-        HttpClientRequest.put(`${url}/${key}`).pipe(HttpClientRequest.bodyText("on the disk")),
-      );
-      expect(put.status).toBe(201);
-      const get = yield* send(HttpClientRequest.get(`${url}/${key}`));
-      expect(yield* get.text).toBe("on the disk");
-
-      // Out of band: the file is on the disk.
-      const text = yield* Objects.getObjectText({ disk: String(diskId) }, key).pipe(
-        Effect.provide(Objects.ObjectCredentialsFromApiKey),
-      );
-      expect(text).toBe("on the disk");
-    }),
-  { timeout: 180_000 },
-);
+const post = (url: string, command: string) =>
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyText(command))).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { stdout: string; exitCode: number }),
+  );
 
 test(
-  "GET of a missing file is a 404",
+  "forks Golden for each request",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const res = yield* send(HttpClientRequest.get(`${url}/missing.txt`));
-    expect(res.status).toBe(404);
+    const name = yield* post(`${url}/run`, "grep -o '\"@sindresorhus/is\"' package.json");
+    expect(name).toMatchObject({ stdout: '"@sindresorhus/is"\n', exitCode: 0 });
+    const both = yield* post(`${url}/run`, "ls ..");
+    expect(both.stdout).toContain("slugify");
   }),
-  { timeout: 180_000 },
+  { timeout: 300_000 },
 );
 
 test(
-  "the async service answers with its env",
+  "gives each user a fork of their own",
   Effect.gen(function* () {
-    const { helloUrl } = yield* stack;
-    const res = yield* send(HttpClientRequest.get(`${helloUrl}/there`));
-    expect(yield* res.text).toBe("hello from /there");
+    const { url } = yield* stack;
+    const put = yield* send(
+      HttpClientRequest.put(`${url}/users/${user}/files/notes.md`).pipe(
+        HttpClientRequest.bodyText("hello"),
+      ),
+    );
+    const first = (yield* put.json) as { sandboxId: string; content: string };
+    expect(first.content).toBe("hello");
+
+    const get = yield* send(HttpClientRequest.get(`${url}/users/${user}/files/notes.md`));
+    const second = (yield* get.json) as { sandboxId: string; content: string };
+    expect(second.sandboxId).toBe(first.sandboxId);
+
+    // A fresh fork of Golden doesn't have the user's change.
+    const fresh = yield* post(`${url}/run`, "test -f notes.md && echo yes || echo no");
+    expect(fresh.stdout).toBe("no\n");
+
+    // The user's fork was created at runtime: delete it through the API.
+    const removed = yield* send(HttpClientRequest.delete(`${url}/users/${user}`));
+    expect(removed.status).toBe(204);
   }),
-  { timeout: 180_000 },
+  { timeout: 300_000 },
 );

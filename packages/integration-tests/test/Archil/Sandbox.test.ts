@@ -2,6 +2,7 @@ import * as Archil from "@alchemy.run/archil";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
+import * as Process from "@distilled.cloud/archil/Process";
 import * as Effect from "effect/Effect";
 import { expectFound } from "./lookup.ts";
 
@@ -85,6 +86,48 @@ test.provider(
 
       yield* stack.destroy();
       expect(yield* observe(resized.sandbox.sandboxId)).toBeUndefined();
+    }),
+  { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "run sets up a sandbox at deploy, a failing command fails the deploy, and new commands replace it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const marker = (sid: string) =>
+        Process.exec(sid, "cat /work/marker 2>/dev/null || echo missing").pipe(
+          Effect.map((r) => r.stdout.trim()),
+        );
+
+      const first = yield* stack.deploy(
+        Archil.Sandbox("Golden", { run: ["mkdir -p /work", "echo one > /work/marker"] }),
+      );
+      expect(yield* marker(first.sandboxId)).toBe("one");
+      expect(first.setupHash).toMatch(/.+/);
+
+      // Unchanged commands leave the sandbox alone.
+      const same = yield* stack.deploy(
+        Archil.Sandbox("Golden", { run: ["mkdir -p /work", "echo one > /work/marker"] }),
+      );
+      expect(same.sandboxId).toBe(first.sandboxId);
+
+      // New commands replace it: a fresh sandbox runs them from the image.
+      const second = yield* stack.deploy(
+        Archil.Sandbox("Golden", { run: ["mkdir -p /work", "echo two > /work/marker"] }),
+      );
+      expect(second.sandboxId).not.toBe(first.sandboxId);
+      expect(yield* marker(second.sandboxId)).toBe("two");
+      expect(yield* observe(first.sandboxId)).toBeUndefined();
+
+      // A command that exits non-zero fails the deploy.
+      const failed = yield* stack
+        .deploy(Archil.Sandbox("Golden", { run: ["exit 3"] }))
+        .pipe(Effect.flip);
+      expect(String(failed)).toContain("exited 3");
+
+      yield* stack.destroy();
+      expect(yield* observe(second.sandboxId)).toBeUndefined();
     }),
   { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
 );

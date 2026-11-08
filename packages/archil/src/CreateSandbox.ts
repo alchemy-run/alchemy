@@ -9,7 +9,12 @@ import { makeSandboxHandle, type SandboxHandle } from "./Clients.ts";
 import type { Image } from "./Image.ts";
 import type { ArchilFailed, ArchilNotReady } from "./internal/archil.ts";
 import { findSandboxByName, listSandboxes, waitForSandbox } from "./internal/archil.ts";
-import { deleteSandbox, toCreateSandboxRequest, type SandboxProps } from "./Sandbox.ts";
+import {
+  deleteSandbox,
+  toCreateSandboxRequest,
+  type Sandbox,
+  type SandboxProps,
+} from "./Sandbox.ts";
 import {
   MountDiskUnresolved,
   mountDiskId,
@@ -34,6 +39,7 @@ export interface CreateSandboxRequest extends Omit<
 
 export type CreateSandboxError =
   | archil.CreateSandboxError
+  | archil.ForkSandboxError
   | archil.GetSandboxError
   | archil.ListSandboxesError
   | ArchilFailed
@@ -94,7 +100,9 @@ export interface CreateSandboxClient {
  * microVMs with disks mounted, public ports, and an outbound network policy
  * that can inject credentials at the boundary. Bind an {@link Image} to make
  * it the default image; a run-time `create` takes the same props as a
- * deploy-time {@link Sandbox}.
+ * deploy-time {@link Sandbox}. Bind a {@link Sandbox} instead and `create`
+ * forks it: each sandbox starts from its memory and disk, with whatever its
+ * `run` commands set up, and changes only its own copy.
  *
  * Objects created at run time are tagged with the stack, stage and binding
  * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted
@@ -130,13 +138,26 @@ export interface CreateSandboxClient {
  * ) {}
  * ```
  *
+ * ### Forking a Sandbox Built at Deploy
+ * **Example:** A fork per user from a sandbox set up at deploy
+ * ```typescript
+ * export const Golden = Archil.Sandbox("Golden", {
+ *   run: ["git clone --depth 1 https://github.com/sindresorhus/is ~/is"],
+ * });
+ *
+ * // in a Worker or program:
+ * const sandboxes = yield* Archil.CreateSandbox(Golden);
+ * const sandbox = (yield* sandboxes.get(`user-${user}`)) ?? (yield* sandboxes.create({ name: `user-${user}` }));
+ * const result = yield* sandbox.exec("git log -1", { cwd: "~/is" });
+ * ```
+ *
  * @binding
  * @product Sandbox
  */
 export interface CreateSandbox extends Binding.Service<
   CreateSandbox,
   "Archil.CreateSandbox",
-  (image?: Image) => Effect.Effect<CreateSandboxClient>
+  (base?: Image | Sandbox) => Effect.Effect<CreateSandboxClient>
 > {}
 
 export const CreateSandbox = Binding.Service<CreateSandbox>("Archil.CreateSandbox");
@@ -146,11 +167,15 @@ export const CreateSandboxHttp = Layer.effect(
   CreateSandbox,
   Effect.gen(function* () {
     const access = yield* ApiAccess;
-    return Effect.fn(function* (image?: Image) {
+    return Effect.fn(function* (base?: Image | Sandbox) {
       const authorize = yield* access();
       const { prefix: owner } = yield* runtimePrefix("Sandboxes");
       const prefix = Effect.succeed(owner);
-      const imageId = image ? yield* image.imageId : undefined;
+      // Resources are proxies (every property reads as an Output), so tell a
+      // bound sandbox from a bound image by its type, not by `in`.
+      const isSandbox = (b: Image | Sandbox): b is Sandbox => b.Type === "Archil.Sandbox";
+      const source = base !== undefined && isSandbox(base) ? yield* base.sandboxId : undefined;
+      const imageId = base !== undefined && !isSandbox(base) ? yield* base.imageId : undefined;
       const fullName = (name: string) => Effect.succeed(runtimeName(owner, name));
       // Forks carry the same prefix as the sandboxes they come from; an
       // unnamed fork gets a random name.
@@ -168,6 +193,15 @@ export const CreateSandboxHttp = Layer.effect(
               const name = yield* fullName(request.name);
               const existing = yield* findSandboxByName(name);
               if (existing) return handle(existing);
+              if (source !== undefined) {
+                // A bound sandbox is the base: fork its memory and disk.
+                const { data } = yield* archil.forkSandbox({
+                  sid: yield* source,
+                  wait: true,
+                  name,
+                });
+                return handle(yield* waitForSandbox(data.sandbox_id));
+              }
               const defaultImage =
                 request.image === undefined && request.baseImage === undefined && imageId
                   ? yield* imageId

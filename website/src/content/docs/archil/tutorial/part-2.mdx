@@ -1,151 +1,84 @@
 ---
-title: "Part 2: Run a Program"
-description: Run an Effect HTTP program in its own Archil sandbox that stores files on the disk.
+title: "Part 2: Fork It for Each Request"
+description: A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
 sidebar:
   order: 2
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-Run a program in its own Archil sandbox, with `PUT /:key` and `GET /:key`
-routes that store files on the disk from [Part 1](/archil/tutorial/part-1).
-The finished code is
-[`examples/archil-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/archil-sandbox).
+## Bind CreateSandbox to the sandbox
 
-## Create the program
-
-An `Archil.Sandbox` with `main` runs your program.
-`main: import.meta.url` makes this file both the bundle and the program,
-and the program listens on port 3000:
-
-```typescript
-// src/Api.ts
+```typescript title="src/Api.ts"
 import * as Archil from "@alchemy.run/archil";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Golden } from "./Golden.ts";
 
 export default class Api extends Archil.Sandbox<Api>()(
   "Api",
   { main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
-    };
-  }),
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
+    return {};
+  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
 ) {}
 ```
 
-## Bind the disk
+`Api` is a program Alchemy runs in an Archil sandbox of its own, at a public URL. Bound to `Golden`, every sandbox this client creates is a fork of it: its memory and disk, with the repository already cloned.
 
-`Archil.ReadWriteDisk(Files)` gives the program its own S3 user on that
-disk, so it can read and write that disk and nothing else:
+## Run a command in a fresh fork
 
 ```diff lang="typescript"
 // src/Api.ts
-import * as Archil from "@alchemy.run/archil";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-+import { Files } from "./Storage.ts";
-
-export default class Api extends Archil.Sandbox<Api>()(
-  "Api",
-  { main: import.meta.url, port: 3000 },
-  Effect.gen(function* () {
-+    const files = yield* Archil.ReadWriteDisk(Files);
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("hello")),
-    };
--  }),
-+  }).pipe(Effect.provide(Archil.ReadWriteDiskHttp)),
-) {}
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
++
++    const run = Effect.fn("run")(function* (command: string) {
++      const id = (yield* Random.nextIntBetween(0, 2 ** 31)).toString(36);
++      const sandbox = yield* Effect.acquireRelease(sandboxes.create({ name: `run-${id}` }), (sandbox) =>
++        Effect.ignore(sandbox.delete()),
++      );
++      return yield* sandbox.exec(command, { cwd: "/work/is" });
++    });
 ```
 
-## Write files with `PUT /:key`
+A fork takes a fraction of a second whatever the disk's size, and writes to it never reach `Golden`. `acquireRelease` deletes the fork when the request's scope closes.
 
-Read the key from the path and put the request body on the disk:
+## Serve it
 
 ```diff lang="typescript"
 // src/Api.ts
-+import { HttpServerRequest } from "effect/http/HttpServerRequest";
-
-    return {
--      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+-    return {};
++    return {
 +      fetch: Effect.gen(function* () {
 +        const request = yield* HttpServerRequest;
-+        const key = new URL(request.url, "http://api").pathname.slice(1);
-+        if (request.method === "PUT") {
-+          const body = yield* request.text;
-+          yield* files.put(key, body);
-+          return HttpServerResponse.empty({ status: 201 });
++        const url = new URL(request.url, "http://api");
++        if (request.method === "POST" && url.pathname === "/run") {
++          return yield* HttpServerResponse.json(yield* run(yield* request.text).pipe(Effect.scoped));
 +        }
-+        const text = yield* files.getText(key);
-+        return HttpServerResponse.text(text);
-+      }),
-    };
++        return HttpServerResponse.text("not found", { status: 404 });
++      }).pipe(Effect.orDie),
++    };
 ```
 
-## Answer 404 for missing files
-
-`head` returns `undefined` when the file doesn't exist:
-
-```diff lang="typescript"
-// src/Api.ts
-          return HttpServerResponse.empty({ status: 201 });
-        }
-+        const file = yield* files.head(key);
-+        if (file === undefined) {
-+          return HttpServerResponse.text("not found", { status: 404 });
-+        }
-        const text = yield* files.getText(key);
-```
-
-## Turn other errors into 500s
-
-```diff lang="typescript"
-// src/Api.ts
-        return HttpServerResponse.text(text);
--      }),
-+      }).pipe(
-+        Effect.catch((error) =>
-+          Effect.succeed(HttpServerResponse.text(String(error), { status: 500 })),
-+        ),
-+      ),
-```
-
-## Wire the program into the Stack
+## Deploy it
 
 ```diff lang="typescript"
 // alchemy.run.ts
-+import Api from "./src/Api.ts";
-import { Files } from "./src/Storage.ts";
-
   Effect.gen(function* () {
-    const files = yield* Files;
--    return { diskId: files.diskId };
+    const golden = yield* Golden;
+-    return { sandbox: golden.name };
 +    const api = yield* Api;
-+    return { diskId: files.diskId, url: api.url };
++    return { sandbox: golden.name, url: api.url };
   }),
 ```
 
-## Deploy
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/run" -d 'git log -1 --format=%s'`}
+/>
 
-<PackageManagers run="alchemy deploy" />
+`Golden` is unchanged, so this deploy only adds the program.
 
-`url` is `https://3000-<id>.<region>.archil.app`.
+## Next
 
-## Try it out
-
-```sh
-curl -X PUT --data "hello archil" "$URL/notes/first.txt"
-curl "$URL/notes/first.txt"
-```
-
-The second command prints `hello archil`. Leave the program alone for a
-few minutes and the sandbox stops; the next request starts it again.
-
-## Recap
-
-The sandbox runs your Effect program and reads and writes the disk
-through its own S3 user. In [Part 3](/archil/tutorial/part-3)
-you'll test it.
-
+[Part 3](/archil/tutorial/part-3) gives each user a fork of their own.
