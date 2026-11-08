@@ -1044,6 +1044,17 @@ export const orderObservedWorkerRoutes = <Route extends { pattern: string; zoneI
 };
 
 /**
+ * The props a redeploy's diff hashes the Worker's source with. `stripEffects`
+ * keeps plain data only, so it drops the functions and RegExps that `build`
+ * options carry (rolldown plugins); hashing builds the bundle, which needs
+ * them as written.
+ *
+ * @internal exported for unit testing.
+ */
+export const sourceHashProps = (news: WorkerProps, desired: WorkerProps): WorkerProps =>
+  desired.build === undefined ? news : { ...news, build: desired.build };
+
+/**
  * Cron triggers Alchemy is responsible for on this Worker. Used by `read` to
  * skip `getScriptSchedule` when the surface is unmanaged (#926). Effect-native
  * `cron()` bindings persist into `output.crons` after the first reconcile, so
@@ -4789,7 +4800,7 @@ export const LiveWorkerProvider = () =>
             (yield* hasChanged(
               id,
               fqn,
-              news,
+              sourceHashProps(news, desired as WorkerProps),
               output,
               Array.isArray(newBindings)
                 ? (newBindings as ResourceBinding<Worker["Binding"]>[])
