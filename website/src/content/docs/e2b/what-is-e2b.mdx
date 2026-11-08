@@ -3,29 +3,22 @@ title: What is E2B?
 description: The concepts behind E2B — teams and API keys, templates, sandboxes, snapshots and forks, volumes, network rules and secrets, and lifecycle events — and how @alchemy.run/e2b models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 
 E2B runs sandboxes: Linux microVMs for code you don't trust. Each **sandbox** boots from a **template**, an image E2B builds and snapshots once, so a new sandbox starts in well under a second with its files and processes already in place. A sandbox runs until its timeout, then E2B kills it or pauses it with its memory. Everything belongs to a **team**: its templates, sandboxes, volumes, secrets and API keys, and the bill.
 
 Take one small app: an `Agent` template with Node.js and git, and a `Warm` snapshot of it with a repository already cloned and installed. For each user, a Cloudflare Worker creates a volume for their files, `home-42`, then creates a sandbox from `Warm` with that volume mounted at `/home/user`, and runs the agent's commands there.
 
-<DAG
+<Tree
   nodes={[
-    { id: "agent", label: "Agent", type: "template", col: 0, row: 0 },
-    { id: "warm", label: "Warm", type: "snapshot", col: 1, row: 0 },
-    { id: "home", label: "home-42", type: "volume", col: 0, row: 1 },
-    { id: "sandbox", label: "user-42", type: "sandbox", tone: "accent", col: 1, row: 1 },
-    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 0, row: 2 },
+    { id: "team", label: "acme", type: "team", icon: "brand:e2b" },
+    { id: "agent", label: "Agent", type: "template", parent: "team", icon: "package" },
+    { id: "warm", label: "Warm", type: "snapshot of Agent", parent: "team", icon: "camera" },
+    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", wide: true, tone: "accent", icon: "box", specs: [["boots", "Warm"], ["/home/user", "home-42"]] },
+    { id: "home", label: "home-42", type: "volume", parent: "team", side: true, icon: "hard-drive" },
+    { id: "github", label: "GitHubToken", type: "secret", parent: "team", side: true, icon: "key-round" },
   ]}
-  groups={[{ id: "team", label: "Team acme", nodes: ["agent", "warm", "sandbox", "home"] }]}
-  edges={[
-    { from: "agent", to: "warm", label: "snapshot" },
-    { from: "warm", to: "sandbox", label: "boots" },
-    { from: "home", to: "sandbox", label: "mounted at /home/user" },
-    { from: "worker", to: "home", label: "create" },
-    { from: "worker", to: "sandbox", label: "create", exit: "side" },
-  ]}
-  caption="The template, its snapshot, the volume and the sandbox all belong to one team. The Worker runs outside E2B and creates the volume and the sandbox through E2B's API, passing the volume in the sandbox's mounts; the sandbox boots from the snapshot with the volume at /home/user."
+  caption="Everything belongs to the team acme. The sandbox boots from the Warm snapshot of the Agent template, with the home-42 volume mounted at /home/user. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
 />
 
 ## Teams and API keys

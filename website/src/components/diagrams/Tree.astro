@@ -181,6 +181,16 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
     .alc-tree__split {
       flex-direction: column;
     }
+    /* Stacked above the main branch, the side nodes share a row instead of
+       taking one each. */
+    .alc-tree__side {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .alc-tree__side > .alc-tree__leaf,
+    .alc-tree__side > .alc-tree__box {
+      flex: 1 1 0;
+    }
   }
   .alc-tree__head {
     display: flex;
@@ -207,6 +217,11 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
     border: 1.5px solid var(--alc-accent-40);
     border-radius: 8px;
     background: var(--alc-bg-elev-2);
+  }
+  /* `.alc-tree__leaf`'s flex shorthand comes later than `.alc-tree__wide`,
+     so a wide leaf needs the higher specificity to get its own row. */
+  .alc-tree__leaf.alc-tree__wide {
+    flex-basis: 100%;
   }
   .alc-tree__leaf--accent {
     border-color: var(--alc-accent);

@@ -3,30 +3,23 @@ title: What is Daytona?
 description: The concepts behind Daytona — organizations, API keys, regions and runners, snapshots, sandboxes and their lifecycle, the toolbox, previews, volumes, network limits and secrets — and how @alchemy.run/daytona models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
 import StateMachine from "../../../components/diagrams/StateMachine.astro";
 
 Everything in Daytona belongs to an organization, and you reach it only through Daytona's API, with a key whose permissions Daytona checks.
 
 Take one small app: a Worker gives each user a sandbox, booted from the `Base` snapshot, with that user's volume as their home.
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Api", type: "Worker · API key", col: 0, row: 0 },
-    { id: "sam", label: "user-sam", type: "sandbox · from Base", tone: "accent", col: 1, row: 0 },
-    { id: "ana", label: "user-ana", type: "sandbox · from Base", col: 1, row: 1 },
-    { id: "home", label: "home-sam", type: "volume", col: 2, row: 0 },
-    { id: "base", label: "Base", type: "snapshot", col: 2, row: 1 },
+    { id: "org", label: "acme", type: "organization", icon: "brand:daytona" },
+    { id: "region", label: "us", type: "region", parent: "org", dashed: true, icon: "map-pin" },
+    { id: "sam", label: "user-sam", type: "sandbox", parent: "region", tone: "accent", icon: "box", specs: [["from", "Base"], ["mounts", "home-sam"]] },
+    { id: "ana", label: "user-ana", type: "sandbox", parent: "region", icon: "box", specs: [["from", "Base"]] },
+    { id: "base", label: "Base", type: "snapshot", parent: "org", side: true, icon: "camera" },
+    { id: "home", label: "home-sam", type: "volume", parent: "org", side: true, icon: "hard-drive" },
   ]}
-  groups={[
-    { id: "org", label: "Organization acme", nodes: ["base", "home"] },
-    { id: "region", label: "region us", parent: "org", nodes: ["sam", "ana"], dashed: true },
-  ]}
-  edges={[
-    { from: "worker", to: "region", label: "create · exec" },
-    { from: "sam", to: "home", label: "mounts" },
-  ]}
-  caption="The organization holds snapshots, volumes, and sandboxes in its regions. The Worker drives the sandboxes through Daytona's API with its own key."
+  caption="The organization holds its snapshots and volumes, and runs its sandboxes in a region. Each sandbox starts from a snapshot and can mount a volume. A Worker outside Daytona creates and drives the sandboxes through Daytona's API with its own key."
 />
 
 ## Organizations

@@ -13,15 +13,15 @@ Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm
 
 <Tree
   nodes={[
-    { id: "ws", label: "acme", type: "workspace" },
-    { id: "env", label: "Agents", type: "environment", parent: "ws" },
-    { id: "coder", label: "Coder", type: "app", parent: "env" },
-    { id: "warm", label: "Warm", type: "image", parent: "coder" },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", specs: [["image", "Warm"], ["mount", "/home/user"]] },
-    { id: "inference", label: "Inference", type: "app", parent: "env" },
-    { id: "embed", label: "Embed", type: "Function", parent: "inference", specs: [["gpu", "L4"]] },
-    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true },
-    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true },
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
+    { id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder" },
+    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window" },
+    { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box", specs: [["image", "Warm"], ["mount", "/home/user"]] },
+    { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
+    { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
+    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true, icon: "hard-drive" },
+    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true, icon: "key-round" },
   ]}
   caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. The Volume and the Secret belong to the environment, so any app in it can use them."
 />
