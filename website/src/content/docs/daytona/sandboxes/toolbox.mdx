@@ -7,6 +7,8 @@ import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 The **toolbox** is the API inside every sandbox. A daemon in the sandbox runs your commands, processes, terminals and file operations, and your calls reach it only through Daytona's toolbox proxy, which checks your API key and passes each call into the sandbox. Ports are reached the same way, through preview URLs, and a shell through SSH access you create.
 
+## Every call goes through the toolbox proxy
+
 <Boundaries
   nodes={[
     { id: "worker", label: "your Worker", type: "API key", col: 0, row: 0 },
@@ -88,7 +90,7 @@ const { exitCode } = yield* pty.exit;
 
 The connection closes with its scope, and the terminal keeps running until it exits or you `kill` it. `pty.connect(sessionId)` attaches to a terminal that already runs. Daytona starts the user's shell; type the command you want into it.
 
-## Files
+## Read and write files
 
 ```typescript
 yield* sandbox.files.makeDir("/home/daytona/out");
@@ -117,14 +119,14 @@ const { files, errors } = yield* sandbox.fs.downloadFiles({ paths: ["/home/dayto
 
 A path that can't be read comes back in `errors`; the rest still download.
 
-## Git
+## Clone and commit with git
 
 ```typescript
 yield* sandbox.git.cloneRepository({ url: "https://github.com/alchemy-run/alchemy", path: "/home/daytona/repo" });
 const status = yield* sandbox.git.getStatus({ path: "/home/daytona/repo" });
 ```
 
-## Previews
+## Open a port's preview
 
 ```typescript
 const port = yield* sandbox.getTcpPort(3000);
@@ -133,13 +135,13 @@ const res = yield* port.fetch(HttpClientRequest.get("/health"));
 
 `getTcpPort` gives you a port by its preview URL, and its `fetch` sends a request there with the token, or proxies one your Worker received. Preview URLs, signed URLs and `public` are in [Network and previews](/daytona/networking/network#reach-a-port-from-outside).
 
-## SSH
+## Open an SSH session
 
 ```typescript
 const ssh = yield* sandbox.createSshAccess({ expiresInMinutes: 60 });
 ```
 
-## Language servers and code interpreter
+## Run a language server or code interpreter
 
 ```typescript
 yield* sandbox.lsp.start({ languageId: "typescript", pathToProject: "/home/daytona/repo" });
@@ -154,7 +156,7 @@ const run = yield* sandbox.interpreter.executeInterpreterCode({
 
 A context keeps its variables between runs. An exception the code raises comes back in `error`; a run past its `timeout` fails with `InterpreterTimeout`. `streamInterpreterCode` streams the same output as it is produced.
 
-## Computer use
+## Drive a desktop with computer use
 
 ```typescript
 yield* sandbox.computerUse.startComputerUse();
@@ -163,10 +165,10 @@ const shot = yield* sandbox.computerUse.takeScreenshot();
 
 Computer use needs a snapshot with a desktop. It is billed like any running sandbox.
 
-## Telemetry
+## Read a sandbox's telemetry
 
 ```typescript
 const logs = yield* sandbox.getSandboxLogs({ from, to });
 ```
 
-Point the whole organization's telemetry at your own backend with [OrganizationOtelConfig](/daytona/observability/telemetry#export-telemetry).
+Point the whole organization's telemetry at your own backend with [OrganizationOtelConfig](/daytona/observability/telemetry#export-telemetry-to-your-backend).

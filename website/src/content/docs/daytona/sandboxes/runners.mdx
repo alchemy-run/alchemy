@@ -7,6 +7,8 @@ import Tree from "../../../../components/diagrams/Tree.astro";
 
 A **region** is where sandboxes run, such as `us` or `eu`. Inside a region, **runners** are the machines that host sandboxes, and Daytona's scheduler places each new sandbox on one. Daytona runs shared regions for every organization. An organization allowed to bring its own compute can add a **custom region**: Daytona still runs the API and the scheduler, and the runners are machines you operate.
 
+## Runners host sandboxes inside a region
+
 <Tree
   nodes={[
     { id: "home", label: "Home", type: "custom region", specs: [["proxy", "proxy.daytona.example.com"], ["ssh", "ssh.daytona.example.com:2222"]] },
