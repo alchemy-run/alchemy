@@ -76,6 +76,17 @@ export const DEFAULT_ELB_LISTENER_PORTS = [80, 443];
 export const DEFAULT_CLOUDFRONT_EDGE_PORTS = Array.from({ length: 20 }, (_, index) => 9500 + index);
 
 /**
+ * Database engine ports published for floci's emulated RDS. DescribeDBInstances
+ * reports each database as a `*.rds.localhost.floci.io` name (127.0.0.1) on
+ * its engine's port, which the emulator serves inside its container and
+ * relays to the database, so the port must be published for anything on the
+ * host (a migration run by the deploying machine, `psql`) to connect. Taken
+ * host ports are skipped, like the ports above: a developer's own Postgres on
+ * 5432 is common and not a problem.
+ */
+export const DEFAULT_DATABASE_PORTS = [5432, 3306, 1433];
+
+/**
  * Label recording the ports the caller asked the managed container to
  * publish (see {@link requestedPortsLabel}).
  */
@@ -474,6 +485,10 @@ const ensureFlociUnsynchronized = (
       config?.cloudfrontEdgePorts ?? DEFAULT_CLOUDFRONT_EDGE_PORTS,
       published ?? new Set(),
     );
+    const databasePorts = yield* resolvePublishablePorts(
+      DEFAULT_DATABASE_PORTS,
+      published ?? new Set(),
+    );
 
     // Converge the managed container's EXPLICITLY-requested ports and its
     // image: a container missing ports the caller configured can't serve
@@ -497,7 +512,7 @@ const ensureFlociUnsynchronized = (
     // allow at creation time. A configured port Docker refused stays
     // dropped until the request changes, instead of recreating (and
     // wiping) the container on every ensure.
-    const publishPorts = [...elbPorts, ...edgePorts];
+    const publishPorts = [...elbPorts, ...edgePorts, ...databasePorts];
     const requestedPorts = requestedPortsLabel(config);
     const image = yield* resolveImage(config);
     const running =
@@ -573,7 +588,11 @@ const ensureFlociUnsynchronized = (
       try: () => fs.mkdir(FLOCI_TLS_DIR, { recursive: true }),
       catch: (cause) => new FlociError({ message: "tls dir", cause }),
     }).pipe(Effect.ignore);
-    const runContainer = (elb: readonly number[], edge: readonly number[]) => {
+    const runContainer = (
+      elb: readonly number[],
+      edge: readonly number[],
+      database: readonly number[],
+    ) => {
       const args = [
         "run",
         "-d",
@@ -591,7 +610,7 @@ const ensureFlociUnsynchronized = (
         "host.docker.internal:host-gateway",
         "--label",
         `${PORTS_LABEL}=${requestedPorts}`,
-        ...[...elb, ...edge].flatMap((p) => ["-p", `127.0.0.1:${p}:${p}`]),
+        ...[...elb, ...edge, ...database].flatMap((p) => ["-p", `127.0.0.1:${p}:${p}`]),
         // The emulator can only hand a distribution a port the container
         // published, so it gets the resolved list rather than its own default
         // range — and the feature is switched off outright when nothing could
@@ -636,7 +655,7 @@ const ensureFlociUnsynchronized = (
     // if the run fails or leaves the gateway unpublished, run once more
     // without the ELB/CloudFront edge ports.
     yield* Effect.logInfo(`floci: starting ${containerName} (${image}) on ${endpoint}`);
-    const first = yield* Effect.result(runContainer(elbPorts, edgePorts));
+    const first = yield* Effect.result(runContainer(elbPorts, edgePorts, databasePorts));
     if (!(Result.isSuccess(first) && (yield* gatewayBound(containerName)))) {
       const reason = Result.isFailure(first)
         ? first.failure.message
@@ -649,9 +668,9 @@ const ensureFlociUnsynchronized = (
         });
       }
       yield* Effect.logWarning(
-        `floci: ${reason} — starting ${containerName} without ports [${publishPorts.join(", ")}]; emulated load balancers and CloudFront distributions on them will not be reachable from the host`,
+        `floci: ${reason} — starting ${containerName} without ports [${publishPorts.join(", ")}]; emulated load balancers, CloudFront distributions and databases on them will not be reachable from the host`,
       );
-      yield* runContainer([], []);
+      yield* runContainer([], [], []);
       if (!(yield* gatewayBound(containerName))) {
         yield* docker(["rm", "-f", containerName]).pipe(Effect.ignore);
         return yield* new FlociError({
