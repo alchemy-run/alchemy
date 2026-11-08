@@ -3,7 +3,7 @@ title: Choosing a runtime
 description: Functions, Servers, program sandboxes and sandboxes created at run time on Modal, and when to use each.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 import Responsibility from "../../../../components/Responsibility.astro";
 import Timeline from "../../../../components/diagrams/Timeline.astro";
 
@@ -155,19 +155,12 @@ A [persistent sandbox](/modal/sandboxes/persistent) keeps its files between sess
 
 A Worker creates a sandbox per user and calls a GPU Function, and both read model weights from one Volume:
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 0, row: 1 },
-    { id: "sbx", label: "session-sam", type: "Sandbox", col: 1, row: 0 },
-    { id: "embed", label: "Embed", type: "Function · L4", col: 1, row: 2 },
-    { id: "weights", label: "Weights", type: "Volume", tone: "accent", col: 2, row: 1 },
+    { id: "env", label: "Agents", type: "environment", icon: "brand:modal" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "env", wide: true, tone: "accent", icon: "hard-drive" },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box", specs: [["mounts", "Weights"], ["Api", "creates it"]] },
+    { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function", specs: [["mounts", "Weights"], ["Api", "calls embed()"]] },
   ]}
-  groups={[{ id: "env", label: "Agents environment", nodes: ["sbx", "embed", "weights"] }]}
-  edges={[
-    { from: "worker", to: "sbx", label: "create" },
-    { from: "worker", to: "embed", label: "embed()" },
-    { from: "sbx", to: "weights", label: "mounts" },
-    { from: "embed", to: "weights", label: "mounts" },
-  ]}
-  caption="The Worker runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
+  caption="The Worker, Api, runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
 />

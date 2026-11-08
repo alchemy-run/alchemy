@@ -107,6 +107,13 @@ interface Props {
    */
   narrow?: boolean;
   wideWidth?: number;
+  /**
+   * Internal: which phone layout to try. `transpose` turns the graph on its
+   * side, `auto` drops the grid and lays it out by its edges top to bottom,
+   * `compact` keeps the desktop direction with tighter nodes and gaps. Each
+   * falls through to the next when it doesn't fit.
+   */
+  mode?: "transpose" | "auto" | "compact";
 }
 
 const props = Astro.props as Props;
@@ -114,12 +121,17 @@ const { narrow = false, wideWidth = Infinity } = props;
 // The phone layout transposes the graph: a grid's columns become rows, and
 // left-to-right becomes top-to-bottom. An elbow keeps its shape by swapping
 // which side it leaves from.
-const rawNodes = narrow ? props.nodes.map((n) => ({ ...n, col: n.row, row: n.col })) : props.nodes;
-const edges = narrow
+const mode = props.mode ?? "transpose";
+const rawNodes = !narrow || mode === "compact"
+  ? props.nodes
+  : mode === "auto"
+    ? props.nodes.map((n) => ({ ...n, col: undefined, row: undefined }))
+    : props.nodes.map((n) => ({ ...n, col: n.row, row: n.col }));
+const edges = narrow && mode === "transpose"
   ? props.edges.map((e) => ({ ...e, exit: (e.exit === "side" ? "bottom" : "side") as EdgeIn["exit"] }))
   : props.edges;
 const { groups = [], caption } = props;
-const direction = narrow ? (props.direction === "TB" ? "LR" : "TB") : (props.direction ?? "LR");
+const direction = !narrow || mode === "compact" ? (props.direction ?? "LR") : mode === "auto" ? "TB" : props.direction === "TB" ? "LR" : "TB";
 // Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
 const uid = Math.random().toString(36).slice(2, 8);
 
@@ -562,7 +574,9 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
 };
 ---
 
-{narrow ? (width < wideWidth * 0.8 && (
+{narrow && (width > 440 || width >= wideWidth * 0.8) && mode !== "compact" ? (
+  <Astro.self {...props} narrow mode={mode === "transpose" && grid && groups.length === 0 ? "auto" : "compact"} wideWidth={wideWidth} />
+) : narrow ? (width < wideWidth * 0.8 && (
   <svg
     class="alc-dag__svg alc-fig__svg--narrow"
     viewBox={`0 0 ${width} ${height}`}

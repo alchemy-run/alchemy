@@ -58,7 +58,15 @@ const SH = 46;
 // Two layouts: the grid as written (desktop), and on phones the grid turned on
 // its side (columns become rows) with tighter gaps, when that is narrower.
 const layout = (narrow: boolean) => {
-const COLW = SW + (narrow ? 56 : 120);
+// On a phone, a transition between neighbours in a row needs room for its label.
+const rowLabels = transitions
+  .filter((t) => {
+    const a = states.find((s) => s.id === t.from);
+    const b = states.find((s) => s.id === t.to);
+    return narrow && a && b && a.col === b.col && t.label;
+  })
+  .map((t) => t.label!.length * 6.6 + 20);
+const COLW = SW + (narrow ? Math.max(40, ...rowLabels) : 120);
 const ROWH = SH + (narrow ? 92 : 84);
 const PAD = 40;
 const pos = new Map(

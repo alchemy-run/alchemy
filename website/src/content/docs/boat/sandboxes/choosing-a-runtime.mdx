@@ -3,7 +3,7 @@ title: Choosing a runtime
 description: Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 import Responsibility from "../../../../components/Responsibility.astro";
 import Timeline from "../../../../components/diagrams/Timeline.astro";
 
@@ -115,20 +115,13 @@ Choose it for agent loops, code a user sends, and anything that needs a fresh ma
 
 One account runs all three at once. A Worker creates a sandbox per task from a snapshot, drives a dev box, and calls a program's API:
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 0, row: 1 },
-    { id: "task", label: "task-42", type: "sandbox per task", col: 1, row: 0 },
-    { id: "golden", label: "Golden", type: "snapshot", col: 2, row: 0 },
-    { id: "box", label: "DevBox", type: "dev box", col: 1, row: 1 },
-    { id: "search", label: "Search", type: "program", tone: "accent", col: 1, row: 2 },
+    { id: "account", label: "acme", type: "account", icon: "brand:boat" },
+    { id: "golden", label: "Golden", type: "snapshot", parent: "account", side: true, icon: "camera" },
+    { id: "task", label: "task-42", type: "sandbox per task", parent: "account", icon: "box", specs: [["from", "Golden"], ["Api", "creates it"]] },
+    { id: "box", label: "DevBox", type: "dev box", parent: "account", icon: "box", specs: [["Api", "runs commands"]] },
+    { id: "search", label: "Search", type: "program", parent: "account", tone: "accent", icon: "file-code", specs: [["Api", "calls its URL"]] },
   ]}
-  groups={[{ id: "account", label: "Account acme", nodes: ["task", "golden", "box", "search"] }]}
-  edges={[
-    { from: "golden", to: "task", label: "starts from" },
-    { from: "worker", to: "task", label: "create" },
-    { from: "worker", to: "box", label: "exec" },
-    { from: "worker", to: "search", label: "fetch" },
-  ]}
-  caption="The Worker creates task sandboxes from Golden, runs commands in DevBox, and calls the Search program at its URL. Each binding gets its own key."
+  caption="A Worker, Api, outside Boat creates task sandboxes from Golden, runs commands in DevBox, and calls the Search program at its URL. Each binding gets its own key."
 />
