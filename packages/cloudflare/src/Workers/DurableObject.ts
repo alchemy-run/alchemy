@@ -380,6 +380,23 @@ export interface DurableObjectBindingProps extends DurableObjectProps {
   containers?: ReadonlyArray<Container.Decl.Any> | undefined;
 }
 
+/**
+ * Options for binding a Durable Object class hosted by another Worker via
+ * `.from(worker)`.
+ */
+export interface DurableObjectFromOptions {
+  /**
+   * Append the caller's W3C trace context to every RPC call, so the
+   * object's spans join the caller's trace. Only set it when the host
+   * Worker is an Alchemy Effect Worker deployed with the same version,
+   * whose bridge strips the context again; a plain-JS class or an older
+   * deploy would receive it as an extra argument.
+   *
+   * @default false
+   */
+  readonly traceContext?: boolean | undefined;
+}
+
 export interface DurableObjectClass extends Effect.Effect<DurableObject, never, DurableObject> {
   <Self, Shape>(): {
     <Name extends string>(
@@ -390,9 +407,13 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
         /** @internal */
         "~alchemy/name": Name;
       };
-      from(scriptName: Input<string>): Effect.Effect<DurableObject<Self>, never, Worker>;
+      from(
+        scriptName: Input<string>,
+        options?: DurableObjectFromOptions,
+      ): Effect.Effect<DurableObject<Self>, never, Worker>;
       from<Req = never>(
         worker: Dependencies<Self> | Effect.Effect<Dependencies<Self>, never, Req>,
+        options?: DurableObjectFromOptions,
       ): Effect.Effect<DurableObject<Self>, never, Worker | Req>;
       make<Req = never>(
         impl: Effect.Effect<
@@ -1490,6 +1511,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       scriptName?: Input<string>,
       transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[],
       errors?: ReadonlyArray<RpcErrorClass>,
+      traceContext?: boolean,
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1521,8 +1543,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         // Without a `scriptName` the class is hosted by this Worker, so its
         // `DurableObjectBridge` ships in this bundle and strips the trace
         // context a stub appends. A class in another script may be plain JS
-        // or an older deploy, so its calls carry only the caller's arguments.
-        const stubOptions = { errors, traceContext: scriptName === undefined };
+        // or an older deploy, so its calls carry only the caller's arguments,
+        // unless `.from(worker, { traceContext: true })` opted in.
+        const stubOptions = {
+          errors,
+          traceContext: scriptName === undefined || traceContext === true,
+        };
         const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
           // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
           // a Worker's `env` bind as the `durable_object_namespace` it is.
@@ -1614,7 +1640,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           impl: Effect.Effect<Effect.Effect<DurableObjectShape, never, DurableObjectState | Req>>,
         ) => Layer.effect(tag, make(impl as any));
 
-        static from = (worker: string | Worker | Effect.Effect<Worker, any, any>) => {
+        static from = (
+          worker: string | Worker | Effect.Effect<Worker, any, any>,
+          options?: DurableObjectFromOptions,
+        ) => {
           // Resolve `worker` to an Effect that yields the actual Worker
           // instance (or a plain string scriptName).
           //
@@ -1634,7 +1663,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(typeof w === "string" ? w : w.workerName, undefined, classProps?.errors),
+              binding(
+                typeof w === "string" ? w : w.workerName,
+                undefined,
+                classProps?.errors,
+                options?.traceContext,
+              ),
             ),
           );
         };
