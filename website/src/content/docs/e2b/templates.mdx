@@ -7,6 +7,8 @@ import Timeline from "../../../components/diagrams/Timeline.astro";
 
 A **template** is the image a sandbox boots from. E2B builds it on its side, so deploys need no Docker. Then it boots the image once, runs its start command, waits for its ready command to pass, and snapshots the running microVM. Every sandbox from the template starts from that snapshot, already past the build and the start, so it's up in well under a second.
 
+## A template is built once, then snapshotted
+
 <Timeline
   end={10}
   lanes={[
@@ -25,7 +27,7 @@ A **template** is the image a sandbox boots from. E2B builds it on its side, so 
   caption="A deploy builds the template once and snapshots it when readyCmd passes. Sandboxes created later start from the snapshot, with the start command already running."
 />
 
-## From a registry image
+## Build from a registry image
 
 ```typescript title="src/Sandbox.ts"
 import * as E2B from "@alchemy.run/e2b";
@@ -33,7 +35,7 @@ import * as E2B from "@alchemy.run/e2b";
 export const Python = E2B.Template("Python", { image: "python:3.12-slim" });
 ```
 
-## From a Dockerfile
+## Build from a Dockerfile
 
 ```typescript title="src/Sandbox.ts"
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
@@ -52,7 +54,7 @@ Point `dockerfile` at a file instead to use its directory as the build context. 
 
 E2B's builder runs one stage. A Dockerfile with several `FROM`s, `COPY --from`, `ADD <url>`, heredocs, `RUN --mount`, or `SHELL` fails at plan time with `UnsupportedDockerfile`, listing the lines, before anything is created. `EXPOSE`, `LABEL`, `VOLUME`, `HEALTHCHECK`, and `STOPSIGNAL` are ignored, and an `ARG` becomes an environment variable.
 
-## From another template
+## Build on another template
 
 ```typescript
 export const Tools = E2B.Template("Tools", {
@@ -63,7 +65,7 @@ export const Tools = E2B.Template("Tools", {
 
 Building on a template reuses its cached layers.
 
-## Size
+## Size the microVM
 
 ```typescript
 export const Big = E2B.Template("Big", { image: "node:22-bookworm", cpuCount: 8, memoryMB: 16384 });
@@ -71,7 +73,7 @@ export const Big = E2B.Template("Big", { image: "node:22-bookworm", cpuCount: 8,
 
 Every sandbox from the template gets these resources.
 
-## A process that is already running
+## Start a process before the snapshot
 
 ```typescript
 export const Preview = E2B.Template("Preview", {
@@ -84,7 +86,7 @@ export const Preview = E2B.Template("Preview", {
 
 E2B snapshots the template once `readyCmd` succeeds, so every sandbox starts with the dev server up. A Dockerfile's `CMD` does the same. To run your own Effect program this way, see [Template programs](/e2b/programs).
 
-## Private base images
+## Pull a private base image
 
 ```typescript
 export const Private = E2B.Template("Private", {
@@ -95,7 +97,7 @@ export const Private = E2B.Template("Private", {
 
 E2B uses the credentials to pull the base image only. ECR (`awsAccessKeyId`, `awsSecretAccessKey`, `awsRegion`) and Artifact Registry (`serviceAccountJson`) work the same way.
 
-## Build templates at runtime
+## Build templates while your app runs
 
 ```typescript
 const templates = yield* E2B.CreateTemplate();
@@ -110,6 +112,6 @@ const template = yield* templates.getOrBuild({
 
 A runtime build takes E2B's own build inputs: a base `image` or `fromTemplate`, then `env`, `files` from memory, and `run` steps. `getOrBuild` builds only when no ready build of the same inputs exists. Delete runtime templates when you no longer need them: destroying the Worker does not.
 
-## Deploys and replacement
+## A changed template is rebuilt
 
 A deploy starts a new build only when the inputs change; sandboxes already running keep the old build. Changing `name` replaces the template.

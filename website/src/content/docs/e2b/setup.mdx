@@ -45,14 +45,12 @@ Pick **Browser login** and sign in to E2B. Alchemy deploys to your account's def
 
 E2B can't narrow an API key, so each one reaches everything in its team. Use a separate team for tests. See [Team & API keys](/e2b/api-keys).
 
-## In CI
+## Deploy from CI
 
 Set `E2B_ACCESS_TOKEN`, and Alchemy uses it instead of your profile:
 
 <PackageManagers script={`E2B_ACCESS_TOKEN=sk_e2b_... {run} alchemy deploy`} />
 
-`E2B_API_KEY` is enough to deploy resources, but bindings and `E2B.ApiKey` create keys, which takes the access token. See [Team & API keys](/e2b/api-keys#in-ci).
+`E2B_API_KEY` is enough to deploy resources, but bindings and `E2B.ApiKey` create keys, which takes the access token. See [Team & API keys](/e2b/api-keys#deploy-from-ci-with-a-token).
 
-## Next
-
-Build the [tutorial](/e2b/tutorial/part-1).
+Next, build the [tutorial](/e2b/tutorial/part-1).

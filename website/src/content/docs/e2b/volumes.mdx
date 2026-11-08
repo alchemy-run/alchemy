@@ -7,6 +7,8 @@ import Timeline from "../../../components/diagrams/Timeline.astro";
 
 A **volume** is a filesystem that lives outside any sandbox. A sandbox mounts it at a path when it's created, and what it writes there stays after the sandbox is killed, for the next sandbox that mounts it. You can also read and write a volume's files without a sandbox.
 
+## Files outlive the sandbox
+
 <Timeline
   end={10}
   lanes={[
@@ -88,7 +90,7 @@ export default class Api extends E2B.Template<Api>()(
 
 Inside a template program, the mount becomes part of the template. Every sandbox created from it, with `CreateSandbox(Api)` or `E2B.Sandbox({ template: Api })`, mounts the volume.
 
-## A volume per user
+## Create a volume per user
 
 ```typescript
 const volumes = yield* E2B.CreateVolume();
