@@ -3,12 +3,31 @@ title: Web endpoints
 description: Serve a Modal Function on the web at a modal.run URL.
 ---
 
-A function with `web` serves its `fetch` handler at a `*.modal.run` URL.
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+A Function with `web` serves its `fetch` handler at a `*.modal.run` URL. Modal starts containers as requests arrive, like it does for calls.
+
+## Proxy auth keeps strangers out
+
+A web endpoint answers anyone unless it requires proxy auth. Then Modal's proxy checks each request's token before it reaches a container:
+
+<Boundaries
+  nodes={[
+    { id: "worker", label: "Api", type: "Worker · FetchServer", col: 0, row: 0 },
+    { id: "anyone", label: "anyone", type: "no token", col: 0, row: 1 },
+    { id: "site", label: "Site", type: "Function · web", col: 1, row: 0, tone: "accent" },
+  ]}
+  zones={[{ id: "proxy", label: "acme--site.modal.run", type: "requiresProxyAuth", nodes: ["site"], tone: "warn" }]}
+  links={[
+    { from: "worker", to: "site", label: "Modal-Key · Modal-Secret" },
+    { from: "anyone", to: "proxy", kind: "blocked", label: "401" },
+  ]}
+  caption="With requiresProxyAuth, a request reaches Site only with a webhook token's Modal-Key and Modal-Secret headers. FetchServer adds them for the Worker."
+/>
 
 ## Serve fetch
 
-```typescript
-// src/Site.ts
+```typescript title="src/Site.ts"
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -25,7 +44,7 @@ export default class Site extends Modal.Function<Site>()(
 
 The URL is the `url` attribute.
 
-## Pick the label
+## Pick the label in its URL
 
 ```typescript
 { main: import.meta.url, app: Inference, web: { label: "site" } }

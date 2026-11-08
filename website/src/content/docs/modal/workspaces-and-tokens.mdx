@@ -64,7 +64,7 @@ Pick **Browser login**. Alchemy opens modal.com, you approve, and Modal creates 
 
 A token is a token id (`ak-…`) and a secret (`as-…`). It acts on everything in its workspace, and doesn't expire.
 
-## One profile per workspace
+## Give production its own workspace
 
 The [stage](/environments/stages) decides **what** you deploy: its own environment and the names inside it. The profile decides **where**: which workspace's token Alchemy uses.
 
@@ -77,7 +77,7 @@ The [stage](/environments/stages) decides **what** you deploy: its own environme
 
 Many stages can share a workspace, each in its own environment. Give production a workspace of its own when you want its members and bill kept apart too.
 
-## Access narrower than yours
+## Each runtime gets a service user
 
 Your runtimes never get your token. When a Worker or Lambda binds a Modal object, deploy creates a **service user** for it and grants it a role in the bound object's environment: `viewer` to read, `contributor` to write or create.
 
@@ -101,7 +101,7 @@ Its `tokenId` and `tokenSecret` are a token pair like yours, that only works in 
 
 Service users need Modal's Team or Enterprise plan. See [Access control](/modal/security/access-control) for the Starter plan, and for environments only some members may change.
 
-## In CI
+## Deploy from CI with a token
 
 Set the same variables the `modal` CLI reads:
 

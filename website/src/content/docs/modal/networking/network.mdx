@@ -81,7 +81,7 @@ const { url, token } = yield* sandbox.connectToken({ port: 8080, userMetadata: u
 
 The token opens that port and nothing else.
 
-## Static egress IPs
+## Leave through static egress IPs
 
 Some APIs only accept calls from known addresses. A `Modal.Proxy` gives sandboxes fixed outbound IPs:
 

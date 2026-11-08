@@ -1,12 +1,33 @@
 ---
 title: Queues
-description: Hand work between Workers, sandboxes and Python functions.
+description: Hand work between Workers, Modal sandboxes and Python functions with a Modal Queue.
 ---
 
-## Create a queue
+import Queue from "../../../../components/diagrams/Queue.astro";
 
-```typescript
-// src/Storage.ts
+A **Queue** hands work from whoever puts it to whoever takes it: a Worker, a Sandbox, a Function or Python code. Items are JSON and expire 24 hours after they're put.
+
+## Partitions keep each user's work apart
+
+A Queue can split into **partitions**, each with its own items in order. A consumer takes from one partition and never sees another's:
+
+<Queue
+  title="Jobs · Modal Queue"
+  producer={{ label: "Api", type: "Worker", send: "put" }}
+  consumers={[
+    { id: "sam", label: "session-sam", type: "Sandbox" },
+    { id: "ana", label: "session-ana", type: "Sandbox" },
+  ]}
+  groups={[
+    { label: "partition sam", messages: [{ label: "lint" }, { label: "test", to: "sam" }] },
+    { label: "partition ana", messages: [{ label: "build", to: "ana" }] },
+  ]}
+  caption="The Worker puts each user's tasks in that user's partition. Each sandbox takes from its own, oldest first."
+/>
+
+## Declare a Queue
+
+```typescript title="src/Storage.ts"
 import * as Modal from "@alchemy.run/modal";
 
 export const Jobs = Modal.Queue("Jobs", {});
@@ -30,11 +51,9 @@ const batch = yield* jobs.take({ count: 10, timeout: "5 seconds" });
 
 `take` removes items. `peek` reads them without removing.
 
-## Use partitions
+## Put and take by partition
 
 ```typescript
 yield* jobs.put(task, { partition: user });
 const mine = yield* jobs.take({ partition: user });
 ```
-
-Items are JSON and expire 24 hours after they're put.
