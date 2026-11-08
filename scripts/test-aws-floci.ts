@@ -367,10 +367,12 @@ const command = Command.make(
       false,
     );
 
+    // Every in-process `ensureFloci` below gets this image too: without it they
+    // fall back to the pinned release and recreate the container.
+    const image = external ? undefined : yield* preferLocalFlociImage(LABEL);
     if (external) {
       yield* Console.log(`${LABEL}: using the existing Floci server (no Docker fallback)`);
     } else {
-      const image = yield* preferLocalFlociImage(LABEL);
       yield* startFlociForTests(LABEL, image).pipe(
         Effect.catch((error) =>
           fail(
@@ -386,7 +388,7 @@ const command = Command.make(
     const subnetIds = yield* optionalEnv("AWS_TEST_SUBNET_IDS");
     const securityGroupIds = yield* optionalEnv("AWS_TEST_SECURITY_GROUP_IDS");
     if ((yield* optionalEnv("AWS_TEST_SLOW")) !== "" && (!subnetIds || !securityGroupIds)) {
-      const network = yield* resolveFlociDefaultNetwork(external).pipe(
+      const network = yield* resolveFlociDefaultNetwork(external, image).pipe(
         Effect.catch((error) =>
           fail(
             `could not resolve the emulator's default VPC network: ${errorMessage(error)}; tests were not started`,
@@ -420,7 +422,7 @@ const command = Command.make(
 
     // Provisioned after any reset so the reset cannot wipe them. Interrupting
     // provisioning (Ctrl-C) removes already-created fixtures first.
-    const fixtures = yield* provisionFlociStandingFixtures(external, { files }).pipe(
+    const fixtures = yield* provisionFlociStandingFixtures(external, { files, image }).pipe(
       Effect.catch((error) =>
         fail(
           `could not provision standing fixtures: ${errorMessage(error)}; tests were not started`,
