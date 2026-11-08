@@ -11,47 +11,49 @@ Daytona runs sandboxes: isolated Linux machines for code you don't fully trust, 
 
 ## A quick example
 
-A snapshot is the image your sandboxes boot from, with their size:
+A warm snapshot is built once, at deploy: an image pulled into a snapshot, then a sandbox from it with a repository cloned, captured:
 
 ```typescript title="src/Images.ts"
 import * as Daytona from "@alchemy.run/daytona";
 
-export const Base = Daytona.Snapshot("Base", {
-  image: "node:22-bookworm-slim",
-  cpu: 1,
-  memory: 1,
-  disk: 3,
+export const Base = Daytona.Snapshot("Base", { image: "node:22-bookworm", cpu: 1, memory: 1, disk: 3 });
+
+export const Warm = Daytona.Snapshot("Warm", {
+  from: Base,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /home/daytona/repo"],
 });
 ```
 
-A Worker creates a sandbox from it per request, runs a command, and deletes it:
+A Worker starts a sandbox from `Warm` on each request, with the repository already there, runs the command it was sent, and deletes the sandbox:
 
 ```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Base } from "./Images.ts";
+import { Warm } from "./Images.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const sandboxes = yield* Daytona.CreateSandbox(Base);
+    const sandboxes = yield* Daytona.CreateSandbox(Warm);
     return {
       fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
         const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
           sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
         );
-        const version = yield* sandbox.exec("node --version");
-        return yield* HttpServerResponse.json(version);
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/home/daytona/repo" });
+        return yield* HttpServerResponse.json(result);
       }).pipe(Effect.scoped, Effect.orDie),
     };
   }).pipe(Effect.provide(Daytona.CreateSandboxHttp)),
 ) {}
 ```
 
-And the Stack deploys both, giving the Worker its own Daytona API key that can only create and delete sandboxes:
+And the Stack deploys them, giving the Worker its own Daytona API key that can only create and delete sandboxes:
 
 ```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
@@ -60,13 +62,18 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import Api from "./src/Api.ts";
+import { Warm } from "./src/Images.ts";
 
 export default Alchemy.Stack(
-  "Sandboxes",
-  { providers: Layer.mergeAll(Cloudflare.providers(), Daytona.providers()) },
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Daytona.providers()),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
+    const warm = yield* Warm;
     const api = yield* Api;
-    return { url: api.url };
+    return { snapshot: warm.name, url: api.url.as<string>() };
   }),
 );
 ```
