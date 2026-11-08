@@ -1,28 +1,36 @@
 ---
-title: "Part 4: Stages"
-description: Deploy separate copies of the Stack, each with its own Worker and key.
+title: "Part 4: Update the Base"
+description: Change the shared Boat snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
 sidebar:
   order: 4
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Deploy another stage
+## Add a command
 
-<PackageManagers run="alchemy deploy --stage staging" />
+Install pnpm into the base:
 
-Each stage gets its own Worker and its own Boat key. Without `--stage`, you deploy to `live_$USER`.
-
-## Share one Boat account
-
-Stages share your Boat account. Sandboxes a stage's Worker creates carry the stage as a label (`alchemy.stage`), so you can list one stage's sandboxes without touching another's:
-
-```typescript
-const staging = yield* sandboxes.list({ labels: { "alchemy.stage": "staging" } });
+```diff lang="typescript"
+// src/Golden.ts
+export const Golden = Boat.Snapshot("Golden", {
+-  run: ["git clone --depth 1 https://github.com/sindresorhus/is ~/repo"],
++  run: ["git clone --depth 1 https://github.com/sindresorhus/is ~/repo", "npm install -g pnpm"],
+});
 ```
 
-Destroying a stage deletes its Worker's key and leaves its sandboxes to stop on their timers. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
+## Deploy the new base
+
+<PackageManagers run="alchemy deploy" />
+
+The commands changed, so Alchemy runs them all again in a fresh sandbox and saves the result under the same name. The Worker is unchanged and isn't redeployed.
+
+<PackageManagers script={`curl -X POST "$URL/run" -d 'pnpm --version'`} />
+
+## Running sandboxes keep their disk
+
+A sandbox has its own copy of the disk it started from. Users who already have a sandbox keep it, with their changes and without pnpm. Sandboxes started after the deploy get the new base. To move a user onto it, delete their sandbox; their next request starts a new one from `Golden`.
 
 ## Next
 
-[Part 5](/boat/tutorial/part-5) deploys from CI.
+[Part 5](/boat/tutorial/part-5) tests it.

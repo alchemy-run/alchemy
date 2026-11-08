@@ -1,8 +1,9 @@
 # Boat agent sandbox example
 
-A Cloudflare Worker that runs untrusted code in Boat sandboxes.
+Build a shared base at deploy time, and start sandboxes from it while the app runs.
 
-- [`src/Api.ts`](./src/Api.ts) — `POST /run` runs a script in a fresh sandbox, deleted when the request ends. `/users/<user>/files/<file>` keeps a sandbox per user, found by label and resumed on the next request.
+- [`src/Golden.ts`](./src/Golden.ts) — the shared base, built at deploy: a snapshot with a repository cloned and pnpm installed.
+- [`src/Api.ts`](./src/Api.ts) — starts sandboxes from Golden while it runs. `POST /run` runs a command in a fresh one, deleted when the request ends. `/users/<user>/files/<file>` keeps a sandbox per user, found by label and resumed on the next request.
 
 ## Commands
 
