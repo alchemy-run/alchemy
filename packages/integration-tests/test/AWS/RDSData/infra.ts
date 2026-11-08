@@ -16,8 +16,9 @@ import * as Effect from "effect/Effect";
  * security group only.
  */
 export const RDSDataInfra = Effect.gen(function* () {
-  // Two zones of the Region the stack deploys to.
-  const region = yield* yield* Region;
+  // Two zones of the Region the stack deploys to. A Region that cannot be
+  // resolved leaves nothing to deploy, so it is a defect here.
+  const region = yield* (yield* Region).pipe(Effect.orDie);
   const vpc = yield* EC2.Vpc("Vpc", {
     cidrBlock: "10.61.0.0/16",
   });
