@@ -134,7 +134,15 @@ export const ensureBranch = Effect.fn(function* (input: {
       from_checkpoint_name: input.fromCheckpoint,
       from_branch: input.fromBranch,
     })
-    .pipe(Effect.map(({ data }) => toBranchAttributes(data)));
+    .pipe(
+      Effect.map(({ data }) => toBranchAttributes(data)),
+      // A concurrent create of the same name won the race.
+      Effect.catchTag("Conflict", (conflict) =>
+        getBranch(input.disk, input.name).pipe(
+          Effect.flatMap((found) => (found ? Effect.succeed(found) : Effect.fail(conflict))),
+        ),
+      ),
+    );
 });
 
 const branchName = (id: string, name: string | undefined) =>
