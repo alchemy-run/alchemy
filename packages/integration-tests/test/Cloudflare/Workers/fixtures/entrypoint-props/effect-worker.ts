@@ -43,12 +43,17 @@ export class PropsMinter extends Cloudflare.DurableObject<PropsMinter>()(
  * `GET /props` echoes `WorkerExecutionContext.props`. `GET /mint` mints a
  * `default` loopback stub with props from the fetch handler and fetches
  * `/props` through it; `GET /mint-do` does the same from a Durable Object.
- * `GET /missing` asks for an entrypoint the Worker does not export.
+ * `GET /mint-named` mints a stub to `Echo`, the named entrypoint re-exported
+ * from `./echo.ts`. `GET /missing` asks for an entrypoint the Worker does not
+ * export.
  */
 export default class EntrypointPropsWorker extends Cloudflare.Worker<EntrypointPropsWorker>()(
   "EntrypointPropsWorker",
   {
     main: import.meta.url,
+    entrypoints: {
+      Echo: { from: "./echo.ts" },
+    },
   },
   Effect.gen(function* () {
     const minters = yield* PropsMinter;
@@ -70,6 +75,10 @@ export default class EntrypointPropsWorker extends Cloudflare.Worker<EntrypointP
         }
         if (url.pathname === "/mint-do") {
           return HttpServerResponse.text(`via-do:${yield* minters.getByName("default").mint()}`);
+        }
+        if (url.pathname === "/mint-named") {
+          const entrypoint = yield* exec.exports.Echo({ props: TENANT_PROPS }).pipe(Effect.orDie);
+          return HttpServerResponse.text(`via-named:${yield* fetchProps(entrypoint)}`);
         }
         if (url.pathname === "/missing") {
           return yield* exec.exports.Missing().pipe(

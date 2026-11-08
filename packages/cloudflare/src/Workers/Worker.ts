@@ -101,6 +101,17 @@ export interface WorkerEntrypointSettings {
     /** Whether Workers Cache is checked before invoking this entrypoint. */
     enabled: boolean;
   };
+  /**
+   * For an Effect-native Worker, the module that exports this named
+   * `WorkerEntrypoint` class, such as a library's. The Worker's generated
+   * entry re-exports it, so `ctx.exports.<Name>` and
+   * `Cloudflare.WorkerEntrypoint("<Name>")` reach it, while the Worker's own
+   * module never imports it: classes that extend `cloudflare:workers` only
+   * load in workerd. Resolved as if the Worker's `main` imported it, so a
+   * relative path is relative to `main`. Ignored for async Workers, whose
+   * module is the entry and exports its entrypoints itself.
+   */
+  from?: string;
 }
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
@@ -749,10 +760,15 @@ export interface WorkerProps<
    * default export, or the class name of a named `WorkerEntrypoint`.
    * Entrypoints you leave out inherit the Worker-wide settings.
    *
-   * Today the only setting is `cache`: a per-entrypoint `cache.enabled`
-   * overrides the Worker-wide {@link cache} for that entrypoint. Workers
-   * Cache only applies to `fetch()` invocations (including loopback calls
-   * through `ctx.exports`); custom RPC methods always bypass it.
+   * `cache`: a per-entrypoint `cache.enabled` overrides the Worker-wide
+   * {@link cache} for that entrypoint. Workers Cache only applies to
+   * `fetch()` invocations (including loopback calls through `ctx.exports`);
+   * custom RPC methods always bypass it.
+   *
+   * `from`: an Effect-native Worker's generated entry exports only its
+   * default handler, Durable Objects and Workflows. A named
+   * `WorkerEntrypoint` it serves, such as one a library ships, is listed
+   * here with the module it comes from, and the entry re-exports it.
    *
    * Names must not collide with Durable Object classes hosted by this
    * Worker.
@@ -2588,6 +2604,39 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  *     return ctx.exports.Public.fetch(request);
  *   },
  * };
+ * ```
+ *
+ * ### Named Entrypoints
+ * An Effect-native Worker's generated entry exports its default handler,
+ * Durable Objects and Workflows. To also serve a named `WorkerEntrypoint`,
+ * such as one a library ships for `ctx.exports` loopback calls, list it in
+ * `entrypoints` with the module it comes from. The entry re-exports it, and
+ * the Worker's own module never imports it, so planning never loads
+ * `cloudflare:workers`.
+ *
+ * **Example:** Re-exporting a library's WorkerEntrypoint
+ * ```typescript
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     entrypoints: {
+ *       // A package, or a path relative to `main`, such as "./proxy.ts".
+ *       WorkspaceProxy: { from: "@cloudflare/computer" },
+ *     },
+ *   },
+ *   Effect.gen(function* () {
+ *     const exec = yield* Cloudflare.WorkerExecutionContext;
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         // A loopback stub to the named entrypoint, with per-call props.
+ *         const proxy = yield* exec.exports.WorkspaceProxy({ props: { tenant: "acme" } });
+ *         const response = yield* proxy.fetch(HttpClientRequest.get("http://self/health"));
+ *         return HttpServerResponse.text(yield* response.text);
+ *       }),
+ *     };
+ *   }),
+ * ) {}
  * ```
  *
  * ### Background Work & Scopes

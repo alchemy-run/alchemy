@@ -129,16 +129,12 @@ const routes = (variant: "effect" | "async") => [
     path: "/mint-do",
     expected: `via-do:${TENANT}`,
   },
-  // Effect Workers export only `default`; a named entrypoint is a native class.
-  ...(variant === "async"
-    ? [
-        {
-          name: "a Worker handler mints a named entrypoint stub with props",
-          path: "/mint-named",
-          expected: `via-named:${TENANT}`,
-        },
-      ]
-    : []),
+  // The async Worker exports `Api` itself; the Effect Worker's entry re-exports `Echo` from `entrypoints.from`.
+  {
+    name: "a Worker handler mints a named entrypoint stub with props",
+    path: "/mint-named",
+    expected: `via-named:${TENANT}`,
+  },
   {
     name: "an entrypoint the Worker does not export is unavailable",
     path: "/missing",

@@ -26,9 +26,24 @@ export interface WorkerBundleOptions extends Omit<Shared.WorkerBundleOptions, "e
     | {
         kind: "effect";
         exports: Record<string, WorkerExport>;
+        /** Named `WorkerEntrypoint` classes to re-export, by export name: the module each comes from. */
+        entrypoints?: Readonly<Record<string, string>>;
       };
   rules?: readonly ModuleRule[] | undefined;
 }
+
+/**
+ * The named entrypoints an Effect-native Worker re-exports from other modules:
+ * each {@link WorkerProps.entrypoints} entry with a `from`, by export name.
+ */
+export const entrypointModules = (
+  entrypoints: WorkerProps["entrypoints"],
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(entrypoints ?? {}).flatMap(([name, settings]) =>
+      name === "default" || settings.from === undefined ? [] : [[name, settings.from]],
+    ),
+  );
 
 /**
  * The bundler options for a Worker's props, as local dev records them in its
@@ -38,7 +53,7 @@ export interface WorkerBundleOptions extends Omit<Shared.WorkerBundleOptions, "e
  */
 export const workerBundleOptions = (options: {
   id: string;
-  props: Pick<WorkerProps, "main" | "isExternal" | "exports" | "build" | "rules">;
+  props: Pick<WorkerProps, "main" | "isExternal" | "exports" | "entrypoints" | "build" | "rules">;
   compatibility: WorkerBundleOptions["compatibility"];
   stack: WorkerBundleOptions["stack"];
 }): WorkerBundleOptions => ({
@@ -47,7 +62,11 @@ export const workerBundleOptions = (options: {
   compatibility: options.compatibility,
   entry: options.props.isExternal
     ? { kind: "external" }
-    : { kind: "effect", exports: options.props.exports ?? {} },
+    : {
+        kind: "effect",
+        exports: options.props.exports ?? {},
+        entrypoints: entrypointModules(options.props.entrypoints),
+      },
   stack: options.stack,
   extraOptions: options.props.build,
   rules: options.props.rules,
@@ -171,7 +190,7 @@ export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, Additio
     import("@alchemy.run/cloudflare-runtime/rolldown").then((module) => module.default),
   virtualEntry: (options) =>
     options.entry.kind === "effect"
-      ? makeEffectVirtualEntry(options.entry.exports, options.stack)
+      ? makeEffectVirtualEntry(options.entry.exports, options.stack, options.entry.entrypoints)
       : undefined,
   moduleRules: (options, main) =>
     realGlobs(options.rules).pipe(Effect.map((rules) => toModuleRules(main, rules))),
@@ -190,6 +209,7 @@ const exportClass = (name: string, base: string, local: string) =>
 export const makeEffectVirtualEntry = (
   exports: Record<string, WorkerExport>,
   stack: { name: string; stage: string },
+  entrypoints: Readonly<Record<string, string>> = {},
 ) => {
   const doClasses: string[] = [];
   const wfClasses: string[] = [];
@@ -243,6 +263,13 @@ ${[
         ),
       ]
     : []),
+  // Named WorkerEntrypoint classes, imported only here so the Worker's module never
+  // loads them outside workerd. A relative module resolves from the Worker's entry,
+  // as if `main` imported it.
+  ...Object.entries(entrypoints).map(
+    ([name, from]) =>
+      `export { ${name} } from ${JSON.stringify(from.startsWith(".") ? path.resolve(path.dirname(importPath), from) : from)};`,
+  ),
 ].join("\n")}
 `;
 };

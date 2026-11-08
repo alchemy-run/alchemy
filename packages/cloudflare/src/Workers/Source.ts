@@ -24,7 +24,7 @@ import { getToolingCompatibility } from "./Compatibility.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
-import { makeRolldownSource } from "./Sources/Rolldown.ts";
+import { entrypointModules, makeRolldownSource } from "./Sources/Rolldown.ts";
 import type { WorkerAssetsConfig, WorkerProps, WorkerSourceDescriptor } from "./Worker.ts";
 import type { WorkerExport } from "./WorkerRuntimeContext.ts";
 
@@ -91,6 +91,8 @@ export interface SourceContext {
     | {
         readonly kind: "effect";
         readonly exports: Record<string, WorkerExport>;
+        /** Named `WorkerEntrypoint` classes to re-export, by export name: the module each comes from. */
+        readonly entrypoints?: Readonly<Record<string, string>>;
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
@@ -437,7 +439,11 @@ export const makeSourceContext = (params: {
   compatibility: getToolingCompatibility(params.compatibility, params.props.main),
   entry: params.props.isExternal
     ? { kind: "external" }
-    : { kind: "effect", exports: params.props.exports ?? {} },
+    : {
+        kind: "effect",
+        exports: params.props.exports ?? {},
+        entrypoints: entrypointModules(params.props.entrypoints),
+      },
   stack: { name: params.stack.name, stage: params.stack.stage },
   env: params.props.env,
   selfUrl: params.selfUrl,
