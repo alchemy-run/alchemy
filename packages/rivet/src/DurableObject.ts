@@ -31,9 +31,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
 import type { DurableObjectState } from "./DurableObjectState.ts";
+import { PoolHost } from "./Host.ts";
 import { fromNativeFetcher } from "./internal/Fetcher.ts";
 import { gatewayFetcher, type GatewayTarget } from "./internal/Gateway.ts";
-import { PoolHost } from "./internal/PoolHostService.ts";
 import type { CargoBuild } from "./internal/RustProgram.ts";
 import type { Providers } from "./Providers.ts";
 

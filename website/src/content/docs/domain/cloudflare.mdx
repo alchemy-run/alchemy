@@ -13,7 +13,7 @@ Provide `DomainCloudflare.layerDurableObjects()` to the model's Layer, as you wo
 ```typescript
 // packages/server/src/BankWorker.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
@@ -101,6 +101,7 @@ import BankWorker from "@bank/server/BankWorker";
 import * as Alchemy from "alchemy";
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -108,7 +109,12 @@ import * as Layer from "effect/Layer";
 export default Alchemy.Stack(
   "CloudflareDomainExample",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      DomainCloudflare.providers(),
+      Stripe.providers(),
+      Axiom.providers(),
+    ),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -125,6 +131,8 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+`DomainCloudflare.providers()` sits next to `Cloudflare.providers()`: a deploy that adds a view or projection waits through it until the view has received its history.
 
 <PackageManagers run="alchemy deploy" />
 
@@ -173,7 +181,7 @@ Models deployed before Domain version 0 named classes after the definition alone
 If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `DurableObjectRenameConflict` until the others set `legacyData: false`:
 
 ```typescript
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Layer from "effect/Layer";
 import { Audit, AuditHandlers } from "./Audit.ts";
 import { Billing, BillingHandlers } from "./Billing.ts";

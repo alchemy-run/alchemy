@@ -16,7 +16,7 @@
  * Every building block is `Domain.<Noun>(...)`, and its types live on the
  * same name: `Domain.Event.Any`, `Domain.Aggregate.StateOf<typeof Account>`.
  * Stories (given / when / then specifications) are in `@alchemy.run/domain/Story`;
- * the Cloudflare platform is in `@alchemy.run/cloudflare/Domain`.
+ * the Cloudflare platform is in `@alchemy.run/domain/Cloudflare`.
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";

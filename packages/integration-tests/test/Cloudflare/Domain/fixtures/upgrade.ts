@@ -1,6 +1,6 @@
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
-import { DeployVersion } from "@alchemy.run/cloudflare/Domain/Version";
 import * as Domain from "@alchemy.run/domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import { DeployVersion } from "@alchemy.run/domain/Cloudflare/Version";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
