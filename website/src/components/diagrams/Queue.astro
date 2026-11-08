@@ -36,6 +36,8 @@ interface Props {
 }
 
 const { title, producer, consumers, messages = [], groups = [], note, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const MW = Math.max(64, ...[...messages, ...groups.flatMap((g) => g.messages)].map((m) => m.label.length * 6.6 + 20));
 const MH = 30;
@@ -128,7 +130,7 @@ const N_H = N_CTOP + CH + 6;
   <div class="alc-fig__panel">
   <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
     <defs>
-      <marker id="alc-q-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-q-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -138,7 +140,7 @@ const N_H = N_CTOP + CH + 6;
         <rect x={8} y={qMid - 23} width={PW} height={46} rx="8" class="alc-fig__box" />
         <text x={8 + PW / 2} y={qMid + (producer.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{producer.label}</text>
         {producer.type && <text x={8 + PW / 2} y={qMid + 13} text-anchor="middle" class="alc-fig__type">{producer.type}</text>}
-        <line x1={8 + PW} y1={qMid} x2={X_Q - 2} y2={qMid} class="alc-fig__line" marker-end="url(#alc-q-arrow)" />
+        <line x1={8 + PW} y1={qMid} x2={X_Q - 2} y2={qMid} class="alc-fig__line" marker-end={`url(#alc-q-arrow-${uid})`} />
         {producer.send && <text x={8 + PW + SEND_GAP / 2} y={qMid - 8} text-anchor="middle" class="alc-fig__small">{producer.send}</text>}
       </g>
     )}
@@ -161,7 +163,7 @@ const N_H = N_CTOP + CH + 6;
               <path
                 d={`M ${m.x + MW} ${m.y + MH / 2} C ${X_C - 40} ${m.y + MH / 2}, ${X_C - 50} ${ty}, ${X_C - 2} ${ty}`}
                 class="alc-fig__line alc-fig__line--dashed"
-                marker-end="url(#alc-q-arrow)"
+                marker-end={`url(#alc-q-arrow-${uid})`}
               />
             )}
             <rect x={m.x} y={m.y} width={MW} height={MH} rx="5" class:list={["alc-fig__box", inFlight ? "alc-fig__box--muted" : "alc-fig__box--accent"]} />
@@ -182,7 +184,7 @@ const N_H = N_CTOP + CH + 6;
   </svg>
   <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_FIT} ${N_H}`} style={`max-width: ${Math.round(N_FIT * 1.15)}px`} role="img" aria-label={caption ?? title}>
     <defs>
-      <marker id="alc-q-arrow-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-q-arrow-n-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -191,7 +193,7 @@ const N_H = N_CTOP + CH + 6;
         <rect x={(N_FIT - N_PW) / 2} y={0} width={N_PW} height={N_PH} rx="8" class="alc-fig__box" />
         <text x={N_FIT / 2} y={N_PH / 2 + (producer.type ? -3 : 4)} text-anchor="middle" class="alc-fig__label">{producer.label}</text>
         {producer.type && <text x={N_FIT / 2} y={N_PH / 2 + 13} text-anchor="middle" class="alc-fig__type">{producer.type}</text>}
-        <line x1={N_FIT / 2} y1={N_PH} x2={N_FIT / 2} y2={N_QTOP - 22} class="alc-fig__line" marker-end="url(#alc-q-arrow-n)" />
+        <line x1={N_FIT / 2} y1={N_PH} x2={N_FIT / 2} y2={N_QTOP - 22} class="alc-fig__line" marker-end={`url(#alc-q-arrow-n-${uid})`} />
         {producer.send && <text x={N_FIT / 2 + 8} y={N_PH + 18} class="alc-fig__small">{producer.send}</text>}
       </g>
     )}
@@ -204,7 +206,7 @@ const N_H = N_CTOP + CH + 6;
       const tx = ncx(ci) + N_CW / 2;
       const qb = N_QTOP + N_QH;
       return (
-        <path d={`M ${m.x + MW / 2} ${m.y + MH} V ${qb + 6} C ${m.x + MW / 2} ${qb + 30}, ${tx} ${qb + 20}, ${tx} ${N_CTOP - 2}`} class="alc-fig__line alc-fig__line--dashed" marker-end="url(#alc-q-arrow-n)" />
+        <path d={`M ${m.x + MW / 2} ${m.y + MH} V ${qb + 6} C ${m.x + MW / 2} ${qb + 30}, ${tx} ${qb + 20}, ${tx} ${N_CTOP - 2}`} class="alc-fig__line alc-fig__line--dashed" marker-end={`url(#alc-q-arrow-n-${uid})`} />
       );
     })}
     {nPlaced.map((m) => {

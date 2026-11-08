@@ -27,6 +27,8 @@ interface Props {
 }
 
 const { title, zones, instances, volume, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const ZW = 176;
 const ZG = 14;
@@ -50,7 +52,7 @@ const COPY_W = 52;
   <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? title}>
     <defs>
-      <marker id="alc-z-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-z-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -98,7 +100,7 @@ const COPY_W = 52;
                   x2={x + w / 2}
                   y2={writes ? VOL_Y - 2 : FLOW_Y + 2}
                   class="alc-fig__line"
-                  marker-end="url(#alc-z-arrow)"
+                  marker-end={`url(#alc-z-arrow-${uid})`}
                 />
                 <text x={x + w / 2 + 8} y={FLOW_Y + 27} class="alc-fig__small">{n.flow}</text>
               </g>

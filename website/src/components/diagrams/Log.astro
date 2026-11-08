@@ -37,6 +37,8 @@ interface Props {
 }
 
 const { lanes, cursors = [], expired = 0, writer, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const LABEL_W = Math.max(...lanes.map((l) => Math.max(l.label.length * 7.4, (l.type ?? "").length * 6.4))) + 20;
 const cellW = Math.max(56, ...lanes.flatMap((l) => l.records.map((r) => r.length * 6.4 + 14)));
@@ -73,7 +75,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
   <div class="alc-fig__panel">
   <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Log"}>
     <defs>
-      <marker id="alc-log-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-log-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -106,7 +108,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
               x2={cx(l.records.length + 1) + 2}
               y2={top + CELL_H / 2}
               class="alc-fig__line"
-              marker-end="url(#alc-log-arrow)"
+              marker-end={`url(#alc-log-arrow-${uid})`}
             />
           )}
           {cursors
@@ -118,7 +120,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
               const tail = below ? tip + 12 : tip - 12;
               return (
                 <g>
-                  <line x1={px} y1={tail} x2={px} y2={tip} class="alc-fig__line" marker-end="url(#alc-log-arrow)" />
+                  <line x1={px} y1={tail} x2={px} y2={tip} class="alc-fig__line" marker-end={`url(#alc-log-arrow-${uid})`} />
                   <text x={px} y={below ? tail + 12 : tail - 4} text-anchor="middle" class="alc-fig__strong">{c.label}</text>
                 </g>
               );
@@ -146,7 +148,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
             ))}
             <rect x={cx0} y={ny(l.records.length)} width={N_CELL} height={CELL_H} rx="5" class="alc-fig__box alc-fig__box--muted" />
             {writer && (
-              <line x1={cx0 + N_CELL / 2} y1={N_H - 16} x2={cx0 + N_CELL / 2} y2={ny(l.records.length) + CELL_H + 2} class="alc-fig__line" marker-end="url(#alc-log-arrow-n)" />
+              <line x1={cx0 + N_CELL / 2} y1={N_H - 16} x2={cx0 + N_CELL / 2} y2={ny(l.records.length) + CELL_H + 2} class="alc-fig__line" marker-end={`url(#alc-log-arrow-n-${uid})`} />
             )}
             {writer && <text x={cx0 + N_CELL / 2 + 8} y={N_H - 6} class="alc-fig__strong">{writer}</text>}
             {cursors
@@ -156,7 +158,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
                 const tip = cx0 + N_CELL + 4;
                 return (
                   <g>
-                    <line x1={tip + 16} y1={py} x2={tip} y2={py} class="alc-fig__line" marker-end="url(#alc-log-arrow-n)" />
+                    <line x1={tip + 16} y1={py} x2={tip} y2={py} class="alc-fig__line" marker-end={`url(#alc-log-arrow-n-${uid})`} />
                     <text x={tip + 20} y={py + 4} class="alc-fig__strong">{c.label}</text>
                   </g>
                 );
@@ -166,7 +168,7 @@ const ny = (i: number) => N_HEAD + i * N_ROW;
       })
     }
     <defs>
-      <marker id="alc-log-arrow-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-log-arrow-n-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>

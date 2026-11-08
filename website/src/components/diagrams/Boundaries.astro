@@ -58,6 +58,8 @@ interface Props {
 }
 
 const { nodes, zones = [], links = [], caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const NW = Math.max(132, ...nodes.map((n) => Math.max(n.label.length * 8, (n.type ?? "").length * 6.6) + 24));
 const NH = 48;
@@ -124,7 +126,7 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
   <div class="alc-fig__panel">
   <svg class="alc-fig__svg" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Boundaries"}>
     <defs>
-      <marker id="alc-bd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-bd-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -205,12 +207,12 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
                   <line x1={x - BREACH} y1={wall.y} x2={x + BREACH} y2={wall.y} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
                 </g>
               )}
-              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line alc-bd__tunnel" marker-end="url(#alc-bd-arrow)" />
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
               {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
             </g>
           ) : (
             <g>
-              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line" marker-end="url(#alc-bd-arrow)" />
+              <line x1={x} y1={y1} x2={x} y2={y2 - 4} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
               {l.label && <text x={x + 10} y={(y1 + y2) / 2 + 4} class="alc-fig__small">{l.label}</text>}
             </g>
           );
@@ -228,14 +230,14 @@ const H = Math.max(rowY[maxRow]! + NH + PAD, ...[...boxes.values()].map((b) => b
                   <line x1={wall.x} y1={y - BREACH} x2={wall.x} y2={y + BREACH} class:list={["alc-bd__breach", wall.tone === "warn" && "alc-bd__breach--warn"]} />
                 </g>
               )}
-              <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line alc-bd__tunnel" marker-end="url(#alc-bd-arrow)" />
+              <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line alc-bd__tunnel" marker-end={`url(#alc-bd-arrow-${uid})`} />
               {l.label && <text x={(x1 + x2) / 2} y={y + 28} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
             </g>
           );
         }
         return (
           <g>
-            <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line" marker-end="url(#alc-bd-arrow)" />
+            <line x1={x1} y1={y} x2={x2 - 4} y2={y} class="alc-fig__line" marker-end={`url(#alc-bd-arrow-${uid})`} />
             {l.label && <text x={(x1 + x2) / 2} y={y - 8} text-anchor="middle" class="alc-fig__small">{l.label}</text>}
           </g>
         );

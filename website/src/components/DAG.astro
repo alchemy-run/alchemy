@@ -102,6 +102,8 @@ interface Props {
 }
 
 const { nodes: rawNodes, edges, groups = [], direction = "LR", caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 // A grid starts at its first used column and row, so an unused column 0 never leaves a blank strip.
 const minCol = Math.min(...rawNodes.map((n) => n.col ?? 0));
@@ -543,7 +545,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
   >
     <defs>
       <marker
-        id="alc-dag-arrow"
+        id={`alc-dag-arrow-${uid}`}
         viewBox="0 0 10 10"
         refX="8"
         refY="5"
@@ -594,7 +596,7 @@ const labelPlace = (g: GroupIn, b: Box): { x: number; anchor: "start" | "end" } 
           stroke="var(--alc-accent-60)"
           stroke-width="1.5"
           stroke-dasharray={e.dashed ? "4 4" : undefined}
-          marker-end="url(#alc-dag-arrow)"
+          marker-end={`url(#alc-dag-arrow-${uid})`}
         />
         {e.label && (
           <text

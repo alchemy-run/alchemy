@@ -34,6 +34,8 @@ interface Props {
 }
 
 const { item, routes, group, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const CH = 6.5; // px per mono char at 10.5px
 const LINE = 15;
@@ -89,7 +91,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
   <div class="alc-fig__panel">
   <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
     <defs>
-      <marker id="alc-fan-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-fan-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -111,7 +113,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
         const inX = r.condition ? X_COND : X_TARGET;
         return (
           <g>
-            <path d={curve(X_ITEM + ITEM_W, itemMid, inX - 2, mid)} class:list={["alc-fig__line", !ok && "alc-fig__line--muted alc-fig__line--dashed"]} marker-end={ok ? "url(#alc-fan-arrow)" : undefined} />
+            <path d={curve(X_ITEM + ITEM_W, itemMid, inX - 2, mid)} class:list={["alc-fig__line", !ok && "alc-fig__line--muted alc-fig__line--dashed"]} marker-end={ok ? `url(#alc-fan-arrow-${uid})` : undefined} />
             {r.condition && (
               <g>
                 <rect x={X_COND} y={ry} width={condW} height={h} rx="7" class:list={["alc-fig__box", !ok && "alc-fig__box--muted"]} />
@@ -120,7 +122,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
                   <text x={X_COND + 12} y={ry + (r.label ? 33 : 22) + i * LINE + (h - 20 - r.condition!.length * LINE - (r.label ? 14 : 0)) / 2} class="alc-fig__small" xml:space="preserve">{l}</text>
                 ))}
                 {ok ? (
-                  <line x1={X_COND + condW} y1={mid} x2={X_TARGET - 2} y2={mid} class="alc-fig__line" marker-end="url(#alc-fan-arrow)" />
+                  <line x1={X_COND + condW} y1={mid} x2={X_TARGET - 2} y2={mid} class="alc-fig__line" marker-end={`url(#alc-fan-arrow-${uid})`} />
                 ) : (
                   <text x={X_COND + condW + 12} y={mid + 4} class="alc-fig__type">no match</text>
                 )}
@@ -136,7 +138,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
   </svg>
   <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_FIT} ${N_H}`} style={`max-width: ${Math.round(N_FIT * 1.15)}px`} role="img" aria-label={caption ?? "Fanout"}>
     <defs>
-      <marker id="alc-fan-arrow-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <marker id={`alc-fan-arrow-n-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
       </marker>
     </defs>
@@ -156,7 +158,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
       const tx = N_X + (N_W - N_TW) / 2;
       return (
         <g>
-          <line x1={8} y1={entry} x2={N_X - 2} y2={entry} class:list={["alc-fig__line", !ok && "alc-fig__line--muted alc-fig__line--dashed"]} marker-end={ok ? "url(#alc-fan-arrow-n)" : undefined} />
+          <line x1={8} y1={entry} x2={N_X - 2} y2={entry} class:list={["alc-fig__line", !ok && "alc-fig__line--muted alc-fig__line--dashed"]} marker-end={ok ? `url(#alc-fan-arrow-n-${uid})` : undefined} />
           {r.condition && (
             <g>
               <rect x={N_X} y={ry} width={N_W} height={ch} rx="7" class:list={["alc-fig__box", !ok && "alc-fig__box--muted"]} />
@@ -165,7 +167,7 @@ const curve = (x1: number, y1: number, x2: number, y2: number) => {
                 <text x={N_X + 12} y={ry + (r.label ? 33 : 22) + i * LINE + (ch - 20 - r.condition!.length * LINE - (r.label ? 14 : 0)) / 2} class="alc-fig__small" xml:space="preserve">{l}</text>
               ))}
               {ok ? (
-                <line x1={N_X + N_W / 2} y1={ry + ch} x2={N_X + N_W / 2} y2={ty - 2} class="alc-fig__line" marker-end="url(#alc-fan-arrow-n)" />
+                <line x1={N_X + N_W / 2} y1={ry + ch} x2={N_X + N_W / 2} y2={ty - 2} class="alc-fig__line" marker-end={`url(#alc-fan-arrow-n-${uid})`} />
               ) : (
                 <text x={N_X + N_W / 2} y={ry + ch + 19} text-anchor="middle" class="alc-fig__type">no match</text>
               )}
