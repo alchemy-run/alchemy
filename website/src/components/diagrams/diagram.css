@@ -100,3 +100,30 @@
 .alc-fig__label-bg {
   fill: var(--alc-bg-elev-1);
 }
+
+/*
+ * Diagrams that draw a second, narrow layout for phones mark the two SVGs
+ * --wide and --narrow; one shows at a time, so text keeps its size instead of
+ * shrinking with the column.
+ */
+.alc-fig__svg--narrow {
+  display: none;
+}
+@media (max-width: 40rem) {
+  .alc-fig__panel {
+    padding: 0.75rem;
+  }
+  .alc-fig__svg--wide:has(+ .alc-fig__svg--narrow) {
+    display: none;
+  }
+  .alc-fig__svg--narrow {
+    display: block;
+  }
+}
+/* Text that a line may cross keeps a ring of panel colour around it. */
+.alc-fig__haloed {
+  paint-order: stroke;
+  stroke: var(--alc-bg-elev-1);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
