@@ -720,11 +720,11 @@ E2B sandboxes for agents: what E2B is, team and API keys, network rules and egre
 - [E2B](https://alchemy.run/e2b) — Run sandboxes for agents on E2B with Alchemy. Declare templates, warm snapshots, volumes and secrets in TypeScript, and create sandboxes from any Worker or Function.
 - [What is E2B?](https://alchemy.run/e2b/what-is-e2b) — The concepts behind E2B — teams and API keys, templates, sandboxes, snapshots and forks, volumes, network rules and secrets, and lifecycle events — and how @alchemy.run/e2b models each of them.
 - [Setup](https://alchemy.run/e2b/setup) — Install @alchemy.run/e2b, sign in to E2B with a profile, and deploy from CI.
-- [Part 1: Build a Shared Base](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and a snapshot of it with a repository cloned, both built at deploy time, so every sandbox starts ready.
-- [Part 2: Start Sandboxes from It](https://alchemy.run/e2b/tutorial/part-2) — A Cloudflare Worker that starts a fresh E2B sandbox from the shared snapshot for each request.
-- [Part 3: A Copy per User](https://alchemy.run/e2b/tutorial/part-3) — Give each user an E2B sandbox started from the shared snapshot, which pauses with their changes and resumes when they come back.
-- [Part 4: Update the Base](https://alchemy.run/e2b/tutorial/part-4) — Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
-- [Part 5: Testing](https://alchemy.run/e2b/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the shared snapshot, and check what they contain.
+- [Part 1: Build a Template and a Snapshot](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and a snapshot of it with a repository cloned, both built at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/e2b/tutorial/part-2) — A Cloudflare Worker that starts a fresh E2B sandbox from the Warm snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/e2b/tutorial/part-3) — Give each user an E2B sandbox started from the Warm snapshot, which pauses with their changes and resumes when they come back.
+- [Part 4: Update the Template](https://alchemy.run/e2b/tutorial/part-4) — Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
+- [Part 5: Testing](https://alchemy.run/e2b/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Warm snapshot, and check what they contain.
 - [Part 6: Stages and CI](https://alchemy.run/e2b/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own E2B template, snapshot and Worker.
 - [Team & API keys](https://alchemy.run/e2b/api-keys) — How an E2B team holds your templates and sandboxes, how your profile picks the team Alchemy deploys to, and what key each host gets instead of yours.
 - [Network & secrets](https://alchemy.run/e2b/network-and-secrets) — Limit where a sandbox can connect, and add credentials to its requests without the sandbox seeing them.
@@ -745,11 +745,11 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 
 ## Archil — Tutorial
 
-- [Part 1: Build a Shared Base](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, declare an Archil disk, and seed it with a repository at deploy time.
-- [Part 2: Run Commands Against It](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that runs each command in a fresh microVM with the shared disk mounted read-only.
-- [Part 3: A Copy per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil disk of their own, copied from the shared base on their first request.
-- [Part 4: Update the Base](https://alchemy.run/archil/tutorial/part-4) — Add to the shared Archil disk, redeploy, and see every new command and copy get it while existing copies keep theirs.
-- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, run commands against the shared disk, and check it stays read-only.
+- [Part 1: Seed a Disk](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, declare an Archil disk, and seed it with a repository at deploy time.
+- [Part 2: Run Commands Against It](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that runs each command in a fresh microVM with the seeded disk mounted read-only.
+- [Part 3: A Copy per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil disk of their own, copied from the seeded disk on their first request.
+- [Part 4: Update the Disk](https://alchemy.run/archil/tutorial/part-4) — Add to the seeded Archil disk, redeploy, and see every new command and copy get it while existing copies keep theirs.
+- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, run commands against the seeded disk, and check it stays read-only.
 - [Part 6: Stages and CI](https://alchemy.run/archil/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Archil base disk and program, from GitHub Actions.
 
 ## Archil — Accounts & access
@@ -797,11 +797,11 @@ Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any W
 - [Boat](https://alchemy.run/boat) — Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
 - [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
 - [Setup](https://alchemy.run/boat/setup) — Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
-- [Part 1: Build a Shared Base](https://alchemy.run/boat/tutorial/part-1) — Declare a Boat snapshot that clones a repository and installs tools at deploy time, so every sandbox starts ready.
-- [Part 2: Start Sandboxes from It](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that starts a fresh Boat sandbox from the shared snapshot for each request.
-- [Part 3: A Copy per User](https://alchemy.run/boat/tutorial/part-3) — Give each user a Boat sandbox started from the shared snapshot, which keeps their changes and resumes when they come back.
-- [Part 4: Update the Base](https://alchemy.run/boat/tutorial/part-4) — Change the shared Boat snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
-- [Part 5: Testing](https://alchemy.run/boat/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the shared snapshot, and check what they contain.
+- [Part 1: Build a Snapshot](https://alchemy.run/boat/tutorial/part-1) — Declare a Boat snapshot that clones a repository and installs tools at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that starts a fresh Boat sandbox from the Golden snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/boat/tutorial/part-3) — Give each user a Boat sandbox started from the Golden snapshot, which keeps their changes and resumes when they come back.
+- [Part 4: Update the Snapshot](https://alchemy.run/boat/tutorial/part-4) — Change the Golden snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
+- [Part 5: Testing](https://alchemy.run/boat/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Golden snapshot, and check what they contain.
 - [Part 6: Stages and CI](https://alchemy.run/boat/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Boat snapshot and Worker.
 - [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
 - [Credentials & bindings](https://alchemy.run/boat/security/credentials) — What each host gets to reach Boat, deploy-time resources vs clients your app runs, and who owns the sandboxes your app creates.
@@ -885,10 +885,10 @@ Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and sc
 
 ## Daytona — Tutorial
 
-- [Part 1: Build a Shared Base](https://alchemy.run/daytona/tutorial/part-1) — Declare a Daytona snapshot of an image, and a warm snapshot of it with a repository cloned, both built at deploy time.
+- [Part 1: Build a Warm Snapshot](https://alchemy.run/daytona/tutorial/part-1) — Declare a Daytona snapshot of an image, and a warm snapshot of it with a repository cloned, both built at deploy time.
 - [Part 2: Start Sandboxes from It](https://alchemy.run/daytona/tutorial/part-2) — A Cloudflare Worker that starts a fresh Daytona sandbox from the warm snapshot for each request.
 - [Part 3: A Copy per User](https://alchemy.run/daytona/tutorial/part-3) — Give each user a Daytona sandbox started from the warm snapshot, which stops when idle and starts again with their changes.
-- [Part 4: Update the Base](https://alchemy.run/daytona/tutorial/part-4) — Move the Daytona snapshots to a new Node.js version, redeploy, and see new sandboxes start from it while existing ones keep theirs.
+- [Part 4: Update the Snapshot](https://alchemy.run/daytona/tutorial/part-4) — Move the Daytona snapshots to a new Node.js version, redeploy, and see new sandboxes start from it while existing ones keep theirs.
 - [Part 5: Testing](https://alchemy.run/daytona/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the warm snapshot, and check what they contain.
 - [Part 6: Stages and CI](https://alchemy.run/daytona/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Daytona snapshots and Worker.
 
@@ -925,11 +925,11 @@ Modal runs code in containers, with GPUs on demand: Functions and Servers that s
 
 ## Modal — Tutorial
 
-- [Part 1: Build a Shared Base](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
+- [Part 1: Build a Warm Image](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
 - [Part 2: Start Sandboxes from It](https://alchemy.run/modal/tutorial/part-2) — A Cloudflare Worker that starts a Modal sandbox from the warm image for each command, and reads back its output.
 - [Part 3: A Copy per User](https://alchemy.run/modal/tutorial/part-3) — Give each user a Modal volume of their own, mounted into every sandbox they start from the warm image.
-- [Part 4: Update the Base](https://alchemy.run/modal/tutorial/part-4) — Change the warm Modal image, redeploy, and see new sandboxes start from the new image while users keep their files.
-- [Part 5: Testing](https://alchemy.run/modal/tutorial/part-5) — Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the base and the user's files.
+- [Part 4: Update the Image](https://alchemy.run/modal/tutorial/part-4) — Change the warm Modal image, redeploy, and see new sandboxes start from the new image while users keep their files.
+- [Part 5: Testing](https://alchemy.run/modal/tutorial/part-5) — Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
 - [Part 6: Stages and CI](https://alchemy.run/modal/tutorial/part-6) — Deploy a stage per environment and per pull request, each in its own Modal environment with its own images.
 
 ## Modal — Accounts & access

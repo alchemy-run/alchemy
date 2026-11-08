@@ -13,65 +13,59 @@ The same disks mount on your own hosts in about 50 ms, keep recent data on fast 
 
 ## A quick example
 
-A disk holds the files, and a Worker runs a command against it on each request:
+A disk is seeded once, at deploy: a checkpoint runs commands against it in a microVM, here cloning a repository:
 
-```typescript title="src/api.ts"
+```typescript title="src/Storage.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+
+export const Repo = Archil.Disk("Repo", {});
+
+export const Base = Effect.gen(function* () {
+  const repo = yield* Repo;
+  return yield* Archil.Checkpoint("Base", {
+    disk: repo.diskId,
+    run: ["test -d is || git clone --depth 1 https://github.com/sindresorhus/is is"],
+  });
+});
+```
+
+A Worker runs each command it's sent in a fresh microVM with `Repo` mounted, the repository already there. The [tutorial](/archil/tutorial/part-2) mounts it read-only, and gives each user a copy:
+
+```typescript title="src/Api.ts"
 import * as Archil from "@alchemy.run/archil";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-export const Dataset = Archil.Disk("Dataset", {});
+import { Repo } from "./Storage.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const dataset = yield* Archil.ExecDisk(Dataset);
+    const repo = yield* Archil.ExecDisk(Repo);
     return {
       fetch: Effect.gen(function* () {
-        const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
-        return HttpServerResponse.text(result.stdout);
+        const request = yield* HttpServerRequest;
+        const result = yield* repo.exec(`cd /mnt/archil/is && ${yield* request.text}`);
+        return yield* HttpServerResponse.json(result);
       }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Archil.ExecDiskHttp)),
 ) {}
 ```
 
-Or the program runs in a sandbox of its own, at a public `https://` URL, with the disk mounted:
-
-```typescript title="src/files.ts"
-import * as Archil from "@alchemy.run/archil";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Dataset } from "./api.ts";
-
-export default class Files extends Archil.Sandbox<Files>()(
-  "Files",
-  { main: import.meta.url, port: 3000 },
-  Effect.gen(function* () {
-    const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
-    const fs = yield* FileSystem.FileSystem;
-    return {
-      fetch: Effect.map(fs.readDirectory(dataset.path), (names) =>
-        HttpServerResponse.text(names.join("\n")),
-      ).pipe(Effect.orDie),
-    };
-  }).pipe(Effect.provide(Archil.MountDiskLive)),
-) {}
-```
-
-And the Stack deploys both:
+And the Stack deploys them:
 
 ```typescript title="alchemy.run.ts"
-import * as Alchemy from "alchemy";
 import * as Archil from "@alchemy.run/archil";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import Api from "./src/api.ts";
-import Files from "./src/files.ts";
+import Api from "./src/Api.ts";
+import { Base } from "./src/Storage.ts";
 
 export default Alchemy.Stack(
   "MyApp",
@@ -80,9 +74,9 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const base = yield* Base;
     const api = yield* Api;
-    const files = yield* Files;
-    return { api: api.url, files: files.url };
+    return { checkpoint: base.name, url: api.url.as<string>() };
   }),
 );
 ```
