@@ -13,7 +13,7 @@ Provide `DomainCluster.layerEntities` to the model's Layer, as you would `Domain
 ```typescript
 // packages/server/src/BankLive.ts
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
-import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
+import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import * as Layer from "effect/Layer";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";

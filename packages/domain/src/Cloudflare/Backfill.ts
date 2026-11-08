@@ -1,4 +1,4 @@
-import type { Progress } from "@alchemy.run/domain/Backfill";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -8,7 +8,7 @@ import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Progress } from "../Backfill.ts";
 
 export interface BackfillProps {
   /** The Domain's Worker: a run starts once the Worker carrying its Workflow is deployed. */

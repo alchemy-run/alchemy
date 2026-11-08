@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
@@ -9,6 +10,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -22,7 +24,7 @@ import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
 
 const { test } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");

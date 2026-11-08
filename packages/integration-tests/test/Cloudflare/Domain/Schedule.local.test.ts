@@ -1,16 +1,18 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DomainScheduleWorker from "./fixtures/worker.ts";
 
 const { test } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
   dev: true,
 });
 

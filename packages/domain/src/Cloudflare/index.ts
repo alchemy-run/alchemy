@@ -1,4 +1,37 @@
-import * as Backfill from "@alchemy.run/domain/Backfill";
+import { outsideAlarmPass } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import {
+  DurableObject as CloudflareDurableObject,
+  type DurableObjectJurisdiction,
+  type InlineDurableObjectProps,
+} from "@alchemy.run/cloudflare/Workers/DurableObject";
+import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
+import { upgrade } from "@alchemy.run/cloudflare/Workers/WebSocket";
+import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import {
+  sleep,
+  task,
+  Workflow,
+  type WorkflowImpl,
+} from "@alchemy.run/cloudflare/Workflows/Workflow";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
+import { StorageName } from "alchemy/Workflows";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
+import { WorkflowEngine } from "effect/workflow";
+import * as Backfill from "../Backfill.ts";
 import {
   Attachment,
   className,
@@ -16,38 +49,14 @@ import {
   SUBSCRIPTION_HEADER,
   TRANSIT_RETRY,
   unwrapDefects,
-} from "@alchemy.run/domain/DurableObjects";
-import { type Platform, type Subscription } from "@alchemy.run/domain/Platform";
-import { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
-import { StorageName } from "alchemy/Workflows";
-import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import type * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Headers from "effect/http/Headers";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import type * as Scope from "effect/Scope";
-import { WorkflowEngine } from "effect/workflow";
-import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
-import {
-  DurableObject as CloudflareDurableObject,
-  type DurableObjectJurisdiction,
-  type InlineDurableObjectProps,
-} from "../Workers/DurableObject.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { makeRpcStub } from "../Workers/Rpc.ts";
-import { upgrade } from "../Workers/WebSocket.ts";
-import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
-import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
-import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
+} from "../DurableObjects.ts";
+import { type Platform, type Subscription } from "../Platform.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
+import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
+
+export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
+export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
 
 /** A Cloudflare Durable Object namespace: Domain's, plus fetch and jurisdictions. */
 interface CloudflareNamespace extends Namespace {
@@ -377,10 +386,13 @@ const cloudflareHost = (
  * key applies in timestamp order.
  *
  * ### Hosting on Cloudflare
+ * The Stack that deploys the Worker registers `DomainCloudflare.providers()`
+ * next to `Cloudflare.providers()`, for the backfills its deploys wait on.
+ *
  * **Example:** A Worker serving an Api
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankPolicies } from "./Bank.ts";
@@ -405,7 +417,7 @@ const cloudflareHost = (
  * ### Restricting a model to a jurisdiction
  * **Example:** Every Durable Object of the model in the EU
  * ```typescript
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankPolicies } from "./Bank.ts";
  *
@@ -425,7 +437,7 @@ const cloudflareHost = (
  *
  * **Example:** Two models that both list `Account`
  * ```typescript
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
  * import * as Layer from "effect/Layer";
  * import { Audit, AuditHandlers } from "./Audit.ts";
  * import { Billing, BillingHandlers } from "./Billing.ts";
@@ -445,7 +457,7 @@ export function layerDurableObjects({
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
-  Worker | SecureRandom.SecureRandom
+  Worker | SecureRandom.SecureRandom | Providers
 > {
   const timeoutSeconds =
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
@@ -469,7 +481,12 @@ export function layerDurableObjects({
         }),
       )),
     );
-  return platform;
+  // The Stack that deploys the Worker must register the providers too.
+  return platform as Layer.Layer<
+    Platform | WorkflowEngine.WorkflowEngine,
+    never,
+    Worker | SecureRandom.SecureRandom | Providers
+  >;
 }
 
 /**
