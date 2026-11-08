@@ -13,6 +13,8 @@ sandbox, and registers it with the sandbox's service manager. The service
 manager restarts the program if it crashes and starts it whenever the
 sandbox boots. The program's port gets a public `https://` URL.
 
+## The service manager keeps it running
+
 <Shell
   shell={{
     label: "Api",
@@ -50,7 +52,7 @@ export default class Api extends Archil.Sandbox<Api>()(
 ) {}
 ```
 
-## Deploy it
+## Deploy it at a public URL
 
 Yield the program from your Stack and return its URL:
 
@@ -158,14 +160,14 @@ export const Thumbs = Archil.Sandbox("Thumbs", {
 });
 ```
 
-## Change it in place
+## A deploy changes it in place
 
 A code change, a new `env`, or a new mount updates the same sandbox. A
 code or `env` change uploads the program and restarts it. A mount change
 stops the sandbox and starts it with the new mounts. The root filesystem
 is kept either way. Changing the image or the size replaces the sandbox.
 
-## Idle sandboxes
+## An idle sandbox pauses until the next request
 
 A sandbox pauses after its idle timeout, 30 minutes by default, and the next request to the program's URL wakes it, usually in a few seconds. Set `idleTtlSeconds` to change it, or `0` to keep it running.
 

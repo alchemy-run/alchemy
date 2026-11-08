@@ -1612,22 +1612,22 @@ export default defineConfig({
             },
             {
               label: "Accounts & access",
-              items: [{ label: "Account & API keys", link: "/boat/account-and-keys" }],
+              items: [
+                { label: "Account & API keys", link: "/boat/account-and-keys" },
+                { label: "Credentials & bindings", link: "/boat/security/credentials" },
+                { label: "Environments & secrets", link: "/boat/security/environments" },
+              ],
             },
             {
               label: "Sandboxes",
               items: [
-                { label: "Choosing a runtime", link: "/boat/choosing-a-runtime" },
-                { label: "Sandboxes", link: "/boat/sandboxes" },
-                { label: "Programs", link: "/boat/programs" },
-                { label: "Snapshots & forks", link: "/boat/snapshots" },
-                { label: "Environments", link: "/boat/environments" },
-                { label: "Ports", link: "/boat/ports" },
+                { label: "Choosing a runtime", link: "/boat/sandboxes/choosing-a-runtime" },
+                { label: "Sandboxes", link: "/boat/sandboxes/sandboxes" },
+                { label: "Programs", link: "/boat/sandboxes/programs" },
+                { label: "Snapshots & forks", link: "/boat/sandboxes/snapshots" },
+                { label: "Ports & URLs", link: "/boat/sandboxes/ports" },
+                { label: "Lifecycle events", link: "/boat/sandboxes/lifecycle-events" },
               ],
-            },
-            {
-              label: "Events",
-              items: [{ label: "Webhooks", link: "/boat/webhooks" }],
             },
             providerResourcesEntry("Boat"),
           ],

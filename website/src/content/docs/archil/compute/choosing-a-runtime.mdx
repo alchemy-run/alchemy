@@ -12,6 +12,8 @@ import DAG from "../../../../components/DAG.astro";
 
 Archil runs code next to a disk in four ways. Three of them are Firecracker microVMs that Archil runs, and the fourth is a host you already run, with the disk mounted. They differ in how long the code lives and who keeps it running.
 
+## Archil manages less as you decide more
+
 <Responsibility
   platform="Archil"
   columns={[
@@ -39,7 +41,7 @@ const dataset = yield* Archil.ExecDisk(Dataset);
 const result = yield* dataset.exec("wc -l /mnt/archil/*.csv");
 ```
 
-A call runs for at most five minutes and keeps nothing but what it writes to the disk. Choose it for an agent's shell tool, a search, or a batch over a dataset. See [Disks](/archil/storage/disks#run-commands-and-search).
+A call runs for at most five minutes and keeps nothing but what it writes to the disk. Choose it for an agent's shell tool, a search, or a batch over a dataset. See [Disks](/archil/storage/disks#run-commands-against-a-disk).
 
 <Timeline
   end={10}

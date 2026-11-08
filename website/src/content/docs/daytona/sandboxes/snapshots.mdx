@@ -7,6 +7,8 @@ import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 A **snapshot** is the image a sandbox boots from, with the size every sandbox from it gets: CPU, memory, disk and GPUs. Daytona builds it once and every sandbox starts from a copy. Snapshots can't be changed: changing what one is built from replaces it.
 
+## Every sandbox starts from a copy
+
 Daytona makes a snapshot from an image, from a Dockerfile, or from another snapshot with commands run in it. That last one is how you get a **warm base**: a snapshot with a repository already cloned and its dependencies installed, so sandboxes start ready to work.
 
 <Timeline
@@ -148,6 +150,10 @@ const base =
 yield* sandbox.createSandboxSnapshot({ name: `checkpoint-${task}` });
 ```
 
-## Deactivated snapshots
+## Unused snapshots are deactivated
 
-Daytona deactivates a snapshot nobody used for two weeks. Deploy reactivates it; at runtime, call `images.activate(name)`.
+Daytona deactivates a snapshot nobody used for two weeks. Deploy reactivates it; at runtime, activate it before you create from it:
+
+```typescript
+yield* images.activate(name);
+```

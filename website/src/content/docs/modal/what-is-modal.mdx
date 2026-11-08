@@ -13,20 +13,20 @@ Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm
 
 <Tree
   nodes={[
-    { id: "ws", label: "acme", type: "workspace" },
-    { id: "env", label: "Agents", type: "environment", parent: "ws" },
-    { id: "coder", label: "Coder", type: "app", parent: "env" },
-    { id: "warm", label: "Warm", type: "image", parent: "coder" },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", specs: [["image", "Warm"], ["mount", "/home/user"]] },
-    { id: "inference", label: "Inference", type: "app", parent: "env" },
-    { id: "embed", label: "Embed", type: "Function", parent: "inference", specs: [["gpu", "L4"]] },
-    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true },
-    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true },
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
+    { id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder" },
+    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window" },
+    { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box", specs: [["image", "Warm"], ["mount", "/home/user"]] },
+    { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
+    { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
+    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true, icon: "hard-drive" },
+    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true, icon: "key-round" },
   ]}
   caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. The Volume and the Secret belong to the environment, so any app in it can use them."
 />
 
-## Workspaces and tokens
+## Workspaces: who owns and pays
 
 A **workspace** owns your apps, storage and secrets, its members, and the bill. A personal account is a workspace of one, and a team shares one.
 
@@ -36,7 +36,7 @@ Modal authenticates calls with a **token**: a token id (`ak-…`) and a secret (
 
 See [Workspaces & tokens](/modal/workspaces-and-tokens).
 
-## Environments
+## Environments: stages that never share a Volume
 
 An **environment** divides a workspace. Two objects with the same name in two environments are different objects, so `dev` and `prod` never share a Volume by accident. Every workspace starts with one called `main`.
 
@@ -48,7 +48,7 @@ Alchemy names the environment from your app, stage and id, so each stage gets it
 
 See [Workspaces & tokens](/modal/workspaces-and-tokens#environments-keep-stages-apart).
 
-## Apps
+## Apps: code deployed and stopped together
 
 An **app** groups the code you deploy together and acts as its namespace. A deployed app runs until you stop it, and stopping it stops every Function, Server and Sandbox in it.
 
@@ -56,7 +56,7 @@ An **app** groups the code you deploy together and acts as its namespace. A depl
 export const Coder = Modal.App("Coder", { environment: Agents });
 ```
 
-## Images
+## Images: the filesystem a container starts from
 
 An **image** is the filesystem a container starts from. Modal builds it on its own builders, from a registry image, a Dockerfile, or another image with commands run on top, so a deploy needs no Docker on your machine.
 
@@ -74,7 +74,7 @@ export const Warm = Modal.Image("Warm", {
 
 See [Images](/modal/sandboxes/images).
 
-## Functions scale with their calls
+## Functions: containers that scale with calls
 
 A **Function** is code Modal runs when it's called. Each call is an **input**. Modal starts containers as inputs arrive, runs several at once when calls pile up, and stops them once they've been idle for the scale-down window. With no inputs, nothing runs and nothing is billed.
 
@@ -118,7 +118,7 @@ A Function can also run on a schedule, or serve its `fetch` handler at a `*.moda
 
 See [Functions](/modal/services/functions) and [Web endpoints](/modal/services/web-endpoints).
 
-## Servers serve HTTP
+## Servers: HTTP that scales with concurrency
 
 A **Server** is a long-running HTTP server. Requests reach it through one routing region, and Modal scales its containers on how many requests each is serving at once, not on a queue of calls.
 
@@ -134,7 +134,7 @@ export default class Api extends Modal.Server<Api>()(
 
 See [Servers](/modal/services/servers) and [Choosing a runtime](/modal/compute/choosing-a-runtime).
 
-## Sandboxes run code you create on the fly
+## Sandboxes: containers your code creates on the fly
 
 A **Sandbox** is a container your code creates while it runs, to execute code it doesn't trust: an agent's commands, a user's script. It runs until its timeout (five minutes unless you ask for up to 24 hours) or until it's been idle for its idle timeout, and you run commands in it, read and write its files, and reach its ports through tunnels.
 
@@ -148,7 +148,7 @@ A Sandbox's filesystem, or its memory too, can be snapshotted and started again 
 
 See [Sandboxes](/modal/sandboxes/sandboxes) and [Snapshots](/modal/sandboxes/snapshots).
 
-## Volumes, Dicts and Queues
+## Volumes, Dicts and Queues: state between containers
 
 A **Volume** is a filesystem that Functions, Servers and Sandboxes mount at a path, and that outlives every container that mounts it. A **Dict** is a key-value store and a **Queue** hands work between processes; both hold JSON and expire their entries.
 
@@ -167,7 +167,7 @@ const home = yield* volumes.getOrCreate(`home-${user}`);
 
 See [Volumes](/modal/storage/volumes), [Dicts](/modal/storage/dicts) and [Queues](/modal/storage/queues).
 
-## Secrets
+## Secrets: variables a container gets
 
 A **Secret** is a named set of environment variables, stored in an environment and attached to the containers that need them. A Sandbox can also keep a Secret out of its environment entirely: Modal adds it to outgoing requests for the hosts you name, so code inside never sees it.
 
@@ -180,7 +180,7 @@ export const OpenAI = Modal.Secret("OpenAI", {
 
 See [Secrets](/modal/security/secrets).
 
-## Network
+## Network: what a Sandbox can reach
 
 A Sandbox reaches the internet unless you limit it. Block its network, or allow only some domains and address ranges, and change either while it runs. Its ports reach the outside through **tunnels**, at a public URL per port.
 

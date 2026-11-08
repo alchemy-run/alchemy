@@ -7,6 +7,8 @@ import BranchGraph from "../../../components/diagrams/BranchGraph.astro";
 
 A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandboxes from it start where the original was: a repository cloned, its dependencies installed, a server listening. A **fork** snapshots a running sandbox and starts copies of it at once, while the original keeps running. Each copy changes on its own from then on.
 
+## Copies start where the original was
+
 <BranchGraph
   end={10}
   branches={[
@@ -25,7 +27,7 @@ A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandb
   caption="Warm is Agent after npm ci. user-42 starts from Warm, and two forks copy user-42 as it is, edits included, to run test shards side by side."
 />
 
-## A warm base at deploy time
+## Build a warm base at deploy
 
 ```typescript title="alchemy.run.ts"
 const warm = yield* E2B.Snapshot("Warm", {
@@ -39,7 +41,7 @@ const warm = yield* E2B.Snapshot("Warm", {
 
 Alchemy boots the template, runs the commands, snapshots the sandbox with its memory, and kills it. A command that exits non-zero fails the deploy with `SnapshotSetupFailed`. A deploy runs the setup again only when the template or the commands change.
 
-## Create sandboxes from it
+## Start sandboxes from a snapshot
 
 ```typescript
 const sandboxes = yield* E2B.CreateSandbox(Warm);
@@ -56,7 +58,7 @@ const restored = yield* sandboxes.create({ templateID: snapshot.snapshotID });
 
 Pass `memory: false` to keep only the filesystem; sandboxes from it boot fresh.
 
-## Fork a sandbox
+## Fork a running sandbox
 
 ```typescript
 const results = yield* sandbox.fork({ count: 3 });
@@ -67,7 +69,7 @@ for (const result of results) {
 
 E2B checkpoints the sandbox (it keeps running) and starts copies of it. Each fork succeeds or fails on its own.
 
-## Snapshots at runtime
+## Take snapshots while your app runs
 
 ```typescript
 const snapshots = yield* E2B.CreateSnapshot();

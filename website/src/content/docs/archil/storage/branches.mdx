@@ -9,6 +9,8 @@ import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
 
 A **checkpoint** is a named snapshot of a disk. It takes about 15 ms whatever the disk's size, and never changes once taken. A **branch** is a writable copy of a disk started from a checkpoint, in about 35 ms. Writes on a branch never reach the disk or its other branches, so each agent, session or CI job can get a copy of its own.
 
+## Each branch shares the seed until it writes
+
 <BranchGraph
   end={10}
   branches={[
@@ -45,7 +47,7 @@ export const Base = Effect.gen(function* () {
 });
 ```
 
-## Branch per session
+## Branch a disk per session
 
 `Archil.BranchDisk` gives a Worker or Lambda a client that creates branches while the app runs:
 
@@ -56,7 +58,7 @@ const branch = yield* seeds.branch({ name: "session-42", fromCheckpoint: "base" 
 
 Mount it on your own host with `MountDisk` and `branch: "session-42"`. Branches share the disk's credentials, so a disk user that mounts the disk can mount any of its branches. A sandbox can't mount a branch yet.
 
-## Declare a branch
+## Declare a long-lived branch
 
 A branch that lives as long as the Stack, like a staging copy, is a resource:
 
@@ -68,7 +70,7 @@ export const Staging = Effect.gen(function* () {
 });
 ```
 
-## Fork a sandbox
+## Fork a sandbox in milliseconds
 
 A sandbox's root filesystem is a disk too, so `fork` uses the same checkpoint and branch to copy a sandbox in milliseconds. A sandbox with mounted disks has to be stopped first.
 
@@ -76,6 +78,6 @@ A sandbox's root filesystem is a disk too, so `fork` uses the same checkpoint an
 const copy = yield* sandbox.fork({ name: "task-1-retry" });
 ```
 
-## Deleting
+## Branches go when the disk does
 
 Archil can't delete checkpoints or branches yet. Destroying an `Archil.Checkpoint` or `Archil.Branch` removes it from Alchemy's state only, and deleting the disk deletes them with it.

@@ -3,9 +3,13 @@ title: Sandboxes
 description: Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
 ---
 
-import StateMachine from "../../../components/diagrams/StateMachine.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
 A **sandbox** is a Linux machine: Ubuntu with Docker, Node.js, Bun and Python, and `sudo` that needs no password. It comes in four sizes: `small` (2 vCPUs, 4 GB), `default`, `large` and `xlarge`, the last on Boat's $100 plan and up. A sandbox starts in under a second, runs for its `autoStop`, then stops and keeps its disk.
+
+## A sandbox stops, keeps its disk, and resumes
+
+Stopping saves the disk, and resuming brings the files back:
 
 <StateMachine
   states={[
@@ -39,7 +43,7 @@ export const DevBox = Boat.Sandbox("DevBox", {
 
 `setupScript` runs once, in the background, after the sandbox starts; `setupStatus` says how it went. `autoStop: false` never stops it. Changing the name, subdomain or `autoStop` updates the sandbox in place. A new `type`, `env`, `environment`, `setupScript`, `labels`, or a new or rebuilt `snapshot`, replaces it, and the old sandbox's disk goes with it.
 
-## Keep the account's secrets out
+## Keep the account's secrets out of untrusted code
 
 A sandbox gets your account's default environment, with its variables, secret files and credentials, unless you say otherwise. For a sandbox that runs someone else's code, pass `noEnv`:
 
@@ -47,7 +51,7 @@ A sandbox gets your account's default environment, with its variables, secret fi
 export const Untrusted = Boat.Sandbox("Untrusted", { noEnv: true, env: { TASK: "lint" } });
 ```
 
-It gets only its own `env`, and it can't act on your account or other sandboxes. See [Environments](/boat/environments) for sandboxes that should get some secrets and not others.
+It gets only its own `env`, and it can't act on your account or other sandboxes. See [Environments & secrets](/boat/security/environments) for sandboxes that should get some secrets and not others.
 
 ## Create sandboxes while your app runs
 
@@ -64,7 +68,7 @@ const sandbox = yield* Effect.acquireRelease(
 
 Provide `Boat.CreateSandboxHttp`. `create` takes Boat's own parameters (`type`, `env`, `environment`, `noEnv`, `setupScript`, `labels`, `from`), and `autoStop`.
 
-## Find a sandbox again
+## Find a sandbox again by its labels
 
 Labels mark a sandbox when it's created. Find it by them on the next request, and resume it with its files:
 
@@ -100,7 +104,7 @@ yield* server.output.pipe(
 
 A background command keeps running after the request ends; `sandbox.processes.attach(server.processId)` picks it up again.
 
-## Use files
+## Read and write files
 
 Paths are relative to `/home/user`. Boat reaches files under `/home/user` and `/tmp`:
 
@@ -112,7 +116,7 @@ const entries = yield* sandbox.files.list("app");
 
 A missing path fails with `FileNotFound`. Writing creates the parent directories.
 
-## Work in a declared sandbox
+## Drive a declared sandbox from a Worker
 
 Bind `ConnectSandbox` to reach a sandbox the Stack declares, from a Worker or Function:
 
@@ -125,6 +129,4 @@ const result = yield* devBox.exec("git pull && npm test", { cwd: "/home/user/alc
 
 Provide `Boat.ConnectSandboxHttp`. A call into a stopped sandbox fails with `SandboxNotRunning`, so resume it first. Resuming one that's running does nothing.
 
-## Next
-
-Run your own server in a sandbox: [Programs](/boat/programs).
+To run your own server in a sandbox, see [Programs](/boat/sandboxes/programs).

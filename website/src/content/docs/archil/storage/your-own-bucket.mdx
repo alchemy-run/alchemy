@@ -9,6 +9,8 @@ import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 A disk can keep its files in a bucket you own instead of Archil's. Archil still keeps the data in use in its storage layer, and copies writes to your bucket in the background, where they're ordinary objects any S3 tool can read without Archil. Destroying the disk leaves them there. Archil offers it on its paid plans.
 
+## Your bucket trusts Archil, no key needed
+
 On S3, the bucket's policy trusts Archil's IAM role for your region, only on behalf of disks in your organization, so no access key exists anywhere.
 
 <Boundaries
@@ -39,7 +41,7 @@ export const Dataset = ArchilAWS.S3Disk("Dataset", { bucket: Store, prefix: "dat
 
 The disk's files land under `datasets/` in `Store`. Your Stack needs `AWS.providers()` next to `Archil.providers()`.
 
-## Set your organization id
+## Set your organization id in the profile
 
 The policy is scoped to your Archil organization, so Alchemy needs its id. Enter it in your profile:
 
@@ -49,7 +51,7 @@ alchemy profile edit --add Archil
 
 Or set `ARCHIL_ORGANIZATION` in CI. Find the id in the [console](https://console.archil.com).
 
-## Other object stores
+## Use another object store
 
 R2, Google Cloud Storage, Azure Blob and other S3-compatible stores take keys. Give them in `storage` on `Archil.Disk`:
 
@@ -67,6 +69,6 @@ export const Dataset = Archil.Disk("Dataset", {
 
 Changing `storage` replaces the disk.
 
-## What the bucket sees
+## The bucket sees writes a little later
 
 Archil writes to the bucket after the write is durable in its own storage, so a tool reading the bucket directly sees a new file a little later than a client of the disk does. Read through the disk when you need the latest write.

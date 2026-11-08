@@ -1,12 +1,16 @@
 ---
-title: Webhooks
+title: Lifecycle events
 description: Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
 ---
 
-import Fanout from "../../../components/diagrams/Fanout.astro";
-import StateMachine from "../../../components/diagrams/StateMachine.astro";
+import Fanout from "../../../../components/diagrams/Fanout.astro";
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
 
-A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you subscribe to. Every event is about one sandbox:
+A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you subscribe to. Every event is about one sandbox.
+
+## Each event is a sandbox changing state
+
+A sandbox fires an event as it becomes ready, gets its files back, stops, fails, or drops out of reach:
 
 <StateMachine
   states={[
@@ -27,7 +31,7 @@ A **webhook** is an HTTPS endpoint of yours that Boat calls with each event you 
   caption="sandbox.ready fires when a sandbox can take commands, and sandbox.hydrated once a resumed or forked sandbox has all its files back. sandbox.archived fires when it stops, and sandbox.error when it fails. A sandbox Boat can't reach fires sandbox.degraded, then sandbox.recovered."
 />
 
-## Receive events in a Worker
+## Subscribe a Worker to events
 
 Subscribe a Worker to the events it needs, with a handler for each one:
 
@@ -51,11 +55,20 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 At deploy, Alchemy registers a webhook pointing at the Worker's `/__alchemy/boat/events`, and gives the Worker its signing secret as a Cloudflare secret. Boat retries a delivery that fails, so make the handler safe to repeat, keyed on `event.id`. Destroying the Worker removes the webhook.
 
-## What reaches your handler
+## The Worker checks every delivery
+
+Boat signs each delivery with the webhook's secret:
+
+```http
+POST /__alchemy/boat/events
+X-Ascii-Delivery: dlv_8a2c
+X-Ascii-Timestamp: 1762531200
+X-Ascii-Signature: v1=<HMAC-SHA256 of delivery.timestamp.body>
+```
 
 The Worker checks every request before your handler runs. It refuses, with 401, a request without Boat's signature, one signed with another secret, one whose body was changed after signing, and one more than five minutes old, so a captured delivery can't be replayed later. The signature covers the delivery id, the timestamp and the body, and the event's `id` must be the signed delivery id. Requests over 1 MB are refused unread, and events you didn't subscribe to are acknowledged without running the handler.
 
-## The Worker's two keys
+## The Worker holds two keys
 
 The Worker holds two keys, both deployed as Cloudflare secrets, never as plain-text variables:
 
@@ -64,7 +77,7 @@ The Worker holds two keys, both deployed as Cloudflare secrets, never as plain-t
 
 The signing secret is what keeps others out: nothing reaches your handler without it.
 
-## Only your stack's sandboxes
+## Your handler sees only your stack's sandboxes
 
 Boat sends a webhook the events of every sandbox in the account. The event names only the sandbox's id, so the Worker reads its labels from Boat, with a key that can only read sandboxes, and hands your handler only the ones this stack and stage own: sandboxes the Stack declares, and the ones its bindings create.
 
@@ -91,11 +104,11 @@ yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
 
 The scope is a filter, not an access boundary: anyone in your Boat account who can create sandboxes can label one with your stack's labels. To receive every sandbox's events, pass `scope: "account"`. The Worker then skips the lookup, and `labels` is undefined. A sandbox that was deleted before its event arrived can't be read, so `scope: "stack"` drops its events. When Boat can't be reached for the lookup, the Worker answers 503 and Boat delivers the event again.
 
-## Limits
+## An account holds 10 webhooks
 
 An account has at most 10 webhooks, and each Worker that consumes events, in each stage, uses one. Destroy stages you no longer use. Boat delivers only to public HTTPS URLs on port 443, so under `alchemy dev` no webhook is registered.
 
-## Declare a webhook yourself
+## Point a webhook at any endpoint
 
 For an endpoint that isn't an Alchemy host, declare the webhook directly:
 
@@ -106,8 +119,4 @@ const hook = yield* Boat.Webhook("Events", {
 });
 ```
 
-`hook.secret` is the signing secret, as a `Redacted` value: Boat shows it only when the webhook is created, so Alchemy keeps it in state. Each delivery carries `X-Ascii-Delivery`, `X-Ascii-Timestamp` and `X-Ascii-Signature: v1=<hex HMAC-SHA256 of delivery.timestamp.body>`; check it before acting on the event. Changing the URL or the events updates the webhook in place.
-
-## Next
-
-See every resource and binding in the [API reference](/providers).
+`hook.secret` is the signing secret, as a `Redacted` value: Boat shows it only when the webhook is created, so Alchemy keeps it in state. Check each delivery's signature, as above, before acting on the event. Changing the URL or the events updates the webhook in place.
