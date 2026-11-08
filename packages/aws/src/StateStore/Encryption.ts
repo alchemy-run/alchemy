@@ -91,20 +91,16 @@ export const stateEncryption = (options: StateEncryptionOptions = {}) =>
       const run = <A, E extends { readonly _tag?: string; readonly message?: string }>(
         effect: Effect.Effect<A, E, KmsDeps>,
       ) => effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
-      const keyArn = yield* Effect.cached(
-        run(
-          resolveStateKey({
-            kmsKeyId: options.kmsKeyId,
-            name: options.name,
-            store: {
-              backend: "aws",
-              flags: { name: options.name },
-              label: "AWS state encryption",
-              configured: options.kmsKeyId !== undefined,
-            },
-          }),
-        ),
-      );
+      const keyArn = yield* resolveStateKey({
+        kmsKeyId: options.kmsKeyId,
+        name: options.name,
+        store: {
+          backend: "aws",
+          flags: { name: options.name },
+          label: "AWS state encryption",
+          configured: options.kmsKeyId !== undefined,
+        },
+      }).pipe(run, Effect.cached);
       return kmsKeyring(keyArn, run);
     }).pipe(withoutSdkDebugLogs),
   ).pipe(Layer.provide(stateEnvironment()));
