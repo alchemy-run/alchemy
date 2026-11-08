@@ -1,6 +1,7 @@
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as RDS from "@alchemy.run/aws/RDS";
 import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 
 /**
@@ -15,18 +16,20 @@ import * as Effect from "effect/Effect";
  * security group only.
  */
 export const RDSDataInfra = Effect.gen(function* () {
+  // Two zones of the Region the stack deploys to.
+  const region = yield* yield* Region;
   const vpc = yield* EC2.Vpc("Vpc", {
     cidrBlock: "10.61.0.0/16",
   });
   const subnetA = yield* EC2.Subnet("SubnetA", {
     vpcId: vpc.vpcId,
     cidrBlock: "10.61.0.0/24",
-    availabilityZone: "us-west-2a",
+    availabilityZone: `${region}a`,
   });
   const subnetB = yield* EC2.Subnet("SubnetB", {
     vpcId: vpc.vpcId,
     cidrBlock: "10.61.1.0/24",
-    availabilityZone: "us-west-2b",
+    availabilityZone: `${region}b`,
   });
 
   // Security group for the VPC-attached Drizzle Lambda. No ingress — it only
