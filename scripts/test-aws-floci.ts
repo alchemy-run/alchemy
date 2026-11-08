@@ -370,8 +370,8 @@ const command = Command.make(
     if (external) {
       yield* Console.log(`${LABEL}: using the existing Floci server (no Docker fallback)`);
     } else {
-      yield* preferLocalFlociImage(LABEL);
-      yield* startFlociForTests(LABEL).pipe(
+      const image = yield* preferLocalFlociImage(LABEL);
+      yield* startFlociForTests(LABEL, image).pipe(
         Effect.catch((error) =>
           fail(
             `could not start the Floci container: ${errorMessage(error)}; tests were not started`,
