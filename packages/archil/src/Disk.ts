@@ -3,7 +3,6 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -378,11 +377,6 @@ export const syncDiskSettings = Effect.fn(function* (
   return { allowedIps, allowSandboxMount };
 });
 
-/** Archil reported a disk created but returned no id, and no disk has its name. */
-export class DiskIdMissing extends Data.TaggedError("Archil.DiskIdMissing")<{
-  readonly diskName: string;
-}> {}
-
 /** Ensure a disk with this name exists and is available (create-or-observe). */
 export const ensureDisk = Effect.fn(function* (
   name: string,
@@ -396,12 +390,11 @@ export const ensureDisk = Effect.fn(function* (
   if (observed) return yield* waitForDisk(observed.id);
   // Archil answers a create of an existing name with that disk's id, so a
   // concurrent create of the same name needs no special case.
-  const created = yield* archil
-    .createDisk({ name, mounts: storage ? [toMountConfig(storage)] : undefined })
-    .pipe(Effect.map(({ data }) => data.diskId));
-  const id = created ?? (yield* findDiskByName(name))?.id;
-  if (!id) return yield* new DiskIdMissing({ diskName: name });
-  return yield* waitForDisk(id);
+  const { data } = yield* archil.createDisk({
+    name,
+    mounts: storage ? [toMountConfig(storage)] : undefined,
+  });
+  return yield* waitForDisk(data.diskId);
 });
 
 /** Delete a disk and wait until it is gone. Deleting a missing disk succeeds. */
