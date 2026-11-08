@@ -3,7 +3,6 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
-import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,7 +12,6 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
@@ -93,11 +91,6 @@ const watch = (url: string, path: string, answers: Array<{ status: number; body:
     Effect.repeat(Schedule.spaced("250 millis")),
   );
 
-const tagsOf = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  return yield* getWorkerTags(scriptName, accountId);
-});
-
 /**
  * A Worker deployed before Domain versions existed named its classes after
  * the definition alone (`AccountAggregate`). Upgrading renames them after
@@ -132,9 +125,6 @@ test.provider(
         "OwnersView",
         "OwnersViewRun",
       ]);
-      expect(
-        (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
-      ).toEqual([]);
 
       // Read the account throughout the upgrade: while Cloudflare rolls the
       // new code out, every request still answers with it.
@@ -162,8 +152,6 @@ test.provider(
         "Billing.OwnersView": legacy.OwnersView,
         "Billing.OwnersViewRun": legacy.OwnersViewRun,
       });
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
-
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       // the run started before the upgrade finishes after it
@@ -180,50 +168,7 @@ test.provider(
       );
       yield* waitForVersion(url, 0);
       expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
-
-      // A Worker a newer Alchemy deployed (version 1) is never moved back.
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      yield* workers.patchScriptScriptAndVersionSetting({
-        accountId,
-        scriptName,
-        settings: {
-          // Cloudflare checks every class is still declared on any settings change.
-          exports: Object.fromEntries(
-            Object.keys(upgraded).map((className) => [
-              className,
-              { type: "durable-object", storage: "sqlite" },
-            ]),
-          ),
-          tags: (yield* tagsOf(scriptName)).map((tag) =>
-            tag === "alchemy:domain:v0" ? "alchemy:domain:v1" : tag,
-          ),
-        },
-      });
-      const downgrade = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return { worker: yield* UpgradeWorker };
-          }),
-        )
-        .pipe(Effect.exit);
-      expect(Exit.isFailure(downgrade)).toBe(true);
-      expect(String(downgrade)).toContain("DomainVersionTooNew");
-      expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
-
-      // Nor are its classes deleted by older code that hosts no model at all.
-      const removed = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return { worker: yield* UpgradePlainWorker };
-          }),
-        )
-        .pipe(Effect.exit);
-      expect(Exit.isFailure(removed)).toBe(true);
-      expect(String(removed)).toContain("DomainVersionTooNew");
-      expect(yield* namespacesOf(scriptName)).toEqual(upgraded);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -232,8 +177,8 @@ test.provider(
 
 /**
  * Two models that listed the same aggregate shared its class before Domain
- * versions existed. Only one can keep that data, so the upgrade fails until
- * one model sets `legacyData`.
+ * versions existed. Only one can keep that data, so the upgrade fails while
+ * both would take it over, until the other sets `legacyData: false`.
  */
 test.provider(
   "upgrading models that shared a class needs one to keep its data",
@@ -261,7 +206,7 @@ test.provider(
         )
         .pipe(Effect.exit);
       expect(Exit.isFailure(ambiguous)).toBe(true);
-      expect(String(ambiguous)).toContain("AmbiguousDomainLegacyData");
+      expect(String(ambiguous)).toContain("DurableObjectRenameConflict");
       // nothing changed on Cloudflare
       expect(yield* namespacesOf(scriptName)).toEqual(legacy);
 
@@ -284,12 +229,11 @@ test.provider(
 );
 
 /**
- * Removing every model from a Worker at the current version is allowed: its
- * classes are deleted like any Durable Object the Worker stops hosting, and
- * its version tag goes with them.
+ * Removing every model from a Worker is allowed: its classes are deleted like
+ * any Durable Object the Worker stops hosting.
  */
 test.provider(
-  "removing every model from a Worker deletes its classes and version",
+  "removing every model from a Worker deletes its classes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -300,7 +244,7 @@ test.provider(
       );
       const scriptName = worker.workerName;
       yield* waitForVersion(worker.url!, 0);
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v0");
+      expect(Object.keys(yield* namespacesOf(scriptName)).length).toBeGreaterThan(0);
 
       yield* stack.deploy(
         Effect.gen(function* () {
@@ -308,9 +252,6 @@ test.provider(
         }),
       );
       expect(yield* namespacesOf(scriptName)).toEqual({});
-      expect(
-        (yield* tagsOf(scriptName)).filter((tag) => tag.startsWith("alchemy:domain:")),
-      ).toEqual([]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

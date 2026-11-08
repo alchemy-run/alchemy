@@ -53,7 +53,8 @@ const SAGA = /^\/(saga|approve)\/([^/]+)(?:\/([^/]+))?$/;
 /**
  * A Worker hosting Billing, and Audit when `audit` is set, laid out as Domain
  * version `version` lays them out: `undefined` for the layout from before
- * versions existed.
+ * versions existed. `legacyData` names the model that keeps a class the two
+ * shared; the other sets `legacyData: false`. Unset, both take it over.
  */
 export const upgradeWorker = ({
   version,
@@ -68,7 +69,7 @@ export const upgradeWorker = ({
     const Platform = DomainCloudflare.layerDurableObjects();
     const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
       Effect.provide(
-        Billing.layer(ApproveLive, { legacyData: legacyData === "Billing" }).pipe(
+        Billing.layer(ApproveLive, legacyData === "Audit" ? { legacyData: false } : {}).pipe(
           Layer.provide(Platform),
         ),
       ),
@@ -78,7 +79,7 @@ export const upgradeWorker = ({
       Audit: audit
         ? yield* Effect.all({ accounts: Account, owners: Owners }).pipe(
             Effect.provide(
-              Audit.layer(Layer.empty, { legacyData: legacyData === "Audit" }).pipe(
+              Audit.layer(Layer.empty, legacyData === "Billing" ? { legacyData: false } : {}).pipe(
                 Layer.provide(Platform),
               ),
             ),

@@ -19,6 +19,7 @@ import {
 } from "@alchemy.run/domain/DurableObjects";
 import { type Platform, type Subscription } from "@alchemy.run/domain/Platform";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -37,13 +38,13 @@ import { outsideAlarmPass } from "../Workers/AlarmCallback.ts";
 import {
   DurableObject as CloudflareDurableObject,
   type DurableObjectJurisdiction,
+  type InlineDurableObjectProps,
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { makeRpcStub } from "../Workers/Rpc.ts";
 import { upgrade } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
-import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
 import { DeployVersion } from "./Version.ts";
@@ -75,6 +76,7 @@ type CloudflareImpl = Effect.Effect<
  */
 const declare = CloudflareDurableObject as unknown as (
   name: string,
+  props: InlineDurableObjectProps,
   impl: CloudflareImpl,
 ) => Effect.Effect<CloudflareNamespace, never, Worker>;
 
@@ -175,18 +177,16 @@ const reachable = <A>(effect: Effect.Effect<A>) =>
 const REACH_RETRIES = { limit: 3, delay: "1 second", backoff: "constant" } as const;
 
 /**
- * Tell the Worker deploy about a class a model hosts and the name it had
- * before Domain version 0, so the deploy carries its data over. See
- * `Version.ts`.
+ * The class a model's class takes over: the one it was named before Domain
+ * version 0, when models in one Worker that listed the same definition shared
+ * its class. A model that sets `legacyData: false` takes over nothing.
  */
-const record = (modelName: string, legacyName: string, legacyData: boolean, name = legacyName) =>
-  Effect.gen(function* () {
-    const worker = yield* CloudflareWorker;
-    const current = className(modelName, name);
-    yield* worker.bind`${current}.DomainVersion`({
-      domainClasses: [{ model: modelName, className: current, legacyName, legacyData }],
-    });
-  });
+const renamedFrom = (
+  version: number | undefined,
+  legacyData: boolean,
+  legacyName: string,
+): InlineDurableObjectProps =>
+  version !== undefined && legacyData ? { renamedFrom: legacyName } : {};
 
 /** The Domain host over a Worker's Durable Objects. */
 const cloudflareHost = (
@@ -196,6 +196,8 @@ const cloudflareHost = (
   /** The Domain version to lay models out with: `undefined` for the layout from before versions. */
   version: number | undefined,
   legacySagas: Map<string, string>,
+  /** The class each saga's runs live on, by its name before Domain version 0. */
+  sagaRenames: Map<string, InlineDurableObjectProps>,
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -226,27 +228,31 @@ const cloudflareHost = (
         // outside the jurisdiction.
         declare: ({ modelName, legacyData }, name, impl) =>
           Effect.gen(function* () {
-            if (version !== undefined) yield* record(modelName, name, legacyData);
-            const namespace = yield* declare(named(modelName, name), onCloudflare(impl));
+            const namespace = yield* declare(
+              named(modelName, name),
+              renamedFrom(version, legacyData, name),
+              onCloudflare(impl),
+            );
             return jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction);
           }),
         lookup: ({ modelName }, name) => fromEnv(env, named(modelName, name)),
         // Each saga's runs live on a Durable Object class of the workflow
         // engine, named after the model too.
         hosted: (model) =>
-          Effect.forEach(
-            model.sagas,
-            (saga) =>
-              version === undefined
-                ? Effect.sync(() => legacySagas.set(`${model.modelName}.${saga}`, saga))
-                : record(
-                    model.modelName,
-                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+          Effect.sync(() => {
+            for (const saga of model.sagas) {
+              if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
+              else
+                sagaRenames.set(
+                  className(model.modelName, `${saga}Workflow`),
+                  renamedFrom(
+                    version,
                     model.legacyData,
-                    `${saga}Workflow`,
+                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
                   ),
-            { discard: true },
-          ),
+                );
+            }
+          }),
         connect: connectTo,
         claimKey: CloudflareWorker,
         // A deploy's backfill: a Workflow starts each new consumer's run, then
@@ -411,9 +417,11 @@ const cloudflareHost = (
  * ### Hosting several models in one Worker
  * Each model gets its own Durable Object classes, named after the model
  * (`Billing.AccountAggregate`), so models that list the same aggregate never
- * share its data. A deploy moves data a Worker deployed with an earlier Domain
- * layout to the current one; see `legacyData` on a model's `layer` for models
- * that shared a class before Domain versions existed.
+ * share its data. A Worker deployed before Domain version 0 named a class
+ * after its definition alone (`AccountAggregate`), shared by every model that
+ * listed it; the next deploy renames it to the model's class with
+ * `renamedFrom`, keeping its objects. When two models shared one, set
+ * `legacyData: false` on the `layer` of each model that starts empty.
  *
  * **Example:** Two models that both list `Account`
  * ```typescript
@@ -425,18 +433,6 @@ const cloudflareHost = (
  * const Platform = DomainCloudflare.layerDurableObjects();
  * const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
  * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
- * ```
- *
- * ### Restricting a model to a jurisdiction
- * **Example:** Every Durable Object of the model in the EU
- * ```typescript
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankPolicies } from "./Bank.ts";
- *
- * const BankLive = Bank.layer(BankPolicies).pipe(
- *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
- * );
  * ```
  *
  * @layer
@@ -463,10 +459,11 @@ export function layerDurableObjects({
       (platform = Layer.unwrap(
         Effect.gen(function* () {
           const version = yield* DeployVersion;
-          const engine = layerDurableObjectEngine({ jurisdiction });
+          const sagaRenames = new Map<string, InlineDurableObjectProps>();
+          const engine = sagaEngine(jurisdiction, sagaRenames);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(jurisdiction, timeoutSeconds, version, legacySagas),
+            cloudflareHost(jurisdiction, timeoutSeconds, version, legacySagas, sagaRenames),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -474,6 +471,25 @@ export function layerDurableObjects({
     );
   return platform;
 }
+
+/**
+ * Effect's workflow engine on the Worker's Durable Objects, as
+ * `Cloudflare.Workflows.layerDurableObjectEngine` runs it, with each saga's
+ * class taking over the class its runs lived on before Domain version 0.
+ */
+const sagaEngine = (
+  jurisdiction: DurableObjectJurisdiction | undefined,
+  sagaRenames: ReadonlyMap<string, InlineDurableObjectProps>,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
+  makeDurableObjectEngine({
+    declare: (name, impl) =>
+      Effect.map(
+        declare(name, sagaRenames.get(name) ?? {}, impl as unknown as CloudflareImpl),
+        (namespace) =>
+          jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+      ),
+    state: DurableObjectState,
+  });
 
 /**
  * Before Domain version 0, a saga's runs lived on a class named after the
