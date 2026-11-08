@@ -5,7 +5,8 @@ sidebar:
   order: 1
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 
 A disk is a POSIX filesystem stored in object storage. The data clients are using sits in Archil's storage layer, in front of the bucket, so reads and writes run at disk speed while the bucket holds everything. A write is durable once `fsync` returns. The bucket is Archil's, or [your own](/archil/storage/your-own-bucket).
 
@@ -13,20 +14,11 @@ A disk is a POSIX filesystem stored in object storage. The data clients are usin
 
 One disk is reachable three ways at once: mounted as a filesystem, through serverless exec, and as an S3-style bucket of objects.
 
-<DAG
+<Tree
   nodes={[
-    { id: "sandbox", label: "Api", type: "mount", col: 0, row: 0 },
-    { id: "exec", label: "exec", type: "microVM per call", col: 0, row: 1 },
-    { id: "worker", label: "Worker", type: "ReadDisk · S3 API", col: 0, row: 2 },
-    { id: "cache", label: "storage layer", type: "data in use", tone: "accent", col: 2, row: 1 },
-    { id: "bucket", label: "bucket", type: "every file", col: 3, row: 1 },
-  ]}
-  groups={[{ id: "disk", label: "Dataset", nodes: ["cache", "bucket"] }]}
-  edges={[
-    { from: "sandbox", to: "cache", exit: "side" },
-    { from: "exec", to: "cache" },
-    { from: "worker", to: "cache", exit: "side" },
-    { from: "cache", to: "bucket", label: "syncs" },
+    { id: "disk", label: "Dataset", type: "disk", icon: "brand:archil" },
+    { id: "cache", label: "storage layer", type: "data in use", parent: "disk", wide: true, tone: "accent", icon: "zap", specs: [["Api", "mounts it"], ["exec", "a microVM per call"], ["Worker", "ReadDisk · S3 API"]] },
+    { id: "bucket", label: "bucket", type: "every file", parent: "disk", wide: true, icon: "archive", specs: [["synced from", "the storage layer"]] },
   ]}
   caption="Mounts, exec calls and S3 requests all reach the same disk and see each other's writes. Archil keeps the data in use in front of the bucket and copies writes to the bucket in the background."
 />
