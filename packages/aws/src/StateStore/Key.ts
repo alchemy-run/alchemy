@@ -4,10 +4,23 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { StateStoreError } from "alchemy/State/State";
 import type { SealingScope, StateEncryptionService } from "alchemy/State/StateEncryption";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+
+/**
+ * The KMS key an `AWS.stateEncryption()` layer encrypts with. The AWS state
+ * stores encrypt their table and buckets at rest with it too.
+ */
+export class StateKmsKey extends Context.Service<
+  StateKmsKey,
+  {
+    /** The key's ARN, resolved (and for the store's own key, created) once. */
+    readonly arn: Effect.Effect<string, StateStoreError>;
+  }
+>()("AWS/StateKmsKey") {}
 
 /** Context required by the distilled KMS operations. */
 type KmsDeps = Credentials | HttpClient | Region;
@@ -34,7 +47,7 @@ const describeKey = (keyId: string) =>
 
 const unusable = (keyId: string, state: string | undefined) =>
   new StateStoreError({
-    message: `The state store's KMS key '${keyId}' is ${state ?? "unavailable"}; enable it, or pass another key as kmsKeyId.`,
+    message: `The state store's KMS key '${keyId}' is ${state ?? "unavailable"}; enable it, or provide AWS.stateEncryption() with another key.`,
   });
 
 /** Turn on yearly rotation of the key material, if it is off. */

@@ -5,7 +5,7 @@ import { StateEncryption } from "alchemy/State/StateEncryption";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import { kmsKeyring, resolveStateKey } from "./Key.ts";
+import { kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 import { stateEnvironment, withoutSdkDebugLogs } from "./State.ts";
 
 export interface StateEncryptionOptions {
@@ -41,8 +41,17 @@ const toError = (cause: { readonly _tag?: string; readonly message?: string }) =
  * (`alchemy:stack`, `alchemy:stage` in the encryption context), so an IAM
  * policy can grant decrypt for one stage only.
  *
- * The AWS state stores use this with their own key already; provide it to
- * encrypt another store's secrets, or to pick the key.
+ * The AWS state stores use this with their own key unless you provide it.
+ * Provided to one of them, its key also encrypts the store's table and
+ * buckets at rest.
+ *
+ * ### Choosing the AWS State Store's Key
+ * **Example:** The AWS state store under your own KMS key
+ * ```typescript
+ * const stateStore = AWS.state().pipe(
+ *   Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" })),
+ * );
+ * ```
  *
  * ### Encrypting another Cloud's State Store
  * **Example:** Cloudflare state, secrets encrypted with AWS KMS
@@ -72,26 +81,31 @@ const toError = (cause: { readonly _tag?: string; readonly message?: string }) =
  * );
  * ```
  *
- * ### Choosing the Key
- * **Example:** Your own KMS key
- * ```typescript
- * const encryption = AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" });
- * ```
- *
  * @layer
  * @provides StateEncryption
+ * @provides AWS.StateKmsKey
  * @product KMS
  */
 export const stateEncryption = (options: StateEncryptionOptions = {}) =>
   Layer.effect(
     StateEncryption,
     Effect.gen(function* () {
+      const key = yield* StateKmsKey;
       // Captured under `withoutSdkDebugLogs`: KMS responses hold data keys.
       const context = yield* Effect.context<KmsDeps>();
       const run = <A, E extends { readonly _tag?: string; readonly message?: string }>(
         effect: Effect.Effect<A, E, KmsDeps>,
       ) => effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
-      const keyArn = yield* resolveStateKey({
+      return kmsKeyring(key.arn, run);
+    }).pipe(withoutSdkDebugLogs),
+  ).pipe(Layer.provideMerge(stateKmsKey(options)), Layer.provide(stateEnvironment()));
+
+const stateKmsKey = (options: StateEncryptionOptions) =>
+  Layer.effect(
+    StateKmsKey,
+    Effect.gen(function* () {
+      const context = yield* Effect.context<KmsDeps>();
+      const arn = yield* resolveStateKey({
         kmsKeyId: options.kmsKeyId,
         name: options.name,
         store: {
@@ -100,7 +114,7 @@ export const stateEncryption = (options: StateEncryptionOptions = {}) =>
           label: "AWS state encryption",
           configured: options.kmsKeyId !== undefined,
         },
-      }).pipe(run, Effect.cached);
-      return kmsKeyring(keyArn, run);
+      }).pipe(Effect.provideContext(context), Effect.mapError(toError), Effect.cached);
+      return { arn };
     }).pipe(withoutSdkDebugLogs),
-  ).pipe(Layer.provide(stateEnvironment()));
+  );

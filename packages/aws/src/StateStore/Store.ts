@@ -67,9 +67,15 @@ const usesS3 = (options: StateOptions) =>
  * stage. A store created before encryption moves to the key on its first
  * use outside CI.
  *
+ * Provide `AWS.stateEncryption()` to choose the key, which then encrypts the
+ * table and buckets too, or any other `StateEncryption` layer to encrypt the
+ * secrets with it instead.
+ *
  * **Example:** Your own KMS key
  * ```typescript
- * const stateStore = AWS.state({ kmsKeyId: "alias/my-state-key" });
+ * const stateStore = AWS.state().pipe(
+ *   Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" })),
+ * );
  * ```
  *
  * ### Migrating from the S3 State Store

@@ -33,7 +33,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import { bucketEncryptionMatches, syncBucketEncryption } from "../S3/Bucket.ts";
-import { kmsKeyring, resolveStateKey } from "./Key.ts";
+import { kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 import {
   fenceLegacyStage,
   HELD_PREFIX,
@@ -89,14 +89,6 @@ export interface DynamoDBStateOptions {
    * @default the S3 store of the same name, `alchemy-state-<name>-<accountId>-<region>-an`
    */
   migrateFrom?: { readonly bucketName?: string; readonly prefix?: string } | false;
-  /**
-   * The KMS key (id, ARN or alias) that encrypts the table and the overflow
-   * bucket at rest, and seals the secrets in state. An existing table or
-   * bucket is moved to it.
-   *
-   * @default the store's own key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created on first use
-   */
-  kmsKeyId?: string;
   /**
    * Size in bytes of a record's encoded state above which it is stored in
    * the overflow bucket, with the DynamoDB item holding a reference to it.
@@ -362,12 +354,9 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
 
   const threshold = options.overflowThreshold ?? DEFAULT_OVERFLOW_THRESHOLD;
-  // Only the stack's config describes a store with its own names or key, so
+  // Only the stack's config describes a store with its own names, so
   // `--backend aws` can't bootstrap it.
-  const configured =
-    options.tableName !== undefined ||
-    options.overflowBucketName !== undefined ||
-    options.kmsKeyId !== undefined;
+  const configured = options.tableName !== undefined || options.overflowBucketName !== undefined;
   const label = "DynamoDB";
 
   // The table, overflow bucket and S3 store this store addresses.
@@ -390,6 +379,18 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       return { table, bucket, region, legacy };
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
+
+  // The KMS key of the AWS.stateEncryption() provided to the store, or else
+  // the store's own; it encrypts the table and overflow bucket at rest.
+  const encryption = yield* Effect.serviceOption(StateEncryption);
+  const kmsKey = yield* Effect.serviceOption(StateKmsKey);
+  const storeKey = (table: string) =>
+    Option.isSome(kmsKey)
+      ? kmsKey.value.arn
+      : resolveStateKey({
+          name: options.name,
+          store: { ...storeRef, label: `DynamoDB state table '${table}'` },
+        });
 
   const provision = (table: string, bucket: string, region: string, keyArn: string) =>
     Effect.all([ensureStateTable(table, keyArn), provisionStateBucket(bucket, region, keyArn)], {
@@ -450,11 +451,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         [describeStateTable(table), stateBucketExists(bucket)],
         { concurrency: 2 },
       );
-      const keyArn = yield* resolveStateKey({
-        kmsKeyId: options.kmsKeyId,
-        name: options.name,
-        store: { ...storeRef, label: `DynamoDB state table '${table}'` },
-      });
+      const keyArn = yield* storeKey(table);
       if (observed === undefined) {
         yield* Provisioning.deployMissing(
           { ...storeRef, label: `DynamoDB state table '${table}'` },
@@ -521,10 +518,8 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     return text;
   });
 
-  // Secrets are sealed under data keys from the store's KMS key.
   // Secrets are encrypted with the StateEncryption provided to the store,
-  // and otherwise with data keys from the store's own KMS key.
-  const encryption = yield* Effect.serviceOption(StateEncryption);
+  // and otherwise with data keys from the store's KMS key.
   const codec = makeSealingCodec(
     Option.getOrElse(encryption, () =>
       kmsKeyring(target.pipe(Effect.map(({ keyArn }) => keyArn)), run),
@@ -1373,11 +1368,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       names,
       provision: names.pipe(
         Effect.tap((resolved) =>
-          resolveStateKey({
-            kmsKeyId: options.kmsKeyId,
-            name: options.name,
-            store: { ...storeRef, label: `DynamoDB state table '${resolved.table}'` },
-          }).pipe(
+          storeKey(resolved.table).pipe(
             Effect.flatMap((keyArn) =>
               provision(resolved.table, resolved.bucket, resolved.region, keyArn),
             ),

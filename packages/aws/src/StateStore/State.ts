@@ -24,7 +24,7 @@ import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
-import { kmsKeyring, resolveStateKey } from "./Key.ts";
+import { kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
@@ -56,18 +56,11 @@ export interface S3StateOptions {
    */
   prefix?: string;
   /**
-   * The KMS key (id, ARN or alias) that seals the secrets in state and, unless
-   * {@link S3StateOptions.encryption} says otherwise, encrypts the bucket.
-   *
-   * @default the KMS key of `encryption` when it names one, otherwise the store's own key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created on first use
-   */
-  kmsKeyId?: string;
-  /**
    * Default encryption enforced on every fresh state-service initialization.
    * Set `blockedEncryptionTypes: ["SSE-C"]` to block customer-provided keys.
    * Existing encrypted state objects are not rewritten.
    *
-   * @default `{ sseAlgorithm: "aws:kms", kmsMasterKeyId: <the store's key>, bucketKeyEnabled: true }`
+   * @default `{ sseAlgorithm: "aws:kms", kmsMasterKeyId: <the store's KMS key>, bucketKeyEnabled: true }`
    */
   encryption?: BucketEncryption;
 }
@@ -78,13 +71,6 @@ export const stateBucketEncryption = (keyArn: string): BucketEncryption => ({
   kmsMasterKeyId: keyArn,
   bucketKeyEnabled: true,
 });
-
-/** The key the S3 store seals secrets with, when the options name one. */
-const sealingKeyId = (options: S3StateOptions) =>
-  options.kmsKeyId ??
-  (options.encryption !== undefined && options.encryption.sseAlgorithm !== "AES256"
-    ? options.encryption.kmsMasterKeyId
-    : undefined);
 
 /** Whether a state bucket exists. */
 export const stateBucketExists = (bucket: string) =>
@@ -217,11 +203,14 @@ export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLev
  * name. Every secret in state (a `Redacted` value) is encrypted with a data
  * key from that key before it is written, one data key per stage per
  * deploy. A record written with a secret in plaintext is encrypted the
- * first time the store reads it.
+ * first time the store reads it. Provide `AWS.stateEncryption()` to choose
+ * the key, or another `StateEncryption` to encrypt secrets with it instead.
  *
  * **Example:** Your own KMS key
  * ```typescript
- * const stateStore = AWS.state({ backend: "s3", kmsKeyId: "alias/my-state-key" });
+ * const stateStore = AWS.state({ backend: "s3" }).pipe(
+ *   Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" })),
+ * );
  * ```
  */
 export const s3State = (options: S3StateOptions = {}) =>
@@ -258,6 +247,9 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     // with the raised floor.
     const context = yield* Effect.context<S3Deps | AWSEnvironment>();
     const encryption = yield* Effect.serviceOption(StateEncryption);
+    // The KMS key of the AWS.stateEncryption() provided to the store, or
+    // else the store's own; it encrypts the bucket unless `encryption` does.
+    const kmsKey = yield* Effect.serviceOption(StateKmsKey);
 
     const toError = (cause: unknown) =>
       new StateStoreError({
@@ -283,13 +275,11 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           backend: "aws-s3",
           flags: { name: options.name },
           label: `S3 state bucket '${bucketName}'`,
-          configured: options.bucketName !== undefined || options.kmsKeyId !== undefined,
+          configured: options.bucketName !== undefined,
         };
-        const keyArn = yield* resolveStateKey({
-          kmsKeyId: sealingKeyId(options),
-          name: options.name,
-          store,
-        });
+        const keyArn = Option.isSome(kmsKey)
+          ? yield* kmsKey.value.arn
+          : yield* resolveStateKey({ name: options.name, store });
         const ensure = ensureStateBucket(bucketName, region, {
           ...options,
           encryption: options.encryption ?? stateBucketEncryption(keyArn),

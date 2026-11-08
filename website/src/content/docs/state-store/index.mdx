@@ -204,11 +204,13 @@ The credentials that deploy need DynamoDB access to the table, S3 access to the 
 
 ### Encryption
 
-The store has its own KMS key, `alias/alchemy-state`, created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Pass `kmsKeyId` to use a key of your own instead:
+The store has its own KMS key, `alias/alchemy-state`, created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Provide `AWS.stateEncryption()` to use a key of your own for both:
 
 ```typescript
-state: AWS.state({ kmsKeyId: "alias/my-state-key" }),
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" }))),
 ```
+
+Any other `StateEncryption` layer works too; it encrypts the secrets, and the store's own key still encrypts the table and buckets.
 
 A store created before encryption moves over on its own. The first deploy or plan outside CI creates the key, switches the table and bucket to it, and encrypts the secrets of each stage it loads. DynamoDB re-encrypts the table in the background without downtime. In CI the store only does this with `--yes`, so run `alchemy state bootstrap --backend aws` once, or deploy from your machine first.
 

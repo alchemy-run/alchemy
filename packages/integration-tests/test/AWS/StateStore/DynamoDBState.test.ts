@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
-import { makeDynamoDBState } from "@alchemy.run/aws";
+import { makeDynamoDBState, type DynamoDBStateOptions } from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { createOverflowBucketName } from "@alchemy.run/aws/StateStore/DynamoDBState";
 import { describe, expect } from "@alchemy.run/test";
@@ -59,6 +59,10 @@ const StateStorage = Effect.gen(function* () {
   };
 });
 
+/** The store under test, encrypting with the given KMS key. */
+const makeStore = ({ kmsKeyId, ...options }: DynamoDBStateOptions & { kmsKeyId: string }) =>
+  makeDynamoDBState(options).pipe(Effect.provide(AWS.stateEncryption({ kmsKeyId })));
+
 const resource = (fqn: string, attr: Record<string, unknown>): ResourceState =>
   ({
     resourceType: "test:resource",
@@ -99,7 +103,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const stage = "round-trip";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -173,7 +177,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           yield* state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed });
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
         }),
@@ -205,7 +209,7 @@ test.provider(
       // A new store opens them.
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           const read = (yield* state.get({
             stack: STACK,
             stage,
@@ -239,7 +243,7 @@ test.provider(
       // Created through the store, so the stage is cataloged and the
       // table is moved to the key.
       yield* Effect.scoped(
-        Effect.flatMap(makeDynamoDBState(storage), (state) =>
+        Effect.flatMap(makeStore(storage), (state) =>
           state.set({ stack: STACK, stage, fqn: "Other", value: resource("Other", { v: 1 }) }),
         ),
       );
@@ -258,7 +262,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(storage);
+          const state = yield* makeStore(storage);
           const read = (yield* state.get({
             stack: STACK,
             stage,
@@ -272,9 +276,7 @@ test.provider(
       expect(text).not.toContain(secret);
 
       yield* Effect.scoped(
-        Effect.flatMap(makeDynamoDBState(storage), (state) =>
-          state.deleteStack({ stack: STACK, stage }),
-        ),
+        Effect.flatMap(makeStore(storage), (state) => state.deleteStack({ stack: STACK, stage })),
       );
       yield* stack.destroy();
     }),
@@ -296,7 +298,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const writer = yield* makeDynamoDBState(storage);
+          const writer = yield* makeStore(storage);
           yield* writer.set({ stack: STACK, stage, fqn: a.fqn, value: a });
           yield* writer.set({ stack: STACK, stage, fqn: replaced.fqn, value: replaced });
         }),
@@ -304,7 +306,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const reader = yield* makeDynamoDBState(storage);
+          const reader = yield* makeStore(storage);
           expect(yield* reader.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
           expect([...(yield* reader.list({ stack: STACK, stage }))].sort()).toEqual([
             "Replaced",
@@ -337,7 +339,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
           yield* state.setOutput({ stack: STACK, stage, value: output });
 
@@ -357,7 +359,7 @@ test.provider(
       yield* Effect.scoped(
         Effect.gen(function* () {
           // A fresh store reads the overflow bodies back.
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           expect(yield* state.get({ stack: STACK, stage, fqn: large.fqn })).toEqual(large);
 
           // Shrinking the record stores it inline and deletes its old body.
@@ -393,7 +395,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
         }),
       );
@@ -403,7 +405,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           const error = yield* state.get({ stack: STACK, stage, fqn: large.fqn }).pipe(Effect.flip);
           expect(error).toBeInstanceOf(StateStoreError);
           expect(error.message).toContain("references missing overflow object");
@@ -421,7 +423,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const stage = "outputs";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -455,9 +457,9 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* makeDynamoDBState(storage);
+          const held = yield* makeStore(storage);
           yield* held.set(request);
-          const other = yield* makeDynamoDBState(storage);
+          const other = yield* makeStore(storage);
           const error = yield* other
             .set({ ...request, value: { ...created, attr: { vpcId: "vpc-bbbb" } } })
             .pipe(Effect.flip);
@@ -474,7 +476,7 @@ test.provider(
       // The first store's scope has closed and released the lease.
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const next = yield* makeDynamoDBState(storage);
+          const next = yield* makeStore(storage);
           yield* next.set({ ...request, value: { ...created, attr: { vpcId: "vpc-cccc" } } });
           expect(yield* next.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
             attr: { vpcId: "vpc-cccc" },
@@ -483,7 +485,7 @@ test.provider(
         }),
       );
 
-      const after = yield* makeDynamoDBState(storage);
+      const after = yield* makeStore(storage);
       expect(yield* after.listStages(STACK)).not.toContain(stage);
       yield* stack.destroy();
     }),
@@ -496,7 +498,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const expiredStage = "expired";
       const heldStage = "held";
       const leaseKey = (stage: string) => ({
@@ -555,7 +557,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* makeDynamoDBState(storage);
+          const held = yield* makeStore(storage);
           yield* held.set(request);
           yield* lapse;
           yield* pastCheck;
@@ -568,7 +570,7 @@ test.provider(
           yield* lapse;
           yield* Effect.scoped(
             Effect.gen(function* () {
-              const other = yield* makeDynamoDBState(storage);
+              const other = yield* makeStore(storage);
               yield* other.list({ stack: STACK, stage });
               yield* pastCheck;
               const lost = yield* held.set(request).pipe(Effect.flip);
@@ -607,7 +609,7 @@ test.provider(
       yield* atDebug(
         Effect.scoped(
           Effect.gen(function* () {
-            const state = yield* makeDynamoDBState(storage);
+            const state = yield* makeStore(storage);
             const value = resource("SecretHolder", { token: secret });
             yield* state.set({ stack: STACK, stage, fqn: value.fqn, value });
             expect(yield* state.get({ stack: STACK, stage, fqn: value.fqn })).toEqual(value);
@@ -734,7 +736,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const stalled = yield* makeDynamoDBState(storage);
+          const stalled = yield* makeStore(storage);
           // Takes the lease; its check is now trusted for a few seconds.
           yield* stalled.list({ stack: STACK, stage });
           // Another deploy takes the lease over.
@@ -783,7 +785,7 @@ test.provider(
       const stage = "overflow-up-front";
       const small = resource("Small", { value: "small" });
       const write = Effect.scoped(
-        Effect.flatMap(makeDynamoDBState(options), (state) =>
+        Effect.flatMap(makeStore(options), (state) =>
           state.set({ stack: STACK, stage, fqn: small.fqn, value: small }),
         ),
       );
@@ -805,9 +807,7 @@ test.provider(
         yield* withCIConfig(false)(write);
         expect(yield* bucketExists(overflowBucketName)).toBe(true);
         yield* Effect.scoped(
-          Effect.flatMap(makeDynamoDBState(options), (state) =>
-            state.deleteStack({ stack: STACK, stage }),
-          ),
+          Effect.flatMap(makeStore(options), (state) => state.deleteStack({ stack: STACK, stage })),
         );
       }).pipe(Effect.ensuring(removeBucket));
       yield* stack.destroy();
@@ -816,7 +816,7 @@ test.provider(
 );
 
 test.provider(
-  "a store created on first use has deletion protection and the given KMS key",
+  "a store created on first use has deletion protection and the provided KMS key",
   (stack) =>
     Effect.gen(function* () {
       const { accountId, region } = yield* AWSEnvironment.current;
@@ -838,9 +838,8 @@ test.provider(
       yield* Effect.gen(function* () {
         yield* withCIConfig(false)(
           Effect.scoped(
-            Effect.flatMap(
-              makeDynamoDBState({ name, kmsKeyId: keyArn, migrateFrom: false }),
-              (state) => state.listStacks(),
+            Effect.flatMap(makeStore({ name, kmsKeyId: keyArn, migrateFrom: false }), (state) =>
+              state.listStacks(),
             ),
           ),
         );

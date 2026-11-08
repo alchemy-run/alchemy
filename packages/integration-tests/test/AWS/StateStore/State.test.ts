@@ -455,7 +455,11 @@ test.provider(
           return { bucket, key };
         }),
       );
-      const options = { bucketName: bucket.bucketName, prefix: "sealed", kmsKeyId: key.keyArn };
+      const options = { bucketName: bucket.bucketName, prefix: "sealed" };
+      // The store's KMS key comes from the encryption layer provided to it.
+      const makeStore = makeS3State(options).pipe(
+        Effect.provide(AWS.stateEncryption({ kmsKeyId: key.keyArn })),
+      );
       const stage = "sealed";
       const secret = "s3-sealed-secret-0123456789";
       const sealed = resource("Sealed", { password: Redacted.make(secret), name: "visible" });
@@ -466,7 +470,7 @@ test.provider(
           .pipe(Effect.flatMap((result) => result.Body!.pipe(Stream.decodeText, Stream.mkString)));
 
       yield* Effect.scoped(
-        Effect.flatMap(makeS3State(options), (state) =>
+        Effect.flatMap(makeStore, (state) =>
           state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed }),
         ),
       );
@@ -491,7 +495,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeS3State(options);
+          const state = yield* makeStore;
           const read = (yield* state.get({
             stack: STACK,
             stage,
@@ -507,7 +511,7 @@ test.provider(
       expect(resealed).not.toContain(secret);
 
       yield* Effect.scoped(
-        Effect.flatMap(makeS3State(options), (state) => state.deleteStack({ stack: STACK, stage })),
+        Effect.flatMap(makeStore, (state) => state.deleteStack({ stack: STACK, stage })),
       );
       yield* stack.destroy();
     }),
