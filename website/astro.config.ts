@@ -46,6 +46,7 @@ function providersSidebarEntry() {
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
+      { label: "Boat", link: "/boat" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -1600,6 +1601,38 @@ export default defineConfig({
           ],
         },
         {
+          label: "Boat",
+          items: [
+            { label: "Overview", link: "/boat" },
+            { label: "What is Boat?", link: "/boat/what-is-boat" },
+            { label: "Setup", link: "/boat/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "boat/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [{ label: "Account & API keys", link: "/boat/account-and-keys" }],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Choosing a runtime", link: "/boat/choosing-a-runtime" },
+                { label: "Sandboxes", link: "/boat/sandboxes" },
+                { label: "Programs", link: "/boat/programs" },
+                { label: "Snapshots & forks", link: "/boat/snapshots" },
+                { label: "Environments", link: "/boat/environments" },
+                { label: "Ports", link: "/boat/ports" },
+              ],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Webhooks", link: "/boat/webhooks" }],
+            },
+            providerResourcesEntry("Boat"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1865,14 +1898,31 @@ export default defineConfig({
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
-                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Cloudflare", link: "/domain/cloudflare" },
+                { label: "Rivet", link: "/domain/rivet" },
+                { label: "Effect Cluster", link: "/domain/effect-cluster" },
+                { label: "In memory", link: "/domain/in-memory" },
               ],
             },
             {
               label: "Testing",
               items: [
+                { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Clients",
+              items: [
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
+                { label: "Agents over MCP", link: "/domain/mcp" },
               ],
             },
             {
@@ -1884,10 +1934,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Agents",
-              items: [{ label: "MCP", link: "/domain/mcp" }],
-            },
-            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1896,20 +1942,16 @@ export default defineConfig({
               ],
             },
             {
-              label: "Consistency patterns",
+              label: "Patterns",
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
               ],
             },
             {
-              label: "Hosting",
+              label: "Operations",
               items: [
-                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
-                { label: "In memory", link: "/domain/in-memory" },
-                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
-                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },

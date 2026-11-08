@@ -40,10 +40,15 @@ export type EntityTypeId = typeof EntityTypeId;
 
 export interface EntityProps extends PlatformProps {
   /**
-   * The module whose default export is this entity: the class, or the Layer
-   * its `.make(...)` returned. Usually `import.meta.url`.
+   * The module that exports this entity: the class, or the Layer its
+   * `.make(...)` returned. Usually `import.meta.url`.
    */
   main: string;
+  /**
+   * The export of {@link main} that holds this entity.
+   * @default "default"
+   */
+  handler?: string;
   /**
    * How long an instance may sit idle before the runner stops it. Its next
    * message starts it again.

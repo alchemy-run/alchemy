@@ -49,6 +49,32 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
+## Hosting on Rivet or Effect Cluster
+
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
+
+```ts
+// packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    DomainRivet.layerDurableObjects({
+      name: "Bank",
+      main: import.meta.url,
+      handler: "BankLive",
+      pool: Default,
+    }),
+    // on Effect Cluster: DomainCluster.layerEntities, with the same options
+  ),
+);
+```
+
+- `handler` names the export the nodes load: export the model's Layer.
+- Callers build the same model Layer, so they need the handlers' services too.
+- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
+
+More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
+
 ## Calling the Api in process
 
 Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with the middleware of everything it serves. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:

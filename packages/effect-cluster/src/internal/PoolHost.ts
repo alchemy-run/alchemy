@@ -232,7 +232,11 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
           hosted.provideServices(services),
           hosted.registerPool((env) =>
             deploy(
-              { name: hosted.LogicalId, module: hosted.Props.main, handler: "default" },
+              {
+                name: hosted.LogicalId,
+                module: hosted.Props.main,
+                handler: hosted.Props.handler ?? "default",
+              },
               env,
               hosted as unknown as Entity,
             ),
