@@ -1,30 +1,41 @@
 ---
-title: "Part 4: Stages"
-description: Deploy separate copies of the Stack, each with its own templates and Worker.
+title: "Part 4: Update the Base"
+description: Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
 sidebar:
   order: 4
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-## Deploy another stage
+## Add a tool to the image
 
-<PackageManagers run="alchemy deploy --stage staging" />
+Install pnpm in the template:
 
-Each stage gets its own template and Worker, named after the stage. Without `--stage`, you deploy to `live_$USER`.
-
-## Share one E2B team
-
-Stages share your E2B team. Sandboxes a stage's Worker creates carry the stage in their metadata (`alchemy::stage`), so you can list one stage's sandboxes without touching another's:
-
-```typescript
-const staging = yield* sandboxes.list({ metadata: { "alchemy::stage": "staging" } });
+```diff lang="typescript"
+// src/Sandbox.ts
+export const Agent = E2B.Template("Agent", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git
++    RUN npm install -g pnpm
+  `,
+  cpuCount: 2,
+  memoryMB: 2048,
+});
 ```
 
-Destroying a stage leaves its sandboxes running until they time out.
+## Deploy the new base
 
-Volumes and templates you create at runtime have no metadata. Delete them when their owner goes away, as the example's `DELETE /users/:user` route does.
+<PackageManagers run="alchemy deploy" />
+
+The Dockerfile changed, so E2B builds `Agent` again. `Warm` starts from `Agent`, so Alchemy snapshots it again on the new build, and clones the repository into it. The Worker is unchanged and isn't redeployed.
+
+<PackageManagers script={`curl -X POST "$URL/run" --data 'pnpm --version'`} />
+
+## Running sandboxes keep what they started with
+
+A sandbox keeps the snapshot it booted from. Users whose sandbox is paused keep it, with their changes and without pnpm. Sandboxes started after the deploy get the new base. To move a user onto it, kill their sandbox; their next request starts a new one from `Warm`.
 
 ## Next
 
-[Part 5](/e2b/tutorial/part-5) deploys from CI.
+[Part 5](/e2b/tutorial/part-5) tests it.
