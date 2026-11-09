@@ -20,6 +20,7 @@ import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
+  type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
 } from "../EC2/hosted.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
@@ -85,6 +86,13 @@ export interface LaunchTemplateProps extends PlatformProps {
    * template version. Unset fields keep the AMI / account defaults.
    */
   metadataOptions?: InstanceMetadataOptions;
+  /**
+   * Enable AWS Nitro Enclaves on launched instances, which also lets them run
+   * [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html).
+   * EKS node groups need it to run `isolated-sandbox` and
+   * `confidential-sandbox` pods. Changes publish a new template version.
+   */
+  enclaveOptions?: InstanceEnclaveOptions;
   /**
    * User-defined tags to apply to the launch template and launched instances.
    */
@@ -400,6 +408,7 @@ export const LaunchTemplateProvider = () =>
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,
               metadataOptions: news.metadataOptions,
+              enclaveOptions: news.enclaveOptions,
               tags: news.tags,
             },
             runtime,
@@ -557,6 +566,7 @@ export const LaunchTemplateProvider = () =>
                   securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   metadataOptions: news.metadataOptions,
+                  enclaveOptions: news.enclaveOptions,
                   tags: desiredTags,
                 },
                 runtime,

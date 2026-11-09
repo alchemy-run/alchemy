@@ -1,13 +1,14 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { isResolved } from "alchemy/Diff";
-import type { Input } from "alchemy/Input";
+import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -16,6 +17,43 @@ import type { RegionID } from "../Region.ts";
 export type CapacityProviderName = string;
 export type CapacityProviderArn =
   `arn:aws:ecs:${RegionID}:${AccountID}:capacity-provider/${CapacityProviderName}`;
+
+/**
+ * Configuration of an Amazon ECS Managed Instances capacity provider: ECS
+ * launches, patches and scales the EC2 instances itself.
+ */
+export interface ManagedInstancesProviderProps {
+  /**
+   * ARN of the infrastructure IAM role ECS assumes to launch and manage the
+   * instances. It needs the
+   * `AmazonECSInfrastructureRolePolicyForManagedInstances` managed policy and
+   * a trust policy for `ecs.amazonaws.com`.
+   */
+  infrastructureRoleArn: string;
+  /**
+   * How ECS launches each instance: instance profile, subnets, instance
+   * requirements, and whether the instances run Nitro Sandboxes
+   * (`nitroEnclavesEnabled`).
+   *
+   * `capacityOptionType`, `fipsEnabled` and `nitroEnclavesEnabled` can't be
+   * changed after creation; changing one replaces the capacity provider.
+   */
+  instanceLaunchTemplate: ecs.InstanceLaunchTemplate;
+  /**
+   * Whether ECS copies the capacity provider's tags onto the instances it
+   * launches.
+   * @default "NONE"
+   */
+  propagateTags?: ecs.PropagateMITags;
+  /**
+   * How long ECS waits before it consolidates under-used instances.
+   */
+  infrastructureOptimization?: ecs.InfrastructureOptimization;
+  /**
+   * Whether ECS replaces instances it finds unhealthy.
+   */
+  autoRepairConfiguration?: ecs.AutoRepairConfiguration;
+}
 
 export interface CapacityProviderProps {
   /**
@@ -28,11 +66,23 @@ export interface CapacityProviderProps {
    */
   name?: string;
   /**
+   * Name of the cluster a Managed Instances capacity provider belongs to.
+   * Managed Instances capacity providers are scoped to one cluster and are
+   * available to that cluster's services and tasks without being listed in
+   * {@link Cluster#capacityProviders}.
+   *
+   * Required with {@link managedInstancesProvider}. Changing this triggers a
+   * replacement.
+   */
+  cluster?: string;
+  /**
    * ARN of the EC2 Auto Scaling Group that backs this capacity provider.
+   * Set exactly one of `autoScalingGroupArn` and
+   * {@link managedInstancesProvider}.
    *
    * Cannot be changed after creation; changing this triggers a replacement.
    */
-  autoScalingGroupArn: Input<string>;
+  autoScalingGroupArn?: string;
   /**
    * Managed scaling configuration applied by ECS to the underlying ASG.
    */
@@ -48,6 +98,11 @@ export interface CapacityProviderProps {
    */
   managedDraining?: ecs.ManagedDraining;
   /**
+   * Make this an Amazon ECS Managed Instances capacity provider. Set exactly
+   * one of `managedInstancesProvider` and {@link autoScalingGroupArn}.
+   */
+  managedInstancesProvider?: ManagedInstancesProviderProps;
+  /**
    * User-defined tags to apply to the capacity provider.
    */
   tags?: Record<string, string>;
@@ -61,11 +116,15 @@ export interface CapacityProvider extends Resource<
     capacityProviderArn: CapacityProviderArn;
     /** The name of the capacity provider. */
     name: CapacityProviderName;
+    /** The kind of capacity provider: `EC2_AUTOSCALING` or `MANAGED_INSTANCES`. */
+    type: ecs.CapacityProviderType | undefined;
+    /** The cluster a Managed Instances capacity provider belongs to. */
+    cluster: string | undefined;
     /** The current status, e.g. `ACTIVE`. */
     status: ecs.CapacityProviderStatus;
     /** The status of the most recent update to the provider. */
     updateStatus: ecs.CapacityProviderUpdateStatus | undefined;
-    /** The Auto Scaling group backing the provider. */
+    /** The Auto Scaling group backing the provider (`""` for Managed Instances). */
     autoScalingGroupArn: string;
     /** The managed scaling configuration. */
     managedScaling: ecs.ManagedScaling | undefined;
@@ -73,6 +132,8 @@ export interface CapacityProvider extends Resource<
     managedTerminationProtection: ecs.ManagedTerminationProtection | undefined;
     /** Whether managed instance draining is enabled. */
     managedDraining: ecs.ManagedDraining | undefined;
+    /** The Managed Instances configuration, for a Managed Instances provider. */
+    managedInstancesProvider: ecs.ManagedInstancesProvider | undefined;
     /** The tags attached to the capacity provider. */
     tags: Record<string, string>;
   },
@@ -88,18 +149,21 @@ export interface CapacityProvider extends Resource<
 export interface CapacityProviderLookup {
   /** The name of the existing capacity provider. */
   name: string;
+  /** The cluster of an existing Managed Instances capacity provider. */
+  cluster?: string;
 }
 
 /**
- * An Amazon ECS capacity provider backed by an EC2 Auto Scaling Group.
+ * An Amazon ECS capacity provider, backed by an EC2 Auto Scaling Group or by
+ * Amazon ECS Managed Instances.
  *
- * Capacity providers are associated with one or more ECS clusters via
- * {@link Cluster#capacityProviders} and are referenced by a service or task's
- * capacity provider strategy.
+ * Auto Scaling Group providers are associated with one or more ECS clusters
+ * via {@link Cluster#capacityProviders}. Managed Instances providers belong
+ * to one `cluster` and are available to it as soon as they exist. Services
+ * and tasks select either kind through a capacity provider strategy.
  *
- * Only EC2 Auto Scaling Group-backed capacity providers are currently
- * supported. The reserved AWS providers `FARGATE` and `FARGATE_SPOT` do not
- * need to be created and can be referenced by name on a `Cluster` directly.
+ * The reserved AWS providers `FARGATE` and `FARGATE_SPOT` do not need to be
+ * created and can be referenced by name on a `Cluster` directly.
  * ### Creating Capacity Providers
  * **Example:** ASG-Backed Capacity Provider
  * ```typescript
@@ -122,6 +186,58 @@ export interface CapacityProviderLookup {
  * });
  * ```
  *
+ * ### Managed Instances
+ * ECS launches and patches the instances of a Managed Instances provider
+ * itself. It needs an infrastructure role that ECS assumes and an instance
+ * profile for the instances.
+ *
+ * **Example:** Managed Instances Capacity Provider
+ * ```typescript
+ * const cluster = yield* Cluster("AppCluster", {});
+ *
+ * const provider = yield* CapacityProvider("AppInstances", {
+ *   cluster: cluster.clusterName,
+ *   managedInstancesProvider: {
+ *     infrastructureRoleArn: infrastructureRole.roleArn,
+ *     instanceLaunchTemplate: {
+ *       ec2InstanceProfileArn: instanceProfile.instanceProfileArn,
+ *       networkConfiguration: { subnets: [subnet.subnetId] },
+ *       instanceRequirements: {
+ *         vCpuCount: { min: 2, max: 8 },
+ *         memoryMiB: { min: 4096 },
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * ### Nitro Sandboxes
+ * Set `nitroEnclavesEnabled` to launch instances that run each task in its
+ * own [Nitro Sandbox](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/isolated-confidential-tasks.html),
+ * a lightweight VM isolated by the Nitro hypervisor. Pick instance types
+ * that support Nitro Sandboxes, then set `trustedExecutionConfiguration` on
+ * the task definition.
+ *
+ * **Example:** Capacity for isolated tasks
+ * ```typescript
+ * const provider = yield* CapacityProvider("SandboxInstances", {
+ *   cluster: cluster.clusterName,
+ *   managedInstancesProvider: {
+ *     infrastructureRoleArn: infrastructureRole.roleArn,
+ *     instanceLaunchTemplate: {
+ *       ec2InstanceProfileArn: instanceProfile.instanceProfileArn,
+ *       networkConfiguration: { subnets: [subnet.subnetId] },
+ *       nitroEnclavesEnabled: true,
+ *       instanceRequirements: {
+ *         vCpuCount: { min: 4, max: 8 },
+ *         memoryMiB: { min: 8192 },
+ *         allowedInstanceTypes: ["m6i.xlarge", "m7i.xlarge"],
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Adopting Existing Capacity Providers
  * Foreign-tagged capacity providers (i.e. providers that exist in AWS but were
  * not created by this stack/stage/logical-id) are surfaced as `Unowned` by
@@ -139,8 +255,9 @@ export interface CapacityProviderLookup {
  *
  * ### Looking up an existing capacity provider
  * `CapacityProvider.lookup` references a capacity provider Alchemy doesn't manage (created in the
- * console or by another stack), found by `name`. It is read during
- * plan/deploy and never created, updated or deleted.
+ * console or by another stack), found by `name` (and `cluster`, for a
+ * Managed Instances provider). It is read during plan/deploy and never
+ * created, updated or deleted.
  *
  * **Example:** Reference an existing capacity provider
  * ```typescript
@@ -150,6 +267,18 @@ export interface CapacityProviderLookup {
  * @resource
  */
 export const CapacityProvider = Resource<CapacityProvider>("AWS.ECS.CapacityProvider");
+
+class CapacityProviderNotSettled extends Data.TaggedError("CapacityProviderNotSettled")<{
+  readonly name: string;
+  readonly status: string | undefined;
+}> {}
+
+/** Launch template fields `updateCapacityProvider` can't change. */
+const immutableLaunchTemplate = (template: ecs.InstanceLaunchTemplate | undefined) => ({
+  capacityOptionType: template?.capacityOptionType,
+  fipsEnabled: template?.fipsEnabled ?? false,
+  nitroEnclavesEnabled: template?.nitroEnclavesEnabled ?? false,
+});
 
 export const CapacityProviderProvider = () =>
   Provider.effect(
@@ -177,22 +306,110 @@ export const CapacityProviderProvider = () =>
               Effect.map((name) => (/^(aws|ecs|fargate)/.test(name) ? `cp-${name}` : name)),
             );
 
-      const describe = (name: string) =>
-        ecs
-          .describeCapacityProviders({
-            capacityProviders: [name],
-            include: ["TAGS"],
-          })
-          .pipe(
-            // A deleted provider stays describable as INACTIVE for a while
-            // and can no longer be updated, so treat it as missing.
-            Effect.map((res) =>
-              res.capacityProviders?.find((p) => p.name === name && p.status !== "INACTIVE"),
+      // `describeCapacityProviders` is a plain operation (no `.pages`), so
+      // drive its `nextToken` pagination with `Stream.paginate`.
+      const describeAll = (cluster: string | undefined) =>
+        Stream.paginate(undefined as string | undefined, (token) =>
+          ecs
+            .describeCapacityProviders({
+              cluster,
+              include: ["TAGS"],
+              ...(token ? { nextToken: token } : {}),
+            })
+            .pipe(
+              Effect.map(
+                (res) =>
+                  [
+                    res.capacityProviders ?? [],
+                    res.nextToken ? Option.some(res.nextToken) : Option.none<string>(),
+                  ] as const,
+              ),
             ),
-          );
+        );
+
+      // Managed Instances providers are only returned when describing their
+      // cluster, and ECS rejects a request naming both providers and a
+      // cluster, so a cluster-scoped provider is found in its cluster's list.
+      const describe = (name: string, cluster: string | undefined) =>
+        (cluster
+          ? describeAll(cluster).pipe(
+              Stream.filter((p) => p.name === name && p.status !== "INACTIVE"),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
+            )
+          : ecs.describeCapacityProviders({ capacityProviders: [name], include: ["TAGS"] }).pipe(
+              // A deleted provider stays describable as INACTIVE for a
+              // while and can no longer be updated, so treat it as missing.
+              Effect.map((res) =>
+                res.capacityProviders?.find((p) => p.name === name && p.status !== "INACTIVE"),
+              ),
+            )
+        ).pipe(
+          // The cluster itself is gone, and its providers with it.
+          Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
+        );
+
+      const attrsOf = (
+        found: ecs.CapacityProvider & { name: string; capacityProviderArn: string },
+        cluster: string | undefined,
+      ): CapacityProvider["Attributes"] => ({
+        capacityProviderArn: found.capacityProviderArn as CapacityProviderArn,
+        name: found.name,
+        type: found.type,
+        cluster: found.cluster ?? cluster,
+        status: (found.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
+        updateStatus: found.updateStatus,
+        autoScalingGroupArn: found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
+        managedScaling: found.autoScalingGroupProvider?.managedScaling,
+        managedTerminationProtection: found.autoScalingGroupProvider?.managedTerminationProtection,
+        managedDraining: found.autoScalingGroupProvider?.managedDraining,
+        managedInstancesProvider: found.managedInstancesProvider,
+        tags: fromEcsTags(found.tags),
+      });
+
+      // A just-created infrastructure role takes a few seconds to become
+      // assumable by ECS.
+      const retryRolePropagation = {
+        while: (e: { _tag: string }) => e._tag === "InfrastructureRoleAccessDenied",
+        schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(15)]),
+      };
+
+      // A Managed Instances provider is PROVISIONING after create and
+      // DEPROVISIONING (terminating its instances) after delete. Services
+      // can't use it until ACTIVE, and its cluster and infrastructure role
+      // can't go until it is gone.
+      const settle = Effect.fn(function* (
+        name: string,
+        cluster: string | undefined,
+        done: (p: ecs.CapacityProvider | undefined) => boolean,
+      ) {
+        return yield* describe(name, cluster).pipe(
+          Effect.flatMap((p) =>
+            done(p)
+              ? Effect.succeed(p)
+              : Effect.fail(new CapacityProviderNotSettled({ name, status: p?.status })),
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "CapacityProviderNotSettled",
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(36)]),
+          }),
+        );
+      });
+
+      // Ready to use, with any update applied (updates run asynchronously).
+      const isReady = (p: ecs.CapacityProvider | undefined) =>
+        p === undefined ||
+        (p.status === "ACTIVE" &&
+          p.updateStatus !== "UPDATE_IN_PROGRESS" &&
+          p.updateStatus !== "CREATE_IN_PROGRESS");
+
+      const hasIdentity = (
+        p: ecs.CapacityProvider | undefined,
+      ): p is ecs.CapacityProvider & { name: string; capacityProviderArn: string } =>
+        p?.name != null && p.capacityProviderArn != null;
 
       return {
-        stables: ["capacityProviderArn", "name"],
+        stables: ["capacityProviderArn", "name", "type", "cluster"],
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -201,101 +418,141 @@ export const CapacityProviderProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+          if (olds.cluster !== news.cluster) {
+            return { action: "replace" } as const;
+          }
+          // Switching between an ASG and Managed Instances is a new provider.
+          if (!!olds.managedInstancesProvider !== !!news.managedInstancesProvider) {
+            return { action: "replace" } as const;
+          }
           if (
             isResolved(olds.autoScalingGroupArn) &&
             olds.autoScalingGroupArn !== news.autoScalingGroupArn
           ) {
             return { action: "replace" } as const;
           }
+          if (
+            !deepEqual(
+              immutableLaunchTemplate(olds.managedInstancesProvider?.instanceLaunchTemplate),
+              immutableLaunchTemplate(news.managedInstancesProvider?.instanceLaunchTemplate),
+            )
+          ) {
+            return { action: "replace" } as const;
+          }
         }),
 
-        lookup: Effect.fn(function* ({ name }) {
-          const found = yield* describe(name);
-          if (!found?.name || !found.capacityProviderArn) return undefined;
-          return {
-            capacityProviderArn: found.capacityProviderArn as CapacityProviderArn,
-            name: found.name,
-            status: (found.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
-            updateStatus: found.updateStatus,
-            autoScalingGroupArn: found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
-            managedScaling: found.autoScalingGroupProvider?.managedScaling,
-            managedTerminationProtection:
-              found.autoScalingGroupProvider?.managedTerminationProtection,
-            managedDraining: found.autoScalingGroupProvider?.managedDraining,
-            tags: fromEcsTags(found.tags),
-          };
+        lookup: Effect.fn(function* ({ name, cluster }) {
+          const found = yield* describe(name, cluster);
+          return hasIdentity(found) ? attrsOf(found, cluster) : undefined;
         }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* toName(id, olds ?? {}));
-          const found = yield* describe(name);
-          if (!found?.name || !found.capacityProviderArn) {
+          const cluster = output?.cluster ?? olds?.cluster;
+          const found = yield* describe(name, cluster);
+          if (!hasIdentity(found)) {
             return undefined;
           }
           const internalTags = yield* createInternalTags(id);
-          const existingTags = fromEcsTags(found.tags);
-          const attrs = {
-            capacityProviderArn: found.capacityProviderArn as CapacityProviderArn,
-            name: found.name,
-            status: (found.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
-            updateStatus: found.updateStatus,
-            autoScalingGroupArn: found.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
-            managedScaling: found.autoScalingGroupProvider?.managedScaling,
-            managedTerminationProtection:
-              found.autoScalingGroupProvider?.managedTerminationProtection,
-            managedDraining: found.autoScalingGroupProvider?.managedDraining,
-            tags: existingTags,
-          };
-          return hasTags(internalTags, existingTags) ? attrs : Unowned(attrs);
+          const attrs = attrsOf(found, cluster);
+          return hasTags(internalTags, attrs.tags) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = yield* toName(id, news);
+          const cluster = news.cluster;
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
-          const autoScalingGroupArn = news.autoScalingGroupArn as string;
+          const managedInstances = news.managedInstancesProvider;
 
           // Observe — fetch live cloud state. We fetch fresh on every
           // reconcile so adoption, drift, and partial-prior-runs all
           // converge.
-          let existing = yield* describe(name);
+          let existing = yield* describe(name, cluster);
 
           // Ensure — create the capacity provider if missing.
-          if (!existing?.name || !existing.capacityProviderArn) {
+          if (!hasIdentity(existing)) {
             yield* ecs
               .createCapacityProvider({
                 name,
-                autoScalingGroupProvider: {
-                  autoScalingGroupArn,
-                  managedScaling: news.managedScaling,
-                  managedTerminationProtection: news.managedTerminationProtection,
-                  managedDraining: news.managedDraining,
-                },
+                cluster,
+                ...(managedInstances
+                  ? { managedInstancesProvider: managedInstances }
+                  : {
+                      autoScalingGroupProvider: {
+                        autoScalingGroupArn: news.autoScalingGroupArn as string,
+                        managedScaling: news.managedScaling,
+                        managedTerminationProtection: news.managedTerminationProtection,
+                        managedDraining: news.managedDraining,
+                      },
+                    }),
                 tags: toEcsTags(desiredTags),
               })
               .pipe(
+                Effect.retry(retryRolePropagation),
                 // ECS may surface concurrent creation either as
                 // `LimitExceededException` or a generic `ClientException`
                 // with name conflict semantics — re-describe and continue.
                 Effect.catchTag("LimitExceededException", () => Effect.void),
               );
-            existing = yield* describe(name);
+            existing = managedInstances
+              ? yield* settle(name, cluster, isReady)
+              : yield* describe(name, cluster);
+          } else if (managedInstances) {
+            // Sync — every mutable Managed Instances field, applied as one
+            // update. The immutable launch template fields replace (diff).
+            const {
+              capacityOptionType: _capacityOptionType,
+              fipsEnabled: _fipsEnabled,
+              nitroEnclavesEnabled: _nitroEnclavesEnabled,
+              ...instanceLaunchTemplate
+            } = managedInstances.instanceLaunchTemplate;
+            const observed = existing.managedInstancesProvider;
+            const {
+              capacityOptionType: _oc,
+              fipsEnabled: _of,
+              nitroEnclavesEnabled: _on,
+              ...observedTemplate
+            } = observed?.instanceLaunchTemplate ?? ({} as ecs.InstanceLaunchTemplate);
+            const desired = {
+              infrastructureRoleArn: managedInstances.infrastructureRoleArn,
+              instanceLaunchTemplate,
+              propagateTags: managedInstances.propagateTags,
+              infrastructureOptimization: managedInstances.infrastructureOptimization,
+              autoRepairConfiguration: managedInstances.autoRepairConfiguration,
+            };
+            const current = {
+              infrastructureRoleArn: observed?.infrastructureRoleArn,
+              instanceLaunchTemplate: observedTemplate,
+              propagateTags: observed?.propagateTags,
+              infrastructureOptimization: observed?.infrastructureOptimization,
+              autoRepairConfiguration: observed?.autoRepairConfiguration,
+            };
+            if (!projects(desired, current)) {
+              yield* ecs
+                .updateCapacityProvider({
+                  name,
+                  cluster,
+                  managedInstancesProvider: desired,
+                })
+                .pipe(Effect.retry(retryRolePropagation));
+            }
+          } else {
+            // Sync managed scaling — ECS updateCapacityProvider only mutates
+            // managed* fields; the ASG ARN is immutable (replaced in diff).
+            yield* ecs.updateCapacityProvider({
+              name,
+              autoScalingGroupProvider: {
+                managedScaling: news.managedScaling,
+                managedTerminationProtection: news.managedTerminationProtection,
+                managedDraining: news.managedDraining,
+              },
+            });
           }
 
           const capacityProviderArn = (existing?.capacityProviderArn ??
             `arn:aws:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
-
-          // Sync managed scaling — observed ↔ desired. ECS
-          // updateCapacityProvider only mutates managed* fields; ASG ARN is
-          // immutable (replacement-triggering, handled in diff).
-          yield* ecs.updateCapacityProvider({
-            name,
-            autoScalingGroupProvider: {
-              managedScaling: news.managedScaling,
-              managedTerminationProtection: news.managedTerminationProtection,
-              managedDraining: news.managedDraining,
-            },
-          });
 
           // Sync tags — diff observed cloud tags against desired.
           const observedTags = fromEcsTags(existing?.tags);
@@ -314,90 +571,113 @@ export const CapacityProviderProvider = () =>
           }
 
           // Re-read to capture status / updateStatus reflecting our changes.
-          const found = yield* describe(name);
+          const found = managedInstances
+            ? yield* settle(name, cluster, isReady)
+            : yield* describe(name, cluster);
           yield* session.note(capacityProviderArn);
 
           return {
             capacityProviderArn,
             name,
+            type: found?.type ?? (managedInstances ? "MANAGED_INSTANCES" : "EC2_AUTOSCALING"),
+            cluster: found?.cluster ?? cluster,
             status: (found?.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
             updateStatus: found?.updateStatus,
             autoScalingGroupArn:
-              found?.autoScalingGroupProvider?.autoScalingGroupArn ?? autoScalingGroupArn,
+              found?.autoScalingGroupProvider?.autoScalingGroupArn ??
+              news.autoScalingGroupArn ??
+              "",
             managedScaling: found?.autoScalingGroupProvider?.managedScaling ?? news.managedScaling,
             managedTerminationProtection:
               found?.autoScalingGroupProvider?.managedTerminationProtection ??
               news.managedTerminationProtection,
             managedDraining:
               found?.autoScalingGroupProvider?.managedDraining ?? news.managedDraining,
+            managedInstancesProvider: found?.managedInstancesProvider ?? managedInstances,
             tags: desiredTags,
           };
         }),
 
         list: () =>
           Effect.gen(function* () {
-            // Enumerate every capacity provider in the account/region.
-            // `describeCapacityProviders` with no filter returns all providers
-            // and paginates via `nextToken`; it is a plain operation (no
-            // `.pages`), so drive the pagination with `Stream.paginate`.
-            const all = yield* Stream.paginate(undefined as string | undefined, (token) =>
-              ecs
-                .describeCapacityProviders({
-                  include: ["TAGS"],
-                  ...(token ? { nextToken: token } : {}),
-                })
-                .pipe(
-                  Effect.map(
-                    (res) =>
-                      [
-                        res.capacityProviders ?? [],
-                        res.nextToken ? Option.some(res.nextToken) : Option.none<string>(),
-                      ] as const,
-                  ),
-                ),
-            ).pipe(
+            // Account-wide providers (ASG-backed) come back without a cluster.
+            const collect = (cluster: string | undefined) =>
+              describeAll(cluster).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) => Array.from(chunk)),
+              );
+            const accountWide = yield* collect(undefined);
+            // Managed Instances providers are only listed per cluster.
+            const clusterArns = yield* ecs.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusterArns ?? [])),
+            );
+            const perCluster = yield* Effect.forEach(
+              clusterArns,
+              (clusterArn) =>
+                collect(clusterArn).pipe(
+                  Effect.map((providers) =>
+                    providers
+                      .filter((p) => p.type === "MANAGED_INSTANCES")
+                      .map((p) => ({ ...p, cluster: p.cluster ?? clusterArn.split("/").pop() })),
+                  ),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed([])),
+                ),
+              { concurrency: 4 },
             );
 
-            return all
+            const seen = new Set<string>();
+            return [...accountWide, ...perCluster.flat()]
+              .filter(hasIdentity)
               .filter(
-                (
-                  p,
-                ): p is ecs.CapacityProvider & {
-                  name: string;
-                  capacityProviderArn: string;
-                } =>
-                  p.name != null &&
-                  p.capacityProviderArn != null &&
+                (p) =>
                   // FARGATE / FARGATE_SPOT are AWS-managed reserved providers
                   // that this resource does not create or own.
-                  p.name !== "FARGATE" &&
-                  p.name !== "FARGATE_SPOT",
+                  p.name !== "FARGATE" && p.name !== "FARGATE_SPOT",
               )
-              .map((p) => ({
-                capacityProviderArn: p.capacityProviderArn as CapacityProviderArn,
-                name: p.name,
-                status: (p.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
-                updateStatus: p.updateStatus,
-                autoScalingGroupArn: p.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
-                managedScaling: p.autoScalingGroupProvider?.managedScaling,
-                managedTerminationProtection:
-                  p.autoScalingGroupProvider?.managedTerminationProtection,
-                managedDraining: p.autoScalingGroupProvider?.managedDraining,
-                tags: fromEcsTags(p.tags),
-              }));
+              .filter((p) => {
+                if (seen.has(p.capacityProviderArn)) return false;
+                seen.add(p.capacityProviderArn);
+                return true;
+              })
+              .map((p) => attrsOf(p, p.cluster));
           }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* ecs.deleteCapacityProvider({ capacityProvider: output.name }).pipe(
-            // Already gone — treat as success.
-            Effect.catchTags({
-              InvalidParameterException: () => Effect.void,
-              ClientException: () => Effect.void,
-            }),
-          );
+          yield* ecs
+            .deleteCapacityProvider({ capacityProvider: output.name, cluster: output.cluster })
+            .pipe(
+              // Already gone — treat as success.
+              Effect.catchTags({
+                InvalidParameterException: () => Effect.void,
+                ClientException: () => Effect.void,
+                ClusterNotFoundException: () => Effect.void,
+              }),
+            );
+          if (output.cluster) {
+            yield* settle(output.name, output.cluster, (p) => p === undefined);
+          }
         }),
       };
     }),
   );
+
+// Compare desired against observed as a projection: keys desired leaves
+// unset are ignored, since ECS fills defaults on read.
+const projects = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return true;
+  if (Array.isArray(desired)) {
+    if (!Array.isArray(observed) || observed.length !== desired.length) return false;
+    const sorted = (xs: unknown[]) => [...xs].map((x) => JSON.stringify(x)).sort();
+    return desired.every((d) => typeof d !== "object")
+      ? deepEqual(sorted(desired), sorted(observed))
+      : desired.every((d, i) => projects(d, observed[i]));
+  }
+  if (desired !== null && typeof desired === "object") {
+    if (observed === null || typeof observed !== "object") return false;
+    return Object.entries(desired).every(([k, v]) =>
+      projects(v, (observed as Record<string, unknown>)[k]),
+    );
+  }
+  return desired === observed;
+};
