@@ -18,8 +18,8 @@ interface ChainState {
 const chainStates = new WeakMap<object, ChainState>();
 
 /**
- * Decides which plain (non-array, non-function) objects inside call arguments
- * are walked for nested chain proxies. Arrays are always walked.
+ * Decides which objects and callbacks inside call arguments are walked for
+ * nested chain proxies. Arrays are always walked.
  */
 export type Descend = (value: object) => boolean;
 
@@ -27,8 +27,12 @@ export interface ProxyChainOptions {
   /**
    * Walk into objects this returns `true` for and resolve chain proxies
    * stored in their fields. A walked object is copied, keeping its
-   * prototype, only when a nested proxy was resolved. Without it only
-   * top-level arguments and arrays are walked.
+   * prototype, only when a nested proxy was resolved. A function it accepts
+   * is wrapped so the callback's return value is resolved the same way.
+   * Without it only top-level arguments and arrays are walked.
+   *
+   * Cycles terminate, but a back-reference inside a copied object still
+   * points at the original.
    */
   readonly descend?: Descend;
 }
@@ -91,9 +95,17 @@ const replayArg = (ctx: Replay, arg: unknown): unknown => {
     // A proxy over some other effect cannot be replayed against this root.
     return state.cached === ctx.cached ? replay(ctx, state.ops) : arg;
   }
-  if (typeof arg === "function") return arg;
   const seen = ctx.seen.get(arg);
   if (seen !== undefined) return seen;
+  if (typeof arg === "function") {
+    if (!ctx.descend?.(arg)) return arg;
+    const fn = arg as (...args: unknown[]) => unknown;
+    const wrapped = function (this: unknown, ...args: unknown[]) {
+      return replayArg(ctx, fn.apply(this, args));
+    };
+    ctx.seen.set(arg, wrapped);
+    return wrapped;
+  }
   // Fragments may arrive wrapped in arrays (e.g. `sql.and([a, b])`).
   if (Array.isArray(arg)) {
     ctx.seen.set(arg, arg);

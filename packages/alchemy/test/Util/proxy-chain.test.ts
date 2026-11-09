@@ -351,13 +351,72 @@ describe("proxyChain", { tags: ["unit", "local"], timeout: 5000 }, () => {
         expect(yield* db.done(query(db))).toEqual(expected);
       }),
     );
+
+    it.effect("resolves a CTE column returned from a drizzle callback", () =>
+      Effect.gen(function* () {
+        const rows = pgTable("repro_rows", {
+          id: integer("id"),
+          parent: integer("parent"),
+        });
+        const query = <Q extends QueryBuilder>(qb: Q) => {
+          const cte = qb.$with("c").as(qb.select().from(rows));
+          return qb
+            .with(cte)
+            .select({ id: rows.id })
+            .from(rows)
+            .leftJoin(cte, () => eq(cte.parent, rows.id))
+            .where(() => eq(cte.id, rows.id));
+        };
+        const expected = query(new QueryBuilder()).toSQL();
+
+        const root = Object.assign(new QueryBuilder(), {
+          done: (q: { toSQL(): unknown }) => Effect.sync(() => q.toSQL()),
+        });
+        const db = proxyChain(Effect.succeed(root), { descend: descendDrizzle });
+        expect(yield* db.done(query(db))).toEqual(expected);
+      }),
+    );
+
+    it.effect("does not walk drizzle tables or columns", () =>
+      Effect.gen(function* () {
+        const rows = pgTable("repro_rows", { id: integer("id") });
+        expect(descendDrizzle(rows)).toBe(false);
+        expect(descendDrizzle(rows.id)).toBe(false);
+        expect(descendDrizzle(sql`1`)).toBe(true);
+      }),
+    );
   });
 });
 
+const entityKind = Symbol.for("drizzle:entityKind");
+
+/** Schema entities: built at module scope, so they never hold a deferred proxy. */
+const schemaKinds = new Set(["Table", "Column", "View"]);
+
+const walkable = new WeakMap<Function, boolean>();
+
+const isWalkableEntity = (ctor: Function): boolean => {
+  let result = walkable.get(ctor);
+  if (result === undefined) {
+    result = false;
+    for (let cls: any = ctor; cls; cls = Object.getPrototypeOf(cls)) {
+      if (!Object.hasOwn(cls, entityKind)) continue;
+      if (schemaKinds.has(cls[entityKind])) {
+        result = false;
+        break;
+      }
+      result = true;
+    }
+    walkable.set(ctor, result);
+  }
+  return result;
+};
+
 /** Mirrors `descendDrizzle` in `@alchemy.run/drizzle`. */
 const descendDrizzle = (value: object): boolean => {
+  if (typeof value === "function") return !(entityKind in value);
   const proto = Object.getPrototypeOf(value);
   if (proto === null || proto === Object.prototype) return true;
   const ctor = proto.constructor;
-  return typeof ctor === "function" && Symbol.for("drizzle:entityKind") in ctor;
+  return typeof ctor === "function" && isWalkableEntity(ctor);
 };
