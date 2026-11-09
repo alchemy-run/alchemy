@@ -22,6 +22,13 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import {
+  isRpcRequest,
+  RPC_REQUEST_METHOD,
+  RpcUnsupportedVersion,
+  SUPPORTED_RPC_VERSIONS,
+  withRpcParent,
+} from "../../Rpc.ts";
+import {
   getWorkerExport,
   handleRpcExit,
   type SharedBuildOptions,
@@ -97,8 +104,32 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       public readonly env: any,
     ) {
       super(ctx, env);
+      // The protocol's envelope method: one call carrying its method,
+      // arguments and metadata, so the caller's trace context never mixes
+      // into the arguments.
+      const request = (envelope: unknown) => {
+        if (!isRpcRequest(envelope)) {
+          return Promise.reject(new Error(`"${RPC_REQUEST_METHOD}" takes one RpcRequest`));
+        }
+        if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
+          return Promise.reject(
+            new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
+          );
+        }
+        return this.event(
+          (built) =>
+            [
+              dispatchRpcMethod(built.shape(), envelope.method, envelope.args).pipe(
+                withRpcParent(envelope.meta),
+              ),
+              Context.empty(),
+            ] as const,
+          handleRpcExit,
+        );
+      };
       return new Proxy(this, {
         get: (target, prop) => {
+          if (prop === RPC_REQUEST_METHOD) return request;
           if (typeof prop !== "string" || prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
             target.event(

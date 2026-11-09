@@ -6,9 +6,12 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { isRailwayHost } from "./MountVolume.ts";
 import {
+  currentTraceparent,
   DEFAULT_RPC_PORT,
   RPC_ERROR_TAG,
   RPC_PATH_PREFIX,
+  RPC_PROTOCOL_HEADER,
+  RPC_PROTOCOL_VERSION,
   RPC_TOKEN_HEADER,
   rpcEnvKeys,
 } from "./rpc-token.ts";
@@ -71,6 +74,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
                 cause: !baseUrl ? "missing host" : "missing token",
               });
             }
+            const traceparent = yield* currentTraceparent;
             const response = yield* Effect.tryPromise({
               try: () =>
                 // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- untyped Proxy RPC stub; an HttpClient requirement would be invisible to callers' Shape and unsatisfied at runtime
@@ -79,6 +83,8 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
                   headers: {
                     "content-type": "application/json",
                     [RPC_TOKEN_HEADER]: token,
+                    [RPC_PROTOCOL_HEADER]: String(RPC_PROTOCOL_VERSION),
+                    ...(traceparent === undefined ? {} : { traceparent }),
                   },
                   body: JSON.stringify(args),
                   signal: AbortSignal.timeout(25_000),

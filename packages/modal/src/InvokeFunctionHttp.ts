@@ -1,6 +1,7 @@
 import * as functions from "@distilled.cloud/modal/functions";
 import {
   asEffectOrStream,
+  currentRpcMeta,
   decodeRpcResponseStream,
   decodeRpcResult,
   RpcCallError,
@@ -13,7 +14,7 @@ import { decodeCbor, encodeCbor } from "./Cbor.ts";
 import { isFunctionRef, makeFunctionBinding, type ResolvedFunction } from "./FunctionTarget.ts";
 import { operations, seconds } from "./internal.ts";
 import { RPC_STREAM_KEY } from "./internal/Entrypoint.ts";
-import { RPC_KEY_KWARG, RpcCaller } from "./internal/RpcAuth.ts";
+import { RPC_KEY_KWARG, RPC_META_KWARG, RpcCaller } from "./internal/RpcAuth.ts";
 import {
   FunctionCallFailed,
   FunctionCallTimeout,
@@ -229,13 +230,15 @@ export const makeRpcClient = (
 ): Record<string, unknown> => {
   const client = makeFunctionClient(resolved, ops);
   const callMethod = (name: string, args: ReadonlyArray<unknown>) =>
-    key.pipe(
-      Effect.flatMap((value) =>
-        makeFunctionClient({ ...resolved, method: name }, ops).call(
-          args,
+    Effect.all([key, currentRpcMeta]).pipe(
+      Effect.flatMap(([value, meta]) =>
+        makeFunctionClient({ ...resolved, method: name }, ops).call(args, {
           // The binding's key: the program serves only callers it issued keys to.
-          value === undefined ? {} : { [RPC_KEY_KWARG]: value },
-        ),
+          ...(value === undefined ? {} : { [RPC_KEY_KWARG]: value }),
+          // The call's metadata (the caller's trace context). The target is a
+          // Function this stack deploys, so its entrypoint reads it.
+          ...(Object.keys(meta).length === 0 ? {} : { [RPC_META_KWARG]: meta }),
+        }),
       ),
       Effect.flatMap((value) =>
         isStreamResult(value)

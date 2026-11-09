@@ -1,4 +1,7 @@
 import { makeRandom } from "alchemy/Random";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Tracer from "effect/Tracer";
 
 /** Env var on the RPC host. Callers send it as {@link RPC_TOKEN_HEADER}. */
 export const RPC_TOKEN_ENV = "ALCHEMY_RPC_TOKEN";
@@ -15,6 +18,43 @@ export const RPC_PATH_PREFIX = "/__rpc__/";
 
 /** Same envelope tag as `alchemy/Rpc.ErrorTag`. */
 export const RPC_ERROR_TAG = "~alchemy/rpc/error";
+
+// The protocol's version header and trace metadata, as `alchemy/Rpc` defines
+// them (`RPC_PROTOCOL_HEADER`, `currentRpcMeta`, `rpcParentOf`), kept here so
+// canvas Functions don't import Rpc.ts.
+
+/** Same as `alchemy/Rpc.RPC_PROTOCOL_HEADER`. */
+export const RPC_PROTOCOL_HEADER = "x-alchemy-rpc";
+
+/** The protocol versions this runtime speaks; `alchemy/Rpc.SUPPORTED_RPC_VERSIONS`. */
+export const RPC_PROTOCOL_VERSION = 1;
+
+/** The W3C `traceparent` of the current span, if there is one to propagate. */
+export const currentTraceparent: Effect.Effect<string | undefined> = Effect.gen(function* () {
+  if (yield* Tracer.DisablePropagation) return undefined;
+  const span = yield* Effect.currentParentSpan.pipe(Effect.option);
+  if (Option.isNone(span)) return undefined;
+  const { traceId, spanId, sampled } = span.value;
+  return `00-${traceId.padStart(32, "0")}-${spanId}-${sampled ? "01" : "00"}`;
+});
+
+const TRACEPARENT = /^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/;
+
+/** Run `effect` as a child of the caller's span a `traceparent` names. */
+export const withTraceparent =
+  (traceparent: string | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    const match = traceparent === undefined ? null : TRACEPARENT.exec(traceparent.trim());
+    if (match === null) return effect;
+    const parent = Tracer.externalSpan({
+      traceId: match[1]!,
+      spanId: match[2]!,
+      sampled: (Number.parseInt(match[3]!, 16) & 1) === 1,
+    });
+    return Effect.flatMap(Effect.currentParentSpan.pipe(Effect.option), (current) =>
+      Option.isSome(current) ? effect : Effect.withParentSpan(effect, parent),
+    );
+  };
 
 export const RPC_TOKEN_ATTR = "rpcToken";
 
