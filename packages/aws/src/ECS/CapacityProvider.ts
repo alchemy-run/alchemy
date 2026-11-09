@@ -269,7 +269,7 @@ export interface CapacityProviderLookup {
 export const CapacityProvider = Resource<CapacityProvider>("AWS.ECS.CapacityProvider");
 
 class CapacityProviderNotSettled extends Data.TaggedError("CapacityProviderNotSettled")<{
-  readonly name: string;
+  readonly capacityProvider: string;
   readonly status: string | undefined;
 }> {}
 
@@ -387,7 +387,9 @@ export const CapacityProviderProvider = () =>
           Effect.flatMap((p) =>
             done(p)
               ? Effect.succeed(p)
-              : Effect.fail(new CapacityProviderNotSettled({ name, status: p?.status })),
+              : Effect.fail(
+                  new CapacityProviderNotSettled({ capacityProvider: name, status: p?.status }),
+                ),
           ),
           Effect.retry({
             while: (e) => e._tag === "CapacityProviderNotSettled",
