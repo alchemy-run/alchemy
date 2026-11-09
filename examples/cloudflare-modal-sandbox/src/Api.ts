@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Agents, Warm } from "./Sandbox.ts";
+import { MyEnv, Warm } from "./Sandbox.ts";
 
 /**
  * Starts sandboxes from the Warm image while it runs. Each user has a volume
@@ -17,7 +17,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
     const sandboxes = yield* Modal.CreateSandbox(Warm);
-    const volumes = yield* Modal.CreateVolume(Agents);
+    const volumes = yield* Modal.CreateVolume(MyEnv);
 
     /**
      * Runs a command in the repository, in a fresh sandbox from Warm with the

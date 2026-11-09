@@ -14,10 +14,10 @@ The program's code lives in the image. Its environment, including the token its 
 <Shell
   shell={{
     label: "agent-1",
-    type: "Sandbox · from Agent",
+    type: "Sandbox · from MySandbox",
     icon: "brand:modal",
     children: [
-      { label: "Agent", type: "Bun · :8080", tone: "accent", icon: "file-code" },
+      { label: "MySandbox", type: "Bun · :8080", tone: "accent", icon: "file-code" },
       { label: "env", type: "Modal Secret", icon: "key-round" },
     ],
   }}
@@ -26,14 +26,14 @@ The program's code lives in the image. Its environment, including the token its 
 
 ## Write the program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Coder } from "./Coder.ts";
 
-export default class Agent extends Modal.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Modal.Sandbox<MySandbox>()(
+  "MySandbox",
   { main: import.meta.url, app: Coder },
   Effect.gen(function* () {
     return {
@@ -48,9 +48,9 @@ Run `alchemy deploy`. Modal builds the image; you don't need Docker.
 ## Start one and call it
 
 ```typescript
-const agents = yield* Modal.CreateSandbox(Agent);
-const agent = yield* agents.create({ timeout: "10 minutes" });
-const port = yield* agent.getTcpPort();
+const sandboxes = yield* Modal.CreateSandbox(MySandbox);
+const sandbox = yield* sandboxes.create({ timeout: "10 minutes" });
+const port = yield* sandbox.getTcpPort();
 const response = yield* port.fetch(HttpClientRequest.get("/"));
 ```
 
@@ -66,23 +66,23 @@ The token the binding needs is in the program's env, never in the image.
 
 ## Run a plain Node program
 
-```typescript title="src/Agent.ts"
+```typescript title="src/MySandbox.ts"
 import * as Modal from "@alchemy.run/modal";
 import { Coder } from "./Coder.ts";
 
-export const Agent = Modal.Sandbox("Agent", {
+export const MySandbox = Modal.Sandbox("MySandbox", {
   main: "./src/agent-server.ts",
   app: Coder,
   env: { GREETING: "hello" },
 });
-export type AgentEnv = Modal.InferEnv<typeof Agent>;
+export type MySandboxEnv = Modal.InferEnv<typeof MySandbox>;
 ```
 
 ```typescript title="src/agent-server.ts"
 import { createServer } from "node:http";
-import type { AgentEnv } from "./Agent.ts";
+import type { MySandboxEnv } from "./MySandbox.ts";
 
-const env = process.env as unknown as AgentEnv;
+const env = process.env as unknown as MySandboxEnv;
 
 createServer((_request, response) => response.end(env.GREETING)).listen(Number(process.env.PORT));
 ```

@@ -131,7 +131,7 @@ See [Branches and checkpoints](/archil/storage/branches).
 Every sandbox has an **egress policy** that Archil enforces outside the microVM. It can deny everything but a list of hosts, and add headers, like an API key, to requests on their way out, so code inside never sees the value.
 
 ```typescript
-export const Agent = Archil.Sandbox("Agent", {
+export const MySandbox = Archil.Sandbox("MySandbox", {
   network: { egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] } },
 });
 ```

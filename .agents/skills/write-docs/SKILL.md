@@ -146,6 +146,14 @@ Each of these was a correction. Don't relearn them.
   variables and caps them at 4 KB; Worker `Config` binds as `secret_text`) and
   links the core page. Move anything worth keeping to the core page rather than
   deleting it.
+- **Example names read as placeholders.** Name example resources so nobody
+  mistakes them for a platform feature or a concept they must learn:
+  `MyEnv`, `MyTemplate`, `MyImage`, `MySandbox`, `acme`, `user-42`. An
+  `Agents` environment and an `Agent` template were rejected because
+  "Agents" reads like something the platform has. Keep a product's real
+  names (Cloudflare Agents, Boat's Agents page) and words that describe the
+  use ("agent loops"), and rename the diagram, prose, code and example
+  together so they still match.
 - **Show the snippet the section talks about.** A section that names a resource,
   like a CloudWatch dashboard, shows a small snippet declaring it.
 

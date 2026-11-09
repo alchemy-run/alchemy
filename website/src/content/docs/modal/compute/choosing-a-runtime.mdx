@@ -105,9 +105,9 @@ Choose it for APIs, streaming responses and WebSockets. See [Servers](/modal/ser
 A `Modal.Sandbox` with a `main` bundles your program into an image. Your code starts one with `create`, reaches the program's port through a tunnel, and terminates it, or lets its timeout stop it.
 
 ```typescript
-const agents = yield* Modal.CreateSandbox(Agent);
-const agent = yield* agents.create({ timeout: "10 minutes" });
-const port = yield* agent.getTcpPort();
+const sandboxes = yield* Modal.CreateSandbox(MySandbox);
+const sandbox = yield* sandboxes.create({ timeout: "10 minutes" });
+const port = yield* sandbox.getTcpPort();
 ```
 
 Choose it when each user or session needs a copy of your own server. See [Programs](/modal/sandboxes/programs).
@@ -158,7 +158,7 @@ A Worker creates a sandbox per user and calls a GPU Function, and both read mode
 <Tree
   nodes={[
     { id: "api", label: "Api", type: "Worker", icon: "square-function" },
-    { id: "env", label: "Agents", type: "environment", icon: "brand:modal", areas: ["sbx weights", "embed weights"], phoneAreas: ["sbx embed", "weights weights"], colGap: 3.5 },
+    { id: "env", label: "MyEnv", type: "environment", icon: "brand:modal", areas: ["sbx weights", "embed weights"], phoneAreas: ["sbx embed", "weights weights"], colGap: 3.5 },
     { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box" },
     { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function" },
     { id: "weights", label: "Weights", type: "Volume", parent: "env", tone: "accent", icon: "hard-drive" },

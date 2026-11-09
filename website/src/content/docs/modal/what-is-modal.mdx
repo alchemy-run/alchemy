@@ -9,13 +9,13 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 Modal runs your code in containers, with GPUs when you ask for them. A **workspace** holds everything you create and pays for it. It's divided into **environments**, and in each environment, **apps** group the code that runs: **Functions** and **Servers** that Modal scales with traffic, and **Sandboxes** your code creates while it runs. Each of them starts from an **image**. Volumes, Dicts, Queues and Secrets sit beside the apps in the same environment. You pay per second for the containers that run, and nothing while they're scaled to zero.
 
-Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm` image, with a Volume of their own as `/home/user`. An `Embed` Function on an L4 GPU turns their text into vectors. The `Coder` and `Inference` apps hold the code, and the `Agents` environment holds both apps with their Volume and Secret.
+Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm` image, with a Volume of their own as `/home/user`. An `Embed` Function on an L4 GPU turns their text into vectors. The `Coder` and `Inference` apps hold the code, and the `MyEnv` environment holds both apps with their Volume and Secret.
 
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
     {
-      id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 4.5,
+      id: "env", label: "MyEnv", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 4.5,
       areas: ["home coder", "openai inference"],
       phoneAreas: ["home openai", "coder coder", "inference inference"],
     },
@@ -49,10 +49,10 @@ See [Workspaces & tokens](/modal/workspaces-and-tokens).
 An **environment** divides a workspace. Two objects with the same name in two environments are different objects, so `dev` and `prod` never share a Volume by accident. Every workspace starts with one called `main`.
 
 ```typescript title="src/environments.ts"
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 ```
 
-Alchemy names the environment from your app, stage and id, so each stage gets its own. Everything else you declare names its environment with `environment: Agents`, or lands in the workspace's default one.
+Alchemy names the environment from your app, stage and id, so each stage gets its own. Everything else you declare names its environment with `environment: MyEnv`, or lands in the workspace's default one.
 
 See [Workspaces & tokens](/modal/workspaces-and-tokens#environments-keep-stages-apart).
 
@@ -61,7 +61,7 @@ See [Workspaces & tokens](/modal/workspaces-and-tokens#environments-keep-stages-
 An **app** groups the code you deploy together and acts as its namespace. A deployed app runs until you stop it, and stopping it stops every Function, Server and Sandbox in it.
 
 ```typescript title="src/apps.ts"
-export const Coder = Modal.App("Coder", { environment: Agents });
+export const Coder = Modal.App("Coder", { environment: MyEnv });
 ```
 
 ## Images: the filesystem a container starts from
@@ -161,15 +161,15 @@ See [Sandboxes](/modal/sandboxes/sandboxes) and [Snapshots](/modal/sandboxes/sna
 A **Volume** is a filesystem that Functions, Servers and Sandboxes mount at a path, and that outlives every container that mounts it. A **Dict** is a key-value store and a **Queue** hands work between processes; both hold JSON and expire their entries.
 
 ```typescript title="src/storage.ts"
-export const Weights = Modal.Volume("Weights", { environment: Agents });
-export const Results = Modal.Dict("Results", { environment: Agents });
-export const Jobs = Modal.Queue("Jobs", { environment: Agents });
+export const Weights = Modal.Volume("Weights", { environment: MyEnv });
+export const Results = Modal.Dict("Results", { environment: MyEnv });
+export const Jobs = Modal.Queue("Jobs", { environment: MyEnv });
 ```
 
 A Volume per user is created by name while your app runs:
 
 ```typescript
-const volumes = yield* Modal.CreateVolume(Agents);
+const volumes = yield* Modal.CreateVolume(MyEnv);
 const home = yield* volumes.getOrCreate(`home-${user}`);
 ```
 
@@ -181,7 +181,7 @@ A **Secret** is a named set of environment variables, stored in an environment a
 
 ```typescript title="src/secrets.ts"
 export const OpenAI = Modal.Secret("OpenAI", {
-  environment: Agents,
+  environment: MyEnv,
   env: { OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY") },
 });
 ```
