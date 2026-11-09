@@ -1507,7 +1507,7 @@ export const WebFunctionProvider = () =>
                     )
                   : Stream.empty,
               ),
-              Stream.mapError(LambdaLiveTailError.fromCause),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
           return Stream.unwrap(session).pipe(Stream.retry(Schedule.spaced("1 second")));

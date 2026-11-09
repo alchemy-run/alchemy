@@ -26,13 +26,12 @@ import type { Providers } from "../Providers.ts";
 
 /** The consumer exists but is not (yet) attached to the expected Worker script. */
 export class ConsumerScriptUnbound extends Data.TaggedError("ConsumerScriptUnbound")<{
-  readonly message: string;
-}> {}
-
-const scriptUnbound = (scriptName: string | undefined) =>
-  new ConsumerScriptUnbound({
-    message: `Queue consumer is not bound to Worker script '${scriptName}'`,
-  });
+  readonly scriptName: string | undefined;
+}> {
+  override get message() {
+    return `Queue consumer is not bound to Worker script '${this.scriptName}'`;
+  }
+}
 
 export type ConsumerProps = {
   /**
@@ -579,9 +578,11 @@ export const ConsumerProviderLive = () =>
         Effect.flatMap((fetched) =>
           toObserved(fetched)?.scriptName === news.scriptName
             ? Effect.void
-            : Effect.fail(scriptUnbound(news.scriptName)),
+            : Effect.fail(new ConsumerScriptUnbound({ scriptName: news.scriptName })),
         ),
-        Effect.catchTag("ConsumerNotFound", () => Effect.fail(scriptUnbound(news.scriptName))),
+        Effect.catchTag("ConsumerNotFound", () =>
+          Effect.fail(new ConsumerScriptUnbound({ scriptName: news.scriptName })),
+        ),
         Effect.retry({
           while: (e) => e._tag === "ConsumerScriptUnbound",
           schedule: queueHandlerReadinessSchedule,

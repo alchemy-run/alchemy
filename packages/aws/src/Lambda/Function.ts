@@ -783,12 +783,11 @@ export interface FunctionLookup {
 
 /** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
 export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
-  message: string;
-  cause: unknown;
+  cause: Error;
 }> {
-  /** @internal Tag a live-tail stream failure so `tail` fails with a typed error. */
-  static fromCause = (cause: Error) =>
-    new LambdaLiveTailError({ message: `Lambda live tail failed: ${cause.message}`, cause });
+  override get message() {
+    return `Lambda live tail failed: ${this.cause.message}`;
+  }
 }
 
 /**
@@ -3481,7 +3480,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
-              Stream.mapError(LambdaLiveTailError.fromCause),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
 
