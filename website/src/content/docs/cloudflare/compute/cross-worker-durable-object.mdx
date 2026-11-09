@@ -19,7 +19,7 @@ through either Worker are visible from the other.
 
 <Tree
   nodes={[
-    { id: "acct", label: "my-company", type: "account", areas: ["b a"], colGap: 3, gutter: true },
+    { id: "acct", label: "my-company", type: "account", areas: ["b a"], colGap: 3 },
     { id: "b", label: "WorkerB", type: "Worker", parent: "acct", specs: [["scriptName", "WorkerA"]] },
     { id: "a", label: "WorkerA", type: "Worker · hosts Counter", parent: "acct" },
     { id: "ns", label: "Counter", type: "Durable Object namespace", parent: "a", dashed: true },

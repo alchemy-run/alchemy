@@ -118,7 +118,7 @@ One account runs all three at once. A Worker creates a sandbox per task from a s
 <Tree
   nodes={[
     { id: "api", label: "Api", type: "Worker", icon: "square-function" },
-    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["task golden", "box golden", "search golden"], colGap: 3, gutter: true },
+    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["task golden", "box golden", "search golden"], colGap: 3 },
     { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
     { id: "task", label: "task-42", type: "sandbox per task", parent: "account", icon: "box" },
     { id: "box", label: "DevBox", type: "dev box", parent: "account", icon: "box" },
@@ -126,7 +126,6 @@ One account runs all three at once. A Worker creates a sandbox per task from a s
   ]}
   areas={["api account"]}
   colGap={3.5}
-  gutter
   links={[
     { from: "api", to: "task", label: "creates" },
     { from: "api", to: "box", label: "exec" },

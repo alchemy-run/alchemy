@@ -13,7 +13,7 @@ Take one small app: a Lambda Function that stores files in an S3 Bucket and queu
   nodes={[
     { id: "account", label: "123456789012", type: "account", icon: "brand:aws", areas: ["role region"], colGap: 3 },
     { id: "role", label: "Role", type: "IAM role · every region", parent: "account", icon: "id-card" },
-    { id: "region", label: "us-east-1", type: "region", parent: "account", dashed: true, icon: "map-pin", areas: ["api files", "api jobs", "api worker"], colGap: 3, gutter: true },
+    { id: "region", label: "us-east-1", type: "region", parent: "account", dashed: true, icon: "map-pin", areas: ["api files", "api jobs", "api worker"], colGap: 3 },
     { id: "api", label: "Api", type: "Lambda Function", parent: "region", tone: "accent", icon: "square-function" },
     { id: "files", label: "Files", type: "S3 Bucket", parent: "region", icon: "archive" },
     { id: "jobs", label: "Jobs", type: "SQS Queue", parent: "region", icon: "inbox" },

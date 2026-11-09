@@ -12,7 +12,7 @@ Take one small app: an API Service in two regions that stores files on a Volume 
 
 <Tree
   nodes={[
-    { id: "org", label: "acme", type: "organization · private network", icon: "brand:fly", areas: ["app", "pg"], gutter: true },
+    { id: "org", label: "acme", type: "organization · private network", icon: "brand:fly", areas: ["app", "pg"] },
     { id: "app", label: "api", type: "app", parent: "org", dashed: true, icon: "app-window", areas: ["riad rlhr"], colGap: 1 },
     { id: "riad", label: "iad", type: "region · Ashburn", parent: "app", dashed: true, icon: "map-pin", areas: ["iad volIad"], phoneAreas: ["iad volIad"], colGap: 3 },
     { id: "iad", label: "Machine", type: "runs api", parent: "riad", tone: "accent", icon: "server" },

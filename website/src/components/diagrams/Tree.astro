@@ -30,8 +30,9 @@
  * nest and how they connect (`{ from: "api", to: "rooms", label: "binds" }`;
  * an arrow to a container ends on its border). Place boxes with `areas` on a
  * container (or on the Tree, for top-level boxes) so each arrow runs short and
- * straight, `phoneAreas` for phones, `colGap` so labels fit, and `gutter` where
- * phone arrows must go around boxes. Check the result at both widths with the
+ * straight, `phoneAreas` for phones, and `colGap` so labels fit. Arrows that
+ * must go around boxes get a gutter on the left, added only where and when one
+ * is needed. Check the result at both widths with the
  * write-docs skill's `scripts/tree-check.mjs`.
  */
 import "./diagram.css";
@@ -59,8 +60,6 @@ interface TreeNode {
   phoneAreas?: string[];
   /** Space between columns of `areas`, in rem, so link labels fit. */
   colGap?: number;
-  /** On phones, leave a gutter on the left for arrows that go around boxes. */
-  gutter?: boolean;
 }
 interface Link {
   from: string;
@@ -84,7 +83,6 @@ interface Props {
   areas?: string[];
   phoneAreas?: string[];
   colGap?: number;
-  gutter?: boolean;
   caption?: string;
   /** Internal: the node this (recursive) instance renders. */
   at?: string;
@@ -178,7 +176,6 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
               "alc-tree__kids",
               node.areas && "alc-tree__kids--grid",
               node.phoneAreas && "alc-tree__kids--phone-grid",
-              node.gutter && "alc-tree__kids--gutter",
             ]}
             style={gridStyle(node)}
           >
@@ -197,7 +194,6 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
               "alc-tree__kids",
               props.areas && "alc-tree__kids--grid",
               props.phoneAreas && "alc-tree__kids--phone-grid",
-              props.gutter && "alc-tree__kids--gutter",
             ]}
             style={gridStyle(props)}
           >
@@ -226,7 +222,10 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
 
   const draw = (tree: HTMLElement) => {
     const links: Link[] = JSON.parse(tree.dataset.links ?? "[]");
-    const origin = tree.getBoundingClientRect();
+    // A gutter is only kept where an arrow has to go around boxes, so start
+    // without any and add them after a first routing pass.
+    for (const k of tree.querySelectorAll(".alc-tree__kids--gutter")) k.classList.remove("alc-tree__kids--gutter");
+    let origin = tree.getBoundingClientRect();
     const rect = (el: Element): R => {
       const r = el.getBoundingClientRect();
       return { l: r.left - origin.left, t: r.top - origin.top, r: r.right - origin.left, b: r.bottom - origin.top };
@@ -329,23 +328,42 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
           return vx > Math.min(hx1, hx2) + 1 && vx < Math.max(hx1, hx2) - 1 && hy > Math.min(vy1, vy2) + 1 && hy < Math.max(vy1, vy2) - 1;
         });
       });
-    const plans = links.flatMap((link) => {
-      const a = node(link.from), b = node(link.to);
-      if (!a || !b) return [];
-      const candidates = routes(rect(a), rect(b));
-      const open = candidates.filter((c) => !crosses(c.pts, obstaclesFor(a, b)));
-      return [{ link, a, b, candidates, open, route: open[0] ?? candidates[0]!, blocked: open.length === 0 }];
-    });
-    // Re-route each arrow against all the others, so no two cross where
-    // another clear route exists, whichever was listed first.
-    for (let pass = 0; pass < 3; pass++)
-      for (const p of plans) {
-        // Arrows from one box, or into one box, may share a trunk.
-        const others = plans
-          .filter((q) => q !== p && q.link.from !== p.link.from && q.link.to !== p.link.to)
-          .flatMap((q) => segsOf(q.route));
-        p.route = p.open.find((c) => !cuts(c.pts, others)) ?? p.route;
-      }
+    const plan = () => {
+      const plans = links.flatMap((link) => {
+        const a = node(link.from), b = node(link.to);
+        if (!a || !b) return [];
+        const candidates = routes(rect(a), rect(b));
+        const open = candidates.filter((c) => !crosses(c.pts, obstaclesFor(a, b)));
+        return [{ link, a, b, candidates, open, route: open[0] ?? candidates[0]!, blocked: open.length === 0 }];
+      });
+      // Re-route each arrow against all the others, so no two cross where
+      // another clear route exists, whichever was listed first.
+      for (let pass = 0; pass < 3; pass++)
+        for (const p of plans) {
+          // Arrows from one box, or into one box, may share a trunk.
+          const others = plans
+            .filter((q) => q !== p && q.link.from !== p.link.from && q.link.to !== p.link.to)
+            .flatMap((q) => segsOf(q.route));
+          p.route = p.open.find((c) => !cuts(c.pts, others)) ?? p.route;
+        }
+      return plans;
+    };
+    let plans = plan();
+    // Open a gutter in the container that holds both ends of each arrow that
+    // goes around, then route again with the room it makes.
+    const holder = (a: HTMLElement, b: HTMLElement) => {
+      let el = a.parentElement;
+      while (el && el !== tree && !(el.classList.contains("alc-tree__kids") && el.contains(b))) el = el.parentElement;
+      return el && el !== tree ? el : undefined;
+    };
+    const needs = new Set(plans.filter((p) => p.route.kind === "gutter").map((p) => holder(p.a, p.b)).filter((k) => k !== undefined));
+    if (needs.size > 0) {
+      for (const k of needs) k.classList.add("alc-tree__kids--gutter");
+      origin = tree.getBoundingClientRect();
+      svg.setAttribute("width", String(origin.width));
+      svg.setAttribute("height", String(origin.height));
+      plans = plan();
+    }
     const drawn = plans.map(({ link, a, b, route, blocked }) => {
       const path = document.createElementNS(NS, "path");
       path.setAttribute("d", route.pts.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" "));
@@ -503,9 +521,10 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
       column-gap: min(var(--col-gap, 0.625rem), 2.5rem);
       row-gap: 1.5rem;
     }
-    .alc-tree__kids--gutter {
-      padding-left: 2rem;
-    }
+  }
+  /* Added by the router only when an arrow must go around boxes. */
+  .alc-tree__kids.alc-tree__kids--gutter {
+    padding-left: 2rem;
   }
   /* A box is a column: its head, then its contents growing to fill it, so a
      box stretched to its row's height has no empty space at the bottom. */
