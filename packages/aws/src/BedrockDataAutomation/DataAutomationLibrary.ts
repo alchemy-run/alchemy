@@ -272,18 +272,16 @@ export const DataAutomationLibraryProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* bda
-            .deleteDataAutomationLibrary({ libraryArn: output.libraryArn })
-            .pipe(
-              // A library can't be deleted while an ingestion job runs; wait
-              // for the jobs to finish (bounded: 30 × 10s ≈ 5 min).
-              Effect.retry({
-                while: (e) => e._tag === "LibraryIngestionJobsActive",
-                schedule: Schedule.spaced("10 seconds"),
-                times: 30,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* bda.deleteDataAutomationLibrary({ libraryArn: output.libraryArn }).pipe(
+            // A library can't be deleted while an ingestion job runs; wait
+            // for the jobs to finish (bounded: 30 × 10s ≈ 5 min).
+            Effect.retry({
+              while: (e) => e._tag === "LibraryIngestionJobsActive",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
           // Deletion settles asynchronously (status ACTIVE → DELETING → gone)
           // and library names are unique, so wait for the terminal
           // disappearance — otherwise an immediate same-name re-create
