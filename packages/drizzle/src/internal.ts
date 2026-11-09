@@ -1,21 +1,23 @@
 const entityKind = Symbol.for("drizzle:entityKind");
 
-/** Schema entities: built at module scope, so they never hold a deferred proxy. */
-const schemaKinds = new Set(["Table", "Column", "View"]);
+/**
+ * The SQL building blocks a deferred column can hide in. Everything else
+ * (tables, columns, query builders, sessions) is left alone: schema is built
+ * at module scope, and builders and sessions hold the live client.
+ */
+const sqlKinds = new Set(["SQL", "SQL.Aliased", "Param", "ValueRows"]);
 
 const walkable = new WeakMap<Function, boolean>();
 
-const isWalkableEntity = (ctor: Function): boolean => {
+const isSqlEntity = (ctor: Function): boolean => {
   let result = walkable.get(ctor);
   if (result === undefined) {
     result = false;
     for (let cls: any = ctor; cls; cls = Object.getPrototypeOf(cls)) {
-      if (!Object.hasOwn(cls, entityKind)) continue;
-      if (schemaKinds.has(cls[entityKind])) {
-        result = false;
+      if (Object.hasOwn(cls, entityKind) && sqlKinds.has(cls[entityKind])) {
+        result = true;
         break;
       }
-      result = true;
     }
     walkable.set(ctor, result);
   }
@@ -27,8 +29,8 @@ const isWalkableEntity = (ctor: Function): boolean => {
  * Drizzle takes as arguments (select fields, row values), Drizzle's query
  * entities (`SQL`, `SQL.Aliased`, …), where `` sql`count(${cte.id})` `` and
  * `eq(cte.parent, id)` store a deferred column, and callbacks such as
- * `.where(() => eq(cte.id, id))`. Tables, columns and views are skipped,
- * as are binary data, dates and other classes.
+ * `.where(() => eq(cte.id, id))`. Tables, columns, query builders, binary
+ * data, dates and other classes are skipped.
  *
  * Known gap: Drizzle encodes a compared value with its column's encoder when
  * the comparison is built, so `eq(cte.col, value)` with a deferred column
@@ -40,5 +42,5 @@ export const descendDrizzle = (value: object): boolean => {
   const proto = Object.getPrototypeOf(value);
   if (proto === null || proto === Object.prototype) return true;
   const ctor = proto.constructor;
-  return typeof ctor === "function" && isWalkableEntity(ctor);
+  return typeof ctor === "function" && isSqlEntity(ctor);
 };

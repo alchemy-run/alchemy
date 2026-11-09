@@ -377,11 +377,60 @@ describe("proxyChain", { tags: ["unit", "local"], timeout: 5000 }, () => {
       }),
     );
 
+    it.effect("leaves a callback's returned query and its client intact", () =>
+      Effect.gen(function* () {
+        // Shape of `db.transaction((tx) => tx.query.rows.findMany())`: the
+        // returned builder holds a session whose client is callable and has
+        // its own methods (`client.unsafe`).
+        class Query {
+          constructor(readonly session: { client: (() => void) & { unsafe: () => string } }) {}
+        }
+        Object.defineProperty(Query, Symbol.for("drizzle:entityKind"), {
+          value: "SQLiteRelationalQuery",
+        });
+        const client = Object.assign(() => {}, { unsafe: () => "ok" });
+        const query = new Query({ client });
+        const db = proxyChain(
+          Effect.succeed({
+            transaction: (cb: (tx: unknown) => Query) =>
+              Effect.sync(() => cb({}).session.client.unsafe()),
+          }),
+          { descend: descendDrizzle },
+        );
+        expect(yield* db.transaction(() => query)).toBe("ok");
+      }),
+    );
+
+    it.effect("keeps a wrapped callback's own properties", () =>
+      Effect.gen(function* () {
+        const cb = Object.assign(() => 1, { unsafe: () => "ok" });
+        const db = proxyChain(
+          Effect.succeed({ put: (f: typeof cb) => Effect.sync(() => [f(), f.unsafe()]) }),
+          { descend: descendDrizzle },
+        );
+        expect(yield* db.put(cb)).toEqual([1, "ok"]);
+      }),
+    );
+
+    it.effect("leaves a decoder on a drizzle SQL object unwrapped", () =>
+      Effect.gen(function* () {
+        const decode = (v: unknown) => Number(v);
+        const chunk = sql`1`.mapWith(decode);
+        const db = proxyChain(Effect.succeed({ put: (v: SQL) => Effect.succeed(v) }), {
+          descend: descendDrizzle,
+        });
+        const out = yield* db.put(chunk);
+        expect(out).toBe(chunk);
+        expect(Reflect.get(out, "decoder").mapFromDriverValue).toBe(decode);
+      }),
+    );
+
     it.effect("does not walk drizzle tables or columns", () =>
       Effect.gen(function* () {
         const rows = pgTable("repro_rows", { id: integer("id") });
         expect(descendDrizzle(rows)).toBe(false);
         expect(descendDrizzle(rows.id)).toBe(false);
+        expect(descendDrizzle(new QueryBuilder().select().from(rows))).toBe(false);
         expect(descendDrizzle(sql`1`)).toBe(true);
       }),
     );
@@ -390,22 +439,24 @@ describe("proxyChain", { tags: ["unit", "local"], timeout: 5000 }, () => {
 
 const entityKind = Symbol.for("drizzle:entityKind");
 
-/** Schema entities: built at module scope, so they never hold a deferred proxy. */
-const schemaKinds = new Set(["Table", "Column", "View"]);
+/**
+ * The SQL building blocks a deferred column can hide in. Everything else
+ * (tables, columns, query builders, sessions) is left alone: schema is built
+ * at module scope, and builders and sessions hold the live client.
+ */
+const sqlKinds = new Set(["SQL", "SQL.Aliased", "Param", "ValueRows"]);
 
 const walkable = new WeakMap<Function, boolean>();
 
-const isWalkableEntity = (ctor: Function): boolean => {
+const isSqlEntity = (ctor: Function): boolean => {
   let result = walkable.get(ctor);
   if (result === undefined) {
     result = false;
     for (let cls: any = ctor; cls; cls = Object.getPrototypeOf(cls)) {
-      if (!Object.hasOwn(cls, entityKind)) continue;
-      if (schemaKinds.has(cls[entityKind])) {
-        result = false;
+      if (Object.hasOwn(cls, entityKind) && sqlKinds.has(cls[entityKind])) {
+        result = true;
         break;
       }
-      result = true;
     }
     walkable.set(ctor, result);
   }
@@ -418,5 +469,5 @@ const descendDrizzle = (value: object): boolean => {
   const proto = Object.getPrototypeOf(value);
   if (proto === null || proto === Object.prototype) return true;
   const ctor = proto.constructor;
-  return typeof ctor === "function" && isWalkableEntity(ctor);
+  return typeof ctor === "function" && isSqlEntity(ctor);
 };

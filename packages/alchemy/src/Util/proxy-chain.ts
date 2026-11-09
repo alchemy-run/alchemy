@@ -28,7 +28,9 @@ export interface ProxyChainOptions {
    * Walk into objects this returns `true` for and resolve chain proxies
    * stored in their fields. A walked object is copied, keeping its
    * prototype, only when a nested proxy was resolved. A function it accepts
-   * is wrapped so the callback's return value is resolved the same way.
+   * is wrapped so the callback's return value is resolved the same way, but
+   * only when found in an argument, an array or a plain object: a function
+   * field of a class instance (e.g. a row decoder) is left alone.
    * Without it only top-level arguments and arrays are walked.
    *
    * Cycles terminate, but a back-reference inside a copied object still
@@ -74,10 +76,14 @@ const replay = (ctx: Replay, ops: ReadonlyArray<Op>): unknown => {
  * sensitive values (e.g. a `TemplateStringsArray` with its `raw` property)
  * are preserved.
  */
-const replayArgs = (ctx: Replay, args: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
+const replayArgs = (
+  ctx: Replay,
+  args: ReadonlyArray<unknown>,
+  callable = true,
+): ReadonlyArray<unknown> => {
   let out: unknown[] | undefined;
   for (let i = 0; i < args.length; i++) {
-    const resolved = replayArg(ctx, args[i]);
+    const resolved = replayArg(ctx, args[i], callable);
     if (resolved !== args[i]) {
       out ??= [...args];
       out[i] = resolved;
@@ -86,7 +92,7 @@ const replayArgs = (ctx: Replay, args: ReadonlyArray<unknown>): ReadonlyArray<un
   return out ?? args;
 };
 
-const replayArg = (ctx: Replay, arg: unknown): unknown => {
+const replayArg = (ctx: Replay, arg: unknown, callable = true): unknown => {
   if (arg === null || (typeof arg !== "object" && typeof arg !== "function")) {
     return arg;
   }
@@ -98,22 +104,23 @@ const replayArg = (ctx: Replay, arg: unknown): unknown => {
   const seen = ctx.seen.get(arg);
   if (seen !== undefined) return seen;
   if (typeof arg === "function") {
-    if (!ctx.descend?.(arg)) return arg;
-    const fn = arg as (...args: unknown[]) => unknown;
-    const wrapped = function (this: unknown, ...args: unknown[]) {
-      return replayArg(ctx, fn.apply(this, args));
-    };
+    if (!callable || !ctx.descend?.(arg)) return arg;
+    // A Proxy keeps the function's own properties (a callable client's
+    // `.unsafe`, etc.); only the call result is resolved.
+    const wrapped = new Proxy(arg, {
+      apply: (target, thisArg, args) => replayArg(ctx, Reflect.apply(target, thisArg, args)),
+    });
     ctx.seen.set(arg, wrapped);
     return wrapped;
   }
   // Fragments may arrive wrapped in arrays (e.g. `sql.and([a, b])`).
   if (Array.isArray(arg)) {
     ctx.seen.set(arg, arg);
-    const out = replayArgs(ctx, arg);
+    const out = replayArgs(ctx, arg, callable);
     ctx.seen.set(arg, out);
     return out;
   }
-  if (ctx.descend?.(arg)) return replayFields(ctx, arg);
+  if (ctx.descend?.(arg)) return replayFields(ctx, arg, callable);
   return arg;
 };
 
@@ -122,7 +129,10 @@ const replayArg = (ctx: Replay, arg: unknown): unknown => {
  * keeps the original prototype so class methods (`SQL.getSQL`, and the like)
  * still run. Accessors are copied without being invoked.
  */
-const replayFields = (ctx: Replay, value: object): unknown => {
+const replayFields = (ctx: Replay, value: object, callable: boolean): unknown => {
+  const proto = Object.getPrototypeOf(value);
+  // Below a class instance, functions are its own machinery, not callbacks.
+  const fieldsCallable = callable && (proto === null || proto === Object.prototype);
   ctx.seen.set(value, value);
   const fields: Array<{ key: PropertyKey; descriptor: PropertyDescriptor }> = [];
   let changed = false;
@@ -133,7 +143,7 @@ const replayFields = (ctx: Replay, value: object): unknown => {
       fields.push({ key, descriptor });
       continue;
     }
-    const next = replayArg(ctx, descriptor.value);
+    const next = replayArg(ctx, descriptor.value, fieldsCallable);
     if (next !== descriptor.value) changed = true;
     fields.push({
       key,
@@ -142,7 +152,7 @@ const replayFields = (ctx: Replay, value: object): unknown => {
   }
   if (!changed) return value;
 
-  const copy: object = Object.create(Object.getPrototypeOf(value));
+  const copy: object = Object.create(proto);
   ctx.seen.set(value, copy);
   for (const field of fields) {
     Object.defineProperty(copy, field.key, field.descriptor);
