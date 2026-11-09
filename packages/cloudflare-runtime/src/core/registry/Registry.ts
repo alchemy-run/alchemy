@@ -15,6 +15,8 @@ import * as Paths from "../internal/Paths.ts";
 import * as System from "../internal/System.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import {
+  DEFAULT_STALE_AFTER_MS,
+  electStorageOwner,
   resolvedTargetKey,
   type RegistryEntry,
   type ResolvedTargetMap,
@@ -43,7 +45,12 @@ export class Registry extends Context.Service<
   }
 >()("cloudflare-runtime/registry/Registry") {}
 
-const STALE_AFTER_MS = 300_000;
+/**
+ * How often the registry is re-read even without a filesystem event, so an
+ * entry whose process died (no more heartbeats, no more writes) expires on
+ * time. Storage candidates rely on this to hand ownership over.
+ */
+const REFRESH_INTERVAL = "2 seconds";
 
 /**
  * Effect's Node `FileSystem.stat` uses `{ bigint: true }` and then converts
@@ -67,35 +74,24 @@ export const RegistryLive = Layer.effect(
     const path = yield* Path.Path;
     const directory = yield* Paths.state("alchemy", "registry");
 
-    const isNonStale = (entryPath: string) =>
-      Effect.zip(readMtime(entryPath), DateTime.nowAsDate, {
-        concurrent: true,
-      }).pipe(
-        Effect.map(([mtime, now]) => !!mtime && mtime.getTime() > now.getTime() - STALE_AFTER_MS),
-      );
-
     const readEntry = (entry: string) => {
       const entryPath = path.join(directory, entry);
-      return isNonStale(entryPath).pipe(
-        Effect.flatMap((valid) =>
-          valid
-            ? fs.readFileString(entryPath).pipe(
-                Effect.flatMap((content) =>
-                  // Other processes (including older runtimes) may expose
-                  // a partial write. A parse failure must leave refresh alive.
-                  Effect.try(
-                    () =>
-                      [
-                        decodeURIComponent(path.basename(entry, ".json")),
-                        JSON.parse(content),
-                      ] as const,
-                  ),
-                ),
-              )
-            : fs.remove(entryPath).pipe(Effect.as(undefined)),
-        ),
-        Effect.orElseSucceed(() => undefined),
-      );
+      return Effect.gen(function* () {
+        const [mtime, now] = yield* Effect.zip(readMtime(entryPath), DateTime.nowAsDate, {
+          concurrent: true,
+        });
+        if (!mtime) return undefined;
+        const content = yield* fs.readFileString(entryPath);
+        // Other processes (including older runtimes) may expose a partial
+        // write. A parse failure must leave refresh alive.
+        const value = yield* Effect.try(() => JSON.parse(content) as RegistryEntry);
+        const staleAfterMs = value.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+        if (mtime.getTime() <= now.getTime() - staleAfterMs) {
+          yield* fs.remove(entryPath);
+          return undefined;
+        }
+        return [decodeURIComponent(path.basename(entry, ".json")), value] as const;
+      }).pipe(Effect.orElseSucceed(() => undefined));
     };
 
     const readAll = fs.readDirectory(directory).pipe(
@@ -139,14 +135,24 @@ export const RegistryLive = Layer.effect(
             // subscription. `mapEffect` runs the reads sequentially, so a
             // watcher-triggered read cannot be overwritten by an older one.
             Stream.merge(Stream.succeed(undefined)),
+            Stream.merge(
+              Stream.fromEffect(Effect.void).pipe(Stream.repeat(Schedule.spaced(REFRESH_INTERVAL))),
+            ),
             Stream.mapEffect(() => refresh),
           )
         : Stream.fromEffect(refresh).pipe(Stream.repeat(Schedule.spaced(100)))
     ).pipe(Stream.runDrain, Effect.forkScoped);
 
     return Registry.of({
+      // Re-read the disk first: an entry another process wrote moments ago
+      // (a storage candidate that started first) may not have reached the
+      // watcher yet, and the initial push must elect the right owner.
       read: (subscribers) =>
-        SubscriptionRef.get(ref).pipe(Effect.map(pickSubscriberServices(subscribers))),
+        refresh.pipe(
+          Effect.ignore,
+          Effect.andThen(SubscriptionRef.get(ref)),
+          Effect.map(pickSubscriberServices(subscribers)),
+        ),
       subscribe: (subscribers) =>
         SubscriptionRef.changes(ref).pipe(
           Stream.map(pickSubscriberServices(subscribers)),
@@ -157,7 +163,7 @@ export const RegistryLive = Layer.effect(
         const serialized = JSON.stringify(entry, null, 2);
         // Publish complete files atomically so other registry processes never
         // observe a truncated entry during creation or replacement.
-        return Effect.scoped(
+        const publish = Effect.scoped(
           Effect.gen(function* () {
             const temporaryPath = yield* fs.makeTempFileScoped({
               directory,
@@ -167,7 +173,8 @@ export const RegistryLive = Layer.effect(
             yield* fs.writeFileString(temporaryPath, serialized);
             yield* fs.rename(temporaryPath, entryPath);
           }),
-        ).pipe(
+        );
+        return publish.pipe(
           Effect.andThen(
             // Immediately update the in-memory registry so it's available without waiting on IO.
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
@@ -190,10 +197,24 @@ export const RegistryLive = Layer.effect(
             ),
           ),
           Effect.tap(() =>
-            // Update the `mtime` every 30 seconds so the entry is not considered stale.
+            // Update the `mtime` well within the entry's staleness window
+            // (every 30 seconds by default) so it is not considered stale.
+            // Another process may have reaped the entry as stale just before
+            // a heartbeat (e.g. after this process was suspended), so a
+            // missing entry is published again; a failed tick is retried on
+            // the next one instead of ending the heartbeat.
             DateTime.nowAsDate.pipe(
               Effect.flatMap((now) => fs.utimes(entryPath, now, now)),
-              Effect.schedule(Schedule.spaced("30 seconds")),
+              Effect.catchIf(
+                (error) => error.reason._tag === "NotFound",
+                () => publish,
+              ),
+              Effect.ignore,
+              Effect.schedule(
+                Schedule.spaced(
+                  Math.min(30_000, Math.floor((entry.staleAfterMs ?? DEFAULT_STALE_AFTER_MS) / 5)),
+                ),
+              ),
               Effect.forkScoped,
             ),
           ),
@@ -218,6 +239,28 @@ const pickSubscriberServices =
   (registry: MutableHashMap.MutableHashMap<string, RegistryEntry>) => {
     const resolved: ResolvedTargetMap = {};
     for (const subscriber of subscribers) {
+      if (subscriber.kind === "storage-owner") {
+        const owner = electStorageOwner(
+          [...MutableHashMap.values(registry)].flatMap((entry) =>
+            entry.services
+              .filter(
+                (service): service is RegistryEntry.StorageOwner =>
+                  service.kind === "storage-owner" && service.scope === subscriber.scope,
+              )
+              .map((service) => [entry, service] as const),
+          ),
+        );
+        if (owner) {
+          const [entry, service] = owner;
+          resolved[resolvedTargetKey(subscriber)] = {
+            ...service,
+            scriptName: entry.scriptName,
+            debugPortAddress: entry.debugPortAddress,
+            instanceId: entry.instanceId,
+          };
+        }
+        continue;
+      }
       for (const entry of MutableHashMap.values(registry)) {
         const service = extractSubscriberService(subscriber, entry);
         if (service) {
@@ -237,7 +280,9 @@ const pickSubscriberServices =
 const extractSubscriberService = (subscriber: Subscriber, entry: RegistryEntry) => {
   switch (subscriber.kind) {
     case "worker":
-      return entry.scriptName === subscriber.scriptName ? entry.services[0] : undefined;
+      return entry.scriptName === subscriber.scriptName
+        ? entry.services.find((service) => service.kind === "worker")
+        : undefined;
     case "durable-object":
       return entry.scriptName === subscriber.scriptName
         ? entry.services.find(
@@ -257,5 +302,8 @@ const extractSubscriberService = (subscriber: Subscriber, entry: RegistryEntry) 
               service.kind === "workflow" && service.workflowName === subscriber.workflowName,
           )
         : undefined;
+    case "storage-owner":
+      // Elected across all entries in `pickSubscriberServices`.
+      return undefined;
   }
 };

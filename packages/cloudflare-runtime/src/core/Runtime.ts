@@ -2,7 +2,9 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -16,6 +18,7 @@ import {
   withDefaultFlags,
 } from "./internal/constants.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
+import { withStartupLocks } from "./internal/StartupLock.ts";
 import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
@@ -42,6 +45,8 @@ export const RuntimeLive = Layer.effect(
     const workerd = yield* Workerd.Workerd;
     const storage = yield* Storage.Storage;
     const docker = yield* Docker.Docker;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const plugins = yield* PluginContext.pickPluginsFromContext<Globals.Globals>();
 
     const preparePlugins = Effect.fnUntraced(function* (worker: RuntimeWorker) {
@@ -277,8 +282,24 @@ export const RuntimeLive = Layer.effect(
         const parentScope = yield* Effect.scope;
         let processScope = yield* Scope.fork(parentScope);
         const startProcess = (pinned?: Workerd.WorkerdPorts) =>
-          serveWorker(pinned).pipe(
-            Effect.tap((ports) => context.start(ports)),
+          Effect.gen(function* () {
+            // Forked before the process starts, so plugin resources (registry
+            // entries, loops) are released only after workerd has exited: a
+            // storage owner withdraws its candidacy once it no longer serves.
+            const pluginScope = yield* Scope.fork(processScope);
+            // Plugins start under the lock too, so a storage candidate is
+            // registered before the next runtime for the directory boots and
+            // elects an owner.
+            return yield* withStartupLocks(
+              config.startupLocks,
+              serveWorker(pinned).pipe(
+                Effect.tap((ports) => context.start(ports).pipe(Scope.provide(pluginScope))),
+              ),
+            ).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.provideService(Path.Path, path),
+            );
+          }).pipe(
             Scope.provide(processScope),
             Effect.onExit((exit) =>
               Exit.isFailure(exit) ? Scope.close(processScope, exit) : Effect.void,

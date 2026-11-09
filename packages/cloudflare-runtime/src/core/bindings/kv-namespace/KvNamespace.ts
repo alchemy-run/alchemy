@@ -12,6 +12,7 @@ import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -89,7 +90,9 @@ export const KvNamespaceLive = Layer.effect(
               }),
           },
           defer: Effect.gen(function* () {
-            if (!used) return {};
+            // A candidate storage owner hosts the simulator even unbound, so
+            // it can serve other runtimes' namespaces (see `SharedStorage`).
+            if (!used && !(yield* SharedStorage.hosting)) return {};
             const storageService = yield* makeStorageService;
             const kvService: WorkerdConfig.Service = {
               name: SERVICE_KV,
@@ -145,12 +148,12 @@ export const KvNamespaceLive = Layer.effect(
  */
 export const local = (props: KvNamespaceProps): BindingHook<KvNamespace> =>
   Plugin.use(KvNamespace, (kv) =>
-    Effect.map(
-      kv.api.register({ namespaceId: props.id ?? props.binding, mode: props.mode }),
-      (service): WorkerdConfig.Worker_Binding => ({
+    kv.api.register({ namespaceId: props.id ?? props.binding, mode: props.mode }).pipe(
+      Effect.flatMap((service) => SharedStorage.route(service)),
+      Effect.map((service): WorkerdConfig.Worker_Binding => ({
         name: props.binding,
         kvNamespace: service,
-      }),
+      })),
     ),
   );
 
