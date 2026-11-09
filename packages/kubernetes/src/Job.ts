@@ -119,9 +119,10 @@ export interface JobPropsBase extends PlatformProps {
    * Kubernetes `RuntimeClass` the pods run under. On EKS, `isolated-sandbox`
    * runs each pod in its own Nitro Sandbox, a lightweight VM isolated by the
    * AWS Nitro hypervisor, and `confidential-sandbox` also hides the pod's
-   * memory from the node. EKS Auto Mode needs no other setup.
+   * memory from the node. EKS Auto Mode needs no other setup. Any other
+   * RuntimeClass on the cluster (gVisor, Kata) works too.
    */
-  runtimeClassName?: string;
+  runtimeClassName?: "isolated-sandbox" | "confidential-sandbox" | (string & {});
   /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
    * template (objects merge recursively; arrays and primitives replace) —
