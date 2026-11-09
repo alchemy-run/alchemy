@@ -97,7 +97,17 @@ const PORTS_LABEL = "run.alchemy.floci.requested-ports";
  * `default` for an omitted one.
  */
 const requestedPortsLabel = (config?: FlociConfig) =>
-  `elb=${config?.elbListenerPorts?.join(",") ?? "default"};edge=${config?.cloudfrontEdgePorts?.join(",") ?? "default"}`;
+  `elb=${config?.elbListenerPorts?.join(",") ?? "default"};edge=${config?.cloudfrontEdgePorts?.join(",") ?? "default"};cloudfront=${FLOCI_CLOUDFRONT_DOMAIN_SUFFIX}`;
+
+/**
+ * Suffix floci gives every distribution's domain name:
+ * `<id>.cloudfront.localhost.floci.io`, which public DNS resolves to
+ * 127.0.0.1, so a custom domain CNAMEd to a distribution reaches the
+ * emulator the way it reaches CloudFront on AWS. Floci serves that name with
+ * its own certificate and each alternate domain name with the distribution's
+ * ACM certificate, on 443.
+ */
+export const FLOCI_CLOUDFRONT_DOMAIN_SUFFIX = "cloudfront.localhost.floci.io";
 
 /** Default name of the managed container. */
 export const DEFAULT_CONTAINER_NAME = "alchemy-floci";
@@ -619,6 +629,8 @@ const ensureFlociUnsynchronized = (
         edge.length > 0
           ? `FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS=${edge.join(",")}`
           : "FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS_ENABLED=false",
+        "-e",
+        `FLOCI_SERVICES_CLOUDFRONT_DOMAIN_SUFFIX=${FLOCI_CLOUDFRONT_DOMAIN_SUFFIX}`,
         ...(config?.dockerSocket === false
           ? []
           : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),
