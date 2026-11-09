@@ -105,3 +105,94 @@ export const waitForWorkSpan = Effect.fn(function* (collectorUrl: string, tag: s
     }),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Runtime-to-runtime RPC: does a callee's span join its caller's trace?
+// ---------------------------------------------------------------------------
+
+/** The RPC surface a traced callee serves: `traced(tag)` makes `rpc-callee:<tag>`. */
+export const tracedRpc = {
+  traced: (tag: string) =>
+    Effect.succeed(`traced ${tag}`).pipe(Effect.withSpan(`rpc-callee:${tag}`)),
+};
+
+/** Call a traced callee inside the caller's own span, `rpc-caller:<tag>`. */
+export const callTraced = <E, R>(
+  callee: { readonly traced: (tag: string) => Effect.Effect<string, E, R> },
+  tag: string,
+) => callee.traced(tag).pipe(Effect.withSpan(`rpc-caller:${tag}`));
+
+/** `GET /rpc-traced?tag=<tag>` on a caller runtime: one traced call to its callee. */
+export const tracedCallerFetch = <E, R>(callee: {
+  readonly traced: (tag: string) => Effect.Effect<string, E, R>;
+}) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const url = new URL(request.url, "http://caller");
+    if (url.pathname === "/rpc-traced") {
+      const tag = url.searchParams.get("tag") ?? "none";
+      return HttpServerResponse.text(yield* callTraced(callee, tag));
+    }
+    return HttpServerResponse.text("traced caller ok");
+  });
+
+interface CollectedSpan {
+  readonly name: string;
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly parentSpanId?: string;
+}
+
+const collectedSpans = (body: unknown): ReadonlyArray<CollectedSpan> =>
+  (body as { items: { signal: string; payload: any }[] }).items
+    .filter((item) => item.signal === "traces")
+    .flatMap((item) => item.payload.resourceSpans ?? [])
+    .flatMap((resource: any) => resource.scopeSpans ?? [])
+    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[]);
+
+/** Whether `span`'s ancestors, followed through `all`, reach `ancestor`. */
+const descendsFrom = (
+  all: ReadonlyArray<CollectedSpan>,
+  span: CollectedSpan,
+  ancestor: CollectedSpan,
+) => {
+  const byId = new Map(all.map((s) => [s.spanId, s] as const));
+  let current: CollectedSpan | undefined = span;
+  for (let hops = 0; current !== undefined && hops < 16; hops++) {
+    if (current.parentSpanId === ancestor.spanId) return true;
+    current = current.parentSpanId === undefined ? undefined : byId.get(current.parentSpanId);
+  }
+  return false;
+};
+
+/**
+ * Poll the collector until it holds both `rpc-caller:<tag>` and
+ * `rpc-callee:<tag>`, then report whether the callee's span is in the caller's
+ * trace and below the caller's span (a transport may add spans between them,
+ * such as an HTTP client span).
+ */
+export const waitForRpcLink = Effect.fn(function* (collectorUrl: string, tag: string) {
+  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  const read = client.get(`${collectorUrl.replace(/\/$/, "")}/collected`).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.map(collectedSpans),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+  );
+  const spans = yield* read.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (all) =>
+        all.some((s) => s.name === `rpc-caller:${tag}`) &&
+        all.some((s) => s.name === `rpc-callee:${tag}`),
+      times: 20,
+    }),
+  );
+  const caller = spans.find((s) => s.name === `rpc-caller:${tag}`);
+  const callee = spans.find((s) => s.name === `rpc-callee:${tag}`);
+  return {
+    found: caller !== undefined && callee !== undefined,
+    sameTrace: caller !== undefined && callee?.traceId === caller.traceId,
+    belowCaller:
+      caller !== undefined && callee !== undefined && descendsFrom(spans, callee, caller),
+  };
+});
