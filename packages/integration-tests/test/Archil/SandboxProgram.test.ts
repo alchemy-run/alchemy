@@ -120,7 +120,7 @@ test.provider(
         )
         .pipe(withCollectorUrl(collector.url!));
 
-      expect(yield* doWork(api.url, "archil")).toBe("did work archil");
+      expect(yield* doWork(api.url!, "archil")).toBe("did work archil");
       const traces = yield* waitForWorkSpan(collector.url!, "archil");
       expect(traces).toContain("work:archil");
       expect(traces).toContain("archil-sandbox-e2e");
