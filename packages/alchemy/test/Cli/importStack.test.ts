@@ -155,6 +155,36 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     expect(second).toBe(first);
   });
 
+  test("reports why a stack entrypoint failed to load", async () => {
+    const failures = await TestCore.run(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const throwing = path.join(dir, "throwing.run.ts");
+        yield* fs.writeFileString(
+          throwing,
+          'throw new Error("stack failed", { cause: Object.assign(new Error("disk full"), { code: "ENOSPC" }) });\n',
+        );
+        const missing = path.join(dir, "missing.run.ts");
+        yield* fs.writeFileString(missing, 'import "alchemy-test-missing-package";\n');
+        return yield* Effect.forEach([throwing, missing], (main) =>
+          collectAuthProviders({ main, envFile: Option.none<string>(), profile: "default" }).pipe(
+            Effect.flip,
+            Effect.map((error) => error.message),
+          ),
+        );
+      }).pipe(Effect.scoped, Effect.provide(Interaction.layerNonInteractive())),
+      { providers: TestLayers() },
+    );
+
+    expect(failures[0]).toMatch(
+      /^Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
+    );
+    expect(failures[1]).toMatch(
+      /^Could not load auth providers from '.+missing\.run\.ts': \w+.*Cannot find (package|module) 'alchemy-test-missing-package'/,
+    );
+  });
+
   test("reports a missing stack entrypoint as a user-facing error", async () => {
     const result = await TestCore.run(
       importStack(path.join(import.meta.dirname, "missing-alchemy.run.ts")).pipe(Effect.result),

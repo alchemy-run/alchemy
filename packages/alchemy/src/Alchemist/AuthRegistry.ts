@@ -3,9 +3,11 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { AuthError, AuthProviders } from "../Auth/AuthProvider.ts";
@@ -76,6 +78,23 @@ const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
 );
 
+const describeFailure = (error: unknown): string => {
+  const reasons: string[] = [];
+  for (let current = error, depth = 0; current != null && depth < 8; depth++) {
+    if (!(current instanceof Error)) {
+      reasons.push(typeof current === "string" ? current : Formatter.format(current));
+      break;
+    }
+    const code =
+      Predicate.hasProperty(current, "code") && typeof current.code === "string"
+        ? ` [${current.code}]`
+        : "";
+    reasons.push(`${current.name}${code}: ${current.message}`);
+    current = current.cause;
+  }
+  return reasons.join("; caused by ");
+};
+
 /**
  * Every auth provider reachable from the current project: the built-ins, plus
  * whatever the user's stack module registers when it is importable.
@@ -119,7 +138,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
             ? Effect.void
             : Effect.fail(
                 AuthError.make({
-                  message: `Could not load auth providers from '${options.main}'.`,
+                  message: `Could not load auth providers from '${options.main}': ${cause.pipe(Cause.squash, describeFailure)}`,
                   cause,
                 }),
               );
