@@ -11,13 +11,19 @@ Take one small app: a Lambda Function that stores files in an S3 Bucket and queu
 
 <Tree
   nodes={[
-    { id: "account", label: "123456789012", type: "account", icon: "brand:aws" },
+    { id: "account", label: "123456789012", type: "account", icon: "brand:aws", areas: ["role region"], colGap: 3 },
     { id: "role", label: "Role", type: "IAM role · every region", parent: "account", icon: "id-card" },
-    { id: "region", label: "us-east-1", type: "region", parent: "account", wide: true, dashed: true, icon: "map-pin" },
-    { id: "api", label: "Api", type: "Lambda Function", parent: "region", wide: true, tone: "accent", icon: "square-function", specs: [["runs as", "Role"], ["s3:PutObject", "Files"], ["sqs:SendMessage", "Jobs"]] },
+    { id: "region", label: "us-east-1", type: "region", parent: "account", dashed: true, icon: "map-pin", areas: ["api files", "api jobs", "api worker"], colGap: 3, gutter: true },
+    { id: "api", label: "Api", type: "Lambda Function", parent: "region", tone: "accent", icon: "square-function" },
     { id: "files", label: "Files", type: "S3 Bucket", parent: "region", icon: "archive" },
     { id: "jobs", label: "Jobs", type: "SQS Queue", parent: "region", icon: "inbox" },
-    { id: "worker", label: "Worker", type: "Lambda Function", parent: "region", icon: "square-function", specs: [["invoked by", "Jobs"]] },
+    { id: "worker", label: "Worker", type: "Lambda Function", parent: "region", icon: "square-function" },
+  ]}
+  links={[
+    { from: "api", to: "role", label: "runs as" },
+    { from: "api", to: "files", label: "writes" },
+    { from: "api", to: "jobs", label: "sends" },
+    { from: "jobs", to: "worker", label: "invokes", dashed: true },
   ]}
   caption="IAM roles belong to the account and work in every region. The rest lives in one region. Api runs as Role, whose policy lets it write to Files and send to Jobs; Jobs invokes Worker."
 />

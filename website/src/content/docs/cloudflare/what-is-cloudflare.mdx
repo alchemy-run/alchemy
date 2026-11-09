@@ -12,16 +12,26 @@ Take one small app: a Worker that stores uploads in R2, counts visits in a Durab
 
 <Tree
   nodes={[
-    { id: "account", label: "acme", type: "account", icon: "brand:cloudflare" },
-    { id: "worker", label: "Api", type: "Worker · every city", parent: "account", wide: true, tone: "accent", icon: "square-function", specs: [["binds", "Uploads · Rooms · Jobs"]] },
+    {
+      id: "account", label: "acme", type: "account", icon: "brand:cloudflare", gutter: true, colGap: 2.75,
+      areas: ["zone api uploads", "zone api rooms", "zone api jobs", "zone api consumer"],
+    },
     { id: "zone", label: "example.com", type: "zone", parent: "account", dashed: true, icon: "globe" },
-    { id: "domain", label: "app.example.com", type: "custom domain", parent: "zone", icon: "link", specs: [["routes to", "Api"]] },
-    { id: "r2", label: "Uploads", type: "R2 Bucket", parent: "account", icon: "archive" },
-    { id: "queue", label: "Jobs", type: "Queue", parent: "account", icon: "inbox", specs: [["delivers to", "Consumer"]] },
+    { id: "domain", label: "app.example.com", type: "custom domain", parent: "zone", icon: "link" },
+    { id: "api", label: "Api", type: "Worker · every city", parent: "account", tone: "accent", icon: "square-function" },
+    { id: "uploads", label: "Uploads", type: "R2 Bucket", parent: "account", icon: "archive" },
+    { id: "rooms", label: "Rooms", type: "Durable Object namespace", parent: "account", dashed: true, icon: "boxes" },
+    { id: "roomA", label: "room-a", type: "one city", parent: "rooms", icon: "box" },
+    { id: "roomB", label: "room-b", type: "one city", parent: "rooms", icon: "box" },
+    { id: "jobs", label: "Jobs", type: "Queue", parent: "account", icon: "inbox" },
     { id: "consumer", label: "Consumer", type: "Worker", parent: "account", icon: "square-function" },
-    { id: "rooms", label: "Rooms", type: "Durable Object namespace", parent: "account", wide: true, dashed: true, icon: "boxes" },
-    { id: "roomA", label: "room-a", type: "object · one city", parent: "rooms", icon: "box" },
-    { id: "roomB", label: "room-b", type: "object · one city", parent: "rooms", icon: "box" },
+  ]}
+  links={[
+    { from: "domain", to: "api", label: "routes" },
+    { from: "api", to: "uploads", label: "binds" },
+    { from: "api", to: "rooms", label: "binds" },
+    { from: "api", to: "jobs", label: "binds" },
+    { from: "jobs", to: "consumer", label: "delivers", dashed: true },
   ]}
   caption="There are no regions to pick. The zone holds your domains, and Workers and storage belong to the account and run across the whole network. Each Durable Object lives in one city. Api binds the bucket, the namespace and the queue, and the queue delivers to Consumer."
 />
