@@ -205,9 +205,12 @@ export const PolicyProvider = () =>
           }
         }),
         lookup: Effect.fn(function* (props) {
-          return "policyId" in props
-            ? yield* readPolicyById(props.policyId)
-            : yield* readPolicyByName({ type: props.type, name: props.name });
+          // An account outside any organization has no organization policies.
+          return yield* (
+            "policyId" in props
+              ? readPolicyById(props.policyId)
+              : readPolicyByName({ type: props.type, name: props.name })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.policyId

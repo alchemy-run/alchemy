@@ -104,6 +104,16 @@ export const FlociFunctionProvider = () =>
               deleteFirst: news.functionName !== undefined,
             };
           }
+          if (olds.alias !== news.alias) {
+            // As in the live diff: consumers move to (or off) the alias, whose
+            // ARN is not known until reconcile publishes and creates it. A
+            // bare update would keep the static `qualifiedArn` stable, and
+            // event source mappings would stay on the old target.
+            return {
+              action: "update" as const,
+              stables: ["functionArn", "functionName", "roleName"],
+            };
+          }
           return undefined;
         }),
       normalizeProps: (props) =>

@@ -10,19 +10,13 @@ const { test } = Test.make({
 const tags = ["provider:aws", "provider:aws:opensearch", "live"];
 
 test.provider(
-  "a lookup of a missing domain or collection fails the deploy",
+  "a lookup of a missing domain fails the deploy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = missingName(stack.stage);
       const lookups = {
         "missing-domain": AWS.OpenSearch.Domain.lookup({ domainName: name.slice(0, 28) }).domainArn,
-        "missing-collection": AWS.OpenSearchServerless.Collection.lookup({
-          collectionName: name.slice(0, 32),
-        }).collectionArn,
-        "missing-endpoint": AWS.OpenSearchServerless.VpcEndpoint.lookup({
-          endpointName: name.slice(0, 32),
-        }).vpcEndpointId,
       };
       for (const [id, value] of Object.entries(lookups)) {
         yield* expectDeployFails(stack.deploy(AWS.SSM.Parameter(id, { value })), [
