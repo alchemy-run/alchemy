@@ -1,17 +1,12 @@
 import {
-  alarmCallbacks,
-  className,
-  type Host,
-  type ListOptions,
-  makePlatform,
-  type Namespace,
-  type ObjectImpl,
-  ObjectState,
-  type ObjectStateShape,
-  type ObjectStorage,
-  parseMultiplexedName,
-} from "@alchemy.run/domain/DurableObjects";
-import type { Platform } from "@alchemy.run/domain/Platform";
+  Entity,
+  type EntityNamespace,
+  type EntityRuntimeContext,
+  PlatformDeclaration,
+} from "@alchemy.run/effect-cluster/Entity";
+import { HasNoPool, makeNamespace, RunnerHost } from "@alchemy.run/effect-cluster/Host";
+import type { PoolLayer } from "@alchemy.run/effect-cluster/Pool";
+import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 /**
  * Host a domain model (`@alchemy.run/domain`) on Effect Cluster entities.
  *
@@ -42,16 +37,19 @@ import * as Scope from "effect/Scope";
 import { SqlClient } from "effect/sql/SqlClient";
 import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
-  Entity,
-  type EntityNamespace,
-  type EntityRuntimeContext,
-  PlatformDeclaration,
-} from "../Entity.ts";
-import { makeNamespace } from "../internal/Gateway.ts";
-import { HasNoPool } from "../internal/HostedRuntime.ts";
-import { RunnerHost } from "../internal/RunnerHost.ts";
-import type { PoolLayer } from "../Pool.ts";
-import type { Providers } from "../Providers.ts";
+  alarmCallbacks,
+  className,
+  type Host,
+  type ListOptions,
+  makePlatform,
+  type Namespace,
+  type ObjectImpl,
+  ObjectState,
+  type ObjectStateShape,
+  type ObjectStorage,
+  parseMultiplexedName,
+} from "../DurableObjects.ts";
+import type { Platform } from "../Platform.ts";
 
 /**
  * Wake an instance at `at`: a persisted message delivered when it is due,
@@ -399,7 +397,7 @@ export interface EntitiesOptions<PoolReq> {
  * ```typescript
  * import * as Docker from "@alchemy.run/docker";
  * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
- * import * as DomainCluster from "@alchemy.run/effect-cluster/Domain";
+ * import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";

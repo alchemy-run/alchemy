@@ -115,7 +115,7 @@ export const toBranchAttributes = (branch: archil.BranchResponse): BranchAttribu
 export const getBranch = (diskId: string, name: string) =>
   archil.getBranch({ id: diskId, name }).pipe(
     Effect.map(({ data }) => toBranchAttributes(data)),
-    Effect.catchTag("BranchNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Create a branch, or return the existing one with that name. */
@@ -136,7 +136,8 @@ export const ensureBranch = Effect.fn(function* (input: {
     })
     .pipe(
       Effect.map(({ data }) => toBranchAttributes(data)),
-      Effect.catchTag("BranchConflict", (conflict) =>
+      // A concurrent create of the same name won the race.
+      Effect.catchTag("Conflict", (conflict) =>
         getBranch(input.disk, input.name).pipe(
           Effect.flatMap((found) => (found ? Effect.succeed(found) : Effect.fail(conflict))),
         ),

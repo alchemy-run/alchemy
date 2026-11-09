@@ -9744,9 +9744,6 @@ importers:
         specifier: 'catalog:'
         version: 0.2.17
     devDependencies:
-      '@alchemy.run/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
@@ -9994,6 +9991,21 @@ importers:
 
   packages/domain:
     devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../effect-cluster
+      '@alchemy.run/rivet':
+        specifier: workspace:*
+        version: link:../rivet
+      '@distilled.cloud/cloudflare':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/cloudflare
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -10124,9 +10136,6 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
-      '@alchemy.run/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly
@@ -11942,9 +11951,6 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
-      '@alchemy.run/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@alchemy.run/fly':
         specifier: workspace:*
         version: link:../fly
@@ -37401,6 +37407,7 @@ snapshots:
 
   '@radix-ui/react-use-effect-event@0.0.5(@types/react@19.3.0)(react@19.3.1)':
     dependencies:
+      '@radix-ui/react-use-layout-effect': 1.1.4(@types/react@19.3.0)(react@19.3.1)
       react: 19.3.1
     optionalDependencies:
       '@types/react': 19.3.0

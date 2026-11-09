@@ -4,13 +4,13 @@ import type { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { Cluster } from "../Cluster.ts";
+import type { PoolHost } from "../Host.ts";
 import {
   isImageProgram,
   makePoolLayer,
   RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
-import type { PoolHost } from "../internal/PoolHostService.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
 export interface SwarmPoolOptions extends PoolSettings {

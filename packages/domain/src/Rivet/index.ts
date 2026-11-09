@@ -1,3 +1,29 @@
+import {
+  DurableObject,
+  type DurableObjectNamespace,
+  type DurableObjectRuntimeContext,
+  makeNamespace,
+  PlatformDeclaration,
+} from "@alchemy.run/rivet/DurableObject";
+import {
+  DurableObjectState,
+  type DurableObjectStorage,
+} from "@alchemy.run/rivet/DurableObjectState";
+import { NodeHost, type PoolHost } from "@alchemy.run/rivet/Host";
+import type { Providers } from "@alchemy.run/rivet/Providers";
+import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
+import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
+import * as Config from "effect/Config";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
+import type { WorkflowEngine } from "effect/workflow";
 /**
  * Host a domain model (`@alchemy.run/domain`) on Rivet Durable Objects.
  *
@@ -16,32 +42,8 @@ import {
   type ObjectStorage,
   parseMultiplexedName,
   type Stub,
-} from "@alchemy.run/domain/DurableObjects";
-import type { Platform } from "@alchemy.run/domain/Platform";
-import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
-import { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
-import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
-import * as Config from "effect/Config";
-import * as Context from "effect/Context";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Scope from "effect/Scope";
-import type { WorkflowEngine } from "effect/workflow";
-import {
-  DurableObject,
-  type DurableObjectNamespace,
-  type DurableObjectRuntimeContext,
-  makeNamespace,
-  PlatformDeclaration,
-} from "../DurableObject.ts";
-import { DurableObjectState, type DurableObjectStorage } from "../DurableObjectState.ts";
-import { NodeHost } from "../internal/NodeHost.ts";
-import type { PoolHost } from "../internal/PoolHostService.ts";
-import type { Providers } from "../Providers.ts";
+} from "../DurableObjects.ts";
+import type { Platform } from "../Platform.ts";
 
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -289,7 +291,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
  * import * as RivetDocker from "@alchemy.run/rivet/Docker";
- * import * as DomainRivet from "@alchemy.run/rivet/Domain";
+ * import * as DomainRivet from "@alchemy.run/domain/Rivet";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";

@@ -30,7 +30,6 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
-import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -114,6 +113,26 @@ export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
     return (
       `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
       `Narrow transferredFrom to the exact physical script name that holds the data.`
+    );
+  }
+}
+
+/**
+ * Two Durable Object classes of one deploy declare `renamedFrom` the same
+ * class, which the Worker still hosts. A class's namespace, and every object
+ * stored in it, can move to one class only, so the deploy fails before any
+ * upload. Keep `renamedFrom` on the class that takes over the objects; the
+ * others start empty.
+ */
+export class DurableObjectRenameConflict extends Data.TaggedError("DurableObjectRenameConflict")<{
+  scriptName: string;
+  renamedFrom: string;
+  classNames: string[];
+}> {
+  override get message() {
+    return (
+      `Durable Object classes ${this.classNames.map((className) => `'${className}'`).join(", ")} on Worker '${this.scriptName}' are all renamed from '${this.renamedFrom}', which the Worker still hosts. ` +
+      `Only one class can take over its objects: keep renamedFrom on that one, and remove it from the others.`
     );
   }
 }
@@ -3301,10 +3320,10 @@ export const LiveWorkerProvider = () =>
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        // `transferredFrom` is alchemy-only transfer metadata on
-        // durable_object_namespace bindings — it drives the
-        // `transferred_classes` migration below and must be stripped from the
-        // wire-shape binding before upload.
+        // `transferredFrom` and `renamedFrom` are alchemy-only migration
+        // metadata on durable_object_namespace bindings — they drive the
+        // `transferred_classes` and `renamed_classes` migrations below and
+        // must be stripped from the wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
           withoutDevOnlyBindings(b.data.bindings ?? []).map((item): WireWorkerBinding => {
             // Lower the `Worker.URL` sentinel into the resolved URL —
@@ -3326,10 +3345,17 @@ export const LiveWorkerProvider = () =>
             if (
               item.type === "durable_object_namespace" &&
               (item.transferredFrom !== undefined ||
+                item.renamedFrom !== undefined ||
                 item.storage !== undefined ||
                 "hostNamespace" in item)
             ) {
-              const { transferredFrom: _, storage: __, hostNamespace: ___, ...rest } = item;
+              const {
+                transferredFrom: _,
+                renamedFrom: ____,
+                storage: __,
+                hostNamespace: ___,
+                ...rest
+              } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
@@ -3434,36 +3460,52 @@ export const LiveWorkerProvider = () =>
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
 
-        // Domain models named their classes differently in earlier Domain
-        // versions. Map each old class to the logical id of its new name, so
-        // the rename below carries its data over instead of deleting it.
-        const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
-        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
-        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
-        if (domainClasses.length > 0) {
-          const renamed = yield* DomainVersion.migrate({
-            scriptName: name,
-            deployed: deployedDomainVersion,
-            classes: domainClasses,
-            deployedClasses: new Set([
-              ...Object.values(oldDoClassNameByLogicalId),
-              ...oldBindings.flatMap((old) =>
-                old.type === "durable_object_namespace" &&
-                "className" in old &&
-                old.className &&
-                (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
-                  ? [old.className]
-                  : [],
-              ),
-            ]),
-          });
-          for (const { from, to } of renamed) {
-            for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
-              if (className === from) delete oldDoClassNameByLogicalId[logicalId];
-            }
-            // A Domain class's logical id is its class name.
-            oldDoClassNameByLogicalId[to] = from;
+        // `renamedFrom`: a class that takes over a class this script still
+        // hosts under its old name. Map the old class to the new binding's
+        // logical id, so the rename below carries its objects over instead of
+        // deleting them. Inert when the script doesn't host the old class, or
+        // already hosts the new one.
+        const hostedBefore = new Set([
+          ...Object.values(oldDoClassNameByLogicalId),
+          ...oldBindings.flatMap((old) =>
+            old.type === "durable_object_namespace" &&
+            "className" in old &&
+            old.className &&
+            (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+              ? [old.className]
+              : [],
+          ),
+        ]);
+        const hostedNow = new Set(currentDoBindings.map((binding) => binding.className));
+        const renamesFrom = new Map<string, Array<{ logicalId: string; className: string }>>();
+        for (const binding of currentDoBindings) {
+          const from = binding.renamedFrom;
+          if (
+            from === undefined ||
+            from === binding.className ||
+            !hostedBefore.has(from) ||
+            hostedBefore.has(binding.className) ||
+            hostedNow.has(from)
+          )
+            continue;
+          renamesFrom.set(from, [
+            ...(renamesFrom.get(from) ?? []),
+            { logicalId: binding.logicalId, className: binding.className },
+          ]);
+        }
+        for (const [from, claims] of renamesFrom) {
+          const classNames = [...new Set(claims.map((claim) => claim.className))];
+          if (classNames.length > 1) {
+            return yield* new DurableObjectRenameConflict({
+              scriptName: name,
+              renamedFrom: from,
+              classNames,
+            });
           }
+          for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+            if (className === from) delete oldDoClassNameByLogicalId[logicalId];
+          }
+          for (const { logicalId } of claims) oldDoClassNameByLogicalId[logicalId] = from;
         }
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
@@ -3782,11 +3824,7 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        // The Domain version goes up with every upload that can change the
-        // classes, in the same request, so the tag and the classes never disagree.
-        const domainTags =
-          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -3974,7 +4012,6 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
-                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
@@ -6055,6 +6092,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          renamedFrom: item.renamedFrom,
           storage: item.storage,
         },
       ];
