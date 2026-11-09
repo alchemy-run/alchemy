@@ -43,6 +43,22 @@ export default Alchemy.Stack(
 
 `alchemy deploy` pulls the image and starts the container. Change a prop and the next deploy replaces only what changed; `alchemy destroy` removes all of it.
 
+## Network configuration
+
+Within a Stack's `Effect.gen`, networks can be isolated, made attachable and assigned explicit IPAM settings:
+
+```typescript
+const internalNetwork = yield* Docker.Network("InternalNetwork", {
+  internal: true,
+  attachable: true,
+  ipam: {
+    config: [{ subnet: "10.50.0.0/24", gateway: "10.50.0.1" }],
+  },
+});
+```
+
+Docker assigns a subnet and gateway if none are provided. Network creation options are immutable; changing them replaces the network, and Docker will refuse to remove it while containers are attached. `internal` restricts traffic through that network, not through a container's other network connections. See [local services](https://alchemy.run/docker/local-services) for driver options and IPv6-only configuration.
+
 ## Learn more
 
 - [Docker on alchemy.run](https://alchemy.run/docker)

@@ -74,6 +74,50 @@ or `Volume` prop (driver, labels, IPv6) is a replacement: the old
 one is deleted and a new one created, so treat a Volume's props as
 fixed once it holds data you care about.
 
+### Configure a network
+
+`Docker.Network` also supports internal networks, manual attachment, network
+driver options and explicit IP Address Management (IPAM):
+
+```typescript
+const privateNetwork = yield* Docker.Network("private-network", {
+  internal: true,
+  attachable: true,
+  driverOpts: { "com.docker.network.driver.mtu": "1420" },
+  ipam: {
+    config: [{
+      subnet: "10.50.0.0/24",
+      gateway: "10.50.0.1",
+      ipRange: "10.50.0.128/25",
+      auxAddresses: { reserved: "10.50.0.5" },
+    }],
+  },
+});
+```
+
+Docker automatically assigns the subnet and gateway when `ipam` is omitted,
+and Alchemy does not treat those Docker-assigned values as configuration drift.
+Use network prefixes without host bits (`10.50.0.0/24`, not
+`10.50.0.1/24`); Alchemy validates ranges, address containment and
+non-overlapping subnets before replacing an existing network. Explicit IPv4
+subnets require IPv4 to be enabled, and IPv6 subnets require `enableIPv6: true`.
+Equivalent IPv6 address spellings do not trigger replacements.
+Invalid configurations report an `InvalidNetworkOptions` error with the
+offending property path (for example, `ipam.config[0].gateway`).
+
+The network driver determines which IPAM combinations are supported. For
+IPv6-only networks, use `enableIPv4: false` with `enableIPv6: true`.
+
+An `internal` network restricts external access **on that network**; a
+container attached to additional networks may still have an external route.
+Changes to network creation settings replace the network, and Docker will
+reject removal while active endpoints remain connected. Replacement is not
+transactional: a driver-specific error during creation can occur after the
+old network has been deleted. Alchemy checks known IPAM constraints before
+replacement, but the driver determines which configurations take effect. Some
+drivers may accept options without applying them; inspect the effective IPAM
+settings when using advanced driver configurations.
+
 ## A Redacted password
 
 ```typescript

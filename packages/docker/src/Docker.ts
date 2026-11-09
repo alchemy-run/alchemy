@@ -271,7 +271,26 @@ export class Docker extends Context.Service<
       readonly create: (options: {
         name: string;
         driver: string;
+        /** Whether the network is isolated from external connectivity. */
+        internal?: boolean;
+        /** Whether standalone containers may attach to the network. */
+        attachable?: boolean;
+        /** Explicitly enable or disable IPv4 address allocation. */
+        ipv4?: boolean;
         ipv6?: boolean;
+        /** Network driver options, passed as repeated `--opt` arguments. */
+        opt?: Record<string, string>;
+        /** Network IP Address Management settings. */
+        ipam?: {
+          driver?: string;
+          options?: Record<string, string>;
+          config?: Array<{
+            subnet: string;
+            gateway?: string;
+            ipRange?: string;
+            auxAddresses?: Record<string, string>;
+          }>;
+        };
         label?: Record<string, string>;
         context?: string;
       }) => Effect.Effect<CommandOutput, PlatformError>;
@@ -555,7 +574,21 @@ export declare namespace Docker {
     Created: string;
     Scope: string;
     Driver: string;
+    Internal?: boolean;
+    Attachable?: boolean;
+    EnableIPv4?: boolean;
     EnableIPv6: boolean;
+    Options?: Record<string, string> | null;
+    IPAM?: {
+      Driver?: string;
+      Options?: Record<string, string> | null;
+      Config?: Array<{
+        Subnet: string;
+        Gateway?: string;
+        IPRange?: string;
+        AuxiliaryAddresses?: Record<string, string> | null;
+      }> | null;
+    };
     Labels: Record<string, string> | null;
   }
 }
@@ -1000,13 +1033,34 @@ const makeDocker = (options: DockerOptions) =>
         remove: (name, force) => run(["context", "rm", ...(force ? ["-f"] : []), name]),
       },
       network: {
-        create: ({ name, driver, ipv6, label, context }) =>
+        create: ({ name, driver, internal, attachable, ipv4, ipv6, opt, ipam, label, context }) =>
           run([
             ...formatArgs({ context }),
             "network",
             "create",
+            ...formatArgs({
+              driver,
+              internal,
+              attachable,
+              ipv6,
+              opt,
+              "ipam-driver": ipam?.driver,
+              "ipam-opt": ipam?.options,
+              label,
+            }),
+            // Docker's boolean --ipv4=false needs an equals sign; the generic
+            // CLI formatter intentionally skips false values elsewhere.
+            ...(ipv4 === undefined ? [] : [`--ipv4=` + String(ipv4)]),
+            ...(ipam?.config ?? []).flatMap(({ subnet, gateway, ipRange, auxAddresses }) => [
+              "--subnet",
+              subnet,
+              ...(gateway === undefined ? [] : ["--gateway", gateway]),
+              ...(ipRange === undefined ? [] : ["--ip-range", ipRange]),
+              ...Object.entries(auxAddresses ?? {})
+                .sort(([a], [b]) => a.localeCompare(b))
+                .flatMap(([key, value]) => ["--aux-address", key + "=" + value]),
+            ]),
             name,
-            ...formatArgs({ driver, ipv6, label }),
           ]),
         connect: ({ network, container, alias, context }) =>
           run([
