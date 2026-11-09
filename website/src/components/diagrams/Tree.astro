@@ -25,6 +25,14 @@
  * node, so kinds of thing read at a glance rather than by their type line:
  * a lucide name (`database`, `server`) or `brand:<name>` (`brand:docker`).
  * Give icons to every node of a kind, or to none of that kind.
+ *
+ * `links` draw arrows for what calls what, so a diagram shows both how things
+ * nest and how they connect (`{ from: "api", to: "rooms", label: "binds" }`;
+ * an arrow to a container ends on its border). Place boxes with `areas` on a
+ * container (or on the Tree, for top-level boxes) so each arrow runs short and
+ * straight, `phoneAreas` for phones, `colGap` so labels fit, and `gutter` where
+ * phone arrows must go around boxes. Check the result at both widths with the
+ * write-docs skill's `scripts/tree-check.mjs`.
  */
 import "./diagram.css";
 import { diagramIcon } from "../../docs-icons";
