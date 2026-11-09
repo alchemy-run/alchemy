@@ -36,6 +36,10 @@ const isSqlEntity = (ctor: Function): boolean => {
  * the comparison is built, so `eq(cte.col, value)` with a deferred column
  * binds `value` unencoded. Columns whose encoder changes the value (custom
  * types, dates or booleans on SQLite) need `eq(cte.col, sql.param(value, cte.col))`.
+ *
+ * Query builders are never walked (they hold the live session), so a builder
+ * returned from `.as((qb) => …)` that reads another deferred CTE stays
+ * unresolved. Pass the query directly instead: `.as(db.select().from(cte))`.
  */
 export const descendDrizzle = (value: object): boolean => {
   if (typeof value === "function") return !(entityKind in value);
