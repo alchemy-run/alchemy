@@ -32,7 +32,6 @@ import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
 import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";

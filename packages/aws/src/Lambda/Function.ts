@@ -781,6 +781,16 @@ export interface FunctionLookup {
   functionName: string;
 }
 
+/** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
+export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
+  message: string;
+  cause: unknown;
+}> {
+  /** @internal Tag a live-tail stream failure so `tail` fails with a typed error. */
+  static fromCause = (cause: Error) =>
+    new LambdaLiveTailError({ message: `Lambda live tail failed: ${cause.message}`, cause });
+}
+
 /**
  * Lambda refused to publish a version or create the alias for a Function
  * with `alias`. Published versions are retained, so they count toward the
@@ -3471,6 +3481,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
+              Stream.mapError(LambdaLiveTailError.fromCause),
             );
           });
 

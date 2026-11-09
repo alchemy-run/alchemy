@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as MutableHashMap from "effect/MutableHashMap";
@@ -22,6 +23,16 @@ import {
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
+
+/** The consumer exists but is not (yet) attached to the expected Worker script. */
+export class ConsumerScriptUnbound extends Data.TaggedError("ConsumerScriptUnbound")<{
+  readonly message: string;
+}> {}
+
+const scriptUnbound = (scriptName: string | undefined) =>
+  new ConsumerScriptUnbound({
+    message: `Queue consumer is not bound to Worker script '${scriptName}'`,
+  });
 
 export type ConsumerProps = {
   /**
@@ -568,11 +579,11 @@ export const ConsumerProviderLive = () =>
         Effect.flatMap((fetched) =>
           toObserved(fetched)?.scriptName === news.scriptName
             ? Effect.void
-            : Effect.fail("ScriptUnbound" as const),
+            : Effect.fail(scriptUnbound(news.scriptName)),
         ),
-        Effect.catchTag("ConsumerNotFound", () => Effect.fail("ScriptUnbound" as const)),
+        Effect.catchTag("ConsumerNotFound", () => Effect.fail(scriptUnbound(news.scriptName))),
         Effect.retry({
-          while: (e) => e === "ScriptUnbound",
+          while: (e) => e._tag === "ConsumerScriptUnbound",
           schedule: queueHandlerReadinessSchedule,
         }),
       );
