@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -79,8 +80,34 @@ export type NetworkMonitoringProvider = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkMonitoringProviderLookup
 >;
+
+/**
+ * Props for {@link NetworkMonitoringProvider.lookup}: find a network
+ * monitoring provider this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface NetworkMonitoringProviderLookup {
+  /**
+   * Provider id (the `{network_monitoring_provider}` segment of
+   * `projects/{p
+   * roject}/locations/{location}/networkMonitoringProviders/{network_monitor
+   * ing_provider}`).
+   */
+  networkMonitoringProviderId: string;
+  /**
+   * Location. Network monitoring providers are only served from `global`
+   * (regional names are rejected as malformed).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Intelligence Center Network Monitoring Provider.
@@ -109,6 +136,19 @@ export type NetworkMonitoringProvider = Resource<
  *     providerType: "EXTERNAL",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing network monitoring provider
+ * `NetworkMonitoringProvider.lookup` references a network monitoring
+ * provider Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared network monitoring provider.
+ *
+ * **Example:** Reference an existing network monitoring provider
+ * ```typescript
+ * const networkMonitoringProvider = GCP.NetworkManagement.NetworkMonitoringProvider.lookup({
+ *   networkMonitoringProviderId: "my-network-monitoring-provider",
+ * });
  * ```
  *
  * @resource
@@ -210,6 +250,15 @@ export const NetworkMonitoringProviderProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ networkMonitoringProviderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, GLOBAL_LOCATION);
+      const name = resourceName(env.project, location, networkMonitoringProviderId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, GLOBAL_LOCATION);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

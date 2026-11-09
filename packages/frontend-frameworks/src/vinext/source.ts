@@ -124,12 +124,12 @@ export interface DevContext extends SourceContext {
     readonly assets: RuntimeAssets | undefined;
     /**
      * The Worker's other runtime settings (crons, Workflows, tail consumers,
-     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Cache API, `request.cf`, Access), spread whole into the runtime
      * Worker.
      */
     readonly options: Pick<
       RuntimeWorker,
-      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access"
     >;
   };
   readonly runtimeContext: Context.Context<RuntimeServices>;
@@ -689,6 +689,7 @@ export const buildInChild = (config: VinextBuildChildConfig) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const root = path.resolve(config.rootDir);
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- flags the vite plugin injection via process.env, not config reading
     process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
     const cachePlugin = yield* makeVinextCachePlugin(root, "kv");
     const pluginOptions = makeVinextPluginOptions({
@@ -869,6 +870,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
     dev: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- flags the vite plugin injection via process.env, not config reading
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const cachePlugin = yield* makeVinextCachePlugin(rootDir, "kv");
       const vite = yield* Effect.promise(() => loadVite(rootDir));

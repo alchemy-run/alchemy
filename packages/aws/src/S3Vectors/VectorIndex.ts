@@ -69,11 +69,23 @@ export interface Index extends Resource<
     indexArn: string;
   },
   never,
-  Providers
+  Providers,
+  IndexLookup
 > {}
 
 /**
- * A vector index inside an S3 Vectors {@link VectorBucket} -- stores vectors of
+ * Props for {@link Index.lookup}: find a vector index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IndexLookup {
+  /** The vector bucket holding the index. */
+  vectorBucketName: string;
+  /** The name of the existing index. */
+  indexName: string;
+}
+
+/**
+ * A vector index inside an S3 Vectors {@link VectorBucket} — stores vectors of
  * a fixed dimension and answers similarity queries under a distance metric.
  *
  * The index shape (data type, dimension, distance metric, non-filterable
@@ -91,6 +103,17 @@ export interface Index extends Resource<
  *   dimension: 1024,
  *   distanceMetric: "cosine",
  * });
+ * ```
+ *
+ * ### Looking up an existing vector index
+ * `Index.lookup` references a vector index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vectorBucketName` and `indexName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing vector index
+ * ```typescript
+ * const docs = AWS.S3Vectors.Index.lookup({ vectorBucketName: "embeddings", indexName: "docs" });
+ * const indexArn = docs.indexArn;
  * ```
  *
  * @resource
@@ -136,6 +159,15 @@ export const IndexProvider = () =>
         // require fanning out over every bucket. Return empty -- the engine
         // reads owned indexes via read() using the cached output identity.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ vectorBucketName, indexName }) {
+          const found = yield* observe(vectorBucketName, indexName);
+          if (!found) return undefined;
+          return {
+            vectorBucketName: found.vectorBucketName,
+            indexName: found.indexName,
+            indexArn: found.indexArn,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const vectorBucketName = output?.vectorBucketName ?? olds?.vectorBucketName;
           if (vectorBucketName === undefined) return undefined;

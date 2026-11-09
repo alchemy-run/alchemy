@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -129,8 +130,31 @@ export type VpnGateway = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VpnGatewayLookup
 >;
+
+/**
+ * Props for {@link VpnGateway.lookup}: find a vpn gateway this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface VpnGatewayLookup {
+  /**
+   * Gateway name.
+   */
+  vpnGatewayName: string;
+  /**
+   * Region the HA VPN gateway lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine HA VPN gateway.
@@ -169,6 +193,19 @@ export type VpnGateway = Resource<
  * const gateway = yield* GCP.Compute.VpnGateway("Gateway", {
  *   network: "default",
  *   stackType: "IPV4_IPV6",
+ * });
+ * ```
+ *
+ * ### Looking up an existing vpn gateway
+ * `VpnGateway.lookup` references a vpn gateway Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * vpn gateway.
+ *
+ * **Example:** Reference an existing vpn gateway
+ * ```typescript
+ * const vpnGateway = GCP.Compute.VpnGateway.lookup({
+ *   vpnGatewayName: "my-vpn-gateway",
  * });
  * ```
  *
@@ -358,14 +395,24 @@ export const VpnGatewayProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ vpnGatewayName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, vpnGatewayName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const vpnGatewayName = yield* toName(id, olds?.vpnGatewayName, output?.vpnGatewayName);
       const region = normalizeRegion(olds?.region ?? output?.region, env.region);
       const existing = yield* getByName(env.project, region, vpnGatewayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "vpnGatewayName");
     }),
 
     list: () =>

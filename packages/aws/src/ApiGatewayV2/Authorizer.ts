@@ -96,11 +96,23 @@ export interface AuthorizerType extends Resource<
     identityValidationExpression: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthorizerTypeLookup
 > {}
 
 /**
- * An API Gateway v2 Authorizer -- controls access to HTTP/WebSocket API
+ * Props for {@link AuthorizerType.lookup}: find an authorizer type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AuthorizerTypeLookup {
+  /** The id of the api it belongs to. */
+  apiId: string;
+  /** The id of the existing authorizer type. */
+  authorizerId: string;
+}
+
+/**
+ * An API Gateway v2 Authorizer — controls access to HTTP/WebSocket API
  * routes via JWT validation or a Lambda (`REQUEST`) authorizer.
  * ### JWT authorizers
  * The common HTTP API authorizer: API Gateway validates the caller's JWT
@@ -138,6 +150,16 @@ export interface AuthorizerType extends Resource<
  *   authorizerPayloadFormatVersion: "2.0",
  *   enableSimpleResponses: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing authorizer type
+ * `AuthorizerType.lookup` references an authorizer type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` and `authorizerId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing authorizer type
+ * ```typescript
+ * const existing = AWS.ApiGatewayV2.AuthorizerType.lookup({ apiId: "...", authorizerId: "..." });
  * ```
  *
  * @resource
@@ -231,6 +253,12 @@ export const AuthorizerProvider = () =>
             );
             return perApi.flat();
           }),
+
+        lookup: Effect.fn(function* ({ apiId, authorizerId }) {
+          const auth = yield* getAuthorizerSafe(apiId, authorizerId);
+          if (!auth?.AuthorizerId) return undefined;
+          return snapshotFromAuthorizer(apiId, auth);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId || !output.authorizerId) return undefined;

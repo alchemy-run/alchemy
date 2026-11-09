@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_THROUGHPUT_CAPACITY,
@@ -67,11 +68,35 @@ export type AdminReservation = Resource<
     throughputCapacity: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdminReservationLookup
 >;
 
 /**
- * A Pub/Sub Lite throughput reservation -- a regional pool of publish
+ * Props for {@link AdminReservation.lookup}: find an admin reservation this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AdminReservationLookup {
+  /**
+   * Reservation id (the `{reservation}` segment of
+   * `projects/{project}/locations/{location}/reservations/{reservation}`).
+   */
+  reservationId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). Reservations are regional.
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Pub/Sub Lite throughput reservation — a regional pool of publish
  * and subscribe capacity that topics can consume.
  *
  * Pub/Sub Lite reservations have no labels. Alchemy stamps
@@ -106,6 +131,19 @@ export type AdminReservation = Resource<
  * const reservation = yield* GCP.PubSubLite.AdminReservation("Capacity", {
  *   location: "us-central1",
  *   throughputCapacity: "16",
+ * });
+ * ```
+ *
+ * ### Looking up an existing admin reservation
+ * `AdminReservation.lookup` references an admin reservation Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * admin reservation.
+ *
+ * **Example:** Reference an existing admin reservation
+ * ```typescript
+ * const adminReservation = GCP.PubSubLite.AdminReservation.lookup({
+ *   reservationId: "my-reservation",
  * });
  * ```
  *
@@ -151,6 +189,20 @@ export const AdminReservationProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ reservationId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getReservation(
+        resourceName(
+          env.project,
+          normalizeLocation(location, env.region),
+          COLLECTION,
+          reservationId,
+        ),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

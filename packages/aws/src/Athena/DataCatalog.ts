@@ -71,11 +71,21 @@ export interface DataCatalog extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataCatalogLookup
 > {}
 
 /**
- * An Amazon Athena data catalog -- registers an external metadata source (a
+ * Props for {@link DataCatalog.lookup}: find a data catalog this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataCatalogLookup {
+  /** The name of the existing data catalog. */
+  name: string;
+}
+
+/**
+ * An Amazon Athena data catalog — registers an external metadata source (a
  * federated Lambda connector, an external Hive metastore, or a cross-account
  * Glue Data Catalog) that Athena queries can reference as a `catalog`.
  *
@@ -90,6 +100,17 @@ export interface DataCatalog extends Resource<
  *     "record-function": connector.functionArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data catalog
+ * `DataCatalog.lookup` references a data catalog Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Query through an existing catalog
+ * ```typescript
+ * const catalog = AWS.Athena.DataCatalog.lookup({ name: "warehouse" });
+ * const dataCatalogArn = catalog.dataCatalogArn;
  * ```
  *
  * @resource
@@ -137,6 +158,20 @@ export const DataCatalogProvider = () =>
           if ((olds?.type ?? undefined) !== news.type) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const dc = yield* getOne(name);
+          if (!dc) return undefined;
+          const arn = `arn:aws:athena:${region}:${accountId}:datacatalog/${name}` as DataCatalogArn;
+          return {
+            name,
+            dataCatalogArn: arn,
+            type: dc.Type,
+            parameters: paramsOf(dc.Parameters),
+            description: dc.Description,
+            tags: yield* fetchTags(arn),
+          };
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

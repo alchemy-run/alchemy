@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -97,8 +98,35 @@ export type DnsAuthorization = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DnsAuthorizationLookup
 >;
+
+/**
+ * Props for {@link DnsAuthorization.lookup}: find a dns authorization this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DnsAuthorizationLookup {
+  /**
+   * DnsAuthorization id (the `{dnsAuthorization}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/dnsAuthorizations/{dnsAuthorization}`). Must
+   * be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  dnsAuthorizationId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager DNS authorization proving ownership of a domain
@@ -155,6 +183,19 @@ export type DnsAuthorization = Resource<
  *     domains: ["www.example.com"],
  *     dnsAuthorizations: [authorization.name],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing dns authorization
+ * `DnsAuthorization.lookup` references a dns authorization Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * dns authorization.
+ *
+ * **Example:** Reference an existing dns authorization
+ * ```typescript
+ * const dnsAuthorization = GCP.CertificateManager.DnsAuthorization.lookup({
+ *   dnsAuthorizationId: "my-dns-authorization",
  * });
  * ```
  *
@@ -352,6 +393,15 @@ export const DnsAuthorizationProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ dnsAuthorizationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, dnsAuthorizationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

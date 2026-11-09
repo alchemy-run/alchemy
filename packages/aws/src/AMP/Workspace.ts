@@ -75,11 +75,21 @@ export interface Workspace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  WorkspaceLookup
 > {}
 
 /**
- * An Amazon Managed Service for Prometheus (AMP) workspace -- a logical,
+ * Props for {@link Workspace.lookup}: find a Prometheus workspace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkspaceLookup {
+  /** The id of the existing workspace. */
+  workspaceId: string;
+}
+
+/**
+ * An Amazon Managed Service for Prometheus (AMP) workspace — a logical,
  * fully-managed Prometheus-compatible metrics store. Metrics are ingested
  * via remote-write and queried through the workspace's Prometheus-compatible
  * endpoint.
@@ -131,6 +141,17 @@ export interface Workspace extends Resource<
  *   timeseries: [{ name: "jobs_done_total", samples: [{ value: 1 }] }],
  * });
  * const result = yield* metrics.query({ query: "jobs_done_total" });
+ * ```
+ *
+ * ### Looking up an existing Prometheus workspace
+ * `Workspace.lookup` references a Prometheus workspace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Prometheus workspace
+ * ```typescript
+ * const metrics = AWS.AMP.Workspace.lookup({ workspaceId: "ws-12345678-abcd-1234-abcd-123456789012" });
+ * const prometheusEndpoint = metrics.prometheusEndpoint;
  * ```
  *
  * @resource
@@ -303,6 +324,10 @@ export const WorkspaceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ workspaceId }) {
+          const workspace = yield* describe(workspaceId);
+          return workspace === undefined ? undefined : toAttrs(workspace);
+        }),
         read: Effect.fn(function* ({ id, output }) {
           // Workspace ids are server-assigned; without an output cache the
           // only recoverable identity is the alchemy ownership tags.

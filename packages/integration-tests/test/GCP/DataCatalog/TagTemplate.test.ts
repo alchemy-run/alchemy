@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as datacatalog from "@distilled.cloud/gcp/datacatalog_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runTagTemplateLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -90,6 +91,13 @@ test.provider.skipIf(!runTagTemplateLifecycle)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DataCatalog.TagTemplate.lookup({
+          tagTemplateId: created.tagTemplateId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.tagTemplateId).toEqual(expect.any(String));

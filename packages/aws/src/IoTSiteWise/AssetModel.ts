@@ -97,11 +97,26 @@ export interface AssetModel extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AssetModelLookup
 > {}
 
 /**
- * An AWS IoT SiteWise asset model -- a standardized definition of
+ * Props for {@link AssetModel.lookup}: find an asset model this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type AssetModelLookup =
+  | {
+      /** The id of the existing asset model. */
+      assetModelId: string;
+    }
+  | {
+      /** The name of the existing asset model. */
+      assetModelName: string;
+    };
+
+/**
+ * An AWS IoT SiteWise asset model — a standardized definition of
  * properties (attributes, measurements, transforms, metrics) and
  * hierarchies from which industrial assets are created.
  *
@@ -146,6 +161,16 @@ export interface AssetModel extends Resource<
  *     { name: "Pumps", childAssetModelId: pump.assetModelId },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing asset model
+ * `AssetModel.lookup` references an asset model Alchemy doesn't manage (created in the
+ * console or by another stack), found by `assetModelId` or `assetModelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing asset model
+ * ```typescript
+ * const turbines = AWS.IoTSiteWise.AssetModel.lookup({ assetModelName: "turbine" });
  * ```
  *
  * @resource
@@ -299,6 +324,13 @@ export const AssetModelProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "assetModelId" in props
+              ? yield* readAssetModelById(props.assetModelId)
+              : yield* findAssetModelByName(props.assetModelName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.assetModelId
             ? yield* readAssetModelById(output.assetModelId)

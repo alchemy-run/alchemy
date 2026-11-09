@@ -2,10 +2,25 @@
 title: Memorystore
 description: Create a Memorystore for Redis instance and reach it from Cloud Run over Direct VPC egress with the ReadWriteRedis binding.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Memorystore is managed Redis on a private IP. Cloud Run reaches it
 through your VPC, so the service needs VPC egress as well as the
 binding.
+
+## It lives on your network
+
+A Memorystore instance has a private IP in one of your VPC networks and nothing public. Cloud Run services run outside every VPC, so a service that uses Redis needs **Direct VPC egress**: an interface of its own on that network.
+
+<Tree
+  nodes={[
+    { id: "vpc", label: "default", type: "VPC network" },
+    { id: "subnet", label: "default", type: "subnet · us-central1", parent: "vpc", dashed: true },
+    { id: "redis", label: "Cache", type: "Redis · 10.12.0.3:6379", parent: "subnet", tone: "accent" },
+    { id: "nic", label: "Api's interface", type: "Direct VPC egress", parent: "subnet" },
+  ]}
+  caption="The Redis instance and the service's egress interface sit in the same subnet, so the service reaches the private IP. Without the interface, there's no route to it."
+/>
 
 ## Create an instance
 

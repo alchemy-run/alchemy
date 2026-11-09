@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -112,11 +113,33 @@ export type DataStore = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoreLookup
 >;
 
 /**
- * A Discovery Engine DataStore -- a container for Documents.
+ * Props for {@link DataStore.lookup}: find a data store this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DataStoreLookup {
+  /**
+   * Data store id (the `{dataStore}` segment of the resource name).
+   */
+  dataStoreId: string;
+  /**
+   * Location (`global`, `us`, `eu`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Discovery Engine DataStore — a container for Documents.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
  * resource it finds without prior state as unowned (adopt it with `--adopt`).
@@ -149,6 +172,19 @@ export type DataStore = Resource<
  * // Same logical id as before; only the display name changes.
  * const store = yield* GCP.DiscoveryEngine.DataStore("Docs", {
  *   displayName: "docs-prod",
+ * });
+ * ```
+ *
+ * ### Looking up an existing data store
+ * `DataStore.lookup` references a data store Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * data store.
+ *
+ * **Example:** Reference an existing data store
+ * ```typescript
+ * const dataStore = GCP.DiscoveryEngine.DataStore.lookup({
+ *   dataStoreId: "my-data-store",
  * });
  * ```
  *
@@ -281,6 +317,14 @@ export const DataStoreProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ dataStoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const existing = yield* getByName(resourceName(env.project, location, dataStoreId));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

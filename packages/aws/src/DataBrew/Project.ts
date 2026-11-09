@@ -68,11 +68,21 @@ export interface Project extends Resource<
     projectArn: string;
   },
   {},
-  Providers
+  Providers,
+  ProjectLookup
 > {}
 
 /**
- * An AWS Glue DataBrew project -- the interactive workspace binding a dataset
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProjectLookup {
+  /** The name of the existing project. */
+  projectName: string;
+}
+
+/**
+ * An AWS Glue DataBrew project — the interactive workspace binding a dataset
  * to a recipe's working version. The project definition is free; costs only
  * accrue when an interactive session is started in the console.
  * ### Creating Projects
@@ -95,6 +105,16 @@ export interface Project extends Resource<
  *   sample: { type: "RANDOM", size: 250 },
  *   role: role.roleArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `projectName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const existing = AWS.DataBrew.Project.lookup({ projectName: "..." });
  * ```
  *
  * @resource
@@ -135,6 +155,15 @@ export const ProjectProvider = () =>
                 projectArn: p.ResourceArn ?? databrewArn(region, accountId, "project", p.Name),
               }));
           }),
+
+        lookup: Effect.fn(function* ({ projectName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const project = yield* observe(name);
+          if (project === undefined) return undefined;
+          const arn = project.ResourceArn ?? databrewArn(region, accountId, "project", name);
+          const attrs = { projectName: name, projectArn: arn };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

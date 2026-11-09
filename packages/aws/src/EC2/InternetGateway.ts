@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -75,8 +76,27 @@ export interface InternetGateway extends Resource<
     tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InternetGatewayLookup
 > {}
+
+/**
+ * Props for {@link InternetGateway.lookup}: find an internet gateway this
+ * stack doesn't manage, in the ambient account and region.
+ */
+export type InternetGatewayLookup =
+  | {
+      /** The gateway's id. */
+      internetGatewayId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC the gateway is attached to. */
+      vpcId: string;
+    };
 /**
  * An internet gateway provides a target for internet-routable traffic in a
  * VPC, enabling bidirectional IPv4 and IPv6 connectivity between resources in
@@ -147,6 +167,24 @@ export interface InternetGateway extends Resource<
  * `publicRouteTable` can send and receive internet traffic. Add an analogous
  * route with `destinationIpv6CidrBlock: "::/0"` to enable IPv6.
  *
+ * ### Looking up an existing internet gateway
+ * `InternetGateway.lookup` references an internet gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `internetGatewayId`, its `Name`
+tag, or the `vpcId` it is attached to. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Route through an existing VPC's gateway
+ * ```typescript
+ * const igw = AWS.EC2.InternetGateway.lookup({ vpcId });
+ *
+ * yield* AWS.EC2.Route("Default", {
+ *   routeTableId: table.routeTableId,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   gatewayId: igw.internetGatewayId,
+ * });
+ * ```
+ *
  * @resource
  */
 export const InternetGateway = Resource<InternetGateway>("AWS.EC2.InternetGateway");
@@ -192,6 +230,34 @@ export const InternetGatewayProvider = () =>
 
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeInternetGateways(
+              "internetGatewayId" in props
+                ? { InternetGatewayIds: [props.internetGatewayId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : { Filters: [{ Name: "attachment.vpc-id", Values: [props.vpcId] }] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+                Effect.succeed({ InternetGateways: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.InternetGateway",
+            "internetGatewayId" in props
+              ? props.internetGatewayId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `vpc=${props.vpcId}`,
+            found.InternetGateways ?? [],
+            (x) => x.InternetGatewayId,
+          );
+          if (!match?.InternetGatewayId) return undefined;
+          return toAttributes(match, region, accountId);
+        }),
         read: Effect.fn(function* ({ id, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const igw = output?.internetGatewayId

@@ -1,6 +1,7 @@
 import * as NodeFs from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -69,6 +70,7 @@ export const startPreviewServer = async <B extends BindingHooks = BindingHooks>(
       (await makePreviewContext().pipe(Layer.buildWithScope(scope), Effect.runPromise));
     const address = await serve(options, build, proxySharedSecret).pipe(
       Effect.provide(context),
+      Effect.provide(SecureRandom.layerWebCrypto),
       Scope.provide(scope),
       Effect.runPromise,
     );
@@ -148,13 +150,14 @@ const serve = Effect.fn(function* (
   proxySharedSecret: string,
 ) {
   const runtime = yield* Runtime.Runtime;
+  const random = yield* SecureRandom.SecureRandom;
   const modules = yield* Effect.promise(() => readWorkerModules(build));
   const assetsDirectory = options.worker?.assets?.directory ?? build.assetsDirectory;
   return yield* runtime.start({
     // Everything the caller configured on the Worker reaches workerd; the
     // fields below are the ones the preview server owns or extends.
     ...options.worker,
-    name: options.worker?.name ?? `vite-preview-${crypto.randomUUID()}`,
+    name: options.worker?.name ?? `vite-preview-${yield* random.uuidV4()}`,
     modules,
     proxySharedSecret,
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,

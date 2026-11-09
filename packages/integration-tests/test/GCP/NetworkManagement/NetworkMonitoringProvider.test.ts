@@ -6,6 +6,7 @@ import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,13 @@ test.provider.skipIf(!runLifecycle)(
             providerType: "EXTERNAL",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkManagement.NetworkMonitoringProvider.lookup({
+          networkMonitoringProviderId: created.networkMonitoringProviderId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/networkMonitoringProviders/");

@@ -6,6 +6,7 @@ import { isResourceOfType, Resource } from "alchemy/Resource";
 import { arrayEquals, subsetDiffers } from "alchemy/Util/equal";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -398,8 +399,34 @@ export type Application = Resource<
   ApplicationProps,
   ApplicationAttributes,
   ApplicationBinding,
-  Providers
+  Providers,
+  ApplicationLookup
 >;
+
+/**
+ * Props for {@link Application.lookup}: find an Access application this stack
+ * doesn't manage, by its id, its domain, or its name.
+ */
+export type ApplicationLookup =
+  | {
+      /**
+       * The UUID of the existing application.
+       */
+      applicationId: string;
+    }
+  | {
+      /**
+       * The domain the existing application protects.
+       */
+      domain: string;
+    }
+  | {
+      /**
+       * The name of the existing application. Names are not unique; the
+       * first application with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Access application.
@@ -579,6 +606,21 @@ export type Application = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `applicationId`,
+ * `domain` or `name`. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Validate Access JWTs for an existing application
+ * ```typescript
+ * const app = Cloudflare.Access.Application.lookup({ domain: "admin.example.com" });
+ * const worker = yield* Cloudflare.Worker("Admin", {
+ *   main: "./src/admin.ts",
+ *   env: { ACCESS_AUD: app.aud },
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -631,6 +673,17 @@ export const ApplicationProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "applicationId" in props
+          ? yield* observeById(accountId, props.applicationId)
+          : "domain" in props
+            ? yield* findByDomain(accountId, props.domain)
+            : yield* findByName(accountId, props.name);
+      return isComplete(observed) ? toAttributes(observed, accountId) : undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -897,6 +950,18 @@ const findByDomain = (accountId: string, domain: string) =>
     Effect.map((chunk) =>
       Array.from(chunk).find((a) => (a as { domain?: string | null }).domain === domain),
     ),
+    Effect.map((found) =>
+      found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
+    ),
+  );
+
+// Lookup by name: names are not unique, so the first match wins.
+const findByName = (accountId: string, name: string) =>
+  zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
+    Stream.filter((a) => (a as { name?: string | null }).name === name),
+    Stream.runHead,
+    retryTransientAccessError,
+    Effect.map(Option.getOrUndefined),
     Effect.map((found) =>
       found === undefined ? undefined : narrowApp(found as Parameters<typeof narrowApp>[0]),
     ),

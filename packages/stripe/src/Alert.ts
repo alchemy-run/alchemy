@@ -115,11 +115,21 @@ export type Alert = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  AlertLookup
 >;
 
 /**
- * A Stripe Billing Alert -- notifies you when a usage threshold on a
+ * Props for {@link Alert.lookup}: find a billing alert this stack
+ * doesn't manage by its id.
+ */
+export interface AlertLookup {
+  /** Stripe billing alert id, e.g. `"alrt_61A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Billing Alert — notifies you when a usage threshold on a
  * [Billing Meter](https://docs.stripe.com/api/billing/meter) is crossed.
  * `title`, `alertType`, and `usageThreshold` are immutable; changing them
  * replaces the alert. `status` is changed with Stripe's activate/deactivate
@@ -188,6 +198,16 @@ export type Alert = Resource<
  *     recurrence: "one_time",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing billing alert
+ * `Alert.lookup` references a billing alert Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing billing alert
+ * ```typescript
+ * const ref = Stripe.Alert.lookup({ id: "alrt_61A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -350,6 +370,11 @@ export const AlertProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

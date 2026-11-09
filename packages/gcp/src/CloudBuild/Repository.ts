@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -89,11 +90,44 @@ export type Repository = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 >;
 
 /**
- * A Cloud Build v2 repository -- links a remote Git repository to a
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RepositoryLookup {
+  /**
+   * Repository id (the `{repository}` segment of
+   * `projects/{project}/locatio
+   * ns/{location}/connections/{connection}/repositories/{repository}`).
+   * Unique within the connection.
+   */
+  repositoryId: string;
+  /**
+   * Parent Cloud Build connection. Full name
+   * `projects/{project}/locations/{location}/connections/{connection}` or
+   * the connection id (combined with `location`).
+   */
+  connection: string;
+  /**
+   * Cloud Build location (`us-central1`, `us-east1`, …). Used when
+   * `connection` is a bare id. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Build v2 repository — links a remote Git repository to a
  * {@link Connection}.
  *
  * Changing `repositoryId`, `connection`, `location`, `remoteUri`, or
@@ -138,6 +172,20 @@ export type Repository = Resource<
  * ```typescript
  * const accessReadToken = yield* GCP.CloudBuild.AccessReadToken(source);
  * const { token } = yield* accessReadToken();
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repository.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repository = GCP.CloudBuild.Repository.lookup({
+ *   repositoryId: "my-repository",
+ *   connection: "my-connection",
+ * });
  * ```
  *
  * @resource
@@ -462,6 +510,18 @@ export const RepositoryProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ repositoryId, connection, location }) {
+      const env = yield* GcpEnvironment.current;
+      if (typeof connection !== "string" || connection.length === 0) {
+        return undefined;
+      }
+      const parent = resolveParent(env.project, connection, location, env.region);
+      const name = resourceName(parent.parent, repositoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -64,11 +64,21 @@ export interface DBClusterParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterParameterGroupLookup
 > {}
 
 /**
- * An Amazon Neptune DB cluster parameter group -- a named set of engine
+ * Props for {@link DBClusterParameterGroup.lookup}: find a Neptune cluster parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterParameterGroupLookup {
+  /** The db cluster parameter group name of the existing Neptune cluster parameter group. */
+  dbClusterParameterGroupName: string;
+}
+
+/**
+ * An Amazon Neptune DB cluster parameter group — a named set of engine
  * configuration parameters (query timeout, audit logging, ...) that can be
  * attached to one or more Neptune {@link DBCluster}s.
  * ### Creating a Parameter Group
@@ -89,6 +99,16 @@ export interface DBClusterParameterGroup extends Resource<
  *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
  *   dbClusterParameterGroupName: params.dbClusterParameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune cluster parameter group
+ * `DBClusterParameterGroup.lookup` references a Neptune cluster parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune cluster parameter group
+ * ```typescript
+ * const existing = AWS.Neptune.DBClusterParameterGroup.lookup({ dbClusterParameterGroupName: "my-neptune-cluster-parameter-group" });
  * ```
  *
  * @resource
@@ -190,6 +210,22 @@ export const DBClusterParameterGroupProvider = () =>
           if (olds !== undefined && olds.family !== news.family) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterParameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.DBClusterParameterGroupName) {
+            return undefined;
+          }
+          const userParameters = yield* readUserParameters(name);
+          const tags = yield* readTags(group.DBClusterParameterGroupArn);
+          return {
+            dbClusterParameterGroupName: group.DBClusterParameterGroupName,
+            dbClusterParameterGroupArn: group.DBClusterParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            parameters: toUserParameterRecord(userParameters),
+            tags,
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

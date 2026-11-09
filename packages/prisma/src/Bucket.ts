@@ -84,8 +84,18 @@ export interface Bucket extends Resource<
     logicalId: string | null;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 > {}
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack
+ * doesn't manage by its id.
+ */
+export interface BucketLookup {
+  /** Prisma bucket id. */
+  bucketId: string;
+}
 
 /**
  * A Prisma Object Store bucket inside a Prisma project.
@@ -112,6 +122,17 @@ export interface Bucket extends Resource<
  *   bucket,
  *   role: "read_write",
  * });
+ * ```
+ *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Mint a key for an existing bucket
+ * ```typescript
+ * const assets = Prisma.Bucket.lookup({ bucketId: "bkt_cmabc123def456ghi789jkl0" });
+ * const key = yield* Prisma.BucketAccessKey("AssetsKey", { bucket: assets });
  * ```
  *
  * @resource
@@ -228,6 +249,14 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ bucketId }) {
+          const bucket = yield* getBucket({ bucketId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return bucket ? attrsFrom(bucket) : undefined;
+        }),
+
         read: Effect.fn(function* ({ fqn, output, olds }) {
           const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) {

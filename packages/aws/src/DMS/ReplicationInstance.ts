@@ -119,11 +119,21 @@ export interface ReplicationInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationInstanceLookup
 > {}
 
 /**
- * A DMS replication instance -- the managed compute that runs migration and
+ * Props for {@link ReplicationInstance.lookup}: find a replication instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationInstanceLookup {
+  /** The replication instance identifier of the existing replication instance. */
+  replicationInstanceIdentifier: string;
+}
+
+/**
+ * A DMS replication instance — the managed compute that runs migration and
  * replication tasks. Provisioning takes several minutes and the instance is
  * billed hourly while it exists, so create it only when a migration is
  * running and destroy it promptly.
@@ -136,6 +146,16 @@ export interface ReplicationInstance extends Resource<
  *   replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
  *   publiclyAccessible: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing replication instance
+ * `ReplicationInstance.lookup` references a replication instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication instance
+ * ```typescript
+ * const existing = AWS.DMS.ReplicationInstance.lookup({ replicationInstanceIdentifier: "my-replication-instance" });
  * ```
  *
  * @resource
@@ -259,6 +279,13 @@ export const ReplicationInstanceProvider = () =>
           if ((news.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ replicationInstanceIdentifier: name }) {
+          const instance = yield* findInstance(name);
+          if (!instance?.ReplicationInstanceArn) return undefined;
+          const attrs = yield* toAttrs(instance);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

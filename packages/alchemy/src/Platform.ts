@@ -4,6 +4,7 @@ import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -125,6 +126,7 @@ export type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] ext
 export type PlatformServices =
   | NodeServices
   | HttpClient
+  | SecureRandom.SecureRandom
   | Provider<any>
   | ProviderCollectionLike
   | Stack
@@ -511,7 +513,13 @@ export const Platform = <
                   // `Main.fetch` shape); `serve` accepts both.
                   const fetch = shape.fetch as any;
                   const hasRpcMethods = Object.keys(shape).some((key) => key !== "fetch");
-                  if (!fetch && !hasRpcMethods) return Effect.void;
+                  // `alwaysServe` runtimes (ones that route Durable Object calls) serve routes
+                  // of their own — boot the server even for an impl with no
+                  // fetch handler and no RPC methods (e.g. a worker that only
+                  // hosts Durable Objects).
+                  if (!fetch && !hasRpcMethods && runtimeContext.alwaysServe !== true) {
+                    return Effect.void;
+                  }
                   // Hand the full impl to `serve` so the runtime can expose any
                   // non-handler methods on the impl shape (RPC methods)
                   // alongside the standard `fetch` handler.

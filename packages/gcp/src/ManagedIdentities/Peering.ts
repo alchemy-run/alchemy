@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -84,11 +85,31 @@ export type Peering = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PeeringLookup
 >;
 
 /**
- * A Managed Microsoft AD domain peering -- attaches a VPC in this
+ * Props for {@link Peering.lookup}: find a peering this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PeeringLookup {
+  /**
+   * Peering id (the `{peering}` segment of
+   * `projects/{project}/locations/global/peerings/{peering}`). Must match
+   * `^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`.
+   */
+  peeringId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Managed Microsoft AD domain peering — attaches a VPC in this
  * project to a Managed AD domain that lives in a **different** project
  * so VMs on that network can join the domain. Same-project access uses
  * `Domain.authorizedNetworks` instead; creating a peering when domain
@@ -126,6 +147,18 @@ export type Peering = Resource<
  *   domainResource: domain.name,
  *   authorizedNetwork: "default",
  *   labels: { env: "prod", team: "identity" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing peering
+ * `Peering.lookup` references a peering Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared peering.
+ *
+ * **Example:** Reference an existing peering
+ * ```typescript
+ * const peering = GCP.ManagedIdentities.Peering.lookup({
+ *   peeringId: "my-peering",
  * });
  * ```
  *
@@ -193,6 +226,14 @@ export const PeeringProvider = () =>
           (previousNetwork.length > 0 && nextNetwork.length > 0 && previousNetwork !== nextNetwork),
       });
     }),
+
+    lookup: Effect.fn(function* ({ peeringId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, peeringId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

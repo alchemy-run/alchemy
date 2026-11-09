@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -124,11 +125,33 @@ export type Apiproduct = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApiproductLookup
 >;
 
 /**
- * An Apigee API product -- a bundle of proxies, resources, quota, and
+ * Props for {@link Apiproduct.lookup}: find an apiproduct this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApiproductLookup {
+  /**
+   * Internal API product id (`A-Z0-9._-$ %`).
+   */
+  apiproductId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An Apigee API product — a bundle of proxies, resources, quota, and
  * metadata delivered to developers.
  *
  * Products have no labels field. Alchemy stamps ownership into
@@ -155,6 +178,19 @@ export type Apiproduct = Resource<
  *   quota: "1000",
  *   quotaInterval: "1",
  *   quotaTimeUnit: "hour",
+ * });
+ * ```
+ *
+ * ### Looking up an existing apiproduct
+ * `Apiproduct.lookup` references an apiproduct Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apiproduct.
+ *
+ * **Example:** Reference an existing apiproduct
+ * ```typescript
+ * const apiproduct = GCP.Apigee.Apiproduct.lookup({
+ *   apiproductId: "my-apiproduct",
  * });
  * ```
  *
@@ -245,6 +281,15 @@ export const ApiproductProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ apiproductId, organizationId: lookupOrganizationId }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const name = resourceName(organizationId, apiproductId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

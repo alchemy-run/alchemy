@@ -64,11 +64,21 @@ export interface DBParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBParameterGroupLookup
 > {}
 
 /**
- * An Amazon Neptune DB (instance-level) parameter group -- a named set of
+ * Props for {@link DBParameterGroup.lookup}: find a Neptune parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBParameterGroupLookup {
+  /** The db parameter group name of the existing Neptune parameter group. */
+  dbParameterGroupName: string;
+}
+
+/**
+ * An Amazon Neptune DB (instance-level) parameter group — a named set of
  * engine configuration parameters applied to individual Neptune
  * {@link DBInstance}s via `dbParameterGroupName` (cluster-wide settings live
  * in a {@link DBClusterParameterGroup} instead).
@@ -91,6 +101,16 @@ export interface DBParameterGroup extends Resource<
  *   dbInstanceClass: "db.serverless",
  *   dbParameterGroupName: params.dbParameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune parameter group
+ * `DBParameterGroup.lookup` references a Neptune parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune parameter group
+ * ```typescript
+ * const existing = AWS.Neptune.DBParameterGroup.lookup({ dbParameterGroupName: "my-neptune-parameter-group" });
  * ```
  *
  * @resource
@@ -188,6 +208,22 @@ export const DBParameterGroupProvider = () =>
           if (olds !== undefined && olds.family !== news.family) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbParameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.DBParameterGroupName) {
+            return undefined;
+          }
+          const userParameters = yield* readUserParameters(name);
+          const tags = yield* readTags(group.DBParameterGroupArn);
+          return {
+            dbParameterGroupName: group.DBParameterGroupName,
+            dbParameterGroupArn: group.DBParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            parameters: toUserParameterRecord(userParameters),
+            tags,
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

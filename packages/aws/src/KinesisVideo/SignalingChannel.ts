@@ -53,11 +53,21 @@ export interface SignalingChannel extends Resource<
     channelArn: string;
   },
   {},
-  Providers
+  Providers,
+  SignalingChannelLookup
 > {}
 
 /**
- * An Amazon Kinesis Video Streams WebRTC signaling channel -- the rendezvous
+ * Props for {@link SignalingChannel.lookup}: find a signaling channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SignalingChannelLookup {
+  /** The channel name of the existing signaling channel. */
+  channelName: string;
+}
+
+/**
+ * An Amazon Kinesis Video Streams WebRTC signaling channel — the rendezvous
  * point that WebRTC master and viewer peers use to exchange SDP offers,
  * answers, and ICE candidates.
  *
@@ -87,6 +97,16 @@ export interface SignalingChannel extends Resource<
  *
  * // runtime -- TURN URIs + short-lived credentials for a WebRTC peer
  * const { IceServerList } = yield* getIceServers({ ClientId: "viewer-1" });
+ * ```
+ *
+ * ### Looking up an existing signaling channel
+ * `SignalingChannel.lookup` references a signaling channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing signaling channel
+ * ```typescript
+ * const existing = AWS.KinesisVideo.SignalingChannel.lookup({ channelName: "my-signaling-channel" });
  * ```
  *
  * @resource
@@ -134,6 +154,18 @@ export const SignalingChannelProvider = () =>
                 channelArn: info.ChannelARN!,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ channelName }) {
+          const info = yield* observeChannel(channelName);
+          if (info?.ChannelARN === undefined || info.ChannelStatus === "DELETING") {
+            return undefined;
+          }
+          const attrs = {
+            channelName,
+            channelArn: info.ChannelARN,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const channelName = output?.channelName ?? (yield* createName(id, olds ?? {}));

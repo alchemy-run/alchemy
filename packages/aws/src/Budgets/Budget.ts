@@ -195,11 +195,21 @@ export interface Budget extends Resource<
     budgetArn: string;
   },
   never,
-  Providers
+  Providers,
+  BudgetLookup
 > {}
 
 /**
- * An AWS Budget -- tracks cost or usage against a defined limit over a time
+ * Props for {@link Budget.lookup}: find a budget this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface BudgetLookup {
+  /** The name of the existing budget. */
+  budgetName: string;
+}
+
+/**
+ * An AWS Budget — tracks cost or usage against a defined limit over a time
  * period and notifies subscribers when configured thresholds are crossed.
  *
  * Budgets are a global (account-level) resource; they are free and take
@@ -242,6 +252,16 @@ export interface Budget extends Resource<
  *   budgetLimit: { amount: "600", unit: "USD" },
  *   costTypes: { includeCredit: false, includeRefund: false },
  * });
+ * ```
+ *
+ * ### Looking up an existing budget
+ * `Budget.lookup` references a budget Alchemy doesn't manage (created in the
+ * console or by another stack), found by `budgetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing budget
+ * ```typescript
+ * const existing = AWS.Budgets.Budget.lookup({ budgetName: "..." });
  * ```
  *
  * @resource
@@ -452,6 +472,18 @@ export const BudgetProvider = () =>
               Effect.catchTag("NotFoundException", () => Effect.succeed([])),
             );
           }),
+        lookup: Effect.fn(function* ({ budgetName: name }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* budgets
+            .describeBudget({ AccountId: accountId, BudgetName: name })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!found?.Budget) return undefined;
+          return {
+            budgetName: name,
+            accountId,
+            budgetArn: budgetArn(accountId, name),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const name = output?.budgetName ?? (yield* createName(id, olds ?? {}));

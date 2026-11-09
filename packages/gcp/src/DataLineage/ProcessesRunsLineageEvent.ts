@@ -4,8 +4,10 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fingerprint,
@@ -112,11 +114,45 @@ export type ProcessesRunsLineageEvent = Resource<
     links: LineageEventLink[];
   },
   never,
-  Providers
+  Providers,
+  ProcessesRunsLineageEventLookup
 >;
 
 /**
- * A Data Lineage event -- one operation that moved data from source
+ * Props for {@link ProcessesRunsLineageEvent.lookup}: find a processes runs
+ * lineage event this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ProcessesRunsLineageEventLookup {
+  /**
+   * Event id (the `{lineage_event}` segment). Max 200 characters: letters,
+   * digits, underscores, hyphens, colons, periods.
+   */
+  lineageEventId: string;
+  /**
+   * Parent run. Full name
+   * `projects/{project}/locations/{location}/processes/{process}/runs/{run}`
+   * or a run id combined with `process`.
+   */
+  run: string;
+  /**
+   * Region used when `run` / `process` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent process used when `run` is a bare id. Full process name or
+   * process id combined with `location`.
+   */
+  process?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Data Lineage event — one operation that moved data from source
  * assets to target assets.
  *
  * Events are immutable after create (no patch API). Identity is the
@@ -136,6 +172,20 @@ export type ProcessesRunsLineageEvent = Resource<
  *       target: { fullyQualifiedName: "custom:proj.dw.orders" },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing processes runs lineage event
+ * `ProcessesRunsLineageEvent.lookup` references a processes runs lineage
+ * event Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared processes runs lineage event.
+ *
+ * **Example:** Reference an existing processes runs lineage event
+ * ```typescript
+ * const processesRunsLineageEvent = GCP.DataLineage.ProcessesRunsLineageEvent.lookup({
+ *   lineageEventId: "my-lineage-event",
+ *   run: "my-run",
  * });
  * ```
  *
@@ -159,7 +209,7 @@ export class ProcessesRunsLineageEventNotResolved extends Data.TaggedError(
 const resourceName = (run: string, lineageEventId: string) =>
   `${run}/lineageEvents/${lineageEventId}`;
 
-const nowIso = () => Effect.sync(() => new Date().toISOString());
+const nowIso = () => Effect.map(DateTime.now, DateTime.formatIso);
 
 const runOf = (run: string, process: string | undefined, project: string, location: string) => {
   if (run.includes("/")) return run.replace(/\/+$/, "");
@@ -282,6 +332,29 @@ export const ProcessesRunsLineageEventProvider = () =>
           (output !== undefined && previous !== next),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      lineageEventId,
+      run: lookupRun,
+      location: lookupLocation,
+      process,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (typeof lookupRun !== "string" || lookupRun.length === 0) {
+        return undefined;
+      }
+      const location = normalizeLocation(lookupLocation, env.region);
+      const run = runOf(lookupRun ?? "", process, env.project, location);
+      const name = resourceName(run, lineageEventId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project, env.region);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

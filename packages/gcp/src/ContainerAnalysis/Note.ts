@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -165,8 +166,25 @@ export type Note = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NoteLookup
 >;
+
+/**
+ * Props for {@link Note.lookup}: find a note this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface NoteLookup {
+  /**
+   * Note id (the `{note}` segment of `projects/{project}/notes/{note}`).
+   */
+  noteId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Container Analysis (Grafeas) note. Notes describe a
@@ -208,6 +226,16 @@ export type Note = Resource<
  *   shortDescription: "qa and staging attestor",
  *   attestation: { hint: { humanReadableName: "QA" } },
  * });
+ * ```
+ *
+ * ### Looking up an existing note
+ * `Note.lookup` references a note Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared note.
+ *
+ * **Example:** Reference an existing note
+ * ```typescript
+ * const note = GCP.ContainerAnalysis.Note.lookup({ noteId: "my-note" });
  * ```
  *
  * @resource
@@ -264,6 +292,14 @@ export const NoteProvider = () =>
         extra: previousKind !== undefined && nextKind !== undefined && previousKind !== nextKind,
       });
     }),
+
+    lookup: Effect.fn(function* ({ noteId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, noteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toPublicAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

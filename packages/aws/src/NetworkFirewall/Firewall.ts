@@ -83,11 +83,21 @@ export interface Firewall extends Resource<
     endpointIds: string[];
   },
   never,
-  Providers
+  Providers,
+  FirewallLookup
 > {}
 
 /**
- * An AWS Network Firewall firewall -- provisions managed firewall endpoints
+ * Props for {@link Firewall.lookup}: find a firewall this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FirewallLookup {
+  /** The firewall name of the existing firewall. */
+  firewallName: string;
+}
+
+/**
+ * An AWS Network Firewall firewall — provisions managed firewall endpoints
  * into your VPC subnets and inspects traffic according to an associated
  * {@link FirewallPolicy}.
  *
@@ -117,6 +127,16 @@ export interface Firewall extends Resource<
  *   vpcId: vpc.vpcId,
  *   subnetMappings: [{ SubnetId: subnet.subnetId }],
  * });
+ * ```
+ *
+ * ### Looking up an existing firewall
+ * `Firewall.lookup` references a firewall Alchemy doesn't manage (created in the
+ * console or by another stack), found by `firewallName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall
+ * ```typescript
+ * const existing = AWS.NetworkFirewall.Firewall.lookup({ firewallName: "my-firewall" });
  * ```
  *
  * @resource
@@ -227,6 +247,13 @@ export const FirewallProvider = () =>
             );
             return items.filter((item): item is Firewall["Attributes"] => item !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ firewallName: name }) {
+          const found = yield* describe(name);
+          if (found?.Firewall === undefined) return undefined;
+          const attrs = toAttrs(found.Firewall, found.FirewallStatus);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.firewallName ?? (yield* createName(id, olds ?? {}));

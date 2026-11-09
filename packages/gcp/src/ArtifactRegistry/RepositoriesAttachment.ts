@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -115,8 +116,37 @@ export type RepositoriesAttachment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesAttachmentLookup
 >;
+
+/**
+ * Props for {@link RepositoriesAttachment.lookup}: find a repositories
+ * attachment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RepositoriesAttachmentLookup {
+  /**
+   * Attachment id (the `{attachment}` segment of
+   * `.../repositories/{repository}/attachments/{attachment}`).
+   */
+  attachmentId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * Artifact Registry metadata attached to a repository, package, or
@@ -140,6 +170,20 @@ export type RepositoriesAttachment = Resource<
  *     annotations: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing repositories attachment
+ * `RepositoriesAttachment.lookup` references a repositories attachment
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared repositories attachment.
+ *
+ * **Example:** Reference an existing repositories attachment
+ * ```typescript
+ * const repositoriesAttachment = GCP.ArtifactRegistry.RepositoriesAttachment.lookup({
+ *   attachmentId: "my-attachment",
+ *   repository: "my-repository",
+ * });
  * ```
  *
  * @resource
@@ -224,6 +268,23 @@ export const RepositoriesAttachmentProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      attachmentId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? locationFromRepository(lookupRepository, env.region),
+        env.region,
+      );
+      const repository = expandRepository(lookupRepository ?? "", env.project, location);
+      const name = resourceNameOf(repository, attachmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -76,11 +76,23 @@ export interface Filter extends Resource<
     rank: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  FilterLookup
 > {}
 
 /**
- * A GuardDuty findings filter -- matches findings against criteria and either
+ * Props for {@link Filter.lookup}: find a findings filter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FilterLookup {
+  /** The detector the filter belongs to. */
+  detectorId: string;
+  /** The name of the existing filter. */
+  name: string;
+}
+
+/**
+ * A GuardDuty findings filter — matches findings against criteria and either
  * keeps (`NOOP`) or auto-archives (`ARCHIVE`) them. Identity is the
  * `(detectorId, name)` pair; description, action, rank, and criteria are
  * updatable in place.
@@ -107,6 +119,16 @@ export interface Filter extends Resource<
  *     Criterion: { "resource.instanceDetails.tags.value": { Equals: ["prod"] } },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing findings filter
+ * `Filter.lookup` references a findings filter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing findings filter
+ * ```typescript
+ * const noisy = AWS.GuardDuty.Filter.lookup({ detectorId, name: "suppress-noisy" });
  * ```
  */
 const FilterResource = Resource<Filter>("AWS.GuardDuty.Filter");
@@ -156,6 +178,10 @@ export const FilterProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ detectorId, name }) {
+          const f = yield* getFilter(detectorId, name);
+          return f ? yield* buildAttrs(detectorId, name, f) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detectorId = output?.detectorId ?? olds?.detectorId;

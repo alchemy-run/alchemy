@@ -87,11 +87,21 @@ export interface Service extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 > {}
 
 /**
- * An Amazon VPC Lattice service -- an independently deployable unit of software
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The id of the existing service. */
+  serviceId: string;
+}
+
+/**
+ * An Amazon VPC Lattice service — an independently deployable unit of software
  * (running on Lambda, ECS, EC2, or elsewhere) that is made discoverable through
  * a service network. Cheap control-plane resource.
  *
@@ -109,6 +119,16 @@ export interface Service extends Resource<
  *   authType: "AWS_IAM",
  *   idleTimeout: "60 seconds",
  * });
+ * ```
+ *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const existing = AWS.VpcLattice.Service.lookup({ serviceId: "..." });
  * ```
  *
  * @resource
@@ -171,6 +191,23 @@ export const ServiceProvider = () =>
           if ((olds?.customDomainName ?? undefined) !== news.customDomainName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ serviceId }) {
+          const service = yield* observe(serviceId);
+          if (!service?.arn || !service.id) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({
+            resourceArn: service.arn,
+          });
+          const attrs = {
+            serviceId: service.id,
+            serviceArn: service.arn,
+            name: service.name!,
+            status: service.status ?? "UNKNOWN",
+            dnsName: service.dnsEntry?.domainName,
+            authType: (service.authType as ServiceNetworkAuthType) ?? "NONE",
+            tags: tagRecord(listed.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const service = output?.serviceId

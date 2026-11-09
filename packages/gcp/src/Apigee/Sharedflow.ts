@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createInternalLabels,
@@ -85,11 +86,35 @@ export type Sharedflow = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SharedflowLookup
 >;
 
 /**
- * An Apigee shared flow -- a reusable sequence of policies that API
+ * Props for {@link Sharedflow.lookup}: find a sharedflow this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SharedflowLookup {
+  /**
+   * Shared flow id (the `{sharedflow}` segment of
+   * `organizations/{org}/sharedflows/{sharedflow}`). Restrict characters to
+   * `A-Za-z0-9._-`.
+   */
+  sharedflowId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An Apigee shared flow — a reusable sequence of policies that API
  * proxies (or other shared flows) invoke with a FlowCallout.
  *
  * Shared flows have no labels field, so Alchemy stamps ownership into
@@ -120,6 +145,19 @@ export type Sharedflow = Resource<
  * ```typescript
  * const flow = yield* GCP.Apigee.Sharedflow("Traffic", {
  *   description: "rate limit only",
+ * });
+ * ```
+ *
+ * ### Looking up an existing sharedflow
+ * `Sharedflow.lookup` references a sharedflow Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * sharedflow.
+ *
+ * **Example:** Reference an existing sharedflow
+ * ```typescript
+ * const sharedflow = GCP.Apigee.Sharedflow.lookup({
+ *   sharedflowId: "my-sharedflow",
  * });
  * ```
  *
@@ -326,6 +364,16 @@ export const SharedflowProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sharedflowId, organization }) {
+      const env = yield* GcpEnvironment.current;
+      const org = orgIdOf(organization, env.project);
+      const name = resourceName(org, sharedflowId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const description = yield* observedDescription(org, existing);
+      return toAttrs(existing, org, description);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

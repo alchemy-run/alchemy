@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -62,11 +63,36 @@ export type Namespace = Resource<
     uid: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 >;
 
 /**
- * A Service Directory namespace -- a location-scoped container for
+ * Props for {@link Namespace.lookup}: find a namespace this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NamespaceLookup {
+  /**
+   * Namespace id (the `{namespace}` segment of
+   * `projects/{project}/locations/{location}/namespaces/{namespace}`). Must
+   * be 1-63 characters and match `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`.
+   */
+  namespaceId: string;
+  /**
+   * Location of the namespace (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Service Directory namespace — a location-scoped container for
  * services.
  *
  * Changing `namespaceId` or `location` replaces the namespace.
@@ -83,6 +109,18 @@ export type Namespace = Resource<
  *   namespaceId: "app-services",
  *   location: "us-central1",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared namespace.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const namespace = GCP.ServiceDirectory.Namespace.lookup({
+ *   namespaceId: "my-namespace",
  * });
  * ```
  *
@@ -200,6 +238,15 @@ export const NamespaceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ namespaceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, namespaceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

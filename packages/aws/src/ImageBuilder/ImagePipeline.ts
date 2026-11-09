@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -139,11 +140,21 @@ export interface ImagePipeline extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImagePipelineLookup
 > {}
 
 /**
- * An EC2 Image Builder image pipeline -- wires a recipe to an infrastructure
+ * Props for {@link ImagePipeline.lookup}: find an image pipeline this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImagePipelineLookup {
+  /** The image pipeline arn of the existing image pipeline. */
+  imagePipelineArn: string;
+}
+
+/**
+ * An EC2 Image Builder image pipeline — wires a recipe to an infrastructure
  * configuration (and optionally a distribution configuration) and automates
  * image builds on a schedule or on demand.
  *
@@ -171,6 +182,16 @@ export interface ImagePipeline extends Resource<
  *       "EXPRESSION_MATCH_AND_DEPENDENCY_UPDATES_AVAILABLE",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing image pipeline
+ * `ImagePipeline.lookup` references an image pipeline Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imagePipelineArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image pipeline
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImagePipeline.lookup({ imagePipelineArn: "my-image-pipeline" });
  * ```
  *
  * @resource
@@ -236,6 +257,13 @@ export const ImagePipelineProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ imagePipelineArn: arn }) {
+          const pipeline = yield* getPipeline(arn);
+          if (pipeline === undefined) return undefined;
+          const attrs = yield* toAttrs(pipeline);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn = output?.imagePipelineArn ?? (yield* toArn(yield* toName(id, olds)));
           const pipeline = yield* getPipeline(arn);
@@ -248,7 +276,8 @@ export const ImagePipelineProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.imagePipelineName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

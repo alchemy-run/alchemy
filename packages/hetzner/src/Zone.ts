@@ -20,6 +20,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -101,7 +102,23 @@ export interface ZoneAttributes {
   delegationStatus: ZoneDelegationStatus | undefined;
 }
 
-export type Zone = Resource<"Hetzner.Zone", ZoneProps, ZoneAttributes, never, Providers>;
+export type Zone = Resource<
+  "Hetzner.Zone",
+  ZoneProps,
+  ZoneAttributes,
+  never,
+  Providers,
+  ZoneLookup
+>;
+
+/**
+ * Props for {@link Zone.lookup}: find a DNS zone this stack
+ * doesn't manage by its domain.
+ */
+export interface ZoneLookup {
+  /** Apex domain name, e.g. `example.com`. */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud DNS zone -- an apex domain hosted on Hetzner's
@@ -127,6 +144,22 @@ export type Zone = Resource<"Hetzner.Zone", ZoneProps, ZoneAttributes, never, Pr
  *   name: "example.com",
  *   labels: { env: "prod" },
  *   deleteProtection: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing zone
+ * `Zone.lookup` references a zone Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Add a record to an existing zone
+ * ```typescript
+ * const zone = Hetzner.Zone.lookup({ name: "example.com" });
+ * yield* Hetzner.RecordSet("Www", {
+ *   zone,
+ *   name: "www",
+ *   type: "A",
+ *   records: [{ value: "203.0.113.10" }],
  * });
  * ```
  *
@@ -223,7 +256,12 @@ export const ZoneProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const zone = yield* getZoneBy(normalizeName(name));
+      return zone === undefined ? undefined : toAttrs(zone);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       let zone: CloudZone | undefined;
       if (output?.zoneId !== undefined) {
         zone = yield* getZoneBy(String(output.zoneId));
@@ -248,6 +286,16 @@ export const ZoneProvider = () =>
         }
       }
       if (zone === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.zoneId,
+          foundId: zone.id,
+          claimedName: olds?.name === undefined ? undefined : normalizeName(olds.name),
+          foundName: zone.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(zone);
       return (yield* hasAlchemyLabels(id, tagRecord(zone.labels))) ? attrs : Unowned(attrs);
     }),

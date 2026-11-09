@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -90,11 +91,35 @@ export type SacRealm = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SacRealmLookup
 >;
 
 /**
- * A Secure Access Connect (SAC) realm -- the handshake between a Google
+ * Props for {@link SacRealm.lookup}: find a sac realm this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SacRealmLookup {
+  /**
+   * Realm id (the `{sacRealm}` segment of
+   * `projects/{project}/locations/global/sacRealms/{sacRealm}`).
+   */
+  sacRealmId: string;
+  /**
+   * Location of the realm. Realms are global — always `"global"`. `GLOBAL`
+   * is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Secure Access Connect (SAC) realm — the handshake between a Google
  * Cloud project and an SSE partner such as Palo Alto Prisma Access.
  *
  * The create API has no patch; changing `sacRealmId`, `location`,
@@ -112,6 +137,18 @@ export type SacRealm = Resource<
  *   sacRealmId: "app-prisma",
  *   securityService: "PALO_ALTO_PRISMA_ACCESS",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing sac realm
+ * `SacRealm.lookup` references a sac realm Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared sac realm.
+ *
+ * **Example:** Reference an existing sac realm
+ * ```typescript
+ * const sacRealm = GCP.NetworkSecurity.SacRealm.lookup({
+ *   sacRealmId: "my-sac-realm",
  * });
  * ```
  *
@@ -255,6 +292,15 @@ export const SacRealmProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ sacRealmId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, sacRealmId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -85,11 +85,21 @@ export interface Workspace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  WorkspaceLookup
 > {}
 
 /**
- * An Amazon Managed Grafana workspace -- a fully-managed Grafana server for
+ * Props for {@link Workspace.lookup}: find a workspace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkspaceLookup {
+  /** The id of the existing workspace. */
+  workspaceId: string;
+}
+
+/**
+ * An Amazon Managed Grafana workspace — a fully-managed Grafana server for
  * visualizing operational metrics, logs, and traces.
  *
  * Grafana workspaces require IAM Identity Center (AWS SSO) to be enabled in
@@ -105,6 +115,16 @@ export interface Workspace extends Resource<
  *   permissionType: "SERVICE_MANAGED",
  *   dataSources: ["PROMETHEUS", "CLOUDWATCH"],
  * });
+ * ```
+ *
+ * ### Looking up an existing workspace
+ * `Workspace.lookup` references a workspace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing workspace
+ * ```typescript
+ * const existing = AWS.Grafana.Workspace.lookup({ workspaceId: "..." });
  * ```
  *
  * @resource
@@ -168,6 +188,14 @@ export const WorkspaceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ workspaceId }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const ws = yield* describe(workspaceId);
+          if (ws === undefined) return undefined;
+          const attrs = toAttrs(accountId, region, ws);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

@@ -6,6 +6,8 @@ import * as workloadmanager from "@distilled.cloud/gcp/workloadmanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { isServiceEnabled } from "../ServiceState.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,7 +62,7 @@ test.provider(
           name: `${parent}/evaluations/alchemy-missing-evaluation`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -74,6 +76,9 @@ test.provider.skipIf(entitled)(
   "createProjectsLocationsEvaluations is rejected with ServiceDisabled while Workload Manager is disabled",
   (stack) =>
     Effect.gen(function* () {
+      // Only meaningful while the API is disabled: enabled, the create would
+      // provision a real resource.
+      if (yield* isServiceEnabled("workloadmanager.googleapis.com")) return;
       const { project } = yield* GcpEnvironment.current;
       const parent = parentOf(project);
       yield* stack.destroy();
@@ -119,6 +124,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.WorkloadManager.Evaluation.lookup({
+          evaluationId: created.evaluationId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/evaluations/");

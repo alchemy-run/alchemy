@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -148,11 +149,37 @@ export type AuthzExtension = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthzExtensionLookup
 >;
 
 /**
- * A Network Services AuthzExtension -- forwards requests to a callout
+ * Props for {@link AuthzExtension.lookup}: find an authz extension this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AuthzExtensionLookup {
+  /**
+   * AuthzExtension id (the `{authzExtension}` segment of
+   * `projects/{project}
+   * /locations/{location}/authzExtensions/{authzExtension}`). Must be 1-63
+   * characters and not start with a number.
+   */
+  authzExtensionId: string;
+  /**
+   * Location (`us-central1`, `global`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Services AuthzExtension — forwards requests to a callout
  * backend that makes an authorization decision for a load balancer.
  *
  * Changing `authzExtensionId`, `location`, or `loadBalancingScheme`
@@ -182,6 +209,19 @@ export type AuthzExtension = Resource<
  *   authority: "authz.example.com",
  *   timeout: "0.2s",
  *   failOpen: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing authz extension
+ * `AuthzExtension.lookup` references an authz extension Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * authz extension.
+ *
+ * **Example:** Reference an existing authz extension
+ * ```typescript
+ * const authzExtension = GCP.NetworkServices.AuthzExtension.lookup({
+ *   authzExtensionId: "my-authz-extension",
  * });
  * ```
  *
@@ -247,6 +287,15 @@ export const AuthzExtensionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ authzExtensionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, authzExtensionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

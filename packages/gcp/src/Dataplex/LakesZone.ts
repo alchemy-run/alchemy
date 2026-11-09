@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -150,11 +151,41 @@ export type LakesZone = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesZoneLookup
 >;
 
 /**
- * A Dataplex zone -- a logical grouping of assets inside a lake (`RAW` or
+ * Props for {@link LakesZone.lookup}: find a lakes zone this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LakesZoneLookup {
+  /**
+   * Zone id. Must contain only lowercase letters, numbers, and hyphens;
+   * start with a letter; end with a letter or number; and be 1-63
+   * characters. Unique across lakes in the project.
+   */
+  zoneId: string;
+  /**
+   * Region used when `lake` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent lake. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}` or the lake id
+   * (combined with `location`).
+   */
+  lake: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex zone — a logical grouping of assets inside a lake (`RAW` or
  * `CURATED`).
  *
  * Changing `lake`, `zoneId`, `location`, `type`, or `locationType`
@@ -177,6 +208,20 @@ export type LakesZone = Resource<
  *   lake: lake.name,
  *   zoneId: "landing-raw",
  *   discoverySpec: { enabled: false },
+ * });
+ * ```
+ *
+ * ### Looking up an existing lakes zone
+ * `LakesZone.lookup` references a lakes zone Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes zone.
+ *
+ * **Example:** Reference an existing lakes zone
+ * ```typescript
+ * const lakesZone = GCP.Dataplex.LakesZone.lookup({
+ *   zoneId: "my-zone",
+ *   lake: "my-lake",
  * });
  * ```
  *
@@ -326,6 +371,16 @@ export const LakesZoneProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ zoneId, location: lookupLocation, lake: lookupLake }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const lake = lakeOf(lookupLake ?? "", env.project, location);
+      const name = resourceName(lake, zoneId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
@@ -60,8 +60,25 @@ export interface DataApi extends Resource<
   DataApiProps,
   DataApiAttributes,
   never,
-  Providers
+  Providers,
+  DataApiLookup
 > {}
+
+/**
+ * Props for {@link DataApi.lookup}: find a database's Data API this
+ * stack doesn't manage by its project, branch and database.
+ */
+export interface DataApiLookup {
+  /** Neon project id. */
+  projectId: string;
+  /**
+   * Branch id.
+   * @default the project's default branch
+   */
+  branchId?: string;
+  /** Database name. */
+  database: string;
+}
 
 /**
  * Own a branch/database Data API singleton. This resource never grants an
@@ -75,6 +92,17 @@ export interface DataApi extends Resource<
  * const dataApi = yield* Neon.DataApi("Data", {
  *   branch, authProvider: "neon_auth", settings: { db_max_rows: 100 },
  * });
+ * ```
+ *
+ * ### Looking up an existing Data API
+ * `DataApi.lookup` references a Data API Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Data API
+ * ```typescript
+ * const api = Neon.DataApi.lookup({ projectId: "plain-wave-12345678", database: "neondb" });
+ * const url = api.url;
  * ```
  *
  * @resource
@@ -185,7 +213,15 @@ export const DataApiProvider = () =>
           return { action: "update" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    lookup: Effect.fn(function* ({ projectId, branchId, database }) {
+      const scope = yield* resolveBranchScope(
+        branchId === undefined ? { project: { projectId } } : { branch: { projectId, branchId } },
+      );
+      const current = yield* observe({ ...scope, database });
+      return current === undefined ? undefined : attributes({ ...scope, database }, current);
+    }),
+
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (
         !output &&
         !(olds?.branch?.projectId && olds.branch.branchId) &&
@@ -200,7 +236,7 @@ export const DataApiProvider = () =>
       const current = yield* observe(scope);
       if (!current) return undefined;
       const attrs = attributes(scope, current);
-      return output ? attrs : Unowned(attrs);
+      return output ? attrs : unownedUnlessPrevious(attrs, previous, "database");
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateDataApiRemoval(olds, news);

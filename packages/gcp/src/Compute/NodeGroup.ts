@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -118,8 +119,31 @@ export type NodeGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NodeGroupLookup
 >;
+
+/**
+ * Props for {@link NodeGroup.lookup}: find a node group this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NodeGroupLookup {
+  /**
+   * Group name (RFC1035, 1-63 characters).
+   */
+  nodeGroupName: string;
+  /**
+   * Zone the group lives in. `US-CENTRAL1-A` is accepted and normalized to
+   * `us-central1-a`.
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine sole-tenant node group.
@@ -148,6 +172,19 @@ export type NodeGroup = Resource<
  *   nodeTemplate: template.nodeTemplateName,
  *   initialNodeCount: 0,
  *   autoscalingPolicy: { mode: "ON", minNodes: 0, maxNodes: 3 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing node group
+ * `NodeGroup.lookup` references a node group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * node group.
+ *
+ * **Example:** Reference an existing node group
+ * ```typescript
+ * const nodeGroup = GCP.Compute.NodeGroup.lookup({
+ *   nodeGroupName: "my-node-group",
  * });
  * ```
  *
@@ -342,7 +379,15 @@ export const NodeGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ nodeGroupName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = normalizeZone(lookupZone);
+      const existing = yield* getByName(env.project, zone, nodeGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const nodeGroupName = yield* toName(id, olds?.nodeGroupName, output?.nodeGroupName);
       const zone = normalizeZone(olds?.zone ?? output?.zone);
@@ -350,7 +395,9 @@ export const NodeGroupProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "nodeGroupName");
     }),
 
     list: () =>

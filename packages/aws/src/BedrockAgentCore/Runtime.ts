@@ -109,11 +109,23 @@ export interface Runtime extends Resource<
      * Current status of the agent runtime (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  RuntimeLookup
 > {}
 
 /**
- * An Amazon Bedrock AgentCore Runtime -- serverless hosting for containerized
+ * Props for {@link Runtime.lookup}: find a runtime this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuntimeLookup {
+  /** The id of the existing runtime. */
+  agentRuntimeId: string;
+}
+
+/**
+ * An Amazon Bedrock AgentCore Runtime — serverless hosting for containerized
  * AI agents.
  *
  * A runtime deploys an agent (an ECR container image or managed-runtime code
@@ -152,6 +164,16 @@ export interface Runtime extends Resource<
  *     return HttpServerResponse.json({ contentType: response.contentType });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing runtime
+ * `Runtime.lookup` references a runtime Alchemy doesn't manage (created in the
+ * console or by another stack), found by `agentRuntimeId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing runtime
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.Runtime.lookup({ agentRuntimeId: "..." });
  * ```
  *
  * @resource
@@ -220,6 +242,15 @@ export const RuntimeProvider = () =>
             );
             return hydrated.filter((r) => r !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ agentRuntimeId }) {
+          const runtime = yield* getRuntimeOrUndefined(agentRuntimeId);
+          if (runtime === undefined || runtime.status === "DELETING") {
+            return undefined;
+          }
+          const attrs = toAttributes(runtime);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const runtime = output?.agentRuntimeId

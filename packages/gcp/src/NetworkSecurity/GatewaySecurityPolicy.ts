@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -78,11 +79,37 @@ export type GatewaySecurityPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GatewaySecurityPolicyLookup
 >;
 
 /**
- * A Gateway Security Policy -- a collection of
+ * Props for {@link GatewaySecurityPolicy.lookup}: find a gateway security
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface GatewaySecurityPolicyLookup {
+  /**
+   * GatewaySecurityPolicy id (the `{gatewaySecurityPolicy}` segment of
+   * `proj
+   * ects/{project}/locations/{location}/gatewaySecurityPolicies/{gatewaySecu
+   * rityPolicy}`).
+   */
+  gatewaySecurityPolicyId: string;
+  /**
+   * Region of the policy (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Gateway Security Policy — a collection of
  * GatewaySecurityPolicyRules used by Secure Web Proxy.
  *
  * The API has no labels field, so Alchemy stamps ownership into the
@@ -104,6 +131,19 @@ export type GatewaySecurityPolicy = Resource<
  *   gatewaySecurityPolicyId: "app-swp",
  *   location: "us-central1",
  *   tlsInspectionPolicy: inspection.name,
+ * });
+ * ```
+ *
+ * ### Looking up an existing gateway security policy
+ * `GatewaySecurityPolicy.lookup` references a gateway security policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared gateway security policy.
+ *
+ * **Example:** Reference an existing gateway security policy
+ * ```typescript
+ * const gatewaySecurityPolicy = GCP.NetworkSecurity.GatewaySecurityPolicy.lookup({
+ *   gatewaySecurityPolicyId: "my-gateway-security-policy",
  * });
  * ```
  *
@@ -168,6 +208,15 @@ export const GatewaySecurityPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ gatewaySecurityPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, gatewaySecurityPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

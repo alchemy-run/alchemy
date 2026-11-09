@@ -14,6 +14,7 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -130,7 +131,8 @@ type EksAdapterDeps =
   | Region
   | AWSEnvironment
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | SecureRandom.SecureRandom;
 
 /** Mint an EKS SigV4 bearer token (STS `GetCallerIdentity` presign). */
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
@@ -245,6 +247,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -263,6 +266,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -342,6 +346,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -356,6 +361,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 

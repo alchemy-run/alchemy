@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -148,11 +149,36 @@ export type LakesAsset = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesAssetLookup
 >;
 
 /**
- * A Dataplex asset -- a Cloud Storage bucket or BigQuery dataset managed
+ * Props for {@link LakesAsset.lookup}: find a lakes asset this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LakesAssetLookup {
+  /**
+   * Asset id. Must contain only lowercase letters, numbers, and hyphens;
+   * start with a letter; end with a letter or number; and be 1-63
+   * characters.
+   */
+  assetId: string;
+  /**
+   * Parent zone. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
+   */
+  zone: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex asset — a Cloud Storage bucket or BigQuery dataset managed
  * inside a lake zone.
  *
  * Changing `zone`, `assetId`, `location`, or the attached resource
@@ -182,6 +208,20 @@ export type LakesAsset = Resource<
  *     name: `projects/${projectNumber}/buckets/${bucket.bucketName}`,
  *   },
  *   discoverySpec: { enabled: false },
+ * });
+ * ```
+ *
+ * ### Looking up an existing lakes asset
+ * `LakesAsset.lookup` references a lakes asset Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes asset.
+ *
+ * **Example:** Reference an existing lakes asset
+ * ```typescript
+ * const lakesAsset = GCP.Dataplex.LakesAsset.lookup({
+ *   assetId: "my-asset",
+ *   zone: "us-central1-a",
  * });
  * ```
  *
@@ -325,6 +365,15 @@ export const LakesAssetProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ assetId, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = zoneOf(lookupZone ?? "");
+      const name = resourceNameOf(zone, assetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

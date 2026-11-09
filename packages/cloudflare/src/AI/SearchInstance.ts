@@ -295,11 +295,28 @@ export type SearchInstance = Resource<
   SearchInstanceProps,
   SearchInstanceAttributes,
   never,
-  Providers
+  Providers,
+  SearchInstanceLookup
 >;
 
 /**
- * A Cloudflare.AI. Search (formerly AutoRAG) instance -- a fully managed
+ * Props for {@link SearchInstance.lookup}: find an AI Search instance this
+ * stack doesn't manage, by its id within a namespace.
+ */
+export interface SearchInstanceLookup {
+  /**
+   * The id (name) of the existing instance.
+   */
+  instanceId: string;
+  /**
+   * The namespace the instance lives in.
+   * @default "default"
+   */
+  namespace?: string;
+}
+
+/**
+ * A Cloudflare.AI. Search (formerly AutoRAG) instance — a fully managed
  * retrieval-augmented generation pipeline over your own data.
  *
  * An instance continuously indexes a data source (an R2 bucket or a web
@@ -518,6 +535,22 @@ export type SearchInstance = Resource<
  * };
  * ```
  *
+ * ### Looking up an existing instance
+ * `SearchInstance.lookup` binds an instance Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `instanceId` within its
+ * `namespace` (`default` when omitted). It is read during plan/deploy and
+ * never created, updated or deleted.
+ *
+ * **Example:** In an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     SEARCH: Cloudflare.AI.SearchInstance.lookup({ instanceId: "docs-search" }),
+ *   },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  *
  * @resource
@@ -588,6 +621,12 @@ export const SearchInstanceProvider = () =>
         return replace;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const namespace = resolveNamespace(props.namespace);
+      const observed = yield* getInstance(accountId, namespace, props.instanceId);
+      return observed ? toAttributes(observed, accountId, namespace) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

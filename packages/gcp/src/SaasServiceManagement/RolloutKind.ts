@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -142,11 +143,36 @@ export type RolloutKind = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RolloutKindLookup
 >;
 
 /**
- * An App Lifecycle Manager rollout kind -- the policy a Rollout follows
+ * Props for {@link RolloutKind.lookup}: find a rollout kind this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RolloutKindLookup {
+  /**
+   * RolloutKind id (the `{rollout_kind_id}` segment of
+   * `projects/{project}/l
+   * ocations/{location}/rolloutKinds/{rollout_kind_id}`).
+   */
+  rolloutKindId: string;
+  /**
+   * Region of the rollout kind (`us-central1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An App Lifecycle Manager rollout kind — the policy a Rollout follows
  * when upgrading units of a UnitKind.
  *
  * `rolloutKindId`, `location`, and `unitKind` replace the rollout kind.
@@ -170,6 +196,19 @@ export type RolloutKind = Resource<
  *   rolloutKindId: kind.rolloutKindId,
  *   unitKind: storeKind.name,
  *   errorBudget: { allowedCount: 1, allowedPercentage: 5 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing rollout kind
+ * `RolloutKind.lookup` references a rollout kind Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * rollout kind.
+ *
+ * **Example:** Reference an existing rollout kind
+ * ```typescript
+ * const rolloutKind = GCP.SaasServiceManagement.RolloutKind.lookup({
+ *   rolloutKindId: "my-rollout-kind",
  * });
  * ```
  *
@@ -260,6 +299,15 @@ export const RolloutKindProvider = () =>
         extra: !sameRef(olds?.unitKind ?? output?.unitKind, news.unitKind),
       });
     }),
+
+    lookup: Effect.fn(function* ({ rolloutKindId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, rolloutKindId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -88,11 +88,24 @@ export type Project = Resource<
     configuredCapabilities: string[];
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 >;
 
 /**
- * A Google Cloud project -- the container for APIs, IAM, billing, and
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage by its identifiers.
+ */
+export interface ProjectLookup {
+  /**
+   * Globally unique project id. 6-30 lowercase letters, digits, or hyphens;
+   * must start with a letter and must not end with a hyphen.
+   */
+  projectId: string;
+}
+
+/**
+ * A Google Cloud project — the container for APIs, IAM, billing, and
  * other resources.
  *
  * `projectId` is globally unique and immutable; changing it replaces
@@ -135,6 +148,18 @@ export type Project = Resource<
  *   projectId: "my-app-sandbox",
  *   displayName: "Sandbox prod",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared project.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const project = GCP.ResourceManager.Project.lookup({
+ *   projectId: "my-project",
  * });
  * ```
  *
@@ -295,6 +320,12 @@ export const ProjectProvider = () =>
         previousId !== undefined && news.projectId !== undefined && nextId !== previousId;
       if (!idChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({ projectId }) {
+      const existing = yield* observe(undefined, projectId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

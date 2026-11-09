@@ -1,0 +1,105 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "scratch",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "CMD",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "exec"
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              ""
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 4,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "a"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 5,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 6,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 7,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 8,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 9,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "abc 123",
+              "♥",
+              "☃",
+              "\" \\ / \b \f \n \r \t \u0000"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

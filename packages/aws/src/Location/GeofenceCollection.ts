@@ -56,8 +56,18 @@ export interface GeofenceCollection extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GeofenceCollectionLookup
 > {}
+
+/**
+ * Props for {@link GeofenceCollection.lookup}: find a geofence collection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GeofenceCollectionLookup {
+  /** The collection name of the existing geofence collection. */
+  collectionName: string;
+}
 
 /**
  * An Amazon Location Service geofence collection. A geofence collection stores
@@ -78,6 +88,16 @@ export interface GeofenceCollection extends Resource<
  *   kmsKeyId: "alias/my-key",
  *   description: "Encrypted geofence collection",
  * });
+ * ```
+ *
+ * ### Looking up an existing geofence collection
+ * `GeofenceCollection.lookup` references a geofence collection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `collectionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing geofence collection
+ * ```typescript
+ * const existing = AWS.Location.GeofenceCollection.lookup({ collectionName: "my-geofence-collection" });
  * ```
  *
  * @resource
@@ -127,6 +147,11 @@ export const GeofenceCollectionProvider = () =>
               (attrs): attrs is GeofenceCollection["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ collectionName }) {
+          const state = yield* readCollection(collectionName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const collectionName =
             output?.collectionName ?? (yield* createCollectionName(id, olds ?? {}));

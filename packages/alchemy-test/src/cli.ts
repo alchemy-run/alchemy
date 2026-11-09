@@ -39,6 +39,7 @@ import { parsePlan } from "./Plan.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
 import { captureStrayOutput } from "./StrayOutput.ts";
+import { worktreeStage } from "./WorktreeStage.ts";
 
 const paths = Argument.String("paths").pipe(
   Argument.withDescription("Test files or directories (default: ./test)"),
@@ -222,6 +223,17 @@ const rootCommand = Command.make(
       process.env.NO_COLOR = "1";
       process.env.FORCE_COLOR = "0";
     });
+    // A linked git worktree defaults to its own stage, so two worktrees of
+    // one developer running the same suite never share deployments. An
+    // explicit `--stage` or ALCHEMY_TEST_STAGE wins.
+    if (Option.isNone(args.stage) && !process.env.ALCHEMY_TEST_STAGE) {
+      const stage = yield* worktreeStage(yield* Effect.sync(() => process.cwd()));
+      if (stage !== undefined) {
+        yield* Effect.sync(() => {
+          process.env.ALCHEMY_TEST_STAGE = stage;
+        });
+      }
+    }
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.

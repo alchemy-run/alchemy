@@ -78,11 +78,21 @@ export interface CustomDataIdentifier extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  CustomDataIdentifierLookup
 > {}
 
 /**
- * An Amazon Macie custom data identifier -- a regex-based detection criterion
+ * Props for {@link CustomDataIdentifier.lookup}: find a custom data identifier this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CustomDataIdentifierLookup {
+  /** The id of the existing custom data identifier. */
+  customDataIdentifierId: string;
+}
+
+/**
+ * An Amazon Macie custom data identifier — a regex-based detection criterion
  * (with optional keywords, ignore words, and severity thresholds) that
  * classification jobs and automated discovery use to detect organization-
  * specific sensitive data. Requires Macie to be enabled for the account (see
@@ -109,6 +119,16 @@ export interface CustomDataIdentifier extends Resource<
  *     { occurrencesThreshold: 25, severity: "HIGH" },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing custom data identifier
+ * `CustomDataIdentifier.lookup` references a custom data identifier Alchemy doesn't manage (created in the
+ * console or by another stack), found by `customDataIdentifierId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing custom data identifier
+ * ```typescript
+ * const existing = AWS.Macie2.CustomDataIdentifier.lookup({ customDataIdentifierId });
  * ```
  */
 const CustomDataIdentifierResource = Resource<CustomDataIdentifier>(
@@ -156,6 +176,10 @@ export const CustomDataIdentifierProvider = () =>
       return {
         stables: ["id", "arn", "name"],
 
+        lookup: Effect.fn(function* ({ customDataIdentifierId }) {
+          const live = yield* getIdentifier(customDataIdentifierId);
+          return live ? buildIdentifierAttrs(customDataIdentifierId, live) : undefined;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.id) return undefined;
           const live = yield* getIdentifier(output.id);

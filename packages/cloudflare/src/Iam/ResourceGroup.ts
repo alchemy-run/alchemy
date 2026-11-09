@@ -70,11 +70,31 @@ export type ResourceGroup = Resource<
   ResourceGroupProps,
   ResourceGroupAttributes,
   never,
-  Providers
+  Providers,
+  ResourceGroupLookup
 >;
 
 /**
- * A Cloudflare IAM resource group -- a named set of account resources
+ * Props for {@link ResourceGroup.lookup}: find a resource group this stack
+ * doesn't manage, by its id or its name.
+ */
+export type ResourceGroupLookup =
+  | {
+      /**
+       * The id of the existing resource group.
+       */
+      resourceGroupId: string;
+    }
+  | {
+      /**
+       * The name of the existing resource group. Names are not unique; the
+       * group with the lowest id is used.
+       */
+      name: string;
+    };
+
+/**
+ * A Cloudflare IAM resource group — a named set of account resources
  * (zones, or the whole account) that fine-grained policies attach to.
  *
  * Resource groups pair with permission groups inside a user group policy:
@@ -123,6 +143,26 @@ export type ResourceGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing group
+ * `ResourceGroup.lookup` references a group Alchemy doesn't manage (created
+ * in the dashboard or by another stack), found by `resourceGroupId` or
+ * `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Grant a user group access to an existing resource group
+ * ```typescript
+ * const zones = Cloudflare.Iam.ResourceGroup.lookup({ name: "production-zones" });
+ * yield* Cloudflare.Iam.UserGroup("Readers", {
+ *   policies: [
+ *     {
+ *       access: "allow",
+ *       permissionGroups: [readOnlyPermissionGroupId],
+ *       resourceGroups: [zones.resourceGroupId],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/scoped-roles/
  *
  * @resource
@@ -141,6 +181,14 @@ export const ResourceGroupProvider = () =>
   Provider.succeed(ResourceGroup, {
     stables: ["resourceGroupId", "accountId"],
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "resourceGroupId" in props
+          ? yield* getResourceGroup(accountId, props.resourceGroupId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

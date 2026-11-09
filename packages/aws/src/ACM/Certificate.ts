@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 
@@ -187,8 +188,32 @@ export interface Certificate extends Resource<
     notAfter: Date | undefined;
   },
   CertificateBinding,
-  Providers
+  Providers,
+  CertificateLookup
 > {}
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack doesn't
+ * manage, by its ARN or by the domain it was issued for.
+ */
+export type CertificateLookup =
+  | {
+      /** The certificate's ARN. */
+      certificateArn: string;
+    }
+  | {
+      /**
+       * The certificate's primary domain name. Only issued certificates match;
+       * the lookup fails when several do.
+       */
+      domainName: string;
+      /**
+       * The region the certificate lives in, as on a declared
+       * `Certificate`: CloudFront only accepts certificates in `us-east-1`.
+       * @default "us-east-1"
+       */
+      region?: string;
+    };
 
 /**
  * Effective SAN set: declared props plus bound SANs (see
@@ -303,6 +328,20 @@ export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")
  *       ),
  *     ),
  * );
+ * ```
+ *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage (created in the
+ * console or by another stack), found by `certificateArn`, or the `domainName` an
+issued certificate covers. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Serve a distribution with an existing certificate
+ * ```typescript
+ * const cert = AWS.ACM.Certificate.lookup({
+ *   domainName: "www.example.com",
+ *   region: "us-east-1",
+ * });
  * ```
  *
  * @resource
@@ -518,6 +557,33 @@ export const CertificateProvider = () =>
           // `certificateTransparencyLoggingPreference` is intentionally NOT
           // a replacement trigger -- it is updated in place via
           // `UpdateCertificateOptions` in `reconcile`.
+        }),
+        lookup: Effect.fn(function* (props) {
+          const certificateArn =
+            "certificateArn" in props
+              ? props.certificateArn
+              : (yield* withCertRegion(props.region)(
+                  Effect.gen(function* () {
+                    const issued = yield* acm.listCertificates
+                      .items({ CertificateStatuses: ["ISSUED"] })
+                      .pipe(
+                        Stream.filter((summary) => summary.DomainName === props.domainName),
+                        Stream.runCollect,
+                        Effect.map((chunk) => Array.from(chunk)),
+                      );
+                    return yield* single(
+                      "AWS.ACM.Certificate",
+                      props.domainName,
+                      issued,
+                      (summary) => summary.CertificateArn,
+                    );
+                  }),
+                ))?.CertificateArn;
+          if (certificateArn === undefined) return undefined;
+          const certificate = yield* describeCertificate(certificateArn);
+          if (!certificate?.CertificateArn) return undefined;
+          const tags = yield* listCertificateTags(certificate.CertificateArn);
+          return toAttrs({ domainName: certificate.DomainName! }, certificate, tags);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // `olds.domainName` may be `undefined` when a `creating` row was

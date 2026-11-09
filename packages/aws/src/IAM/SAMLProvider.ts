@@ -59,8 +59,18 @@ export interface SAMLProvider extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SAMLProviderLookup
 > {}
+
+/**
+ * Props for {@link SAMLProvider.lookup}: find a SAML provider this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface SAMLProviderLookup {
+  /** The ARN of the existing SAML provider. */
+  samlProviderArn: string;
+}
 
 /**
  * An IAM SAML identity provider.
@@ -73,6 +83,17 @@ export interface SAMLProvider extends Resource<
  * const provider = yield* SAMLProvider("WorkforceSaml", {
  *   samlMetadataDocument: "<EntityDescriptor>...</EntityDescriptor>",
  * });
+ * ```
+ *
+ * ### Looking up an existing SAML provider
+ * `SAMLProvider.lookup` references a SAML provider Alchemy doesn't manage (created in the
+ * console or by another stack), found by `samlProviderArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Trust an existing SAML provider
+ * ```typescript
+ * const okta = AWS.IAM.SAMLProvider.lookup({ samlProviderArn });
+ * const providerArn = okta.samlProviderArn;
  * ```
  *
  * @resource
@@ -110,6 +131,21 @@ export const SAMLProviderProvider = () =>
       if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news))) {
         return { action: "replace" } as const;
       }
+    }),
+    lookup: Effect.fn(function* ({ samlProviderArn }) {
+      const response = yield* iam
+        .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
+        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+      if (!response) return undefined;
+      const tags = yield* iam.listSAMLProviderTags({ SAMLProviderArn: samlProviderArn });
+      return {
+        samlProviderArn,
+        name: samlProviderArn.split("/").at(-1)!,
+        samlProviderUUID: response.SAMLProviderUUID,
+        samlMetadataDocument: response.SAMLMetadataDocument,
+        assertionEncryptionMode: response.AssertionEncryptionMode,
+        tags: toTagRecord(tags.Tags),
+      };
     }),
     read: Effect.fn(function* ({ output }) {
       if (!output) {

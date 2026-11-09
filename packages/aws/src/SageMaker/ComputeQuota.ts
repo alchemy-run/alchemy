@@ -120,11 +120,21 @@ export interface ComputeQuota extends Resource<
     queueName: string;
   },
   never,
-  Providers
+  Providers,
+  ComputeQuotaLookup
 > {}
 
 /**
- * A SageMaker HyperPod compute allocation (task governance) -- reserves
+ * Props for {@link ComputeQuota.lookup}: find a compute quota this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComputeQuotaLookup {
+  /** The compute quota id of the existing compute quota. */
+  computeQuotaId: string;
+}
+
+/**
+ * A SageMaker HyperPod compute allocation (task governance) — reserves
  * instance capacity on an EKS-orchestrated HyperPod cluster for a team,
  * with fair-share weights and borrow/lend rules for idle compute.
  * ### Creating Compute Allocations
@@ -140,6 +150,16 @@ export interface ComputeQuota extends Resource<
  *     ResourceSharingConfig: { Strategy: "Lend", BorrowLimit: 50 },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing compute quota
+ * `ComputeQuota.lookup` references a compute quota Alchemy doesn't manage (created in the
+ * console or by another stack), found by `computeQuotaId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing compute quota
+ * ```typescript
+ * const existing = AWS.SageMaker.ComputeQuota.lookup({ computeQuotaId: "my-compute-quota" });
  * ```
  *
  * @resource
@@ -294,6 +314,15 @@ export const ComputeQuotaProvider = () =>
               ];
             });
           }),
+        lookup: Effect.fn(function* ({ computeQuotaId: quotaId }) {
+          if (quotaId === undefined) return undefined;
+          const described = yield* describeQuotaOrUndefined(quotaId);
+          if (!described || described.Status === "Deleting" || described.Status === "Deleted") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const quotaId =
             output?.computeQuotaId ??

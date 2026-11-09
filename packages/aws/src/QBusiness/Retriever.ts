@@ -93,11 +93,30 @@ export interface Retriever extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RetrieverLookup
 > {}
 
 /**
- * An Amazon Q Business retriever -- the query engine that fetches relevant
+ * Props for {@link Retriever.lookup}: find a retriever this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type RetrieverLookup =
+  | {
+      /** The application the retriever belongs to. */
+      applicationId: string;
+      /** The id of the existing retriever. */
+      retrieverId: string;
+    }
+  | {
+      /** The application the retriever belongs to. */
+      applicationId: string;
+      /** The display name of the existing retriever. */
+      displayName: string;
+    };
+
+/**
+ * An Amazon Q Business retriever — the query engine that fetches relevant
  * passages from an index (native or Kendra) to ground chat responses.
  *
  * ### Creating Retrievers
@@ -124,6 +143,16 @@ export interface Retriever extends Resource<
  *     kendraIndexConfiguration: { indexId: kendraIndex.id },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing retriever
+ * `Retriever.lookup` references a retriever Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` with `retrieverId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing retriever
+ * ```typescript
+ * const existing = AWS.QBusiness.Retriever.lookup({ applicationId, displayName: "main" });
  * ```
  *
  * @resource
@@ -235,6 +264,13 @@ export const RetrieverProvider = () =>
         // without iterating every application -- treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "retrieverId" in props
+              ? yield* readRetrieverById(props.applicationId, props.retrieverId)
+              : yield* findRetrieverByName(props.applicationId, props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           if (applicationId === undefined) return undefined;

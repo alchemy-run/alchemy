@@ -71,8 +71,10 @@ const aliasTargetOf = (target: DnsHostnameTarget) => ({
  * - `alias` -- `AWS.Route53.Record` `id` (a lone `A` alias or `CNAME`), or
  *   `id-A` / `id-AAAA` for a dual-stack alias; `id-Addresses`
  *   (`AWS.Route53.RecordList`) for an address target.
- * - `aliasSet` -- `AWS.Route53.Records` `id`.
- * - `records` -- `AWS.Route53.RecordList` `id`.
+ * - `aliasSet` — `AWS.Route53.Records` `id`, plus `id-AAAA` for a
+ *   dual-stack alias set. The `AAAA` set follows the `A` set's names
+ *   (declared and bound) and zone, so bindings go to the `A` set only.
+ * - `records` — `AWS.Route53.RecordList` `id`.
  *
  * `hostedZoneId` is always passed (even `undefined`), exactly as before.
  */
@@ -99,17 +101,30 @@ export const adapter = {
               aliasTarget: aliasTargetOf(target),
             }),
           ),
-  aliasSet: (id, { zone: hostedZoneId, names, target }) =>
-    Records(id, {
-      hostedZoneId,
-      ...(names === undefined ? {} : { names }),
-      ...(target.route53Alias === undefined
-        ? {
-            type: "CNAME" as const,
-            ttl: CNAME_TTL,
-            records: [target.hostname as string],
-          }
-        : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
+  aliasSet: (id, { zone: hostedZoneId, names, target, ipv6 }) =>
+    Effect.gen(function* () {
+      const set = yield* Records(id, {
+        hostedZoneId,
+        ...(names === undefined ? {} : { names }),
+        ...(target.route53Alias === undefined
+          ? {
+              type: "CNAME" as const,
+              ttl: CNAME_TTL,
+              records: [target.hostname as string],
+            }
+          : { type: "A" as const, aliasTarget: aliasTargetOf(target) }),
+      });
+      if (ipv6 && target.route53Alias !== undefined) {
+        // Bound names only reach the `A` set, so the `AAAA` set reads the
+        // set's resolved names (declared + bound) and zone from it.
+        yield* Records(`${id}-AAAA`, {
+          hostedZoneId: set.hostedZoneId as unknown as string,
+          names: set.names as unknown as string[],
+          type: "AAAA",
+          aliasTarget: aliasTargetOf(target),
+        });
+      }
+      return set;
     }),
   records: (id, { zone: hostedZoneId, records, retain }) =>
     RecordList(id, { hostedZoneId, records: records as DnsRecord[] }).pipe(

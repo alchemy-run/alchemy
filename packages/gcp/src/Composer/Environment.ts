@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -166,8 +167,34 @@ export type Environment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 >;
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EnvironmentLookup {
+  /**
+   * Environment id (the `{environment}` segment of
+   * `projects/{project}/locations/{location}/environments/{environment}`).
+   * Must start with a lowercase letter, be 1-63 characters, and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  environmentId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Composer environment (Managed Apache Airflow).
@@ -230,6 +257,19 @@ export type Environment = Resource<
  *       envVariables: { EXAMPLE_VAR: "test" },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * environment.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const environment = GCP.Composer.Environment.lookup({
+ *   environmentId: "my-environment",
  * });
  * ```
  *
@@ -843,6 +883,15 @@ export const EnvironmentProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ environmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, environmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -100,11 +100,21 @@ export interface EmailIdentity extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  EmailIdentityLookup
 > {}
 
 /**
- * An Amazon SES v2 email identity -- a verified email address or domain that
+ * Props for {@link EmailIdentity.lookup}: find an email identity this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EmailIdentityLookup {
+  /** The email address or domain of the existing identity. */
+  emailIdentity: string;
+}
+
+/**
+ * An Amazon SES v2 email identity — a verified email address or domain that
  * you send email from.
  *
  * Creating the identity starts verification: email-address identities receive
@@ -191,6 +201,19 @@ export interface EmailIdentity extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing email identity
+ * `EmailIdentity.lookup` references an email identity Alchemy doesn't manage (created in the
+ * console or by another stack), found by `emailIdentity`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Send from an existing verified domain
+ * ```typescript
+ * const domain = AWS.SES.EmailIdentity.lookup({ emailIdentity: "example.com" });
+ *
+ * // init
+ * const sendEmail = yield* AWS.SES.SendEmail(domain);
  * ```
  *
  * @resource
@@ -287,6 +310,16 @@ export const EmailIdentityProvider = () =>
             );
             return attrs.filter((a) => a !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ emailIdentity }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* getIdentity(emailIdentity);
+          if (!found) return undefined;
+          return {
+            ...toAttributes(emailIdentity, identityArnOf(region, accountId, emailIdentity), found),
+            configuration: observeIdentityConfiguration(found, undefined, toTagRecord(found.Tags)),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

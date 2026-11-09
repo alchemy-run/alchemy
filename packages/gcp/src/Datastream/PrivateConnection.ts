@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -115,8 +116,33 @@ export type PrivateConnection = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateConnectionLookup
 >;
+
+/**
+ * Props for {@link PrivateConnection.lookup}: find a private connection
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface PrivateConnectionLookup {
+  /**
+   * Private connection id (the `{privateConnection}` segment of
+   * `projects/{p
+   * roject}/locations/{location}/privateConnections/{privateConnection}`).
+   */
+  privateConnectionId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Datastream private connection: VPC peering or a PSC interface
@@ -139,6 +165,19 @@ export type PrivateConnection = Resource<
  *     subnet: "10.9.0.0/29",
  *   },
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing private connection
+ * `PrivateConnection.lookup` references a private connection Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared private connection.
+ *
+ * **Example:** Reference an existing private connection
+ * ```typescript
+ * const privateConnection = GCP.Datastream.PrivateConnection.lookup({
+ *   privateConnectionId: "my-private-connection",
  * });
  * ```
  *
@@ -250,6 +289,15 @@ export const PrivateConnectionProvider = () =>
             previousLabels !== nextLabels),
       });
     }),
+
+    lookup: Effect.fn(function* ({ privateConnectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, privateConnectionId);
+      const existing = yield* getPrivateConnectionByName(name);
+      if (existing === undefined) return undefined;
+      return toPrivateConnectionAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -15,6 +15,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -156,8 +157,23 @@ export interface Volume extends Resource<
     state: ec2.VolumeState;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 > {}
+
+/**
+ * Props for {@link Volume.lookup}: find an EBS volume this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type VolumeLookup =
+  | {
+      /** The volume's id. */
+      volumeId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * An Elastic Block Store (EBS) volume -- durable block storage you attach to an
  * EC2 instance via a {@link VolumeAttachment}. Volumes live in a single
@@ -222,6 +238,23 @@ export interface Volume extends Resource<
  *
  * When you create a volume from a snapshot, `size` defaults to the snapshot's
  * size and can only be grown, never shrunk.
+ *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in the
+ * console or by another stack), found by `volumeId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Attach an existing volume
+ * ```typescript
+ * const data = AWS.EC2.Volume.lookup({ name: "data" });
+ *
+ * yield* AWS.EC2.VolumeAttachment("Data", {
+ *   volumeId: data.volumeId,
+ *   instanceId: instance.instanceId,
+ *   device: "/dev/sdf",
+ * });
+ * ```
  *
  * @resource
  */
@@ -292,6 +325,25 @@ export const VolumeProvider = () =>
           if (olds.size !== undefined && news.size !== undefined && news.size < olds.size) {
             return { action: "replace" };
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeVolumes(
+              "volumeId" in props
+                ? { VolumeIds: [props.volumeId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(Effect.catchTag("InvalidVolume.NotFound", () => Effect.succeed({ Volumes: [] })));
+          const match = yield* single(
+            "AWS.EC2.Volume",
+            "volumeId" in props ? props.volumeId : `Name=${props.name}`,
+            (found.Volumes ?? []).filter((x) => x.State !== "deleted" && x.State !== "deleting"),
+            (x) => x.VolumeId,
+          );
+          if (!match?.VolumeId) return undefined;
+          return toVolumeAttributes(match, region, accountId);
         }),
 
         read: Effect.fn(function* ({ id, instanceId, output }) {

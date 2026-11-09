@@ -75,11 +75,21 @@ export interface Asset extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AssetLookup
 > {}
 
 /**
- * An AWS IoT SiteWise asset -- an instance of an asset model representing
+ * Props for {@link Asset.lookup}: find an asset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AssetLookup {
+  /** The id of the existing asset. */
+  assetId: string;
+}
+
+/**
+ * An AWS IoT SiteWise asset — an instance of an asset model representing
  * a physical piece of industrial equipment or a logical grouping.
  *
  * Asset creation and updates are asynchronous (`CREATING`/`UPDATING` ->
@@ -101,6 +111,16 @@ export interface Asset extends Resource<
  *   assetModelId: model.assetModelId,
  *   assetDescription: "Pump #1 on the west line",
  * });
+ * ```
+ *
+ * ### Looking up an existing asset
+ * `Asset.lookup` references an asset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `assetId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing asset
+ * ```typescript
+ * const turbine = AWS.IoTSiteWise.Asset.lookup({ assetId });
  * ```
  *
  * @resource
@@ -238,6 +258,9 @@ export const AssetProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* ({ assetId }) {
+          return (yield* readAssetById(assetId))?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.assetId
             ? yield* readAssetById(output.assetId)

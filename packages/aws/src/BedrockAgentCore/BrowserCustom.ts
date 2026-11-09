@@ -71,11 +71,23 @@ export interface BrowserCustom extends Resource<
      * Current status of the browser (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  BrowserCustomLookup
 > {}
 
 /**
- * A custom Amazon Bedrock AgentCore Browser -- a managed, isolated cloud
+ * Props for {@link BrowserCustom.lookup}: find a browser custom this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface BrowserCustomLookup {
+  /** The id of the existing browser custom. */
+  browserId: string;
+}
+
+/**
+ * A custom Amazon Bedrock AgentCore Browser — a managed, isolated cloud
  * browser that agents drive to interact with websites.
  *
  * A custom browser controls the sandbox's network mode, execution role, and
@@ -99,6 +111,16 @@ export interface BrowserCustom extends Resource<
  *     s3Location: { bucket: bucket.bucketName, prefix: "sessions/" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing browser custom
+ * `BrowserCustom.lookup` references a browser custom Alchemy doesn't manage (created in the
+ * console or by another stack), found by `browserId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing browser custom
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.BrowserCustom.lookup({ browserId: "..." });
  * ```
  *
  * @resource
@@ -155,6 +177,13 @@ export const BrowserCustomProvider = () =>
             );
             return hydrated.filter((b) => b !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ browserId }) {
+          const browser = yield* getLiveOrUndefined(browserId);
+          if (browser === undefined) return undefined;
+          const attrs = toAttributes(browser);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const browser = output?.browserId

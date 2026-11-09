@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -89,11 +90,37 @@ export type Glossary = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlossaryLookup
 >;
 
 /**
- * A Dataplex Glossary -- a collection of GlossaryCategories and
+ * Props for {@link Glossary.lookup}: find a glossary this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface GlossaryLookup {
+  /**
+   * Glossary id (the `{glossary}` segment of
+   * `projects/{project}/locations/{location}/glossaries/{glossary}`). Must
+   * be 1-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  glossaryId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex Glossary — a collection of GlossaryCategories and
  * GlossaryTerms.
  *
  * Changing `glossaryId` or `location` replaces the glossary. Description,
@@ -124,6 +151,16 @@ export type Glossary = Resource<
  *   description: "glossary v2",
  *   labels: { env: "prod", team: "data" },
  * });
+ * ```
+ *
+ * ### Looking up an existing glossary
+ * `Glossary.lookup` references a glossary Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared glossary.
+ *
+ * **Example:** Reference an existing glossary
+ * ```typescript
+ * const glossary = GCP.Dataplex.Glossary.lookup({ glossaryId: "my-glossary" });
  * ```
  *
  * @resource
@@ -191,6 +228,15 @@ export const GlossaryProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ glossaryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, glossaryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

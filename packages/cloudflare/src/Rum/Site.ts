@@ -91,7 +91,33 @@ export type SiteAttributes = {
   created: string | undefined;
 };
 
-export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>;
+export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers, SiteLookup>;
+
+/**
+ * Props for {@link Site.lookup}: find a Web Analytics site this stack doesn't
+ * manage, by its site tag, the host it measures, or the zone it measures.
+ */
+export type SiteLookup =
+  | {
+      /**
+       * The site tag of the existing site.
+       */
+      siteTag: string;
+    }
+  | {
+      /**
+       * The hostname the existing site measures. Cloudflare allows several
+       * sites per host; the oldest is used.
+       */
+      host: string;
+    }
+  | {
+      /**
+       * The zone the existing (orange-clouded) site measures. The oldest
+       * zone site is used.
+       */
+      zoneTag: string;
+    };
 
 /**
  * A Cloudflare Web Analytics (RUM) site.
@@ -132,6 +158,22 @@ export type Site = Resource<TypeId, SiteProps, SiteAttributes, never, Providers>
  *   zoneTag: zone.zoneId,
  *   autoInstall: true,
  *   lite: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing site
+ * `Site.lookup` references a site Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `siteTag`, `host` or `zoneTag`.
+ * It is read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a rule to an existing site
+ * ```typescript
+ * const site = Cloudflare.Rum.Site.lookup({ host: "www.example.com" });
+ * yield* Cloudflare.Rum.Rule("SkipAdmin", {
+ *   rulesetId: site.rulesetId.as<string>(),
+ *   host: "www.example.com",
+ *   paths: ["/admin*"],
+ *   inclusive: false,
  * });
  * ```
  *
@@ -176,6 +218,18 @@ export const SiteProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "siteTag" in props
+          ? yield* getSite(accountId, props.siteTag)
+          : yield* findSite(
+              accountId,
+              "host" in props ? props.host : undefined,
+              "zoneTag" in props ? props.zoneTag : undefined,
+            );
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

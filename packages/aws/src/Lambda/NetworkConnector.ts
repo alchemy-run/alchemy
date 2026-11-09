@@ -112,12 +112,27 @@ export interface NetworkConnector extends Resource<
     lastModified?: string;
   },
   never,
-  Providers
+  Providers,
+  NetworkConnectorLookup
 > {}
 
 /**
- * A Lambda network connector that gives Lambda compute resources -- notably
- * {@link MicrovmImage} MicroVMs -- a managed egress path into your VPC. The
+ * Props for {@link NetworkConnector.lookup}: find a network connector this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type NetworkConnectorLookup =
+  | {
+      /** The id or ARN of the existing connector. */
+      networkConnectorId: string;
+    }
+  | {
+      /** The name of the existing connector. */
+      name: string;
+    };
+
+/**
+ * A Lambda network connector that gives Lambda compute resources — notably
+ * {@link MicrovmImage} MicroVMs — a managed egress path into your VPC. The
  * connector provisions elastic network interfaces (ENIs) in the subnets you
  * specify so workloads can reach private resources such as databases, caches,
  * and internal APIs.
@@ -160,6 +175,16 @@ export interface NetworkConnector extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing network connector
+ * `NetworkConnector.lookup` references a network connector Alchemy doesn't manage (created in the
+ * console or by another stack), found by `networkConnectorId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing network connector
+ * ```typescript
+ * const vpc = AWS.Lambda.NetworkConnector.lookup({ name: "private" });
+ * ```
+ *
  * @resource
  */
 export const NetworkConnector = Resource<NetworkConnector>("AWS.Lambda.NetworkConnector");
@@ -177,6 +202,12 @@ export const NetworkConnectorProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const connector = yield* getConnector(
+        "networkConnectorId" in props ? props.networkConnectorId : props.name,
+      );
+      return connector ? toAttrs(connector) : undefined;
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const identifier = output?.networkConnectorId ?? output?.networkConnectorArn;
       const connector = identifier

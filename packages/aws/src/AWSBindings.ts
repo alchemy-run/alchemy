@@ -6,8 +6,9 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
-import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import { CurrentRuntimeContext, OidcTokenError } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -21,6 +22,7 @@ import { DEFAULT_LOCAL_ENDPOINT } from "./AuthProvider.ts";
 import { Credentials, makeAssumeRoleResolver } from "./Credentials.ts";
 import { AWSEnvironment } from "./Environment.ts";
 import { AccessKey } from "./IAM/AccessKey.ts";
+import { OpenIDConnectProvider } from "./IAM/OpenIDConnectProvider.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
 import { User } from "./IAM/User.ts";
@@ -35,6 +37,10 @@ import { CurrentRegion } from "./Region.ts";
  *   Alchemy creates a Role that trusts that account's Google ID tokens, puts
  *   the statements on the Role, and the host assumes it with
  *   `AssumeRoleWithWebIdentity`. No key is created;
+ * - the host runs on Fly Machines (a Fly Service): Alchemy creates a Role
+ *   that trusts the App's Fly OIDC tokens, puts the statements on the Role,
+ *   and the host assumes it with `AssumeRoleWithWebIdentity`. No key is
+ *   created;
  * - any other host (a Cloudflare Worker, Cloud Run, a GKE pod): Alchemy
  *   creates an IAM User and AccessKey that may assume a Role, puts the
  *   statements on the Role, and binds the key into the host's env;
@@ -113,6 +119,9 @@ const WEB_IDENTITY_ROLE_ENV = "ALCHEMY_AWS_WEB_IDENTITY_ROLE_ARN";
 /** The `aud` a host requests on the Google ID tokens it exchanges with STS. */
 const GOOGLE_ID_TOKEN_AUDIENCE = "sts.amazonaws.com";
 
+/** The `aud` a Fly host requests on the OIDC tokens it exchanges with STS. */
+const FLY_OIDC_AUDIENCE = "sts.amazonaws.com";
+
 /**
  * Whether a host runs its code as an IAM role: Lambda, ECS, EC2,
  * AutoScaling, AppRunner, Batch, or a Kubernetes workload on an EKS cluster
@@ -161,7 +170,17 @@ export const runsAsGoogleServiceAccount = (host: ResourceLike): boolean => {
 };
 
 /**
- * The name of the Role a Google-service-account host assumes:
+ * Whether a host runs its code on Fly Machines, which mint OIDC tokens
+ * signed by `https://oidc.fly.io/{org}`: a Fly Service. Not a Fly Sprite.
+ * Deploy-time only.
+ *
+ * TODO: don't hard-code Fly host types in the AWS package, as with
+ * {@link runsAsGoogleServiceAccount}.
+ */
+export const runsOnFlyMachines = (host: ResourceLike): boolean => host.Type === "Fly.Service";
+
+/**
+ * The name of the Role a federated or key-holding host assumes:
  * `{stack}-{host}-{stage}-` plus a hash of the host's FQN, at most 64
  * characters. Derived from the host alone so the host's env can name the
  * Role without depending on it.
@@ -233,6 +252,7 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
   const IamUser = yield* User;
   const IamAccessKey = yield* AccessKey;
   const IamRole = yield* Role;
+  const IamOidcProvider = yield* OpenIDConnectProvider;
 
   return (label: TemplateStringsArray, ...args: unknown[]) =>
     Effect.fn(function* (data: HostBinding) {
@@ -305,18 +325,85 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         return;
       }
 
-      // The user may assume any role that trusts it; the role's trust policy
-      // restricts assumption to this user, which avoids a User<->Role ARN cycle.
+      if (runsOnFlyMachines(host)) {
+        const { orgSlug, appName } = host as unknown as {
+          orgSlug: Output.Output<string>;
+          appName: Output.Output<string>;
+        };
+        // IAM keeps one provider per issuer URL per account, shared by every
+        // stack whose Fly hosts are in this organization: it is adopted when
+        // it exists and never deleted.
+        const provider = yield* IamOidcProvider("FlyOidcProvider", {
+          url: Output.interpolate`https://oidc.fly.io/${orgSlug}`,
+          clientIDList: [FLY_OIDC_AUDIENCE],
+        }).pipe(RemovalPolicy.retain());
+        const roleName = yield* federatedRoleName(host);
+        const role = yield* IamRole(`${id}Role`, {
+          roleName,
+          assumeRolePolicyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { Federated: provider.openIDConnectProviderArn },
+                Action: ["sts:AssumeRoleWithWebIdentity"],
+                // A Fly token names its caller `{org}:{app}:{machine}`: only
+                // this App's Machines may assume the Role.
+                Condition: Output.all(orgSlug, appName).pipe(
+                  Output.map(([org, app]) => ({
+                    StringEquals: { [`oidc.fly.io/${org}:aud`]: FLY_OIDC_AUDIENCE },
+                    StringLike: { [`oidc.fly.io/${org}:sub`]: `${org}:${app}:*` },
+                  })),
+                ),
+              },
+            ],
+          },
+        });
+        if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
+          yield* (role as unknown as BindTarget).bind(
+            labelled("Allow", label),
+            host,
+            ...args,
+          )({ policyStatements: data.policyStatements });
+        }
+        yield* runtime.set(
+          WEB_IDENTITY_ROLE_ENV,
+          Output.fromEffect(
+            AWSEnvironment.use((env) =>
+              Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
+            ).pipe(Effect.orDie),
+          ) as Output.Output<string>,
+        );
+        yield* runtime.set(
+          KEY_ENV.region,
+          Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
+        );
+        for (const [key, value] of Object.entries(data.env ?? {})) {
+          yield* runtime.set(key, toOutput(value));
+        }
+        return;
+      }
+
+      // The user may assume only this host's Role. The Role's name is
+      // derived from the host, so the user's policy names its ARN without an
+      // edge back to the Role (whose trust policy reads the user's ARN).
+      const roleName = yield* federatedRoleName(host);
+      const roleArn = Output.fromEffect(
+        AWSEnvironment.use((env) =>
+          Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
+        ).pipe(Effect.orDie),
+      ) as Output.Output<string>;
       const user = yield* IamUser(`${id}User`, {
         inlinePolicies: {
           AssumeRole: {
             Version: "2012-10-17",
-            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: ["*"] }],
+            Statement: [{ Effect: "Allow", Action: ["sts:AssumeRole"], Resource: [roleArn] }],
           },
         },
       });
       const accessKey = yield* IamAccessKey(`${id}AccessKey`, { userName: user.userName });
       const role = yield* IamRole(`${id}Role`, {
+        roleName,
         assumeRolePolicyDocument: {
           Version: "2012-10-17",
           Statement: [
@@ -383,23 +470,34 @@ const googleIdToken = Effect.gen(function* () {
 }).pipe(Effect.provide(FetchHttpClient.layer));
 
 /**
- * Resolve an operation on a host that runs as a Google service account: the
- * Role {@link Bind} created for it is assumed with the host's Google ID token
- * (`AssumeRoleWithWebIdentity`). Credentials are cached and re-assumed with a
- * fresh token shortly before they expire.
+ * Resolve an operation on a host with a platform identity (a Google service
+ * account, Fly Machines): the Role {@link Bind} created for it is assumed
+ * with the host's OIDC token (`AssumeRoleWithWebIdentity`). Credentials are
+ * cached and re-assumed with a fresh token shortly before they expire.
  */
 const withWebIdentity = Effect.fn(function* <Op>(
   operation: Effect.Effect<Op, never, any>,
-  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+  region: Effect.Effect<Effect.Effect<string>, never, any> | undefined,
+  token: "google" | "fly",
 ) {
   const runtime = yield* CurrentRuntimeContext;
   const roleArn = runtime ? yield* runtime.get<string>(WEB_IDENTITY_ROLE_ENV) : undefined;
   if (runtime === undefined || roleArn === undefined) {
     return yield* operation as Effect.Effect<Op>;
   }
+  const webIdentityToken =
+    token === "google"
+      ? googleIdToken
+      : runtime.oidcToken !== undefined
+        ? runtime.oidcToken(FLY_OIDC_AUDIENCE)
+        : Effect.fail(
+            new OidcTokenError({
+              message: `${runtime.Type} ${runtime.id} cannot mint OIDC tokens`,
+            }),
+          );
   const credentials = fromWebToken({
     roleArn,
-    webIdentityToken: googleIdToken,
+    webIdentityToken,
     roleSessionName: "alchemy",
     // STS is global; operations provide their own Region.
     region: "us-east-1",
@@ -442,7 +540,11 @@ export const withCredentials: <Op>(
   // A host running as a Google service account assumes its Role with an ID
   // token; it never has a key, so the bundler drops that path.
   if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "GCP.IAM.ServiceAccount") {
-    return yield* withWebIdentity(operation, region);
+    return yield* withWebIdentity(operation, region, "google");
+  }
+  // A Fly Service's Machines assume its Role with a Fly OIDC token.
+  if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "Fly.OIDC") {
+    return yield* withWebIdentity(operation, region, "fly");
   }
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;

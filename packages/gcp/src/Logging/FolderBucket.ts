@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -139,8 +140,38 @@ export type FolderBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderBucketLookup
 >;
+
+/**
+ * Props for {@link FolderBucket.lookup}: find a folder bucket this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `{parent}/locations/{location}/buckets/{bucket}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Folder id (`folders/{folder}` or the numeric id).
+   */
+  folderId?: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket owned by a folder (or the stack project).
@@ -177,6 +208,19 @@ export type FolderBucket = Resource<
  *   location: "global",
  *   description: "retained application logs",
  *   retentionDays: 60,
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder bucket
+ * `FolderBucket.lookup` references a folder bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder bucket.
+ *
+ * **Example:** Reference an existing folder bucket
+ * ```typescript
+ * const folderBucket = GCP.Logging.FolderBucket.lookup({
+ *   bucketId: "my-bucket",
  * });
  * ```
  *
@@ -314,6 +358,16 @@ export const FolderBucketProvider = () =>
       if (!idChanged && !locationChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ bucketId, folderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = scopeParent(env.project, folderId);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(parent, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeletedBucket(existing)) return undefined;
+      return toAttrs(existing, parent, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

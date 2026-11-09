@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -82,8 +83,32 @@ export type LocationsDeidentifyTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsDeidentifyTemplateLookup
 >;
+
+/**
+ * Props for {@link LocationsDeidentifyTemplate.lookup}: find a locations
+ * deidentify template this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface LocationsDeidentifyTemplateLookup {
+  /**
+   * Template id (the `{deidentifyTemplate}` segment of
+   * `projects/{project}/locations/{location}/deidentifyTemplates/{id}`).
+   * Must match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  templateId: string;
+  /**
+   * Processing location (`global`, `us`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A location-scoped Cloud DLP de-identify template.
@@ -109,6 +134,19 @@ export type LocationsDeidentifyTemplate = Resource<
  *       ],
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing locations deidentify template
+ * `LocationsDeidentifyTemplate.lookup` references a locations deidentify
+ * template Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared locations deidentify template.
+ *
+ * **Example:** Reference an existing locations deidentify template
+ * ```typescript
+ * const locationsDeidentifyTemplate = GCP.DLP.LocationsDeidentifyTemplate.lookup({
+ *   templateId: "my-template",
  * });
  * ```
  *
@@ -167,6 +205,15 @@ export const LocationsDeidentifyTemplateProvider = () =>
         normalizeLocation(news.location) !== normalizeLocation(previousLocation);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ templateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

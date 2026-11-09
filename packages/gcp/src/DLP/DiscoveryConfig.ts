@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -108,8 +109,32 @@ export type DiscoveryConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DiscoveryConfigLookup
 >;
+
+/**
+ * Props for {@link DiscoveryConfig.lookup}: find a discovery config this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DiscoveryConfigLookup {
+  /**
+   * Config id (the `{discoveryConfig}` segment of
+   * `projects/{project}/locations/{location}/discoveryConfigs/{id}`). Must
+   * match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  configId: string;
+  /**
+   * Processing location (`us`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A location-scoped Cloud DLP discovery config.
@@ -139,6 +164,19 @@ export type DiscoveryConfig = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing discovery config
+ * `DiscoveryConfig.lookup` references a discovery config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * discovery config.
+ *
+ * **Example:** Reference an existing discovery config
+ * ```typescript
+ * const discoveryConfig = GCP.DLP.DiscoveryConfig.lookup({
+ *   configId: "my-config",
  * });
  * ```
  *
@@ -202,6 +240,15 @@ export const DiscoveryConfigProvider = () =>
           normalizeLocation(previousLocation, DEFAULT_REGIONAL_LOCATION);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ configId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_REGIONAL_LOCATION);
+      const name = resourceName(env.project, location, configId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

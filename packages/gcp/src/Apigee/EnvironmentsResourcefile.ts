@@ -65,11 +65,36 @@ export type EnvironmentsResourcefile = Resource<
     environmentId: string;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsResourcefileLookup
 >;
 
 /**
- * An environment-scoped Apigee resource file (JavaScript, Java, XSL, ...).
+ * Props for {@link EnvironmentsResourcefile.lookup}: find an environments
+ * resourcefile this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsResourcefileLookup {
+  /**
+   * File id.
+   */
+  fileId: string;
+  /**
+   * Resource file type (`js`, `java`, `properties`, `py`, `xsl`, `wsdl`,
+   * `xsd`, …).
+   */
+  fileType?: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
+
+/**
+ * An environment-scoped Apigee resource file (JavaScript, Java, XSL, …).
  *
  * Resource files have no labels. `list` enumerates files in Apigee
  * environments mapped to this GCP project. Type and name are identity;
@@ -82,6 +107,20 @@ export type EnvironmentsResourcefile = Resource<
  *   environment: "eval",
  *   fileType: "js",
  *   content: "function helper() { return 1; }",
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments resourcefile
+ * `EnvironmentsResourcefile.lookup` references an environments resourcefile
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments resourcefile.
+ *
+ * **Example:** Reference an existing environments resourcefile
+ * ```typescript
+ * const environmentsResourcefile = GCP.Apigee.EnvironmentsResourcefile.lookup({
+ *   fileId: "my-file",
+ *   environment: "my-environment",
  * });
  * ```
  *
@@ -177,6 +216,17 @@ export const EnvironmentsResourcefileProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ fileId, fileType: lookupFileType, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const fileType = fileTypeOf(lookupFileType);
+      const parent = environmentNameOf(organizationId, environmentId);
+      const existing = yield* getById(parent, fileType, fileId);
+      if (existing === undefined) return undefined;
+      return toAttrs(fileId, fileType, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

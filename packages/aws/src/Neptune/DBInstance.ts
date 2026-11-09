@@ -105,11 +105,21 @@ export interface DBInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBInstanceLookup
 > {}
 
 /**
- * An Amazon Neptune instance -- a compute member of a Neptune
+ * Props for {@link DBInstance.lookup}: find a Neptune instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBInstanceLookup {
+  /** The db instance identifier of the existing Neptune instance. */
+  dbInstanceIdentifier: string;
+}
+
+/**
+ * An Amazon Neptune instance — a compute member of a Neptune
  * {@link DBCluster}. Storage, backup, and endpoints are managed at the
  * cluster level; the instance contributes CPU/RAM and can serve as a writer
  * or reader. Provisioning takes several minutes.
@@ -132,6 +142,16 @@ export interface DBInstance extends Resource<
  *   dbClusterIdentifier: cluster.dbClusterIdentifier,
  *   dbInstanceClass: "db.serverless",
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune instance
+ * `DBInstance.lookup` references a Neptune instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune instance
+ * ```typescript
+ * const existing = AWS.Neptune.DBInstance.lookup({ dbInstanceIdentifier: "my-neptune-instance" });
  * ```
  *
  * @resource
@@ -279,6 +299,14 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbInstanceIdentifier: identifier }) {
+          const instance = yield* readInstance(identifier);
+          if (!instance?.DBInstanceArn) {
+            return undefined;
+          }
+          const tags = yield* readTags(instance.DBInstanceArn);
+          return toAttrs({ instance, tags });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

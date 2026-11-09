@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -73,11 +74,36 @@ export type InstancesMaterializedView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesMaterializedViewLookup
 >;
 
 /**
- * A Cloud Bigtable continuous materialized view -- a SQL SELECT whose
+ * Props for {@link InstancesMaterializedView.lookup}: find an instances
+ * materialized view this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InstancesMaterializedViewLookup {
+  /**
+   * Materialized view id (the `{materialized_view}` segment of
+   * `.../instances/{instance}/materializedViews/{materialized_view}`). Must
+   * be unique among table ids and view ids in the instance.
+   */
+  materializedViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Bigtable continuous materialized view — a SQL SELECT whose
  * results are precomputed and kept current.
  *
  * The parent instance must already exist. The query must use `GROUP BY`
@@ -99,6 +125,20 @@ export type InstancesMaterializedView = Resource<
  * const view = yield* GCP.Bigtable.InstancesMaterializedView("Counts", {
  *   instance: instance.name,
  *   query: "SELECT '*' AS _key, COUNT(*) AS row_count FROM events GROUP BY _key",
+ * });
+ * ```
+ *
+ * ### Looking up an existing instances materialized view
+ * `InstancesMaterializedView.lookup` references an instances materialized
+ * view Alchemy doesn't manage (created in the console or by another stack).
+ * It is read during plan/deploy, never created, updated or deleted, and
+ * binds like a declared instances materialized view.
+ *
+ * **Example:** Reference an existing instances materialized view
+ * ```typescript
+ * const instancesMaterializedView = GCP.Bigtable.InstancesMaterializedView.lookup({
+ *   materializedViewId: "my-materialized-view",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -208,6 +248,17 @@ export const InstancesMaterializedViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ materializedViewId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? materializedViewName(env.project, instanceIdOf(instance), materializedViewId)
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

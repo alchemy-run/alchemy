@@ -1103,6 +1103,7 @@ const executeNode = (
             ...node.state,
             attr: node.state.attr,
             props: news,
+            removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
           })
         : commit<UpdatingReourceState>({
@@ -1160,6 +1161,7 @@ const executeNode = (
           props: news,
           // Resolved payload, not raw `node.bindings` -- see create commit.
           bindings: bindingOutputs,
+          removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
         });
       } else {
@@ -1212,6 +1214,14 @@ const executeNode = (
       if (node.state.status === "replaced" && !node.restart) {
         // The replacement already exists; this pass only needs GC to clean up
         // older generations, so expose the current replacement and stop here.
+        // Like the noop branch, persist a changed removal policy: this is the
+        // only pass that sees it, and GC reads the row's policy.
+        if (node.state.removalPolicy !== node.resource.RemovalPolicy) {
+          yield* commit<ReplacedResourceState>({
+            ...node.state,
+            removalPolicy: node.resource.RemovalPolicy,
+          });
+        }
         track(tracker, outputs, fqn, {
           output: node.state.attr,
           props: node.state.props,

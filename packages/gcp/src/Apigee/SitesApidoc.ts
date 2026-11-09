@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { orgIdOf, orgParent } from "./ownership.ts";
 
@@ -104,8 +105,39 @@ export type SitesApidoc = Resource<
     modified: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SitesApidocLookup
 >;
+
+/**
+ * Props for {@link SitesApidoc.lookup}: find a sites apidoc this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SitesApidocLookup {
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Portal site id (the `{site}` segment of
+   * `organizations/{org}/sites/{site}`). Required.
+   */
+  siteId: string;
+  /**
+   * Server-assigned catalog item id. Set when adopting an existing item.
+   */
+  apiDocId?: string;
+  /**
+   * Name of the backing API product.
+   */
+  apiProductName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee integrated-portal catalog item (`apidoc`). Catalog items
@@ -141,6 +173,20 @@ export type SitesApidoc = Resource<
  *   description: "place orders",
  *   published: true,
  *   categoryIds: [payments.categoryId],
+ * });
+ * ```
+ *
+ * ### Looking up an existing sites apidoc
+ * `SitesApidoc.lookup` references a sites apidoc Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * sites apidoc.
+ *
+ * **Example:** Reference an existing sites apidoc
+ * ```typescript
+ * const sitesApidoc = GCP.Apigee.SitesApidoc.lookup({
+ *   siteId: "my-site",
+ *   apiProductName: "my-api-product",
  * });
  * ```
  *
@@ -263,6 +309,21 @@ export const SitesApidocProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ organization, siteId, apiDocId, apiProductName }) {
+      const env = yield* GcpEnvironment.current;
+      const org = orgIdOf(organization, env.project);
+      if (siteId === undefined) return undefined;
+      const name = apiDocId !== undefined ? resourceName(org, siteId, apiDocId) : undefined;
+      const existing =
+        name !== undefined
+          ? yield* getByName(name)
+          : apiProductName !== undefined
+            ? yield* findByProduct(org, siteId, apiProductName)
+            : undefined;
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, org, siteId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

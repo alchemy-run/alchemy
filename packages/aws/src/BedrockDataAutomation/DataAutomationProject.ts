@@ -99,11 +99,26 @@ export interface DataAutomationProject extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DataAutomationProjectLookup
 > {}
 
 /**
- * An Amazon Bedrock Data Automation Project -- the configuration unit that
+ * Props for {@link DataAutomationProject.lookup}: find a data automation project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataAutomationProjectLookup =
+  | {
+      /** The ARN of the existing project. */
+      projectArn: string;
+    }
+  | {
+      /** The name of the existing project. */
+      projectName: string;
+    };
+
+/**
+ * An Amazon Bedrock Data Automation Project — the configuration unit that
  * turns documents, images, audio, and video into structured output, with
  * optional custom output driven by `Blueprint`s.
  *
@@ -151,6 +166,16 @@ export interface DataAutomationProject extends Resource<
  *     blueprints: [{ blueprintArn: blueprint.blueprintArn }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data automation project
+ * `DataAutomationProject.lookup` references a data automation project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `projectArn` or `projectName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data automation project
+ * ```typescript
+ * const intake = AWS.BedrockDataAutomation.DataAutomationProject.lookup({ projectName: "intake" });
  * ```
  *
  * @resource
@@ -242,6 +267,13 @@ export const DataAutomationProjectProvider = () =>
             return attrs.flat();
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn =
+            "projectArn" in props ? props.projectArn : yield* findProjectArn(props.projectName);
+          if (arn === undefined) return undefined;
+          const found = yield* observeProject(arn, undefined);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const projectArn =
             output?.projectArn ?? (yield* findProjectArn(yield* createName(id, olds ?? {})));

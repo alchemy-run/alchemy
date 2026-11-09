@@ -202,7 +202,25 @@ export type ListAttributes = {
   modifiedOn: string;
 };
 
-export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
+/**
+ * Props for {@link List.lookup}: find a list this stack doesn't manage, by
+ * its id or its name.
+ */
+export type ListLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing list.
+       */
+      listId: string;
+    }
+  | {
+      /**
+       * The name of the existing list (the `$name` rule expressions use).
+       */
+      name: string;
+    };
+
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers, ListLookup>;
 
 /**
  * A Cloudflare account-level List (Lists API) -- a named collection of IP
@@ -282,6 +300,18 @@ export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>
  * const expression = list.name.apply((name) => `ip.src in $${name}`);
  * ```
  *
+ * ### Looking up an existing List
+ * `List.lookup` reads a list Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `listId` or `name`, so rules can
+ * reference it. It is read during plan/deploy and never created, updated
+ * or deleted.
+ *
+ * **Example:** Block an existing IP list
+ * ```typescript
+ * const blocklist = Cloudflare.Rules.List.lookup({ name: "blocklist" });
+ * const expression = Output.interpolate`ip.src in $${blocklist.name}`;
+ * ```
+ *
  * @see https://developers.cloudflare.com/waf/tools/lists/
  *
  * @resource
@@ -340,6 +370,14 @@ export const ListProvider = () =>
         return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "listId" in props
+          ? yield* getListById(accountId, props.listId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

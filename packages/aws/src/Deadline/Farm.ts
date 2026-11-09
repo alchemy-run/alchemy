@@ -87,11 +87,26 @@ export interface Farm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FarmLookup
 > {}
 
 /**
- * An AWS Deadline Cloud farm -- the top-level container for render-farm
+ * Props for {@link Farm.lookup}: find a farm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FarmLookup =
+  | {
+      /** The id of the existing farm. */
+      farmId: string;
+    }
+  | {
+      /** The display name of the existing farm. */
+      displayName: string;
+    };
+
+/**
+ * An AWS Deadline Cloud farm — the top-level container for render-farm
  * queues, fleets, storage profiles, and budgets.
  *
  * ### Creating Farms
@@ -110,6 +125,17 @@ export interface Farm extends Resource<
  *   costScaleFactor: 1.5,
  *   tags: { team: "vfx" },
  * });
+ * ```
+ *
+ * ### Looking up an existing farm
+ * `Farm.lookup` references a farm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing farm
+ * ```typescript
+ * const render = AWS.Deadline.Farm.lookup({ displayName: "render" });
+ * const farmId = render.farmId;
  * ```
  *
  * @resource
@@ -181,6 +207,14 @@ export const FarmProvider = () =>
               .filter((state): state is FarmState => state !== undefined)
               .map((state) => state.attrs);
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "farmId" in props
+              ? yield* readFarmById(props.farmId, arnOf)
+              : yield* findFarmByDisplayName(props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const state = output?.farmId

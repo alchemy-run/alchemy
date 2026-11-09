@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -79,11 +80,23 @@ export interface FargateProfile extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FargateProfileLookup
 > {}
 
 /**
- * An Amazon EKS Fargate profile -- declares which pods (by namespace + labels)
+ * Props for {@link FargateProfile.lookup}: find a Fargate profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FargateProfileLookup {
+  /** The cluster the profile belongs to. */
+  clusterName: string;
+  /** The name of the existing profile. */
+  fargateProfileName: string;
+}
+
+/**
+ * An Amazon EKS Fargate profile — declares which pods (by namespace + labels)
  * run on AWS Fargate serverless compute instead of on EC2 nodes.
  *
  * Fargate profiles are immutable except for tags: any change to selectors, the
@@ -116,6 +129,16 @@ export interface FargateProfile extends Resource<
  *     { namespace: "batch", labels: { compute: "fargate" } },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing Fargate profile
+ * `FargateProfile.lookup` references a Fargate profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName` and `fargateProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Fargate profile
+ * ```typescript
+ * const system = AWS.EKS.FargateProfile.lookup({ clusterName: "platform", fargateProfileName: "system" });
  * ```
  *
  * @resource
@@ -165,13 +188,6 @@ export const FargateProfileProvider = () =>
           ? Effect.succeed(props.fargateProfileName)
           : createPhysicalName({ id, maxLength: 63 });
 
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       const readProfile = Effect.fn(function* ({
         clusterName,
         fargateProfileName,
@@ -213,7 +229,7 @@ export const FargateProfileProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileNotReady,
+            while: (error) => error._tag === "EKS.FargateProfileNotReady",
             schedule: waitSchedule,
           }),
         );
@@ -224,7 +240,7 @@ export const FargateProfileProvider = () =>
             state ? Effect.fail(new FargateProfileStillExists()) : Effect.undefined,
           ),
           Effect.retry({
-            while: (error) => error instanceof FargateProfileStillExists,
+            while: (error) => error._tag === "EKS.FargateProfileStillExists",
             schedule: waitSchedule,
           }),
         );
@@ -283,6 +299,8 @@ export const FargateProfileProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ clusterName, fargateProfileName }) =>
+          readProfile({ clusterName, fargateProfileName }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
             | string
@@ -295,6 +313,7 @@ export const FargateProfileProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const fargateProfileName = yield* toProfileName(id, news);
           const desiredTags = {
@@ -317,20 +336,17 @@ export const FargateProfileProvider = () =>
                 selectors: news.selectors,
                 subnets: news.subnets as string[] | undefined,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(
                 Effect.catchTag("ResourceInUseException", () =>
                   Effect.fail(new FargateProfileBusy()),
                 ),
                 Effect.retry({
-                  while: (error) => error instanceof FargateProfileBusy,
+                  while: (error) => error._tag === "EKS.FargateProfileBusy",
                   schedule: busySchedule,
                 }),
-                Effect.catchIf(
-                  (error) => error instanceof FargateProfileBusy,
-                  () => Effect.void,
-                ),
+                Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
               );
 
             yield* session.note(`Creating EKS Fargate profile ${fargateProfileName}...`);
@@ -377,13 +393,10 @@ export const FargateProfileProvider = () =>
                 ResourceInUseException: () => Effect.fail(new FargateProfileBusy()),
               }),
               Effect.retry({
-                while: (error) => error instanceof FargateProfileBusy,
+                while: (error) => error._tag === "EKS.FargateProfileBusy",
                 schedule: busySchedule,
               }),
-              Effect.catchIf(
-                (error) => error instanceof FargateProfileBusy,
-                () => Effect.void,
-              ),
+              Effect.catchTag("EKS.FargateProfileBusy", () => Effect.void),
             );
           yield* waitForProfileDeleted(output.clusterName, output.fargateProfileName);
         }),

@@ -4,6 +4,8 @@ import type * as NodeNet from "node:net";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -179,8 +181,13 @@ const runOpenNextBuild = (options: {
       // mutates its own process.env (NEXT_PRIVATE_STANDALONE,
       // NEXT_PRIVATE_OUTPUT_TRACE_ROOT) before exec'ing `next build`, and
       // those mutations do not reliably reach execSync children under bun.
+      // `next build` must run as production, like `nextjs/node.ts` and
+      // `BuildChild`: an inherited NODE_ENV (left by an in-process dev server
+      // in the same long-lived process) breaks prerendering `/_global-error`
+      // ("Cannot read properties of null (reading 'useContext')").
       const env = yield* Effect.sync(() => ({
         ...process.env,
+        NODE_ENV: "production",
         ...options.env,
       }));
       const child = yield* ChildProcess.make(
@@ -333,19 +340,21 @@ const spawnNextDev = (options: {
         catch: fail("Failed to spawn the next dev CLI (is `node` on PATH?)"),
       }),
     ),
-    ({ child }) =>
-      Effect.callback<void>((resume) => {
-        if (child.exitCode !== null) {
-          resume(Effect.void);
-          return;
-        }
-        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
-        child.once("exit", () => {
-          clearTimeout(killTimer);
-          resume(Effect.void);
+    ({ child }) => {
+      const stop = (signal: NodeJS.Signals) =>
+        Effect.callback<void>((resume) => {
+          if (child.exitCode !== null || child.signalCode !== null) {
+            resume(Effect.void);
+            return;
+          }
+          child.once("exit", () => resume(Effect.void));
+          child.kill(signal);
         });
-        child.kill("SIGTERM");
-      }),
+      return stop("SIGTERM").pipe(
+        Effect.interruptible,
+        Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => stop("SIGKILL") }),
+      );
+    },
   ).pipe(Effect.map(({ handle }) => handle));
 
 /**
@@ -363,15 +372,12 @@ const awaitNextDevReady = (options: {
           `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
         )(undefined);
       }
-      const ready = yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(options.url, {
-            signal: AbortSignal.timeout(2000),
-          });
-          return response.status < 600;
-        },
-        catch: () => "not-ready" as const,
-      }).pipe(Effect.orElseSucceed(() => false));
+      const ready = yield* HttpClient.get(options.url).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.map((response) => response.status < 600),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.orElseSucceed(() => false),
+      );
       if (ready) return;
       yield* Effect.sleep(500);
     }

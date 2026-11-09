@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -435,11 +436,40 @@ export type WorkstationClustersWorkstationConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkstationClustersWorkstationConfigLookup
 >;
 
 /**
- * A Cloud Workstations configuration -- the template for workstation VMs
+ * Props for {@link WorkstationClustersWorkstationConfig.lookup}: find a
+ * workstation clusters workstation config this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface WorkstationClustersWorkstationConfigLookup {
+  /**
+   * Configuration id (the `{workstationConfig}` segment).
+   */
+  workstationConfigId: string;
+  /**
+   * Parent workstation cluster. Full name
+   * `projects/{project}/locations/{loc
+   * ation}/workstationClusters/{workstationCluster}` or a cluster id
+   * (combined with `location`).
+   */
+  workstationCluster: string;
+  /**
+   * Region used when `workstationCluster` is a bare id.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Workstations configuration — the template for workstation VMs
  * (machine type, image, disks, timeouts).
  *
  * Changing `workstationConfigId`, `location`, `workstationCluster`,
@@ -481,6 +511,21 @@ export type WorkstationClustersWorkstationConfig = Resource<
  *     idleTimeout: "3600s",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing workstation clusters workstation config
+ * `WorkstationClustersWorkstationConfig.lookup` references a workstation
+ * clusters workstation config Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared workstation
+ * clusters workstation config.
+ *
+ * **Example:** Reference an existing workstation clusters workstation config
+ * ```typescript
+ * const workstationClustersWorkstationConfig = GCP.Workstations.WorkstationClustersWorkstationConfig.lookup({
+ *   workstationConfigId: "my-workstation-config",
+ *   workstationCluster: "my-workstation-cluster",
+ * });
  * ```
  *
  * @resource
@@ -663,6 +708,27 @@ export const WorkstationClustersWorkstationConfigProvider = () =>
             replicaKey(previousZones) !== replicaKey(news.replicaZones)),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      workstationConfigId,
+      workstationCluster,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      // A config cannot exist before its cluster's name resolved.
+      if (!workstationCluster) return undefined;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const cluster = expandParent(
+        workstationCluster ?? "",
+        env.project,
+        location,
+        "workstationClusters",
+      );
+      const name = resourceName(cluster, workstationConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -131,11 +131,23 @@ export interface Table extends Resource<
     catalogId: string;
   },
   {},
-  Providers
+  Providers,
+  TableLookup
 > {}
 
 /**
- * An AWS Glue Data Catalog table -- a schema (columns), storage location, and
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account's Data Catalog.
+ */
+export interface TableLookup {
+  /** The database the table belongs to. */
+  databaseName: string;
+  /** The name of the existing table. */
+  tableName: string;
+}
+
+/**
+ * An AWS Glue Data Catalog table — a schema (columns), storage location, and
  * SerDe over data in S3 (or another store). This is the unit Athena, Redshift
  * Spectrum, and EMR query; it is the analytics foundation of a Glue database.
  * ### Creating Tables
@@ -169,6 +181,17 @@ export interface Table extends Resource<
  *   partitionKeys: [{ name: "dt", type: "string" }],
  *   parameters: { classification: "parquet" },
  * });
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName` and `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const events = AWS.Glue.Table.lookup({ databaseName: "lake", tableName: "events" });
+ * const tableArn = events.tableArn;
  * ```
  *
  * @resource
@@ -283,6 +306,20 @@ export const TableProvider = () =>
             );
             return nested.flat();
           }),
+
+        lookup: Effect.fn(function* ({ databaseName, tableName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const table = yield* observe(databaseName, tableName, accountId);
+          if (table === undefined) return undefined;
+          const catalogId = table.CatalogId ?? accountId;
+          const database = table.DatabaseName ?? databaseName;
+          return {
+            tableName: table.Name,
+            databaseName: database,
+            tableArn: tableArn(region, catalogId, database, table.Name),
+            catalogId,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

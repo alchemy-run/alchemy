@@ -3,6 +3,7 @@ import * as Flag from "effect/cli/Flag";
 import * as GlobalFlag from "effect/cli/GlobalFlag";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -64,12 +65,12 @@ export type LogFormat = "pretty" | "json";
 
 /**
  * `--log-format pretty|json`: `json` prints one {@link LogRecord} per line
- * on stderr and leaves rendering to the reader. Registered on the CLI root;
+ * on stdout and leaves rendering to the reader; errors stay text on stderr. Registered on the CLI root;
  * the console logger reads the parsed value (see {@link consoleSettings}).
  */
 export const LogFormatFlag = GlobalFlag.Setting("log-format")({
   flag: Flag.Literals("log-format", ["pretty", "json"]).pipe(
-    Flag.withDescription("Print log records as text or as JSON lines on stderr"),
+    Flag.withDescription("Print log records as text or as JSON lines on stdout"),
     Flag.optional,
   ),
 });
@@ -114,7 +115,10 @@ export const consoleSettingsEnv = (settings: ConsoleSettings): Record<string, st
   [LOG_FORMAT_ENV]: settings.format,
 });
 
-const jsonSink = jsonLogger((line) => process.stderr.write(`${line}\n`));
+// Bound now: under `--log-format json` everything else written to stdout is
+// captured as records (see `JsonConsole`), and this is how records get out.
+const writeStdout = process.stdout.write.bind(process.stdout);
+const jsonSink = jsonLogger((line) => writeStdout(`${line}\n`));
 const prettySink = makePlainConsoleSink();
 
 /**
@@ -233,8 +237,7 @@ export const lazyRunLog = Effect.fn(function* (
 export const GlobalLogLive = Layer.unwrap(
   Effect.gen(function* () {
     const path = yield* Path;
-    const stamp = new Date(yield* Clock.currentTimeMillis)
-      .toISOString()
+    const stamp = DateTime.formatIso(yield* DateTime.now)
       .slice(0, 19)
       .replaceAll(":", "-");
     const name = `${stamp}-pid${process.pid}.ndjson`;

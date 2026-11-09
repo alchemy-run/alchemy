@@ -65,11 +65,21 @@ export interface CostCategory extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CostCategoryLookup
 > {}
 
 /**
- * A Cost Explorer cost category -- rule-based groupings that map your AWS
+ * Props for {@link CostCategory.lookup}: find a cost category this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CostCategoryLookup {
+  /** The ARN of the existing cost category. */
+  costCategoryArn: string;
+}
+
+/**
+ * A Cost Explorer cost category — rule-based groupings that map your AWS
  * costs into named values (e.g. team, environment, project) usable across
  * Cost Explorer, Budgets, and CUR reports.
  *
@@ -113,6 +123,16 @@ export interface CostCategory extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing cost category
+ * `CostCategory.lookup` references a cost category Alchemy doesn't manage (created in the
+ * console or by another stack), found by `costCategoryArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cost category
+ * ```typescript
+ * const existing = AWS.CostExplorer.CostCategory.lookup({ costCategoryArn: "..." });
  * ```
  *
  * @resource
@@ -194,6 +214,12 @@ export const CostCategoryProvider = () =>
               { concurrency: 10 },
             );
           }),
+        lookup: Effect.fn(function* ({ costCategoryArn }) {
+          const live = yield* getByArn(costCategoryArn);
+          if (live === undefined) return undefined;
+          const attrs = yield* toAttrs(live);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const live = output?.costCategoryArn
             ? yield* getByArn(output.costCategoryArn)

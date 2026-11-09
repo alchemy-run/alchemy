@@ -99,11 +99,21 @@ export interface WorkGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  WorkGroupLookup
 > {}
 
 /**
- * An Amazon Athena workgroup -- an isolation boundary for queries that pins the
+ * Props for {@link WorkGroup.lookup}: find a workgroup this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkGroupLookup {
+  /** The name of the existing workgroup, `primary` included. */
+  workGroupName: string;
+}
+
+/**
+ * An Amazon Athena workgroup — an isolation boundary for queries that pins the
  * S3 result-output location, result encryption, a bytes-scanned cutoff, and
  * whether that configuration is enforced over per-query client settings.
  *
@@ -126,6 +136,17 @@ export interface WorkGroup extends Resource<
  *   bytesScannedCutoffPerQuery: 10_000_000, // 10 MB per query
  *   publishCloudWatchMetricsEnabled: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing workgroup
+ * `WorkGroup.lookup` references a workgroup Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run queries in the default workgroup
+ * ```typescript
+ * const primary = AWS.Athena.WorkGroup.lookup({ workGroupName: "primary" });
+ * const workGroupArn = primary.workGroupArn;
  * ```
  *
  * @resource
@@ -171,6 +192,20 @@ export const WorkGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ workGroupName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const wg = yield* getOne(workGroupName);
+          if (!wg) return undefined;
+          const arn =
+            `arn:aws:athena:${region}:${accountId}:workgroup/${workGroupName}` as WorkGroupArn;
+          return {
+            workGroupName,
+            workGroupArn: arn,
+            state: (wg.State ?? "ENABLED") as "ENABLED" | "DISABLED",
+            outputLocation: outputLocationOf(wg),
+            tags: yield* fetchTags(arn),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

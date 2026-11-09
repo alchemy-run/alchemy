@@ -55,11 +55,21 @@ export interface HttpNamespace extends Resource<
     httpName: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  HttpNamespaceLookup
 > {}
 
 /**
- * An AWS Cloud Map HTTP namespace -- an API-only service registry. Instances
+ * Props for {@link HttpNamespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface HttpNamespaceLookup {
+  /** The name of the existing namespace. */
+  namespaceName: string;
+}
+
+/**
+ * An AWS Cloud Map HTTP namespace — an API-only service registry. Instances
  * registered in an HTTP namespace are discoverable via the
  * `DiscoverInstances` API but not via DNS, so no VPC or hosted zone is
  * required.
@@ -81,6 +91,20 @@ export interface HttpNamespace extends Resource<
  * ```typescript
  * const service = yield* AWS.CloudMap.Service("Backend", {
  *   namespaceId: namespace.namespaceId,
+ * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `HttpNamespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register a service in an existing namespace
+ * ```typescript
+ * const ns = AWS.CloudMap.HttpNamespace.lookup({ namespaceName: "internal" });
+ *
+ * yield* AWS.CloudMap.Service("Api", {
+ *   namespaceId: ns.namespaceId,
  * });
  * ```
  *
@@ -123,6 +147,11 @@ export const HttpNamespaceProvider = () =>
                 httpName: n.Properties?.HttpProperties?.HttpName,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ namespaceName }) {
+          const namespace = yield* observeNamespace("HTTP", namespaceName, undefined);
+          return namespace?.Id === undefined ? undefined : toAttributes(namespace);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));

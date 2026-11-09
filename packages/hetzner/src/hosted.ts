@@ -1,3 +1,4 @@
+import { loadImageArchiveScript } from "@alchemy.run/docker/ImageArchive";
 import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import {
@@ -587,12 +588,103 @@ WantedBy=multi-user.target
     );
   });
 
+  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
+  const renderDockerEnvFile = (env: Record<string, unknown>) =>
+    Object.entries(env)
+      .filter(([, value]) => value !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => {
+        const text = typeof value === "string" ? value : JSON.stringify(value);
+        return `${key}=${text.replaceAll("\n", " ")}`;
+      })
+      .join("\n");
+
+  const renderImageUnit = (unitName: string, appDir: string) => `[Unit]
+Description=Alchemy Hetzner Service ${unitName}
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/docker rm -f ${unitName}
+ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+ExecStop=/usr/bin/docker stop ${unitName}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+`;
+
+  /**
+   * Run an image archive as the unit: install Docker, copy the archive
+   * over SSH, load it, and run it on the host network under systemd.
+   */
+  const deployImageUnit = Effect.fn(function* (input: {
+    ssh: SshClient;
+    unitName: string;
+    archive: Uint8Array<ArrayBufferLike>;
+    env: Record<string, unknown>;
+  }) {
+    const appDir = `/opt/${input.unitName}`;
+    yield* waitForSsh(input.ssh);
+    yield* input.ssh.exec(
+      [
+        `set -uo pipefail`,
+        `export HOME=/root`,
+        `mkdir -p ${JSON.stringify(appDir)}`,
+        `if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/null 2>&1 || true; fi`,
+        `if ! command -v docker >/dev/null 2>&1; then`,
+        `  for attempt in 1 2 3 4 5; do`,
+        `    apt-get -o DPkg::Lock::Timeout=300 update && DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y docker.io && break`,
+        `    sleep 5`,
+        `  done`,
+        `fi`,
+        `if ! command -v docker >/dev/null 2>&1; then`,
+        `  echo "docker install failed" >&2`,
+        `  exit 1`,
+        `fi`,
+        `systemctl enable --now docker`,
+      ].join("\n"),
+    );
+    yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
+    yield* input.ssh.scp(new TextEncoder().encode(renderDockerEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(
+      new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
+      `/etc/systemd/system/${input.unitName}.service`,
+    );
+    yield* input.ssh.exec(
+      [
+        `set -euo pipefail`,
+        loadImageArchiveScript(`${appDir}/image.tar`),
+        `echo "$IMAGE" > ${JSON.stringify(`${appDir}/image`)}`,
+        `systemctl daemon-reload`,
+        `systemctl enable ${input.unitName}.service`,
+        `systemctl restart ${input.unitName}.service`,
+      ].join("\n"),
+    );
+    yield* input.ssh.exec(
+      [
+        `set -uo pipefail`,
+        `for attempt in $(seq 1 30); do`,
+        `  if systemctl is-active --quiet ${input.unitName}.service; then exit 0; fi`,
+        `  sleep 2`,
+        `done`,
+        `echo "unit ${input.unitName} not ready" >&2`,
+        `journalctl -u ${input.unitName}.service -n 80 --no-pager || true`,
+        `exit 1`,
+      ].join("\n"),
+    );
+  });
+
   const removeUnit = Effect.fn(function* (input: { ssh: SshClient; unitName: string }) {
     const appDir = `/opt/${input.unitName}`;
     yield* input.ssh
       .exec(
         [
           `systemctl disable --now ${input.unitName}.service || true`,
+          `docker rm -f ${input.unitName} >/dev/null 2>&1 || true`,
           `rm -f /etc/systemd/system/${input.unitName}.service`,
           `rm -rf ${JSON.stringify(appDir)}`,
           `systemctl daemon-reload || true`,
@@ -606,6 +698,7 @@ WantedBy=multi-user.target
     bundleProgram,
     attachAndMount,
     deployUnit,
+    deployImageUnit,
     removeUnit,
     waitForSsh,
     openSshClient,

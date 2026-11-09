@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -155,11 +156,34 @@ export type PersistentResource = Resource<
     startTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PersistentResourceLookup
 >;
 
 /**
- * A Vertex AI Persistent Resource -- dedicated node pools for custom
+ * Props for {@link PersistentResource.lookup}: find a persistent resource
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface PersistentResourceLookup {
+  /**
+   * Persistent resource id. Must match
+   * `/^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/`.
+   */
+  persistentResourceId: string;
+  /**
+   * Vertex AI location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Vertex AI Persistent Resource — dedicated node pools for custom
  * training and Ray-on-Vertex workloads.
  *
  * Changing `persistentResourceId`, `location`, `network`,
@@ -179,6 +203,19 @@ export type PersistentResource = Resource<
  *       machineSpec: { machineType: "n1-standard-4" },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing persistent resource
+ * `PersistentResource.lookup` references a persistent resource Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared persistent resource.
+ *
+ * **Example:** Reference an existing persistent resource
+ * ```typescript
+ * const persistentResource = GCP.AIPlatform.PersistentResource.lookup({
+ *   persistentResourceId: "my-persistent-resource",
  * });
  * ```
  *
@@ -327,6 +364,15 @@ export const PersistentResourceProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ persistentResourceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, persistentResourceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

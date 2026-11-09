@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,11 +93,36 @@ export type MirroringDeployment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MirroringDeploymentLookup
 >;
 
 /**
- * A Network Security Integration mirroring deployment -- a zonal GENEVE
+ * Props for {@link MirroringDeployment.lookup}: find a mirroring deployment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface MirroringDeploymentLookup {
+  /**
+   * Deployment id (the `{mirroringDeployment}` segment of
+   * `projects/{project
+   * }/locations/{location}/mirroringDeployments/{mirroringDeployment}`).
+   */
+  mirroringDeploymentId: string;
+  /**
+   * Zone of the deployment (e.g. `us-central1-a`). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security Integration mirroring deployment — a zonal GENEVE
  * collector, typically an internal passthrough load balancer, that
  * belongs to a global mirroring deployment group.
  *
@@ -136,6 +162,19 @@ export type MirroringDeployment = Resource<
  *   forwardingRule: rule.selfLink,
  *   description: "zone a collector v2",
  *   labels: { env: "prod", role: "nsi" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing mirroring deployment
+ * `MirroringDeployment.lookup` references a mirroring deployment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared mirroring deployment.
+ *
+ * **Example:** Reference an existing mirroring deployment
+ * ```typescript
+ * const mirroringDeployment = GCP.NetworkSecurity.MirroringDeployment.lookup({
+ *   mirroringDeploymentId: "my-mirroring-deployment",
  * });
  * ```
  *
@@ -289,6 +328,15 @@ export const MirroringDeploymentProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ mirroringDeploymentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_LOCATION);
+      const name = resourceName(env.project, location, COLLECTION, mirroringDeploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

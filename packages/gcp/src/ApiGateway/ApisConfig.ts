@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,11 +114,35 @@ export type ApisConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApisConfigLookup
 >;
 
 /**
- * An API Gateway API config -- OpenAPI or gRPC settings for a managed
+ * Props for {@link ApisConfig.lookup}: find an apis config this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApisConfigLookup {
+  /**
+   * Config id (the `{apiConfig}` segment of
+   * `.../apis/{api}/configs/{apiConfig}`).
+   */
+  apiConfigId: string;
+  /**
+   * Parent API. Full name `projects/{project}/locations/global/apis/{api}`
+   * or the API id.
+   */
+  api: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An API Gateway API config — OpenAPI or gRPC settings for a managed
  * API that Gateways serve.
  *
  * Parent API, config id, documents, gRPC definitions, and gateway
@@ -155,6 +180,20 @@ export type ApisConfig = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing apis config
+ * `ApisConfig.lookup` references an apis config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apis config.
+ *
+ * **Example:** Reference an existing apis config
+ * ```typescript
+ * const apisConfig = GCP.ApiGateway.ApisConfig.lookup({
+ *   apiConfigId: "my-api-config",
+ *   api: "my-api",
  * });
  * ```
  *
@@ -226,6 +265,15 @@ export const ApisConfigProvider = () =>
         extra: documentsChanged(news, olds) || accountChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({ apiConfigId, api: lookupApi }) {
+      const env = yield* GcpEnvironment.current;
+      const api = lookupApi !== undefined ? expandApi(lookupApi, env.project) : "";
+      const name = api ? resourceName(api, apiConfigId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, api);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

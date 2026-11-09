@@ -97,12 +97,22 @@ export type RadarValueList = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  RadarValueListLookup
 >;
 
 /**
- * A Stripe Radar Value List -- a named collection of values (emails, IPs,
- * card fingerprints, ...) referenced from Radar rules. `alias` and
+ * Props for {@link RadarValueList.lookup}: find a Radar value list this stack
+ * doesn't manage by its id.
+ */
+export interface RadarValueListLookup {
+  /** Stripe Radar value list id, e.g. `"rsl_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Radar Value List — a named collection of values (emails, IPs,
+ * card fingerprints, …) referenced from Radar rules. `alias` and
  * `itemType` are immutable and changing them replaces the list. Name and
  * metadata update in place. Destroy deletes the list and its items; a
  * list referenced by a Radar rule cannot be deleted.
@@ -146,6 +156,16 @@ export type RadarValueList = Resource<
  *   alias: "custom_blocklist",
  *   itemType: "ip_address",
  * });
+ * ```
+ *
+ * ### Looking up an existing Radar value list
+ * `RadarValueList.lookup` references a Radar value list Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Radar value list
+ * ```typescript
+ * const ref = Stripe.RadarValueList.lookup({ id: "rsl_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -301,13 +321,21 @@ export const RadarValueListProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output }) {
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
+    read: Effect.fn(function* ({ id, output, previous }) {
       const existing = yield* observe({
         id: output?.id,
         logicalId: id,
         alias: output?.alias,
       });
       if (existing === undefined) return undefined;
+      // A create-first replacement finds the list it is replacing under the
+      // same logical id: that is not the replacement.
+      if (output === undefined && existing.id === previous?.id) return undefined;
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),

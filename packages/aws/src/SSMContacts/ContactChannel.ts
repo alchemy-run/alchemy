@@ -64,11 +64,21 @@ export interface ContactChannel extends Resource<
     activationStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContactChannelLookup
 > {}
 
 /**
- * An Incident Manager contact channel -- the method (SMS, voice, or email)
+ * Props for {@link ContactChannel.lookup}: find a contact channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ContactChannelLookup {
+  /** The ARN of the existing contact channel. */
+  contactChannelArn: string;
+}
+
+/**
+ * An Incident Manager contact channel — the method (SMS, voice, or email)
  * that Incident Manager uses to engage a contact during an incident.
  *
  * ### Creating Contact Channels
@@ -89,6 +99,16 @@ export interface ContactChannel extends Resource<
  *   type: "SMS",
  *   deliveryAddress: { SimpleAddress: "+15551234567" },
  * });
+ * ```
+ *
+ * ### Looking up an existing contact channel
+ * `ContactChannel.lookup` references a contact channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `contactChannelArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing contact channel
+ * ```typescript
+ * const pager = AWS.SSMContacts.ContactChannel.lookup({ contactChannelArn });
  * ```
  */
 const ContactChannelResource = Resource<ContactChannel>("AWS.SSMContacts.ContactChannel");
@@ -140,6 +160,10 @@ export const ContactChannelProvider = () =>
         // contacts is not meaningful here.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ contactChannelArn }) {
+          const channel = yield* getChannel(contactChannelArn);
+          return channel === undefined ? undefined : buildAttrs(channel);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output !== undefined) {
             const channel = yield* getChannel(output.contactChannelArn);

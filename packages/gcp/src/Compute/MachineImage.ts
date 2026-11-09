@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -83,8 +84,26 @@ export type MachineImage = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MachineImageLookup
 >;
+
+/**
+ * Props for {@link MachineImage.lookup}: find a machine image this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface MachineImageLookup {
+  /**
+   * Machine image name (RFC1035, 1-63 characters).
+   */
+  machineImageName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Compute Engine machine image capturing a VM's disks, metadata, and
@@ -126,6 +145,19 @@ export type MachineImage = Resource<
  *   sourceInstance:
  *     "projects/{project}/zones/us-central1-a/instances/web",
  *   labels: { env: "prod", role: "golden" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing machine image
+ * `MachineImage.lookup` references a machine image Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * machine image.
+ *
+ * **Example:** Reference an existing machine image
+ * ```typescript
+ * const machineImage = GCP.Compute.MachineImage.lookup({
+ *   machineImageName: "my-machine-image",
  * });
  * ```
  *
@@ -323,6 +355,13 @@ export const MachineImageProvider = () =>
           previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ machineImageName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, machineImageName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -85,8 +86,28 @@ export type StoredInfoType = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  StoredInfoTypeLookup
 >;
+
+/**
+ * Props for {@link StoredInfoType.lookup}: find a stored info type this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface StoredInfoTypeLookup {
+  /**
+   * StoredInfoType id (the `{storedInfoType}` segment of
+   * `projects/{project}/storedInfoTypes/{storedInfoType}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  storedInfoTypeId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Cloud DLP stored info type
@@ -114,6 +135,19 @@ export type StoredInfoType = Resource<
  *   displayName: "account ids",
  *   description: "internal account numbers v2",
  *   regex: { pattern: "ACCT[0-9]{10}" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing stored info type
+ * `StoredInfoType.lookup` references a stored info type Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * stored info type.
+ *
+ * **Example:** Reference an existing stored info type
+ * ```typescript
+ * const storedInfoType = GCP.DLP.StoredInfoType.lookup({
+ *   storedInfoTypeId: "my-stored-info-type",
  * });
  * ```
  *
@@ -180,6 +214,14 @@ export const StoredInfoTypeProvider = () =>
         news.storedInfoTypeId !== previousId;
       return replaceOnIdentity(idChanged);
     }),
+
+    lookup: Effect.fn(function* ({ storedInfoTypeId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, storedInfoTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

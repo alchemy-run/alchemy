@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
@@ -105,8 +106,32 @@ export type WorkloadIdentityProvider = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkloadIdentityProviderLookup
 >;
+
+/**
+ * Props for {@link WorkloadIdentityProvider.lookup}: find a workload
+ * identity provider this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface WorkloadIdentityProviderLookup {
+  /**
+   * Provider id: 4-32 lowercase letters, digits, or hyphens (the `gcp-`
+   * prefix is reserved). Deleted providers keep their id for 30 days;
+   * redeploying the same id in that window restores the provider.
+   */
+  workloadIdentityPoolProviderId: string;
+  /**
+   * Id of the pool the provider belongs to.
+   */
+  workloadIdentityPoolId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An issuer in a Google Cloud IAM workload identity pool (a "workload
@@ -149,6 +174,20 @@ export type WorkloadIdentityProvider = Resource<
  * replaces the provider. GCP keeps a deleted provider for 30 days and
  * reserves its id; deploying that id again restores it and re-applies the
  * declared settings.
+ *
+ * ### Looking up an existing workload identity provider
+ * `WorkloadIdentityProvider.lookup` references a workload identity provider
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared workload identity provider.
+ *
+ * **Example:** Reference an existing workload identity provider
+ * ```typescript
+ * const workloadIdentityProvider = GCP.IAM.WorkloadIdentityProvider.lookup({
+ *   workloadIdentityPoolProviderId: "my-workload-identity-pool-provider",
+ *   workloadIdentityPoolId: "my-workload-identity-pool",
+ * });
+ * ```
  *
  * @resource
  * @category IAM
@@ -256,6 +295,17 @@ export const WorkloadIdentityProviderProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workloadIdentityPoolProviderId, workloadIdentityPoolId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      if (workloadIdentityPoolId === undefined) return undefined;
+      const existing = yield* getProvider(
+        providerName(project, workloadIdentityPoolId, workloadIdentityPoolProviderId),
+      );
+      if (existing === undefined || existing.state === "DELETED") return undefined;
+      return toAttrs(existing, project, workloadIdentityPoolId, workloadIdentityPoolProviderId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

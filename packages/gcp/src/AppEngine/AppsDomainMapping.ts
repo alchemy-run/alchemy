@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   catchMissing,
@@ -92,8 +93,30 @@ export type AppsDomainMapping = Resource<
     resourceRecords: AppsDomainMappingResourceRecord[];
   },
   never,
-  Providers
+  Providers,
+  AppsDomainMappingLookup
 >;
+
+/**
+ * Props for {@link AppsDomainMapping.lookup}: find an apps domain mapping
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AppsDomainMappingLookup {
+  /**
+   * Domain name served by the application (for example `www.example.com`).
+   */
+  domain: string;
+  /**
+   * App Engine application id.
+   */
+  appsId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A custom domain serving an App Engine application.
@@ -132,6 +155,19 @@ export type AppsDomainMapping = Resource<
  *     sslManagementType: "MANUAL",
  *     certificateId: cert.certificateId,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing apps domain mapping
+ * `AppsDomainMapping.lookup` references an apps domain mapping Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared apps domain mapping.
+ *
+ * **Example:** Reference an existing apps domain mapping
+ * ```typescript
+ * const appsDomainMapping = GCP.AppEngine.AppsDomainMapping.lookup({
+ *   domain: "my-domain",
  * });
  * ```
  *
@@ -208,6 +244,16 @@ export const AppsDomainMappingProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ domain: lookupDomain, appsId: lookupAppsId }) {
+      const env = yield* GcpEnvironment.current;
+      const appsId = yield* resolveAppsId(lookupAppsId, undefined);
+      const domain = lookupDomain ?? "";
+      const existing = yield* getByDomain(appsId, domain);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, appsId, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

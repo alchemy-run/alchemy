@@ -12,6 +12,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -181,8 +182,28 @@ export interface RouteTable extends Resource<
     tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RouteTableLookup
 > {}
+
+/**
+ * Props for {@link RouteTable.lookup}: find a route table this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type RouteTableLookup =
+  | {
+      /** The route table's id. */
+      routeTableId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC whose main route table to find. */
+      vpcId: string;
+      main: true;
+    };
 /**
  * A VPC route table holds a set of routes that determine where network
  * traffic from associated subnets (or gateways) is directed. Create one
@@ -252,6 +273,24 @@ export interface RouteTable extends Resource<
  * the `0.0.0.0/0` route. Multiple subnets can share the same route table by
  * declaring additional associations -- a common way to give every public
  * subnet in a VPC identical routing.
+ *
+ * ### Looking up an existing route table
+ * `RouteTable.lookup` references a route table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `routeTableId`, its `Name` tag, or
+`{ vpcId, main: true }` for a VPC's main route table. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Add a route to an existing VPC's main route table
+ * ```typescript
+ * const main = AWS.EC2.RouteTable.lookup({ vpcId, main: true });
+ *
+ * yield* AWS.EC2.Route("ToPeer", {
+ *   routeTableId: main.routeTableId,
+ *   destinationCidrBlock: "10.1.0.0/16",
+ *   vpcPeeringConnectionId: peering.vpcPeeringConnectionId,
+ * });
+ * ```
  *
  * @resource
  */
@@ -342,6 +381,46 @@ export const RouteTableProvider = () =>
         // associations are managed by `Route` and `RouteTableAssociation`
         // (which observe them), so the persisted snapshot is carried forward
         // instead of reporting their changes as this table's drift.
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeRouteTables(
+              "routeTableId" in props
+                ? { RouteTableIds: [props.routeTableId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : {
+                      Filters: [
+                        { Name: "vpc-id", Values: [props.vpcId] },
+                        { Name: "association.main", Values: ["true"] },
+                      ],
+                    },
+            )
+            .pipe(
+              Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+                Effect.succeed({ RouteTables: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.RouteTable",
+            "routeTableId" in props
+              ? props.routeTableId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `main route table of ${props.vpcId}`,
+            found.RouteTables ?? [],
+            (x) => x.RouteTableId,
+          );
+          if (!match?.RouteTableId) return undefined;
+          return {
+            routeTableId: match.RouteTableId as RouteTableId,
+            routeTableArn:
+              `arn:aws:ec2:${region}:${accountId}:route-table/${match.RouteTableId}` as `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`,
+            vpcId: match.VpcId as VpcId,
+            ownerId: match.OwnerId,
+            tags: tagListRecord(match.Tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.routeTableId) return undefined;
           const routeTable = (yield* ec2

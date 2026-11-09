@@ -50,11 +50,21 @@ export interface Alarm extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AlarmLookup
 > {}
 
 /**
- * A CloudWatch metric alarm -- watches a single metric (or metric-math
+ * Props for {@link Alarm.lookup}: find an alarm this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AlarmLookup {
+  /** The alarm name of the existing alarm. */
+  alarmName: string;
+}
+
+/**
+ * A CloudWatch metric alarm — watches a single metric (or metric-math
  * expression) and transitions between `OK`, `ALARM`, and
  * `INSUFFICIENT_DATA`, optionally firing actions on state change.
  * ### Creating Alarms
@@ -97,6 +107,16 @@ export interface Alarm extends Resource<
  * // runtime
  * const result = yield* describeAlarms();
  * const state = result.MetricAlarms?.[0]?.StateValue;
+ * ```
+ *
+ * ### Looking up an existing alarm
+ * `Alarm.lookup` references an alarm Alchemy doesn't manage (created in the
+ * console or by another stack), found by `alarmName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing alarm
+ * ```typescript
+ * const existing = AWS.CloudWatch.Alarm.lookup({ alarmName: "my-alarm" });
  * ```
  *
  * @resource
@@ -196,6 +216,11 @@ export const AlarmProvider = () =>
             );
             return attrs;
           }),
+        lookup: Effect.fn(function* ({ alarmName: name }) {
+          const state = yield* readAlarm(name);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readAlarm(name);

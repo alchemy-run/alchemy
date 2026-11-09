@@ -142,7 +142,7 @@ export const LoggingProvider = () =>
       return toAttributes(acct, observed, initialSettings);
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       // 1. Observe -- the singleton always exists; read its live state.

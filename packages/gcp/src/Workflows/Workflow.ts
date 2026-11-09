@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -129,11 +130,37 @@ export type Workflow = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkflowLookup
 >;
 
 /**
- * A Google Cloud Workflows workflow -- YAML or JSON orchestration that
+ * Props for {@link Workflow.lookup}: find a workflow this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface WorkflowLookup {
+  /**
+   * Workflow id (the `{workflow}` segment of
+   * `projects/{project}/locations/{location}/workflows/{workflow}`). Must
+   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1–64 characters, start
+   * with a letter, end with a letter or number).
+   */
+  workflowId: string;
+  /**
+   * Workflows location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Google Cloud Workflows workflow — YAML or JSON orchestration that
  * Workflows executes as a revisioned program.
  *
  * Changing `workflowId` or `location` replaces the workflow. Updating
@@ -175,6 +202,18 @@ export type Workflow = Resource<
  * const createExecution = yield* GCP.Workflows.CreateExecution(greet);
  * const execution = yield* createExecution({
  *   body: { argument: JSON.stringify({ name: "world" }) },
+ * });
+ * ```
+ *
+ * ### Looking up an existing workflow
+ * `Workflow.lookup` references a workflow Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared workflow.
+ *
+ * **Example:** Reference an existing workflow
+ * ```typescript
+ * const workflow = GCP.Workflows.Workflow.lookup({
+ *   workflowId: "my-workflow",
  * });
  * ```
  *
@@ -372,6 +411,15 @@ export const WorkflowProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workflowId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, workflowId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

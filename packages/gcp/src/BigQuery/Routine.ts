@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   alchemyLabelKeys,
@@ -183,11 +184,37 @@ export type Routine = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RoutineLookup
 >;
 
 /**
- * A Google BigQuery routine -- a user-defined function, table-valued
+ * Props for {@link Routine.lookup}: find a routine this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RoutineLookup {
+  /**
+   * Routine id (the `{routine}` segment of
+   * `projects/{project}/datasets/{dataset}/routines/{routine}`). Must
+   * contain only letters, numbers, and underscores; max 256 characters.
+   */
+  routineId: string;
+  /**
+   * Dataset id (the `{dataset}` segment of
+   * `projects/{project}/datasets/{dataset}`) or a full dataset resource
+   * name.
+   */
+  datasetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Google BigQuery routine — a user-defined function, table-valued
  * function, aggregate function, or stored procedure.
  *
  * Routines have no labels; Alchemy stamps ownership into the description
@@ -248,6 +275,19 @@ export type Routine = Resource<
  * ```typescript
  * const query = yield* GCP.BigQuery.Query(dataset);
  * const result = yield* query({ query: "SELECT Add(1, 2) AS n" });
+ * ```
+ *
+ * ### Looking up an existing routine
+ * `Routine.lookup` references a routine Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared routine.
+ *
+ * **Example:** Reference an existing routine
+ * ```typescript
+ * const routine = GCP.BigQuery.Routine.lookup({
+ *   routineId: "my-routine",
+ *   datasetId: "my-dataset",
+ * });
  * ```
  *
  * @resource
@@ -529,6 +569,15 @@ export const RoutineProvider = () =>
           nextRoutineId === previousRoutineId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ routineId, datasetId: lookupDatasetId }) {
+      const env = yield* GcpEnvironment.current;
+      const datasetId = datasetIdOf(lookupDatasetId ?? "");
+      if (datasetId.length === 0) return undefined;
+      const existing = yield* getByRef(env.project, datasetId, routineId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

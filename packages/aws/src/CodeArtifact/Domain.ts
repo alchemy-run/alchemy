@@ -46,11 +46,21 @@ export interface Domain extends Resource<
     s3BucketArn: string;
   },
   never,
-  Providers
+  Providers,
+  DomainLookup
 > {}
 
 /**
- * An AWS CodeArtifact domain -- the top-level container that groups a set of
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DomainLookup {
+  /** The domain name of the existing domain. */
+  domainName: string;
+}
+
+/**
+ * An AWS CodeArtifact domain — the top-level container that groups a set of
  * package repositories and provides a single point for encryption, ownership
  * and cross-account access control.
  *
@@ -67,6 +77,16 @@ export interface Domain extends Resource<
  *   encryptionKey: key.keyArn,
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const existing = AWS.CodeArtifact.Domain.lookup({ domainName: "my-domain" });
  * ```
  *
  * @resource
@@ -93,7 +113,7 @@ export const DomainProvider = () =>
       const toName = (id: string, props: Partial<DomainProps>) =>
         props.domainName
           ? Effect.succeed(props.domainName)
-          : createPhysicalName({ id, maxLength: 50 });
+          : createPhysicalName({ id, maxLength: 50, lowercase: true });
 
       const getDomain = Effect.fn(function* (name: string) {
         const response = yield* codeartifact
@@ -142,6 +162,13 @@ export const DomainProvider = () =>
           if ((news?.encryptionKey ?? undefined) !== (olds?.encryptionKey ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ domainName: name }) {
+          const domain = yield* getDomain(name);
+          if (domain?.arn === undefined) return undefined;
+          const attrs = toAttrs(domain, name);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

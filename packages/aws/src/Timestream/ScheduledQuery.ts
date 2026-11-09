@@ -114,11 +114,21 @@ export interface ScheduledQuery extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ScheduledQueryLookup
 > {}
 
 /**
- * An Amazon Timestream for LiveAnalytics scheduled query -- a SQL query
+ * Props for {@link ScheduledQuery.lookup}: find a scheduled query this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScheduledQueryLookup {
+  /** The ARN of the existing scheduled query. */
+  scheduledQueryArn: string;
+}
+
+/**
+ * An Amazon Timestream for LiveAnalytics scheduled query — a SQL query
  * Timestream runs on a cron/rate schedule, materializing results into a
  * target table and notifying an SNS topic after each run.
  *
@@ -167,6 +177,16 @@ export interface ScheduledQuery extends Resource<
  *   // ... unchanged configuration ...
  *   state: "DISABLED",
  * });
+ * ```
+ *
+ * ### Looking up an existing scheduled query
+ * `ScheduledQuery.lookup` references a scheduled query Alchemy doesn't manage (created in the
+ * console or by another stack), found by `scheduledQueryArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing scheduled query
+ * ```typescript
+ * const existing = AWS.Timestream.ScheduledQuery.lookup({ scheduledQueryArn: "..." });
  * ```
  *
  * @resource
@@ -247,6 +267,11 @@ export const ScheduledQueryProvider = () =>
               (attrs): attrs is ScheduledQuery["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ scheduledQueryArn }) {
+          const state = yield* readScheduledQuery(scheduledQueryArn);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.scheduledQueryArn
             ? yield* readScheduledQuery(output.scheduledQueryArn)

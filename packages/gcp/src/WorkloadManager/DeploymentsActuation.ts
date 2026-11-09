@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandNamed,
@@ -102,11 +103,40 @@ export type DeploymentsActuation = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeploymentsActuationLookup
 >;
 
 /**
- * A Workload Manager actuation -- a bootstrap run of a Deployment that
+ * Props for {@link DeploymentsActuation.lookup}: find a deployments
+ * actuation this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface DeploymentsActuationLookup {
+  /**
+   * Actuation id (the `{actuation}` segment). The API has no patch —
+   * actuations are existence-only.
+   */
+  actuationId: string;
+  /**
+   * Region used when `deployment` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Deployment. Full name
+   * `projects/{project}/locations/{location}/deployments/{deployment}` or
+   * the deployment id (combined with `location`).
+   */
+  deployment: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Workload Manager actuation — a bootstrap run of a Deployment that
  * applies Terraform/Ansible and records infrastructure output.
  *
  * Actuations have no labels, description, or patch API. Identity is
@@ -132,6 +162,20 @@ export type DeploymentsActuation = Resource<
  *     actuationId: "alch-bootstrap-1",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing deployments actuation
+ * `DeploymentsActuation.lookup` references a deployments actuation Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared deployments actuation.
+ *
+ * **Example:** Reference an existing deployments actuation
+ * ```typescript
+ * const deploymentsActuation = GCP.WorkloadManager.DeploymentsActuation.lookup({
+ *   actuationId: "my-actuation",
+ *   deployment: "my-deployment",
+ * });
  * ```
  *
  * @resource
@@ -230,6 +274,20 @@ export const DeploymentsActuationProvider = () =>
         nextParent,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      actuationId,
+      location: lookupLocation,
+      deployment: lookupDeployment,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const deployment = expandNamed(lookupDeployment ?? "", env.project, location, "deployments");
+      const name = resourceName(deployment, actuationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

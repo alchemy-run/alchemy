@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -149,8 +150,35 @@ export type GoogleApiSource = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GoogleApiSourceLookup
 >;
+
+/**
+ * Props for {@link GoogleApiSource.lookup}: find a google api source this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface GoogleApiSourceLookup {
+  /**
+   * Google API source id (the `{googleApiSource}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/googleApiSources/{googleApiSource}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  googleApiSourceId: string;
+  /**
+   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`. One source
+   * is allowed per project per region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc Advanced GoogleApiSource that delivers first-party Google
@@ -185,6 +213,19 @@ export type GoogleApiSource = Resource<
  *   destination: bus.name,
  *   displayName: "google events v2",
  *   labels: { env: "prod", role: "source" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing google api source
+ * `GoogleApiSource.lookup` references a google api source Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * google api source.
+ *
+ * **Example:** Reference an existing google api source
+ * ```typescript
+ * const googleApiSource = GCP.Eventarc.GoogleApiSource.lookup({
+ *   googleApiSourceId: "my-google-api-source",
  * });
  * ```
  *
@@ -260,6 +301,15 @@ export const GoogleApiSourceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ googleApiSourceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, googleApiSourceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

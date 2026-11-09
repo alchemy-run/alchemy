@@ -7,7 +7,11 @@ import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
-import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import {
+  type BaseRuntimeContext,
+  CurrentRuntimeContext,
+  OidcTokenError,
+} from "alchemy/RuntimeContext";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -28,12 +32,18 @@ import { WorkloadIdentityProvider } from "./IAM/WorkloadIdentityProvider.ts";
  * - the host runs as a service account (Cloud Run, Cloud Functions, a GKE
  *   pod): roles are granted to that account, and calls use its
  *   metadata-server credentials;
- * - the host runs as an AWS IAM role (Lambda, ECS, EC2, App Runner): Alchemy
+ * - the host runs as an AWS IAM role (Lambda, ECS, EC2, App Runner, Batch,
+ *   an EKS pod): Alchemy
  *   creates a service account, grants the roles to it, and lets the role
  *   impersonate it through a workload identity pool that trusts the AWS
  *   account. The host exchanges a signed `GetCallerIdentity` request for the
  *   account's token; no key is created;
- * - any other host (a Cloudflare Worker, an EKS pod): Alchemy creates a
+ * - the host runs on Fly Machines (a Fly Service): Alchemy creates a
+ *   service account, grants the roles to it, and lets the App impersonate
+ *   it through a workload identity pool that trusts the organization's Fly
+ *   OIDC issuer. The host exchanges its Machine's OIDC token; no key is
+ *   created;
+ * - any other host (a Cloudflare Worker): Alchemy creates a
  *   service account and key for it, grants the roles to that account, and
  *   binds the key into the host's env;
  * - no host (a script or deploy-time Action): nothing is bound and calls use
@@ -120,15 +130,38 @@ const AWS_ROLE_ARN_ATTRIBUTE: Record<string, string> = {
   "AWS.EC2.Instance": "roleArn",
   "AWS.AutoScaling.LaunchTemplate": "roleArn",
   "AWS.AppRunner.Service": "instanceRoleArn",
+  "AWS.Batch.JobDefinition": "jobRoleArn",
 };
+
+/** An `AWS.EKS.Cluster`, or a cluster connection authenticating as `aws-eks`. */
+const isEksCluster = (cluster: unknown): boolean => {
+  if (isResourceOfType(cluster, "AWS.EKS.Cluster")) return true;
+  const value = cluster as { auth?: { kind?: string }; connection?: { auth?: { kind?: string } } };
+  return value?.auth?.kind === "aws-eks" || value?.connection?.auth?.kind === "aws-eks";
+};
+
+/** A Kubernetes workload on an EKS cluster, which runs as a Pod Identity role. */
+const isEksWorkload = (host: ResourceLike): boolean =>
+  (host.Type === "Kubernetes.Deployment" || host.Type === "Kubernetes.Job") &&
+  isEksCluster(host.Props?.cluster);
 
 /**
  * Whether a host runs its code as an AWS IAM role GCP can federate with:
- * Lambda, ECS, EC2, an EC2 launch template, or App Runner. Not an EKS pod or
- * a Batch job, which keep a key. Deploy-time only.
+ * Lambda, ECS, EC2, an EC2 launch template, App Runner, Batch, or a
+ * Kubernetes workload on EKS (Pod Identity). Deploy-time only.
  */
 export const runsAsAwsRole = (host: ResourceLike): boolean =>
-  Object.hasOwn(AWS_ROLE_ARN_ATTRIBUTE, host.Type);
+  Object.hasOwn(AWS_ROLE_ARN_ATTRIBUTE, host.Type) || isEksWorkload(host);
+
+/** The ARN of the IAM role an AWS host runs as (see {@link runsAsAwsRole}). */
+const awsRoleArnOf = (host: ResourceLike): Output.Output<string> => {
+  const attrs = host as unknown as Record<string, Output.Output<unknown>>;
+  if (isEksWorkload(host)) {
+    // The EKS adapter's identity state: the generated Pod Identity role.
+    return Output.map(attrs.identity!, (identity) => (identity as { roleArn: string }).roleArn);
+  }
+  return attrs[AWS_ROLE_ARN_ATTRIBUTE[host.Type]!]! as Output.Output<string>;
+};
 
 /**
  * Id of the AWS provider in the stack's pool. Fixed so a host's env can name
@@ -137,7 +170,29 @@ export const runsAsAwsRole = (host: ResourceLike): boolean =>
  */
 const AWS_PROVIDER_ID = "alchemy-aws";
 
-/** `arn:aws:iam::123:role/path/name` -> `arn:aws:sts::123:assumed-role/name`. */
+/**
+ * Whether a host runs its code on Fly Machines, which mint OIDC tokens
+ * signed by `https://oidc.fly.io/{org}`: a Fly Service. Not a Fly Sprite.
+ * Deploy-time only.
+ *
+ * TODO: don't hard-code Fly host types in the GCP package, as with
+ * {@link runsAsAwsRole}.
+ */
+export const runsOnFlyMachines = (host: ResourceLike): boolean => host.Type === "Fly.Service";
+
+/** Id of the Fly provider in the stack's Fly pool, fixed for the same reason as {@link AWS_PROVIDER_ID}. */
+const FLY_PROVIDER_ID = "alchemy-fly";
+
+/**
+ * Maps a Fly token to its App, so a grant to `attribute.fly_app/<app>`
+ * matches every Machine of that App. `sub` is `<org>:<app>:<machine>`.
+ */
+const FLY_ATTRIBUTE_MAPPING = {
+  "google.subject": "assertion.sub",
+  "attribute.fly_app": "assertion.app_name",
+};
+
+/** `arn:aws:iam::123:role/path/name` → `arn:aws:sts::123:assumed-role/name`. */
 const assumedRoleArn = (roleArn: string) => {
   const [, partition, , , account, resource] = roleArn.split(":");
   const name = resource?.split("/").pop();
@@ -258,9 +313,7 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       const runtime = (yield* CurrentRuntimeContext)!;
 
       if (runsAsAwsRole(host)) {
-        const roleArn = (host as unknown as Record<string, Output.Output<string>>)[
-          AWS_ROLE_ARN_ATTRIBUTE[host.Type]!
-        ]!;
+        const roleArn = awsRoleArnOf(host);
         // One pool and provider serve every AWS host in the stack: a second
         // declaration of the same id resolves to the first.
         const pool = yield* GcpWorkloadIdentityPool("AwsWorkloadIdentityPool", {
@@ -282,6 +335,42 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         yield* runtime.set(
           FEDERATION_ENV.audience,
           Output.interpolate`//iam.googleapis.com/${pool.name}/providers/${AWS_PROVIDER_ID}`,
+        );
+        yield* runtime.set(FEDERATION_ENV.email, account.email);
+        yield* runtime.set(FEDERATION_ENV.project, account.project);
+        for (const [name, value] of Object.entries(data.env ?? {})) {
+          yield* runtime.set(name, Output.isOutput(value) ? value : Output.literal(value));
+        }
+        return;
+      }
+
+      if (runsOnFlyMachines(host)) {
+        const { orgSlug, appName } = host as unknown as {
+          orgSlug: Output.Output<string>;
+          appName: Output.Output<string>;
+        };
+        // One pool and provider serve every Fly host in the stack: a second
+        // declaration of the same id resolves to the first.
+        const pool = yield* GcpWorkloadIdentityPool("FlyWorkloadIdentityPool", {
+          displayName: "Alchemy Fly hosts",
+        });
+        // No `allowedAudiences`: a token must name the provider itself.
+        yield* GcpWorkloadIdentityProvider("FlyWorkloadIdentityProvider", {
+          workloadIdentityPoolId: pool.workloadIdentityPoolId,
+          workloadIdentityPoolProviderId: FLY_PROVIDER_ID,
+          displayName: "Alchemy Fly hosts",
+          oidc: { issuerUri: Output.interpolate`https://oidc.fly.io/${orgSlug}` },
+          attributeMapping: FLY_ATTRIBUTE_MAPPING,
+        });
+        yield* GcpMember(`${host.LogicalId}WorkloadIdentityUser`, {
+          kind: "iam.serviceAccount",
+          name: Output.interpolate`projects/${account.project}/serviceAccounts/${account.email}`,
+          role: "roles/iam.workloadIdentityUser",
+          member: Output.interpolate`principalSet://iam.googleapis.com/${pool.name}/attribute.fly_app/${appName}`,
+        });
+        yield* runtime.set(
+          FEDERATION_ENV.audience,
+          Output.interpolate`//iam.googleapis.com/${pool.name}/providers/${FLY_PROVIDER_ID}`,
         );
         yield* runtime.set(FEDERATION_ENV.email, account.email);
         yield* runtime.set(FEDERATION_ENV.project, account.project);
@@ -345,6 +434,14 @@ const awsSubjectToken = (audience: string) =>
     );
   }).pipe(Effect.provide(FetchHttpClient.layer));
 
+/** The Machine's Fly OIDC token for `audience`, minted on every token refresh. */
+const flyOidcToken = (runtime: BaseRuntimeContext, audience: string) =>
+  runtime.oidcToken !== undefined
+    ? runtime.oidcToken(audience)
+    : Effect.fail(
+        new OidcTokenError({ message: `${runtime.Type} ${runtime.id} cannot mint OIDC tokens` }),
+      );
+
 /**
  * Resolve a distilled operation with the host's GCP credentials, once when
  * the binding's layer is built: with the key {@link Bind} created for this
@@ -357,8 +454,12 @@ export const withCredentials: <Op>(operation: Effect.Effect<Op, never, any>) => 
     if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "GCP.IAM.ServiceAccount")
       return yield* operation as Effect.Effect<Op>;
     const runtime = yield* CurrentRuntimeContext;
-    // A host running as an AWS IAM role federates; it never has a key.
-    if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "AWS.IAM.Role") {
+    // A host running as an AWS IAM role or on Fly Machines federates; it
+    // never has a key.
+    if (
+      globalThis.__ALCHEMY_HOST_IDENTITY__ === "AWS.IAM.Role" ||
+      globalThis.__ALCHEMY_HOST_IDENTITY__ === "Fly.OIDC"
+    ) {
       const audience =
         globalThis.__ALCHEMY_RUNTIME__ && runtime !== undefined
           ? yield* runtime.get<string>(FEDERATION_ENV.audience)
@@ -370,8 +471,16 @@ export const withCredentials: <Op>(operation: Effect.Effect<Op, never, any>) => 
         audience,
         serviceAccountEmail: (yield* runtime.get<string>(FEDERATION_ENV.email))!,
         project: yield* runtime.get<string>(FEDERATION_ENV.project),
-        subjectToken: awsSubjectToken(audience),
-        subjectTokenType: "urn:ietf:params:aws:token-type:aws4_request",
+        ...(globalThis.__ALCHEMY_HOST_IDENTITY__ === "Fly.OIDC"
+          ? {
+              // A Fly token whose audience names the provider.
+              subjectToken: flyOidcToken(runtime, audience),
+              subjectTokenType: "urn:ietf:params:oauth:token-type:jwt",
+            }
+          : {
+              subjectToken: awsSubjectToken(audience),
+              subjectTokenType: "urn:ietf:params:aws:token-type:aws4_request",
+            }),
       });
       const credentials = Context.get(
         yield* Layer.build(federated).pipe(Effect.scoped),

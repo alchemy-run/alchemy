@@ -40,11 +40,21 @@ export interface Application extends Resource<
     applicationName: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
 
 /**
- * An AWS Service Catalog AppRegistry application -- the top-level node that
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApplicationLookup {
+  /** The application id of the existing application. */
+  applicationId: string;
+}
+
+/**
+ * An AWS Service Catalog AppRegistry application — the top-level node that
  * groups related cloud resources and metadata under a single logical
  * application (surfaced in myApplications and the `awsApplication` tag).
  *
@@ -63,6 +73,16 @@ export interface Application extends Resource<
  *   description: "Customer-facing storefront services",
  *   tags: { team: "commerce" },
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.AppRegistry.Application.lookup({ applicationId: "my-application" });
  * ```
  *
  * @resource
@@ -103,6 +123,16 @@ export const ApplicationProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ applicationId: specifier }) {
+          const found = yield* observe(specifier);
+          if (!found?.id) return undefined;
+          const attrs = {
+            applicationId: found.id,
+            applicationArn: found.arn!,
+            applicationName: found.name!,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const specifier = output?.applicationId ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(specifier);

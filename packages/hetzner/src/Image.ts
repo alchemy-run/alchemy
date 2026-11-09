@@ -22,6 +22,7 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -147,12 +148,22 @@ export type Image = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ImageLookup
 >;
 
 /**
- * A Hetzner Cloud custom Image -- a snapshot (or backup) of a Server's
- * disk. Stock system/app Images (`ubuntu-24.04`, ...) are Catalog lookups
+ * Props for {@link Image.lookup}: find a snapshot or backup
+ * image this stack doesn't manage by its id.
+ */
+export interface ImageLookup {
+  /** Numeric image id. */
+  id: number;
+}
+
+/**
+ * A Hetzner Cloud custom Image — a snapshot (or backup) of a Server's
+ * disk. Stock system/app Images (`ubuntu-24.04`, …) are Catalog lookups
  * via `Hetzner.findImage`, not this resource.
  *
  * Snapshots are created with `POST /servers/{id}/actions/create_image`
@@ -193,6 +204,17 @@ export type Image = Resource<
  *   labels: { role: "golden", env: "prod" },
  *   deleteProtection: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references a image Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing snapshot
+ * ```typescript
+ * const snapshot = Hetzner.Image.lookup({ id: 123456 });
+ * const size = snapshot.diskSize;
  * ```
  *
  * @resource
@@ -406,12 +428,22 @@ export const ImageProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output }) {
+    lookup: Effect.fn(function* ({ id }) {
+      const found = yield* getById(id);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, output, previous }) {
       const found = yield* observe({
         id,
         outputId: output?.id,
       });
       if (found === undefined) return undefined;
+      // Images have no name: a label match during a replacement is always
+      // the generation being replaced.
+      if (isReplacedGeneration({ previousId: previous?.id, foundId: found.id })) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);

@@ -48,11 +48,21 @@ export interface Keyspace extends Resource<
     replicationStrategy: string;
   },
   never,
-  Providers
+  Providers,
+  KeyspaceLookup
 > {}
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) keyspace -- the top-level
+ * Props for {@link Keyspace.lookup}: find a keyspace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KeyspaceLookup {
+  /** The keyspace name of the existing keyspace. */
+  keyspaceName: string;
+}
+
+/**
+ * An Amazon Keyspaces (for Apache Cassandra) keyspace — the top-level
  * container for Cassandra tables.
  *
  * Keyspaces are serverless, free to create, and provisioned near-instantly,
@@ -69,6 +79,16 @@ export interface Keyspace extends Resource<
  *   keyspaceName: "app_data",
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing keyspace
+ * `Keyspace.lookup` references a keyspace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing keyspace
+ * ```typescript
+ * const existing = AWS.Keyspaces.Keyspace.lookup({ keyspaceName: "my-keyspace" });
  * ```
  *
  * @resource
@@ -124,6 +144,17 @@ export const KeyspaceProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ keyspaceName: name }) {
+          const found = yield* readKeyspace(name);
+          if (found === undefined) return undefined;
+          const attrs = {
+            keyspaceName: found.keyspaceName,
+            keyspaceArn: found.resourceArn,
+            replicationStrategy: found.replicationStrategy,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

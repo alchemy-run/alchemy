@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -111,8 +112,33 @@ export type AssetsExportJob = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AssetsExportJobLookup
 >;
+
+/**
+ * Props for {@link AssetsExportJob.lookup}: find an assets export job this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AssetsExportJobLookup {
+  /**
+   * Assets export job id (the `{assetsExportJob}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/assetsExportJobs/{assetsExportJob}`).
+   */
+  assetsExportJobId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Migration Center assets export job that writes inventory (and
@@ -135,6 +161,19 @@ export type AssetsExportJob = Resource<
  * const job = yield* GCP.MigrationCenter.AssetsExportJob("Inventory", {
  *   fileFormat: "XLSX",
  *   performanceDataMaxDays: 40,
+ * });
+ * ```
+ *
+ * ### Looking up an existing assets export job
+ * `AssetsExportJob.lookup` references an assets export job Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * assets export job.
+ *
+ * **Example:** Reference an existing assets export job
+ * ```typescript
+ * const assetsExportJob = GCP.MigrationCenter.AssetsExportJob.lookup({
+ *   assetsExportJobId: "my-assets-export-job",
  * });
  * ```
  *
@@ -258,6 +297,15 @@ export const AssetsExportJobProvider = () =>
         extra: payloadChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({ assetsExportJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, assetsExportJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

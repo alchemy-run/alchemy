@@ -233,7 +233,8 @@ const findByName = (accountId: string, name: string) =>
 
 const createNetworkName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+    // Cloudflare caps managed network names at 50 characters.
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 50 }));
   });
 
 const encodeConfig = (

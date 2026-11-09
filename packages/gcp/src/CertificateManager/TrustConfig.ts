@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -127,11 +128,36 @@ export type TrustConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TrustConfigLookup
 >;
 
 /**
- * A Certificate Manager TrustConfig -- the PKI used to validate client
+ * Props for {@link TrustConfig.lookup}: find a trust config this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TrustConfigLookup {
+  /**
+   * TrustConfig id (the `{trustConfig}` segment of
+   * `projects/{project}/locations/{location}/trustConfigs/{trustConfig}`).
+   * Must be 1-63 characters and match `[a-z0-9-]{1,63}`.
+   */
+  trustConfigId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Certificate Manager TrustConfig — the PKI used to validate client
  * certificates in mutual TLS (load balancer or SPIFFE).
  *
  * Changing `trustConfigId` or `location` replaces the resource.
@@ -186,6 +212,19 @@ export type TrustConfig = Resource<
  *       trustAnchors: [{ pemCertificate }],
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing trust config
+ * `TrustConfig.lookup` references a trust config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * trust config.
+ *
+ * **Example:** Reference an existing trust config
+ * ```typescript
+ * const trustConfig = GCP.CertificateManager.TrustConfig.lookup({
+ *   trustConfigId: "my-trust-config",
  * });
  * ```
  *
@@ -428,6 +467,15 @@ export const TrustConfigProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ trustConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, trustConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

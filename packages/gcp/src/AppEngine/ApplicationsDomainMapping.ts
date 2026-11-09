@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   catchMissing,
@@ -109,8 +110,34 @@ export type ApplicationsDomainMapping = Resource<
     resourceRecords: ApplicationsDomainMappingResourceRecord[];
   },
   never,
-  Providers
+  Providers,
+  ApplicationsDomainMappingLookup
 >;
+
+/**
+ * Props for {@link ApplicationsDomainMapping.lookup}: find an applications
+ * domain mapping this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ApplicationsDomainMappingLookup {
+  /**
+   * Domain name served by the application (for example `www.example.com`).
+   */
+  domain: string;
+  /**
+   * Application id (usually the project id).
+   */
+  applicationsId?: string;
+  /**
+   * App Engine location (`us-central`, `us-east1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A custom domain serving an App Engine application via the
@@ -139,6 +166,19 @@ export type ApplicationsDomainMapping = Resource<
  *     sslManagementType: "MANUAL",
  *     certificateId: cert.certificateId,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing applications domain mapping
+ * `ApplicationsDomainMapping.lookup` references an applications domain
+ * mapping Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared applications domain mapping.
+ *
+ * **Example:** Reference an existing applications domain mapping
+ * ```typescript
+ * const applicationsDomainMapping = GCP.AppEngine.ApplicationsDomainMapping.lookup({
+ *   domain: "my-domain",
  * });
  * ```
  *
@@ -250,6 +290,22 @@ export const ApplicationsDomainMappingProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({
+      domain: lookupDomain,
+      applicationsId: lookupApplicationsId,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const applicationsId = yield* resolveAppsId(lookupApplicationsId ?? env.project, undefined);
+      const project = env.project;
+      const location = yield* resolveLocation(lookupLocation, undefined, applicationsId);
+      const domain = lookupDomain ?? "";
+      const existing = yield* getByDomain(project, location, applicationsId, domain);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, project, location, applicationsId);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

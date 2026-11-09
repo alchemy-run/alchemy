@@ -5,6 +5,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -66,6 +67,14 @@ test.provider.skipIf(!organizationId)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DLP.OrganizationsLocationsStoredInfoType.lookup({
+          storedInfoTypeId: created.storedInfoTypeId,
+          organization: created.organization,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.location).toEqual(location);

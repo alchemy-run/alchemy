@@ -88,11 +88,33 @@ export type EnvironmentsArchiveDeployment = Resource<
     updatedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsArchiveDeploymentLookup
 >;
 
 /**
- * An Apigee archive deployment -- a zip of API proxies deployed as a unit
+ * Props for {@link EnvironmentsArchiveDeployment.lookup}: find an
+ * environments archive deployment this stack doesn't manage by its
+ * identifiers.
+ */
+export interface EnvironmentsArchiveDeploymentLookup {
+  /**
+   * Archive deployment id (last path segment).
+   */
+  archiveDeploymentId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`. The
+   * environment must use archive deployment.
+   */
+  environment: string;
+}
+
+/**
+ * An Apigee archive deployment — a zip of API proxies deployed as a unit
  * to an archive-mode environment.
  *
  * Labels carry Alchemy ownership so `list` / nuke can find leaked rows.
@@ -106,6 +128,20 @@ export type EnvironmentsArchiveDeployment = Resource<
  *   environment: "eval",
  *   archiveZip: zipBase64,
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments archive deployment
+ * `EnvironmentsArchiveDeployment.lookup` references an environments archive
+ * deployment Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared environments archive deployment.
+ *
+ * **Example:** Reference an existing environments archive deployment
+ * ```typescript
+ * const environmentsArchiveDeployment = GCP.Apigee.EnvironmentsArchiveDeployment.lookup({
+ *   archiveDeploymentId: "my-archive-deployment",
+ *   environment: "my-environment",
  * });
  * ```
  *
@@ -195,6 +231,16 @@ export const EnvironmentsArchiveDeploymentProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ archiveDeploymentId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, archiveDeploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

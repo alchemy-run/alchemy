@@ -54,11 +54,21 @@ export interface RuleSet extends Resource<
     ruleSetName: string;
   },
   never,
-  Providers
+  Providers,
+  RuleSetLookup
 > {}
 
 /**
- * An SES Mail Manager rule set -- the ordered rules an ingress point applies
+ * Props for {@link RuleSet.lookup}: find a rule set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleSetLookup {
+  /** The name of the existing rule set. */
+  ruleSetName: string;
+}
+
+/**
+ * An SES Mail Manager rule set — the ordered rules an ingress point applies
  * to incoming email (drop, archive, write to S3, deliver, bounce, invoke
  * Lambda, ...).
  *
@@ -129,6 +139,16 @@ export interface RuleSet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule set
+ * `RuleSet.lookup` references a rule set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule set
+ * ```typescript
+ * const existing = AWS.MailManager.RuleSet.lookup({ ruleSetName: "inbound-rules" });
+ * ```
+ *
  * @resource
  */
 export const RuleSet = Resource<RuleSet>("AWS.MailManager.RuleSet");
@@ -195,6 +215,10 @@ export const RuleSetProvider = () =>
             Effect.map((results) => results.flatMap((r) => (r === undefined ? [] : [toAttrs(r)]))),
           ),
 
+        lookup: Effect.fn(function* ({ ruleSetName }) {
+          const found = yield* observe(undefined, ruleSetName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.ruleSetName ?? (yield* createName(id, olds ?? {}));
           const ruleSet = yield* observe(output, name);

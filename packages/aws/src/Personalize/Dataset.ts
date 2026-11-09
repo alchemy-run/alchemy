@@ -74,12 +74,22 @@ export interface Dataset extends Resource<
     datasetGroupArn: string;
   },
   never,
-  Providers
+  Providers,
+  DatasetLookup
 > {}
 
 /**
- * An Amazon Personalize dataset -- a typed collection (Interactions, Items,
- * Users, ...) inside a dataset group, backed by a schema. Creating the dataset
+ * Props for {@link Dataset.lookup}: find a dataset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatasetLookup {
+  /** The ARN of the existing dataset. */
+  datasetArn: string;
+}
+
+/**
+ * An Amazon Personalize dataset — a typed collection (Interactions, Items,
+ * Users, …) inside a dataset group, backed by a schema. Creating the dataset
  * is a cheap metadata operation; bulk imports and training happen through
  * separate import jobs and solutions.
  *
@@ -91,6 +101,16 @@ export interface Dataset extends Resource<
  *   datasetGroupArn: group.datasetGroupArn,
  *   datasetType: "Interactions",
  * });
+ * ```
+ *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datasetArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dataset
+ * ```typescript
+ * const existing = AWS.Personalize.Dataset.lookup({ datasetArn: "..." });
  * ```
  *
  * @resource
@@ -161,6 +181,13 @@ export const DatasetProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ datasetArn }) {
+          const dataset = yield* describe(datasetArn);
+          if (dataset === undefined) return undefined;
+          const attrs = toAttrs(dataset);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, output }) {

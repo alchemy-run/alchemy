@@ -80,11 +80,21 @@ export interface ClusterSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterSubnetGroupLookup
 > {}
 
 /**
- * An Amazon Redshift cluster subnet group -- the set of VPC subnets a
+ * Props for {@link ClusterSubnetGroup.lookup}: find a cluster subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterSubnetGroupLookup {
+  /** The cluster subnet group name of the existing cluster subnet group. */
+  clusterSubnetGroupName: string;
+}
+
+/**
+ * An Amazon Redshift cluster subnet group — the set of VPC subnets a
  * provisioned Redshift cluster's nodes are placed into.
  *
  * Subnet groups are free and provision instantly. A {@link Cluster}
@@ -103,6 +113,16 @@ export interface ClusterSubnetGroup extends Resource<
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *   tags: { team: "analytics" },
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster subnet group
+ * `ClusterSubnetGroup.lookup` references a cluster subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterSubnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster subnet group
+ * ```typescript
+ * const existing = AWS.Redshift.ClusterSubnetGroup.lookup({ clusterSubnetGroupName: "my-cluster-subnet-group" });
  * ```
  *
  * @resource
@@ -178,6 +198,13 @@ export const ClusterSubnetGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterSubnetGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ClusterSubnetGroupName) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

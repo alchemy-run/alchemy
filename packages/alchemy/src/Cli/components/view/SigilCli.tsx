@@ -160,17 +160,22 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
     })
     .pipe(Scope.provide(scope));
   const close = live.close.pipe(Effect.ensuring(Scope.close(scope, Exit.void)));
+  const startedAt = yield* Clock.currentTimeMillis;
   return {
     done: (outcome) =>
-      Effect.sync(() => {
-        const outputReady = progress.snapshot().output !== undefined;
-        progress.finish(
-          outcome,
-          labels[outcome],
-          options?.dev && outcome === "success" && outputReady ? "output" : "plan",
-        );
-        if (!options?.dev) progress.setViewport("full");
-      }).pipe(Effect.andThen(options?.dev ? Effect.void : close)),
+      Clock.currentTimeMillis.pipe(
+        Effect.map((now) => {
+          const outputReady = progress.snapshot().output !== undefined;
+          progress.finish(
+            outcome,
+            labels[outcome],
+            options?.dev && outcome === "success" && outputReady ? "output" : "plan",
+            now - startedAt,
+          );
+          if (!options?.dev) progress.setViewport("full");
+        }),
+        Effect.andThen(options?.dev ? Effect.void : close),
+      ),
     close,
     emit: (event: ApplyEvent) => Effect.sync(() => progress.emit(event)),
     setOutput: (value: unknown) => Effect.sync(() => progress.setOutput(value)),

@@ -109,11 +109,21 @@ export interface Product extends Resource<
     provisioningArtifactId: string;
   },
   never,
-  Providers
+  Providers,
+  ProductLookup
 > {}
 
 /**
- * An AWS Service Catalog product -- a CloudFormation-backed offering
+ * Props for {@link Product.lookup}: find a product this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProductLookup {
+  /** The id of the existing product. */
+  productId: string;
+}
+
+/**
+ * An AWS Service Catalog product — a CloudFormation-backed offering
  * (or Terraform/external equivalent) with one or more provisioning
  * artifacts (versions) that principals can launch from a portfolio.
  *
@@ -152,6 +162,16 @@ export interface Product extends Resource<
  *   portfolioId: portfolio.portfolioId,
  *   productId: product.productId,
  * });
+ * ```
+ *
+ * ### Looking up an existing product
+ * `Product.lookup` references a product Alchemy doesn't manage (created in the
+ * console or by another stack), found by `productId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing product
+ * ```typescript
+ * const existing = AWS.ServiceCatalog.Product.lookup({ productId: "..." });
  * ```
  *
  * @resource
@@ -224,6 +244,14 @@ export const ProductProvider = () =>
             );
             return items.filter((item): item is Product["Attributes"] => item !== undefined);
           }),
+        lookup: Effect.fn(function* ({ productId }) {
+          const described = yield* observe({ Id: productId });
+          if (!described?.ProductViewDetail?.ProductViewSummary?.ProductId) {
+            return undefined;
+          }
+          const attrs = toAttributes(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const described = output?.productId
             ? yield* observe({ Id: output.productId })

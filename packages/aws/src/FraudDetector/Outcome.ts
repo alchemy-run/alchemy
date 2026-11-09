@@ -36,11 +36,21 @@ export interface Outcome extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  OutcomeLookup
 > {}
 
 /**
- * An Amazon Fraud Detector outcome -- the result a rule produces when it matches
+ * Props for {@link Outcome.lookup}: find an outcome this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface OutcomeLookup {
+  /** The name of the existing outcome. */
+  name: string;
+}
+
+/**
+ * An Amazon Fraud Detector outcome — the result a rule produces when it matches
  * (e.g. `approve`, `review`, `block`). Detector rules reference outcomes; they
  * are cheap metadata objects.
  *
@@ -51,6 +61,16 @@ export interface Outcome extends Resource<
  *   description: "let the transaction through",
  * });
  * const review = yield* FraudDetector.Outcome("review", {});
+ * ```
+ *
+ * ### Looking up an existing outcome
+ * `Outcome.lookup` references an outcome Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing outcome
+ * ```typescript
+ * const existing = AWS.FraudDetector.Outcome.lookup({ name: "my-outcome" });
  * ```
  *
  * @resource
@@ -88,6 +108,13 @@ export const OutcomeProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const outcome = yield* get(name);
+          if (outcome === undefined) return undefined;
+          const attrs = toAttrs(outcome);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

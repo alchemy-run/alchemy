@@ -87,11 +87,21 @@ export interface User extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UserLookup
 > {}
 
 /**
- * A MemoryDB user -- an RBAC identity that authenticates to a cluster and is
+ * Props for {@link User.lookup}: find a user this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UserLookup {
+  /** The user name of the existing user. */
+  userName: string;
+}
+
+/**
+ * A MemoryDB user — an RBAC identity that authenticates to a cluster and is
  * granted permissions through an access string. Users are grouped into
  * {@link ACL}s, which are attached to clusters.
  *
@@ -112,6 +122,16 @@ export interface User extends Resource<
  *   authenticationMode: { type: "iam" },
  *   accessString: "on ~* +@all",
  * });
+ * ```
+ *
+ * ### Looking up an existing user
+ * `User.lookup` references a user Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user
+ * ```typescript
+ * const existing = AWS.MemoryDB.User.lookup({ userName: "my-user" });
  * ```
  *
  * @resource
@@ -186,6 +206,13 @@ export const UserProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ userName: name }) {
+          const user = yield* readUser(name);
+          if (!user?.ARN) return undefined;
+          const attrs = yield* toAttrs(user);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

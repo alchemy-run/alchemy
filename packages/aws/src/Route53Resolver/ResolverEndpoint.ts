@@ -101,11 +101,21 @@ export interface ResolverEndpoint extends Resource<
     hostVpcId: string;
   },
   never,
-  Providers
+  Providers,
+  ResolverEndpointLookup
 > {}
 
 /**
- * A Route 53 Resolver endpoint -- the set of elastic network interfaces that
+ * Props for {@link ResolverEndpoint.lookup}: find a resolver endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ResolverEndpointLookup {
+  /** The name of the existing resolver endpoint. */
+  name: string;
+}
+
+/**
+ * A Route 53 Resolver endpoint — the set of elastic network interfaces that
  * connect your VPC's `.2` resolver to DNS resolvers on your own network.
  *
  * An `INBOUND` endpoint lets DNS resolvers on your network forward queries
@@ -150,6 +160,17 @@ export interface ResolverEndpoint extends Resource<
  *   resolverEndpointId: outbound.resolverEndpointId,
  *   targetIps: [{ ip: "192.168.1.10" }],
  * });
+ * ```
+ *
+ * ### Looking up an existing resolver endpoint
+ * `ResolverEndpoint.lookup` references a resolver endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing resolver endpoint
+ * ```typescript
+ * const outbound = AWS.Route53Resolver.ResolverEndpoint.lookup({ name: "outbound" });
+ * const resolverEndpointId = outbound.resolverEndpointId;
  * ```
  *
  * @resource
@@ -271,6 +292,17 @@ export const ResolverEndpointProvider = () =>
                 ),
             ),
           ),
+        lookup: Effect.fn(function* ({ name }) {
+          const endpoint = yield* observe(name, undefined);
+          if (endpoint?.Id === undefined || endpoint.Arn === undefined) return undefined;
+          return {
+            resolverEndpointId: endpoint.Id,
+            resolverEndpointArn: endpoint.Arn,
+            name: endpoint.Name ?? name,
+            direction: endpoint.Direction ?? "",
+            hostVpcId: endpoint.HostVPCId ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const endpoint = yield* observe(name, output?.resolverEndpointId);

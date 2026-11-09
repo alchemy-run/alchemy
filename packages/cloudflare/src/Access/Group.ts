@@ -88,11 +88,30 @@ export type Group = Resource<
     isDefault: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 >;
 
 /**
- * A Cloudflare Zero Trust Access group -- a reusable, account-scoped set of
+ * Props for {@link Group.lookup}: find an Access group this stack doesn't
+ * manage, by its id or its name.
+ */
+export type GroupLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing group.
+       */
+      groupId: string;
+    }
+  | {
+      /**
+       * The name of the existing group.
+       */
+      name: string;
+    };
+
+/**
+ * A Cloudflare Zero Trust Access group — a reusable, account-scoped set of
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.
@@ -126,6 +145,22 @@ export type Group = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Group
+ * `Group.lookup` reads a group Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `groupId` or `name`, so policies
+ * can reference it. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Allow an existing group
+ * ```typescript
+ * const admins = Cloudflare.Access.Group.lookup({ name: "Admins" });
+ *
+ * const policy = yield* Cloudflare.Access.Policy("AllowAdmins", {
+ *   decision: "allow",
+ *   include: [{ group: { id: admins.groupId } }],
+ * });
+ * ```
+ *
  * @resource
  * @product Access
  * @category Cloudflare One (Zero Trust)
@@ -145,6 +180,23 @@ export const GroupProvider = () =>
         return { action: "replace" } as const;
       }
       // Everything else (name, rules, isDefault) converges via PUT.
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const group =
+        "groupId" in props
+          ? yield* zeroTrust.getAccessGroupForAccount({ accountId, groupId: props.groupId }).pipe(
+              Effect.map(toObserved),
+              Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
+            )
+          : yield* findGroupByName(accountId, props.name);
+      if (!group?.id) return undefined;
+      return {
+        groupId: group.id,
+        accountId,
+        name: group.name ?? "",
+        isDefault: group.isDefault ?? undefined,
+      };
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

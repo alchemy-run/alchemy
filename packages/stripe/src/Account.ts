@@ -270,11 +270,21 @@ export type Account = Resource<
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AccountLookup
 >;
 
 /**
- * A Stripe Connect connected account -- a Standard, Express, or Custom
+ * Props for {@link Account.lookup}: find a connected account this stack
+ * doesn't manage by its id.
+ */
+export interface AccountLookup {
+  /** Stripe connected account id, e.g. `"acct_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Connect connected account — a Standard, Express, or Custom
  * account created by your platform on behalf of a user.
  *
  * Creating an account is only the first step of onboarding: Stripe
@@ -350,6 +360,16 @@ export type Account = Resource<
  *     stripeDashboard: { type: "none" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing connected account
+ * `Account.lookup` references a connected account Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connected account
+ * ```typescript
+ * const ref = Stripe.Account.lookup({ id: "acct_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -578,6 +598,11 @@ export const AccountProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

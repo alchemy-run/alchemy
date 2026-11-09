@@ -79,10 +79,36 @@ export type PostgresBranch = Resource<
   PostgresBranchProps,
   PostgresBranchAttributes,
   never,
-  Providers
+  Providers,
+  PostgresBranchLookup
 >;
 
-/** @resource */
+/**
+ * Props for {@link PostgresBranch.lookup}: find a Postgres branch this
+ * stack doesn't manage by its database and name.
+ */
+export interface PostgresBranchLookup {
+  /** Database name. */
+  database: string;
+  /** Branch name. */
+  name: string;
+}
+
+/**
+ * A branch of a PlanetScale Postgres database.
+ *
+ * ### Looking up an existing Postgres branch
+ * `PostgresBranch.lookup` references a Postgres branch Alchemy doesn't manage (created in
+ * the PlanetScale dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Reference an existing branch
+ * ```typescript
+ * const main = Planetscale.PostgresBranch.lookup({ database: "app", name: "main" });
+ * ```
+ *
+ * @resource
+ */
 export const PostgresBranch = Resource<PostgresBranch>("Planetscale.PostgresBranch");
 
 export const PostgresBranchProvider = () =>

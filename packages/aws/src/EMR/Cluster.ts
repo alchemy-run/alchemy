@@ -213,8 +213,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The id of the existing cluster. */
+  clusterId: string;
+}
 
 /**
  * A provisioned Amazon EMR cluster (job flow) running open-source big-data
@@ -271,6 +281,16 @@ export interface Cluster extends Resource<
  *   jobFlowRole: instanceProfile.instanceProfileName,
  *   securityConfiguration: config.securityConfigurationName,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.EMR.Cluster.lookup({ clusterId: "..." });
  * ```
  *
  * @resource
@@ -474,6 +494,13 @@ export const ClusterProvider = () =>
           if ((newCore === 0) !== (oldCore === 0)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterId }) {
+          const cluster = yield* readCluster(clusterId);
+          if (!cluster) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

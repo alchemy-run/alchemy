@@ -83,7 +83,32 @@ export interface UserGroupAttributes {
   modifiedOn: string;
 }
 
-export type UserGroup = Resource<TypeId, UserGroupProps, UserGroupAttributes, never, Providers>;
+export type UserGroup = Resource<
+  TypeId,
+  UserGroupProps,
+  UserGroupAttributes,
+  never,
+  Providers,
+  UserGroupLookup
+>;
+
+/**
+ * Props for {@link UserGroup.lookup}: find a user group this stack doesn't
+ * manage, by its id or its name.
+ */
+export type UserGroupLookup =
+  | {
+      /**
+       * The id of the existing user group.
+       */
+      userGroupId: string;
+    }
+  | {
+      /**
+       * The name of the existing user group.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare IAM user group -- a named set of account members that share
@@ -124,6 +149,19 @@ export type UserGroup = Resource<TypeId, UserGroupProps, UserGroupAttributes, ne
  * });
  * ```
  *
+ * ### Looking up an existing group
+ * `UserGroup.lookup` references a group Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `userGroupId` or `name`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a member to an existing group
+ * ```typescript
+ * yield* Cloudflare.Iam.UserGroupMembership("SamInReaders", {
+ *   userGroup: Cloudflare.Iam.UserGroup.lookup({ name: "zone-readers" }).userGroupId,
+ *   memberId: accountMember.memberId,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
  *
  * @resource
@@ -159,6 +197,15 @@ export const UserGroupProvider = () =>
       );
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "userGroupId" in props
+          ? yield* getUserGroup(accountId, props.userGroupId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
+
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -179,7 +226,7 @@ export const UserGroupProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createGroupName(id, news.name);
       const desired = resolvePolicies(news.policies ?? []);

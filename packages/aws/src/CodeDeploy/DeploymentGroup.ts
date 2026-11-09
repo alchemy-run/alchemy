@@ -166,11 +166,23 @@ export interface DeploymentGroup extends Resource<
     serviceRoleArn: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentGroupLookup
 > {}
 
 /**
- * An AWS CodeDeploy deployment group -- the set of target instances/functions
+ * Props for {@link DeploymentGroup.lookup}: find a deployment group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentGroupLookup {
+  /** The application the group belongs to. */
+  applicationName: string;
+  /** The name of the existing deployment group. */
+  deploymentGroupName: string;
+}
+
+/**
+ * An AWS CodeDeploy deployment group — the set of target instances/functions
  * plus the deployment configuration for one {@link Application}. For the
  * `Lambda` compute platform a group ties a service role and a deployment
  * config (e.g. `CodeDeployDefault.LambdaAllAtOnce`) to an application.
@@ -192,6 +204,16 @@ export interface DeploymentGroup extends Resource<
  *     events: ["DEPLOYMENT_FAILURE"],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing deployment group
+ * `DeploymentGroup.lookup` references a deployment group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationName` and `deploymentGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment group
+ * ```typescript
+ * const prod = AWS.CodeDeploy.DeploymentGroup.lookup({ applicationName: "web", deploymentGroupName: "prod" });
  * ```
  *
  * @resource
@@ -291,6 +313,23 @@ export const DeploymentGroupProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ applicationName, deploymentGroupName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const group = yield* getGroup(applicationName, deploymentGroupName);
+          if (group?.deploymentGroupId === undefined) return undefined;
+          return {
+            deploymentGroupName: group.deploymentGroupName ?? deploymentGroupName,
+            deploymentGroupId: group.deploymentGroupId,
+            deploymentGroupArn: deploymentGroupArn(
+              region,
+              accountId,
+              applicationName,
+              deploymentGroupName,
+            ),
+            applicationName: group.applicationName ?? applicationName,
+            serviceRoleArn: group.serviceRoleArn ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const appName = output?.applicationName ?? olds?.applicationName;

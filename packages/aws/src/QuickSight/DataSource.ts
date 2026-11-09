@@ -94,11 +94,21 @@ export interface DataSource extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
 
 /**
- * An Amazon QuickSight data source -- a connection to an external data store
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataSourceLookup {
+  /** The id of the existing data source. */
+  dataSourceId: string;
+}
+
+/**
+ * An Amazon QuickSight data source — a connection to an external data store
  * that datasets read from.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -126,6 +136,16 @@ export interface DataSource extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dataSourceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const sales = AWS.QuickSight.DataSource.lookup({ dataSourceId: "sales" });
  * ```
  *
  * @resource
@@ -176,6 +196,11 @@ export const DataSourceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dataSourceId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readSource(accountId, dataSourceId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dataSourceId = output?.dataSourceId ?? (yield* toId(id, olds));

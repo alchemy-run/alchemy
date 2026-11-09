@@ -112,7 +112,41 @@ export type DatasetAttributes = {
   modifiedAt: string;
 };
 
-export type Dataset = Resource<TypeId, DatasetProps, DatasetAttributes, never, Providers>;
+export type Dataset = Resource<
+  TypeId,
+  DatasetProps,
+  DatasetAttributes,
+  never,
+  Providers,
+  DatasetLookup
+>;
+
+/**
+ * Props for {@link Dataset.lookup}: find a gateway dataset this stack
+ * doesn't manage, by its id or its name.
+ */
+export type DatasetLookup =
+  | {
+      /**
+       * The AI Gateway the existing dataset belongs to.
+       */
+      gatewayId: string;
+      /**
+       * The id of the existing dataset.
+       */
+      datasetId: string;
+    }
+  | {
+      /**
+       * The AI Gateway the existing dataset belongs to.
+       */
+      gatewayId: string;
+      /**
+       * The name of the existing dataset. Names are not unique; the first
+       * dataset with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A saved log filter ("dataset") on a Cloudflare.AI. Gateway.
@@ -154,6 +188,22 @@ export type Dataset = Resource<TypeId, DatasetProps, DatasetAttributes, never, P
  * });
  * ```
  *
+ * ### Looking up an existing dataset
+ * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `datasetId` or `name` within
+ * its gateway. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Evaluate an existing dataset
+ * ```typescript
+ * const logs = Cloudflare.AI.Dataset.lookup({ gatewayId: gateway.gatewayId, name: "success-logs" });
+ * yield* Cloudflare.AI.Evaluation("Baseline", {
+ *   gatewayId: gateway.gatewayId,
+ *   datasetIds: [logs.datasetId],
+ *   evaluationTypeIds,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-gateway/evaluations/set-up-evaluations/
  *
  * @resource
@@ -190,6 +240,14 @@ export const DatasetProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "datasetId" in props
+          ? yield* getDataset(accountId, props.gatewayId, props.datasetId)
+          : yield* findByName(accountId, props.gatewayId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

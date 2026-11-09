@@ -60,11 +60,21 @@ export interface ReplicationSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationSubnetGroupLookup
 > {}
 
 /**
- * A DMS replication subnet group -- the set of VPC subnets a replication
+ * Props for {@link ReplicationSubnetGroup.lookup}: find a replication subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationSubnetGroupLookup {
+  /** The replication subnet group identifier of the existing replication subnet group. */
+  replicationSubnetGroupIdentifier: string;
+}
+
+/**
+ * A DMS replication subnet group — the set of VPC subnets a replication
  * instance can be launched into. Must cover at least two Availability Zones.
  * Free and fast to create.
  * ### Creating a Subnet Group
@@ -74,6 +84,16 @@ export interface ReplicationSubnetGroup extends Resource<
  *   description: "DMS replication subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing replication subnet group
+ * `ReplicationSubnetGroup.lookup` references a replication subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationSubnetGroupIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication subnet group
+ * ```typescript
+ * const existing = AWS.DMS.ReplicationSubnetGroup.lookup({ replicationSubnetGroupIdentifier: "my-replication-subnet-group" });
  * ```
  *
  * @resource
@@ -273,6 +293,13 @@ export const ReplicationSubnetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ replicationSubnetGroupIdentifier: name }) {
+          const group = yield* findGroup(name);
+          if (!group?.ReplicationSubnetGroupIdentifier) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

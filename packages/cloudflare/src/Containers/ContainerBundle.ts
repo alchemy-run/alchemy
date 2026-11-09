@@ -222,6 +222,7 @@ export const buildFinalDockerfile = (
   runtime: "bun" | "node",
   external: string[] = [],
   autoInstallExternals = true,
+  install: ReadonlyArray<string> = [],
 ): string => {
   const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
   const runtimeBin = runtime === "bun" ? "bun" : "node";
@@ -231,6 +232,9 @@ export const buildFinalDockerfile = (
   return [
     base,
     "",
+    // Mount-binding clients (e.g. the Archil FUSE client) go below the base
+    // and above the program, so a program change doesn't reinstall them.
+    ...(install.length > 0 ? [...install, ""] : []),
     "WORKDIR /app",
     ...(installStep ? [installStep, ""] : []),
     // Linked copies don't depend on the layers below them, so the registry
@@ -403,6 +407,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     runtime,
     news.external,
     news.autoInstallExternals,
+    news.imageInstall,
   );
   const [bundle] = yield* Effect.all(
     [

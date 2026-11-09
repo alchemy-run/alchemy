@@ -65,11 +65,21 @@ export interface PublicDnsNamespace extends Resource<
     hostedZoneId: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  PublicDnsNamespaceLookup
 > {}
 
 /**
- * An AWS Cloud Map public DNS namespace -- a service registry backed by a
+ * Props for {@link PublicDnsNamespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PublicDnsNamespaceLookup {
+  /** The name of the existing namespace. */
+  namespaceName: string;
+}
+
+/**
+ * An AWS Cloud Map public DNS namespace — a service registry backed by a
  * Route 53 **public** hosted zone, so registered instances are discoverable
  * on the public internet via DNS as well as via the `DiscoverInstances` API.
  *
@@ -85,6 +95,20 @@ export interface PublicDnsNamespace extends Resource<
  *
  * const namespace = yield* AWS.CloudMap.PublicDnsNamespace("PublicNamespace", {
  *   name: "discovery.example.com",
+ * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `PublicDnsNamespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register a service in an existing namespace
+ * ```typescript
+ * const ns = AWS.CloudMap.PublicDnsNamespace.lookup({ namespaceName: "internal" });
+ *
+ * yield* AWS.CloudMap.Service("Api", {
+ *   namespaceId: ns.namespaceId,
  * });
  * ```
  *
@@ -127,6 +151,11 @@ export const PublicDnsNamespaceProvider = () =>
                 hostedZoneId: n.Properties?.DnsProperties?.HostedZoneId,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ namespaceName }) {
+          const namespace = yield* observeNamespace("DNS_PUBLIC", namespaceName, undefined);
+          return namespace?.Id === undefined ? undefined : toAttributes(namespace);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));

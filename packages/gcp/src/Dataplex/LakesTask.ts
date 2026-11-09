@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForOperation } from "./operations.ts";
@@ -193,11 +194,39 @@ export type LakesTask = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesTaskLookup
 >;
 
 /**
- * A Dataplex lake task -- a Spark or notebook job scheduled against a lake.
+ * Props for {@link LakesTask.lookup}: find a lakes task this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LakesTaskLookup {
+  /**
+   * Task id.
+   */
+  taskId: string;
+  /**
+   * Region used when `lake` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent lake. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}` or the lake id
+   * (combined with `location`).
+   */
+  lake: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex lake task — a Spark or notebook job scheduled against a lake.
  *
  * Changing `lake`, `taskId`, `location`, or trigger type replaces the
  * task. Description, labels, execution spec, and Spark/notebook config
@@ -220,6 +249,20 @@ export type LakesTask = Resource<
  *   triggerSpec: { type: "RECURRING", schedule: "0 2 * * *" },
  *   executionSpec: { serviceAccount },
  *   notebook: { notebook: "gs://bucket/job.ipynb" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing lakes task
+ * `LakesTask.lookup` references a lakes task Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes task.
+ *
+ * **Example:** Reference an existing lakes task
+ * ```typescript
+ * const lakesTask = GCP.Dataplex.LakesTask.lookup({
+ *   taskId: "my-task",
+ *   lake: "my-lake",
  * });
  * ```
  *
@@ -362,6 +405,16 @@ export const LakesTaskProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ taskId, location: lookupLocation, lake: lookupLake }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const lake = lakeOf(lookupLake ?? "", env.project, location);
+      const name = resourceName(lake, taskId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -105,11 +105,21 @@ export interface Environment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 > {}
 
 /**
- * An Amazon FinSpace environment -- a managed data management and analytics
+ * Props for {@link Environment.lookup}: find an environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EnvironmentLookup {
+  /** The id of the existing environment. */
+  environmentId: string;
+}
+
+/**
+ * An Amazon FinSpace environment — a managed data management and analytics
  * workspace for the financial services industry.
  *
  * :::caution
@@ -137,6 +147,16 @@ export interface Environment extends Resource<
  *     applicationCallBackURL: "https://example.com/callback",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const existing = AWS.FinSpace.Environment.lookup({ environmentId: "..." });
  * ```
  *
  * @resource
@@ -278,6 +298,12 @@ export const EnvironmentProvider = () =>
             );
             return hydrated;
           }),
+        lookup: Effect.fn(function* ({ environmentId }) {
+          const env = yield* readEnvironmentById(environmentId);
+          if (!env) return undefined;
+          const attrs = yield* toAttributes(env, environmentId);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const env = output?.environmentId
             ? yield* readEnvironmentById(output.environmentId)

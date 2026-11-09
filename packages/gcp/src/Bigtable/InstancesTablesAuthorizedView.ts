@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -103,11 +104,41 @@ export type InstancesTablesAuthorizedView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesTablesAuthorizedViewLookup
 >;
 
 /**
- * A Cloud Bigtable authorized view -- a named subset of a table used for
+ * Props for {@link InstancesTablesAuthorizedView.lookup}: find an instances
+ * tables authorized view this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface InstancesTablesAuthorizedViewLookup {
+  /**
+   * Authorized view id (the `{authorized_view}` segment of
+   * `.../tables/{table}/authorizedViews/{authorized_view}`).
+   */
+  authorizedViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Parent table. Full name
+   * `projects/{project}/instances/{instance}/tables/{table}` or the table
+   * id.
+   */
+  table: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Bigtable authorized view — a named subset of a table used for
  * fine-grained IAM.
  *
  * The parent instance and table must already exist. Changing
@@ -130,6 +161,21 @@ export type InstancesTablesAuthorizedView = Resource<
  *       cf: { qualifierPrefixes: [""] },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing instances tables authorized view
+ * `InstancesTablesAuthorizedView.lookup` references an instances tables
+ * authorized view Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared instances tables authorized view.
+ *
+ * **Example:** Reference an existing instances tables authorized view
+ * ```typescript
+ * const instancesTablesAuthorizedView = GCP.Bigtable.InstancesTablesAuthorizedView.lookup({
+ *   authorizedViewId: "my-authorized-view",
+ *   instance: "my-instance",
+ *   table: "my-table",
  * });
  * ```
  *
@@ -277,6 +323,18 @@ export const InstancesTablesAuthorizedViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ authorizedViewId, instance, table }) {
+      const env = yield* GcpEnvironment.current;
+      const name =
+        instance && table
+          ? `${tableNameOf(env.project, instance, table)}/authorizedViews/${authorizedViewId}`
+          : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

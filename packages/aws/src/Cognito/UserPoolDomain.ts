@@ -50,8 +50,18 @@ export interface UserPoolDomain extends Resource<
     cloudFrontDomain: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UserPoolDomainLookup
 > {}
+
+/**
+ * Props for {@link UserPoolDomain.lookup}: find a user pool domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UserPoolDomainLookup {
+  /** The domain of the existing user pool domain. */
+  domain: string;
+}
 
 /**
  * A domain for an Amazon Cognito user pool's managed login and OAuth 2.0
@@ -85,6 +95,16 @@ export interface UserPoolDomain extends Resource<
  *   domain: "auth.example.com",
  *   certificateArn: certificate.certificateArn, // must be us-east-1
  * });
+ * ```
+ *
+ * ### Looking up an existing user pool domain
+ * `UserPoolDomain.lookup` references a user pool domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domain`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user pool domain
+ * ```typescript
+ * const existing = AWS.Cognito.UserPoolDomain.lookup({ domain: "my-user-pool-domain" });
  * ```
  *
  * @resource
@@ -190,6 +210,11 @@ export const UserPoolDomainProvider = () =>
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
+
+        lookup: Effect.fn(function* ({ domain }) {
+          const observed = yield* describeDomain(domain);
+          return observed === undefined ? undefined : attributesOf(observed);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const domain = output?.domain ?? (yield* createDomain(id, olds ?? {}));

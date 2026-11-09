@@ -123,11 +123,21 @@ export interface EventDataStore extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  EventDataStoreLookup
 > {}
 
 /**
- * A CloudTrail Lake event data store -- an immutable collection of events
+ * Props for {@link EventDataStore.lookup}: find an event data store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EventDataStoreLookup {
+  /** The ARN of the existing event data store. */
+  eventDataStoreArn: string;
+}
+
+/**
+ * A CloudTrail Lake event data store — an immutable collection of events
  * that can be queried with SQL via CloudTrail Lake.
  *
  * Deleting an event data store schedules it for deletion
@@ -161,6 +171,16 @@ export interface EventDataStore extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing event data store
+ * `EventDataStore.lookup` references an event data store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `eventDataStoreArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing event data store
+ * ```typescript
+ * const existing = AWS.CloudTrail.EventDataStore.lookup({ eventDataStoreArn: "..." });
  * ```
  *
  * @resource
@@ -287,6 +307,18 @@ export const EventDataStoreProvider = () =>
                 status: s.Status ?? "ENABLED",
               }));
           }),
+        lookup: Effect.fn(function* ({ eventDataStoreArn }) {
+          const store = yield* getByArn(eventDataStoreArn);
+          if (store === undefined || store.Status === "PENDING_DELETION") {
+            return undefined;
+          }
+          const attrs = {
+            eventDataStoreArn: store.EventDataStoreArn!,
+            name: store.Name!,
+            status: store.Status ?? "ENABLED",
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const store = output?.eventDataStoreArn
             ? yield* getByArn(output.eventDataStoreArn)

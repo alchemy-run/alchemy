@@ -25,11 +25,21 @@ export interface ReceiptRuleSet extends Resource<
     ruleSetName: string;
   },
   never,
-  Providers
+  Providers,
+  ReceiptRuleSetLookup
 > {}
 
 /**
- * An Amazon SES receipt rule set -- the ordered container for the receipt rules
+ * Props for {@link ReceiptRuleSet.lookup}: find a receipt rule set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReceiptRuleSetLookup {
+  /** The rule set name of the existing receipt rule set. */
+  ruleSetName: string;
+}
+
+/**
+ * An Amazon SES receipt rule set — the ordered container for the receipt rules
  * that decide what happens to inbound email (deliver to S3, invoke a Lambda,
  * publish to SNS, bounce, etc.).
  *
@@ -59,6 +69,16 @@ export interface ReceiptRuleSet extends Resource<
  * yield* SES.ActiveReceiptRuleSet("Active", {
  *   ruleSetName: ruleSet.ruleSetName,
  * });
+ * ```
+ *
+ * ### Looking up an existing receipt rule set
+ * `ReceiptRuleSet.lookup` references a receipt rule set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing receipt rule set
+ * ```typescript
+ * const existing = AWS.SES.ReceiptRuleSet.lookup({ ruleSetName: "my-receipt-rule-set" });
  * ```
  *
  * @resource
@@ -103,6 +123,11 @@ export const ReceiptRuleSetProvider = () =>
             } while (nextToken);
             return rows;
           }),
+
+        lookup: Effect.fn(function* ({ ruleSetName: name }) {
+          const found = yield* describe(name);
+          return found ? { ruleSetName: name } : undefined;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.ruleSetName ?? (yield* createName(id, olds));

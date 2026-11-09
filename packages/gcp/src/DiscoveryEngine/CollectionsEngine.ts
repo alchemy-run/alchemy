@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -142,11 +143,37 @@ export type CollectionsEngine = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsEngineLookup
 >;
 
 /**
- * A Discovery Engine Engine under a collection -- serves Search,
+ * Props for {@link CollectionsEngine.lookup}: find a collections engine
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CollectionsEngineLookup {
+  /**
+   * Engine id (the `{engine}` segment of the resource name).
+   */
+  engineId: string;
+  /**
+   * Location (`global`, `us`, `eu`, …).
+   */
+  location?: string;
+  /**
+   * Collection id.
+   */
+  collectionId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Discovery Engine Engine under a collection — serves Search,
  * Recommendation, or Chat from one or more DataStores.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
@@ -173,6 +200,19 @@ export type CollectionsEngine = Resource<
  * const engine = yield* GCP.DiscoveryEngine.CollectionsEngine("Search", {
  *   dataStoreIds: [store.dataStoreId],
  *   displayName: "docs search prod",
+ * });
+ * ```
+ *
+ * ### Looking up an existing collections engine
+ * `CollectionsEngine.lookup` references a collections engine Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared collections engine.
+ *
+ * **Example:** Reference an existing collections engine
+ * ```typescript
+ * const collectionsEngine = GCP.DiscoveryEngine.CollectionsEngine.lookup({
+ *   engineId: "my-engine",
  * });
  * ```
  *
@@ -314,6 +354,21 @@ export const CollectionsEngineProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({
+      engineId,
+      location: lookupLocation,
+      collectionId: lookupCollectionId,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const collectionId = normalizeCollection(lookupCollectionId);
+      const existing = yield* getByName(
+        resourceName(env.project, location, collectionId, engineId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

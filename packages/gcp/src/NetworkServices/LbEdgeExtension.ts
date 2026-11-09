@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -175,11 +176,37 @@ export type LbEdgeExtension = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LbEdgeExtensionLookup
 >;
 
 /**
- * A Network Services LbEdgeExtension -- a Service Extension that
+ * Props for {@link LbEdgeExtension.lookup}: find a lb edge extension this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LbEdgeExtensionLookup {
+  /**
+   * LbEdgeExtension id (the `{lbEdgeExtension}` segment of
+   * `projects/{projec
+   * t}/locations/{location}/lbEdgeExtensions/{lbEdgeExtension}`). Must be
+   * 1-63 characters and not start with a number.
+   */
+  lbEdgeExtensionId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Services LbEdgeExtension — a Service Extension that
  * rewrites request headers so an Application Load Balancer can change
  * backend selection and Cloud CDN cache keys.
  *
@@ -208,6 +235,19 @@ export type LbEdgeExtension = Resource<
  *       ],
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing lb edge extension
+ * `LbEdgeExtension.lookup` references a lb edge extension Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lb edge extension.
+ *
+ * **Example:** Reference an existing lb edge extension
+ * ```typescript
+ * const lbEdgeExtension = GCP.NetworkServices.LbEdgeExtension.lookup({
+ *   lbEdgeExtensionId: "my-lb-edge-extension",
  * });
  * ```
  *
@@ -296,6 +336,15 @@ export const LbEdgeExtensionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ lbEdgeExtensionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, lbEdgeExtensionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

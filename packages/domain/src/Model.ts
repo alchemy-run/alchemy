@@ -1,4 +1,6 @@
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,18 +11,28 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import {
+  DefinitionError,
+  ForeignAppend,
+  LazyViewNeedsOneSource,
+  MissingWorkflowEngine,
+  UnvalidatedRead,
+} from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
-import type * as Key from "./Key.ts";
+import * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type ModelHost,
   Platform,
   type PolicyStore,
   type ProjectionStore,
+  type StoredEvent,
   type StreamEntry,
   type StreamMeta,
   type StreamStore,
@@ -29,6 +41,8 @@ import {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
+import * as Query from "./Query.ts";
+import * as Read from "./Read.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -57,6 +71,10 @@ export class Internals extends Context.Service<
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Key.Any, unknown>>;
     /** Each stream's API, by stream name. */
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Key.Any, unknown>>;
+    /** Each query, hosted, by query name. */
+    readonly queries: ReadonlyMap<string, Query.Host>;
+    /** Each guarded view's and stream's `validate`, from its Layer, by name. */
+    readonly validators: ReadonlyMap<string, Read.AnyValidate>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -70,6 +88,7 @@ export interface Members<
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any> = readonly [],
+  Q extends ReadonlyArray<Query.Any> = readonly [],
 > {
   readonly aggregates: A;
   readonly views?: V;
@@ -77,13 +96,15 @@ export interface Members<
   readonly projections?: J;
   readonly streams?: S;
   readonly sagas?: G;
+  /** The queries it answers, from the stores its projections write. */
+  readonly queries?: Q;
 }
 
 /**
  * The class type returned by {@link make}.
  *
  * `Provided` is every aggregate, view, stream and projection-progress service
- * the Model provides; `Policies` is every policy and projection whose
+ * the Model provides; `Policies` is every policy, projection and query whose
  * implementation `layer` requires.
  */
 export interface ModelClass<
@@ -94,6 +115,7 @@ export interface ModelClass<
 > {
   new (_: never): {};
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: Name;
   /** The model's aggregates, in order. */
   readonly aggregates: Parts["aggregates"];
@@ -103,6 +125,8 @@ export interface ModelClass<
   readonly views: Parts["views"];
   /** The model's streams, in order. */
   readonly streams: Parts["streams"];
+  /** The model's queries, in order. */
+  readonly queries: Parts["queries"];
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -113,7 +137,11 @@ export interface ModelClass<
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
     options?: LayerOptions<Parts["views"][number]["viewName"]>,
-  ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
+  ): Layer.Layer<
+    Provided | Internals,
+    E,
+    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
+  >;
 }
 
 /**
@@ -121,6 +149,7 @@ export interface ModelClass<
  */
 export interface Any extends Servable {
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
 }
@@ -136,6 +165,7 @@ export interface Servable {
   readonly commands: ReadonlyArray<Command.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries: ReadonlyArray<Query.Any>;
 }
 
 /** What a model's members serve. */
@@ -143,11 +173,13 @@ export interface ServableBy<
   A extends ReadonlyArray<Aggregate.Any>,
   V extends ReadonlyArray<View.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
+  Q extends ReadonlyArray<Query.Any> = readonly [],
 > {
   readonly aggregates: A;
   readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
   readonly views: V;
   readonly streams: S;
+  readonly queries: Q;
 }
 
 type ProvidedBy<
@@ -168,21 +200,54 @@ export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
   /**
-   * Each view's version, by name (0 when omitted). Bump a view's version to
-   * rebuild it from the history: after its state was lost, or once its
-   * `evolve` or routing changed what it should hold. Every view and
-   * projection that reads it is rebuilt with it. Until the rebuild is
-   * complete, the view's `history` says so.
+   * Before Domain version 0, models in one Worker that listed the same
+   * aggregate, view or saga shared its Durable Object class, and so its data.
+   * Each model now has classes of its own, and the first deploy renames the
+   * shared class to the model's, keeping its data. When two models shared a
+   * class, only one can keep it: set `false` on the others, which start
+   * empty. The deploy fails while more than one would take it over.
+   *
+   * @default true
    */
-  readonly versions?: { readonly [View in Views]?: number };
+  readonly legacyData?: boolean;
+  /**
+   * Views that fill lazily when they are added. A deploy that adds one waits
+   * for nothing: each key reads its history the first time it is read (or when
+   * its source next changes). Only for a view that reads one aggregate and is
+   * keyed by it, so each key's history is its own instance's events. (Such a
+   * view is always rebuilt this way when its `version` is bumped.)
+   */
+  readonly lazy?: ReadonlyArray<Views>;
 }
 
-/** Every implementation a model's `layer` requires: its policies, projections and sagas. */
+/** Every implementation a model's `layer` requires: its policies, projections, sagas and queries. */
+/** A guarded view's or stream's Layer, which provides its `validate`. */
+type ValidatorOf<X> = X extends {
+  readonly Validator: Context.Key<infer I, unknown>;
+  readonly definition: infer D;
+}
+  ? // A widened view (`View.Any`) names no Layer: serving it checks at run time.
+    unknown extends I
+    ? never
+    : Read.Guarded<D> extends true
+      ? I
+      : never
+  : never;
+
 type HandledBy<
   P extends ReadonlyArray<Policy.Any>,
   J extends ReadonlyArray<Projection.Any>,
   G extends ReadonlyArray<Saga.Any>,
-> = Identifier<P[number]> | Identifier<J[number]> | Saga.ImplementationIdentifier<G[number]>;
+  Q extends ReadonlyArray<Query.Any> = readonly [],
+  V extends ReadonlyArray<View.Any> = readonly [],
+  S extends ReadonlyArray<DomainStream.Any> = readonly [],
+> =
+  | Identifier<P[number]>
+  | Identifier<J[number]>
+  | Saga.ImplementationIdentifier<G[number]>
+  | Query.Identifier<Q[number]>
+  | ValidatorOf<V[number]>
+  | ValidatorOf<S[number]>;
 
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
@@ -210,6 +275,25 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Annotating models
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * A model lists its declarations, so tooling can walk them and read each
+ * one's annotations.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Bank extends Domain.Model(
+ *   "Bank",
+ *   { aggregates: [Account], views: [AccountSummary] },
+ *   { description: "Accounts and their balances." },
+ * ) {}
+ *
+ * const glossary = Bank.commands.map((command) => `${command.tag}: ${command.annotations.description}`);
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -220,19 +304,28 @@ export const make = <
   const J extends ReadonlyArray<Projection.Any> = readonly [],
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
   const G extends ReadonlyArray<Saga.Any> = readonly [],
+  const Q extends ReadonlyArray<Query.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G>,
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
+  members: Members<A, V, P, J, S, G, Q>,
+  annotations: Annotations = {},
+): ModelClass<
+  Name,
+  ProvidedBy<A, V, J, S, G>,
+  HandledBy<P, J, G, Q, V, S>,
+  ServableBy<A, V, S, Q>
+> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
     policies: members.policies ?? [],
     projections: members.projections ?? [],
     streams: members.streams ?? [],
+    queries: members.queries ?? [],
   };
   return class {
     static readonly kind = "Model" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
@@ -242,22 +335,29 @@ export const make = <
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
+    static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
+    static layer<E, R>(
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S>, E, R>,
+      options?: LayerOptions,
+    ) {
       return Layer.effectContext(
         build(
+          name,
           definitions,
           handlers,
           members.sagas ?? [],
+          members.queries ?? [],
           Telemetry.resolve(options?.telemetry),
-          options?.versions ?? {},
+          options?.legacyData ?? true,
+          options?.lazy ?? [],
         ),
       );
     }
   } as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G>,
-    HandledBy<P, J, G>,
-    ServableBy<A, V, S>
+    HandledBy<P, J, G, Q, V, S>,
+    ServableBy<A, V, S, Q>
   >;
 };
 
@@ -306,7 +406,7 @@ const observeProjection =
     return effect.pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
-          const now = yield* Effect.sync(() => Date.now());
+          const now = yield* Clock.currentTimeMillis;
           for (const { delivery } of batch) {
             yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
           }
@@ -332,24 +432,34 @@ const observeProjection =
   };
 
 const build = <A, E, R>(
+  modelName: string,
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
+  queries: ReadonlyArray<Query.Any>,
   telemetry: Telemetry.Resolved,
-  versions: { readonly [view: string]: number | undefined },
+  legacyData: boolean,
+  lazy: ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
-    const platform = yield* Platform;
+    // The model's own storage: models sharing a definition never share its data.
+    const platform = yield* (yield* Platform).model({
+      modelName,
+      id: definitions,
+      sagas: sagas.map((saga) => saga.workflow._tag),
+      legacyData,
+    });
     const kernel = yield* Kernel.make(definitions, telemetry);
-    for (const [view, version] of Object.entries(versions)) {
-      if (version) kernel.setVersion(`view:${view}`, version);
-    }
+    const random = yield* SecureRandom.SecureRandom;
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
     const policyStores = new Map<string, PolicyStore>();
     const projectionStores = new Map<string, ProjectionStore>();
     const streamStores = new Map<string, StreamStore>();
+    // Filled once the handlers' Layer is built; pushes read it when they run.
+    const validators = new Map<string, Read.AnyValidate>();
+    const validatorOf = (name: string) => validators.get(name);
 
     const deliver = (delivery: Delivery): Effect.Effect<void> =>
       Effect.suspend(() => {
@@ -365,20 +475,42 @@ const build = <A, E, R>(
       aggregateStores.set(
         aggregate.aggregateName,
         // Assigned, not spread: a kit's `targets` is read when used, once versions are set.
-        yield* platform.aggregate(
-          aggregate,
-          Object.assign(kernel.aggregateKit(aggregate, deliver), {
-            push: Watch.aggregatePush(kernel, aggregate),
-          }),
-        ),
+        yield* platform.aggregate(aggregate, kernel.aggregateKit(aggregate, deliver)),
       );
     }
+    const viewTarget = (name: string) => kernel.targetIdOf("view", name);
+    for (const name of lazy) {
+      if (!kernel.inPlace("view", name))
+        return yield* Effect.die(
+          new DefinitionError({ reason: new LazyViewNeedsOneSource({ view: name }) }),
+        );
+    }
+    // A view keyed by the one aggregate it reads fills each key itself, from its
+    // instance's events, before the key answers: when it is lazy, and when its
+    // version was bumped (it is rebuilt in place). The deploy runs no backfill for it.
+    const selfFilled = new Set(
+      definitions.views
+        .filter(
+          (view) =>
+            kernel.inPlace("view", view.viewName) &&
+            (lazy.includes(view.viewName) || kernel.generationOf("view", view.viewName) > 0),
+        )
+        .map((view) => view.viewName),
+    );
     for (const view of definitions.views) {
+      // Only a view that fills itself reads its keys' history on first touch; any
+      // other view is filled by the deploy's backfill, and its keys apply live.
+      const source = selfFilled.has(view.viewName)
+        ? kernel.sourcesOf(viewTarget(view.viewName))?.[0]
+        : undefined;
       viewStores.set(
         view.viewName,
         yield* platform.view(
           view,
-          Object.assign(kernel.viewKit(view, deliver), { push: Watch.viewPush(kernel, view) }),
+          Object.assign(kernel.viewKit(view, deliver), {
+            push: Watch.viewPush(kernel, view, validatorOf),
+            ...(source === undefined ? {} : { catchUp: { source } }),
+          }),
         ),
       );
     }
@@ -388,7 +520,7 @@ const build = <A, E, R>(
         stream.streamName,
         yield* platform.stream(stream, {
           name: stream.streamName,
-          push: Watch.streamPush(kernel, stream),
+          push: Watch.streamPush(kernel, stream, validatorOf),
         }),
       );
     }
@@ -400,6 +532,7 @@ const build = <A, E, R>(
         kernel,
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
+        random,
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
@@ -410,13 +543,10 @@ const build = <A, E, R>(
         kernel,
         view,
         viewStores.get(view.viewName)!,
-        history(platform, () =>
-          CatchUp.targetId({
-            kind: "view",
-            name: view.viewName,
-            generation: kernel.generationOf("view", view.viewName),
-          }),
-        ),
+        // Such a key reads its history before it answers: every answer has it all.
+        selfFilled.has(view.viewName)
+          ? Effect.succeed({ complete: true })
+          : history(platform, () => viewTarget(view.viewName)),
       );
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
@@ -442,6 +572,7 @@ const build = <A, E, R>(
               generation: kernel.generationOf("projection", projection.projectionName),
             }),
           ),
+          aggregateStores,
         ),
       );
     }
@@ -451,16 +582,45 @@ const build = <A, E, R>(
       const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
       if (Option.isNone(engine)) {
         return yield* Effect.die(
-          new Kernel.DefinitionError(
-            `${sagas.map((saga) => saga.sagaName).join(", ")} need a platform that runs workflows`,
-          ),
+          new DefinitionError({
+            reason: new MissingWorkflowEngine({ sagas: sagas.map((saga) => saga.sagaName) }),
+          }),
         );
       }
-      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+      // The model's own runs: its sagas register and start under `<model>/<saga>`.
+      const modelEngine = Saga.engineFor(engine.value, modelName);
+      hosts = Context.add(hosts, WorkflowEngine.WorkflowEngine, modelEngine);
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
+    // Each guarded view's and stream's `validate`, traced as `Domain.validate <Name>`.
+    for (const [name, entry] of [
+      ...definitions.views.map((view) => [view.viewName, view] as const),
+      ...definitions.streams.map((stream) => [stream.streamName, stream] as const),
+    ]) {
+      const implementation = Context.getOption(
+        implementations as Context.Context<unknown>,
+        entry.Validator as Context.Key<unknown, Read.Implementation>,
+      );
+      if (Option.isNone(implementation)) {
+        if (Read.isGuarded(entry.definition)) {
+          return yield* Effect.die(
+            new DefinitionError({ reason: new UnvalidatedRead({ entity: name }) }),
+          );
+        }
+        continue;
+      }
+      const validate = implementation.value.validate as Read.AnyValidate;
+      validators.set(name, (request, state) =>
+        validate(request, state).pipe(
+          Effect.withSpan(`Domain.validate ${name}`, {
+            attributes: { "domain.read": name, "domain.mode": request.mode },
+          }),
+        ),
+      );
+    }
     const implementationOf = (projection: Projection.Any) =>
       Context.getUnsafe(
         implementations as Context.Context<unknown>,
@@ -486,10 +646,9 @@ const build = <A, E, R>(
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
+              const inputs = yield* kernel.projectionInputs(projection, key, batch);
               // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
-              yield* implementation.handle(
-                kernel.projectionInputs(projection, key, batch),
-              ) as Effect.Effect<void>;
+              yield* implementation.handle(inputs) as Effect.Effect<void>;
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
@@ -517,7 +676,44 @@ const build = <A, E, R>(
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.
-    if (platform.start) yield* platform.start(kernel.targets, kernel.planOf);
+    // Lazy views have no backfill: their keys catch up when read.
+    const lazyTargets = new Set([...selfFilled].map(viewTarget));
+    // Every consumer is in the model, so its sources route to it; those that fill
+    // themselves get no backfill.
+    if (platform.start)
+      yield* platform.start(
+        kernel.targets,
+        kernel.planOf,
+        kernel.targets.filter((target) => !lazyTargets.has(target)),
+      );
+
+    // Queries run where the Api runs, reading your store and the model's members.
+    const queryHosts = new Map<string, Query.Host>();
+    const progressOf = (projection: Projection.Any) =>
+      Context.getUnsafe(hosts, projection.Progress as Context.Key<unknown, Projection.Progress>);
+    // The kernel has refused duplicate names and unknown projections.
+    for (const query of queries) {
+      const implementation = Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        query as Context.Key<unknown, Query.Implementation>,
+      );
+      queryHosts.set(
+        query.queryName,
+        Query.host(query, implementation, hosts, (read) => {
+          if (read.kind === "Projection") return progressOf(read).caughtUp;
+          if (read.kind === "View")
+            return viewCaughtUp(kernel, read, viewHosts.get(read.viewName)!, aggregateStores);
+          // A stream is caught up once every projection that writes it is.
+          const writers = definitions.projections.filter((projection) =>
+            (projection.definition.writes ?? []).includes(read),
+          );
+          return (receipt, options) =>
+            Effect.forEach(writers, (writer) => progressOf(writer).caughtUp(receipt, options), {
+              discard: true,
+            });
+        }),
+      );
+    }
 
     return Context.add(hosts, Internals, {
       kernel,
@@ -527,6 +723,8 @@ const build = <A, E, R>(
       commands,
       viewHosts,
       streamHosts,
+      queries: queryHosts,
+      validators,
     });
   });
 
@@ -534,6 +732,7 @@ const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
+  random: SecureRandom.SecureRandom["Service"],
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
   const metaFor = (
@@ -543,13 +742,12 @@ const aggregateClient = (
     link: boolean,
   ) =>
     Effect.gen(function* () {
-      const commandId = yield* Aggregate.commandIdFor(options);
+      const commandId = yield* Aggregate.commandIdFor(options, random);
       const context = yield* RequestContext.capture;
       const correlationId = yield* Telemetry.correlationFor(commandId);
       yield* Effect.annotateCurrentSpan({
         "domain.command_id": commandId,
         "domain.correlation_id": correlationId,
-        ...Telemetry.attributesOf(command.constructor, command),
       });
       const trace = yield* Telemetry.currentTrace;
       return {
@@ -576,7 +774,8 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const result = yield* store.send(id, kernel.encodeCommand(aggregate, command), meta);
+          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
             result._tag === "Accepted"
@@ -592,21 +791,26 @@ const aggregateClient = (
         );
         return result._tag === "Rejected"
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
-          : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+          : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
     schedule: (target, command, options) =>
       Effect.gen(function* () {
         // The command runs later, so its span links back here rather than continuing this trace.
-        const { id, meta } = yield* metaFor(target, command, options, true);
+        // `commandId` names the scheduled command; the arming gets its own id, derived like a
+        // send's, so a policy or step that runs again arms nothing new, and a later trigger
+        // arms the name again even after its command ran.
+        const { id, meta } = yield* metaFor(target, command, undefined, true);
+        const name = options.commandId ?? meta.commandId;
         const at = yield* store.schedule(
           id,
-          kernel.encodeCommand(aggregate, command),
+          name,
+          yield* kernel.encodeCommand(aggregate, command),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
             : { afterMillis: Duration.toMillis(Duration.fromInputUnsafe(options.after)) },
         );
-        return { commandId: meta.commandId, at: DateTime.makeUnsafe(at) };
+        return { commandId: name, at: DateTime.makeUnsafe(at) };
       }).pipe(
         Effect.withSpan(
           `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
@@ -620,7 +824,7 @@ const aggregateClient = (
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
         }),
       ),
-    state: (target) =>
+    get: (target) =>
       store
         .state(Aggregate.targetId(target))
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
@@ -716,7 +920,7 @@ const viewHost = (
   };
   return {
     history,
-    query: (key, options) =>
+    get: (key, options) =>
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
       ),
@@ -746,18 +950,24 @@ const viewHost = (
     watchEach,
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
+        Stream.mapEffect((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) =>
+              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -792,9 +1002,16 @@ const streamHost = (
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
       ? Effect.succeedNone
-      : store
-          .tail(key, meta.seq - 1)
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
+      : store.tail(key, meta.seq - 1).pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeedNone,
+              onSome: (entry) => Effect.asSome(decode(entry)),
+            }),
+          ),
+        );
   return {
     peek: (key, options) => {
       const atLeast = options?.atLeast;
@@ -828,18 +1045,23 @@ const streamHost = (
       ),
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map(decode),
+        Stream.mapEffect(decode),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: decode(row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -856,59 +1078,145 @@ const streamHost = (
         const writer = kernel.writerOf(stream);
         if (!meta || !writer || writer.projectionName !== meta.projection) {
           return Effect.die(
-            new Kernel.DefinitionError(
-              `Only the projection that lists ${stream.streamName} in \`writes\` may append to it, with the input it is handling`,
-            ),
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
           );
         }
         meta.appends += 1;
-        return store.append(meta.key, {
-          origin: [meta.position, meta.appends],
-          source: meta.source,
-          sourceSeq: meta.sourceSeq,
-          at: meta.at,
-          commandId: meta.commandId,
-          events: events.map((event) => kernel.encodeEvent(event as { readonly _tag: string })),
-        });
+        const position: [number, number] = [meta.position, meta.appends];
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            store.append(meta.key, {
+              origin: position,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
       }),
   };
 };
 
 /** How much history has reached a consumer, as the platform reports it. */
-const history = (
-  platform: Platform["Service"],
-  target: () => string,
-): Effect.Effect<View.History> =>
+const history = (platform: ModelHost, target: () => string): Effect.Effect<View.History> =>
   Effect.suspend(() =>
     platform.history
       ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))
       : Effect.succeed({ complete: true }),
   );
+/**
+ * The events of the command that brought an aggregate instance to `version`:
+ * the run of events up to it that share its last event's command id. Reads a
+ * small window first, and widens it only for a command with many events.
+ */
+const commandEvents = (
+  store: AggregateStore,
+  id: string,
+  version: number,
+): Effect.Effect<ReadonlyArray<StoredEvent>> =>
+  Effect.gen(function* () {
+    // A version beyond the instance's is clamped: there is nothing more to wait for.
+    const last = Math.min(version, (yield* store.state(id)).version);
+    if (last <= 0) return [];
+    for (let window = 8; ; window *= 4) {
+      const from = Math.max(0, last - window);
+      const events = yield* store.tail(id, from).pipe(
+        Stream.takeUntil((stored) => stored.envelope.seq >= last),
+        Stream.runCollect,
+      );
+      const commandId = events[events.length - 1]?.envelope.commandId;
+      let start = events.length - 1;
+      while (start > 0 && events[start - 1]!.envelope.commandId === commandId) start--;
+      if (start > 0 || from === 0) return events.slice(Math.max(0, start));
+    }
+  });
+
+/**
+ * Wait until a view has applied a command's events on every key they reach,
+ * so a query that reads it sees the caller's write. Only the events of an
+ * aggregate the view reads directly reach it this way.
+ */
+const viewCaughtUp =
+  (
+    kernel: Kernel.Kernel,
+    view: View.Any,
+    host: View.Host<unknown, Key.Any, unknown>,
+    aggregates: ReadonlyMap<string, AggregateStore>,
+  ): Query.CaughtUp =>
+  (receipt, options) =>
+    Effect.gen(function* () {
+      const [aggregate, ...rest] = receipt.stream.split("/");
+      const id = rest.join("/");
+      const source = aggregates.get(aggregate!);
+      const consumes = view.definition.from.some(
+        (from) => from.kind === "Aggregate" && from.aggregateName === aggregate,
+      );
+      if (!consumes || !source) return;
+      const waits = new Map<string, number>();
+      for (const stored of yield* commandEvents(source, id, receipt.version)) {
+        const event = (yield* kernel.decodeEvent(stored.event)) as { readonly _tag: string };
+        for (const key of kernel.viewKeys(view, aggregate!, id, event, stored.envelope.seq)) {
+          waits.set(key, Math.max(waits.get(key) ?? 0, stored.envelope.seq));
+        }
+      }
+      yield* Effect.forEach(
+        waits,
+        ([key, seq]) =>
+          host.get(Key.refOf(view.definition.key, key) as never, {
+            atLeast: { stream: receipt.stream, version: seq },
+            ...(options?.timeout === undefined ? {} : { timeout: options.timeout }),
+          }),
+        { discard: true },
+      );
+    });
 
 const projectionProgress = (
   kernel: Kernel.Kernel,
   projection: Projection.Any,
   store: () => ProjectionStore,
   history: Effect.Effect<View.History>,
+  aggregates: ReadonlyMap<string, AggregateStore>,
 ): Projection.Progress => ({
   history,
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
       const [aggregate, ...rest] = receipt.stream.split("/");
       const id = rest.join("/");
-      const first = receipt.version - receipt.events.length + 1;
+      // A receipt from a client carries no events: read them from the aggregate.
+      const consumes = projection.definition.from.some(
+        (source) => source.kind === "Aggregate" && source.aggregateName === aggregate,
+      );
+      const source = aggregates.get(aggregate!);
+      const events: ReadonlyArray<{ readonly event: unknown; readonly seq: number }> =
+        receipt.events !== undefined
+          ? receipt.events.map((event, index) => ({
+              event,
+              seq: receipt.version - receipt.events!.length + 1 + index,
+            }))
+          : consumes && source
+            ? yield* Effect.forEach(yield* commandEvents(source, id, receipt.version), (stored) =>
+                Effect.map(kernel.decodeEvent(stored.event), (event) => ({
+                  event,
+                  seq: stored.envelope.seq,
+                })),
+              )
+            : [];
       const waits = new Map<string, number>();
-      receipt.events.forEach((event, index) => {
+      for (const { event, seq } of events) {
         for (const key of kernel.projectionKeys(
           projection,
           aggregate!,
           id,
           event as { readonly _tag: string },
-          first + index,
+          seq,
         )) {
-          waits.set(key, Math.max(waits.get(key) ?? 0, first + index));
+          waits.set(key, Math.max(waits.get(key) ?? 0, seq));
         }
-      });
+      }
       yield* Effect.forEach(
         waits,
         ([key, seq]) =>

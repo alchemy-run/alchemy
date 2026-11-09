@@ -50,11 +50,21 @@ export interface ServiceProfile extends Resource<
     serviceProfileName: string;
   },
   never,
-  Providers
+  Providers,
+  ServiceProfileLookup
 > {}
 
 /**
- * An AWS IoT Core for LoRaWAN service profile -- the network-level parameters
+ * Props for {@link ServiceProfile.lookup}: find a service profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceProfileLookup {
+  /** The name of the existing service profile. */
+  serviceProfileName: string;
+}
+
+/**
+ * An AWS IoT Core for LoRaWAN service profile — the network-level parameters
  * (data-rate bounds, gateway metadata reporting, roaming permissions) shared
  * by a fleet of wireless devices.
  *
@@ -89,6 +99,16 @@ export interface ServiceProfile extends Resource<
  *     OtaaV1_0_x: { AppKey: "...", AppEui: "..." },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing service profile
+ * `ServiceProfile.lookup` references a service profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service profile
+ * ```typescript
+ * const lorawan = AWS.IoTWireless.ServiceProfile.lookup({ serviceProfileName: "lorawan-us915" });
  * ```
  *
  * @resource
@@ -170,6 +190,10 @@ export const ServiceProfileProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ serviceProfileName }) {
+          const profile = yield* observe(undefined, serviceProfileName);
+          return profile === undefined ? undefined : yield* toAttrs(profile, serviceProfileName);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.serviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);

@@ -85,12 +85,6 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cf?: Record<string, unknown>;
   /**
-   * The zone outbound `fetch()`es report in their `CF-Worker` header, as on
-   * Cloudflare's edge: the host of the Worker's first route or custom
-   * domain. Defaults to Miniflare's `<name>.example.com`.
-   */
-  readonly zone?: string;
-  /**
    * Simulates a request that passed Cloudflare Access: every request's
    * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
    * `identity`. Mirrors Wrangler's `access.dev` config.

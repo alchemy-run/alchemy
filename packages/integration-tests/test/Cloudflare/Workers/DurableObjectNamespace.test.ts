@@ -16,6 +16,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -483,6 +484,37 @@ export default {
 };
 `;
 
+/**
+ * A Worker hosting counter classes named `classes`; its fetch reads and
+ * writes the first, and answers with that class's name too.
+ */
+const counterClassesScript = (
+  ...classes: string[]
+) => `import { DurableObject } from "cloudflare:workers";
+${classes
+  .map(
+    (className) => `export class ${className} extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+  async get() {
+    return (await this.ctx.storage.get("count")) ?? 0;
+  }
+}`,
+  )
+  .join("\n")}
+export default {
+  async fetch(request, env) {
+    const stub = env.${classes[0]}.getByName("shared");
+    const url = new URL(request.url);
+    const value = url.pathname === "/increment" ? await stub.increment() : await stub.get();
+    return Response.json({ value, className: "${classes[0]}" });
+  },
+};
+`;
+
 const consumerWorkerScript = `export default {
   async fetch(request, env) {
     const stub = env.Counter.getByName("shared");
@@ -882,7 +914,7 @@ export default { async fetch() { return new Response("v4"); } };
           // leave the worker behind, and `putScript` would then reject the
           // `newSqliteClasses` migration ("class already exists"), so purge any
           // leftover first.
-          const physicalName = "alchemy-test-do-adopt";
+          const physicalName = testName("alchemy-test-do-adopt");
 
           yield* workers
             .deleteScript({ accountId, scriptName: physicalName, force: true })
@@ -1017,6 +1049,106 @@ export default { async fetch() { return new Response("v4"); } };
 
           yield* scratch.destroy();
           expect(yield* namespacesOf).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // `renamedFrom` gives a class under a new binding the objects of the class
+    // it was called before: the deploy ships a `renamed_classes` migration, so
+    // the namespace (and its id) carries over. Once renamed, it is inert.
+    test.provider(
+      "renamedFrom carries a class's objects to a class under a new binding",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespacesOf = (scriptName: string) =>
+            durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === scriptName),
+              Stream.runCollect,
+              Effect.map((namespaces) =>
+                Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id])),
+              ),
+            );
+          const readUntil = (url: string, className: string) =>
+            fetchJsonReady<{ value: number; className: string }>(`${url}/get`).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (body) => body.className === className,
+                times: 30,
+              }),
+            );
+
+          const v1 = yield* scratch.deploy(
+            Cloudflare.Worker("worker", {
+              script: counterClassesScript("Counter"),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            }),
+          );
+          const written = yield* fetchJsonReady<{ value: number }>(`${v1.url}/increment`);
+          expect(written.value).toBe(1);
+          const before = yield* namespacesOf(v1.workerName);
+          expect(Object.keys(before)).toEqual(["Counter"]);
+
+          const renamed = Cloudflare.Worker("worker", {
+            script: counterClassesScript("Meter"),
+            env: { Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }) },
+          });
+          const v2 = yield* scratch.deploy(renamed);
+          expect(yield* namespacesOf(v2.workerName)).toEqual({ Meter: before.Counter });
+          expect((yield* readUntil(v2.url!, "Meter")).value).toBe(1);
+
+          // The old class is gone: deploying again renames nothing.
+          const v3 = yield* scratch.deploy(renamed);
+          expect(yield* namespacesOf(v3.workerName)).toEqual({ Meter: before.Counter });
+          expect((yield* readUntil(v3.url!, "Meter")).value).toBe(1);
+
+          yield* scratch.destroy();
+          expect(yield* namespacesOf(v1.workerName)).toEqual({});
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
+    // One class's objects can move to one class only: a deploy where two
+    // classes are renamed from the class the Worker hosts fails before upload.
+    test.provider(
+      "renamedFrom on two classes for one hosted class fails the deploy",
+      (scratch) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const namespacesOf = (scriptName: string) =>
+            durableObjects.listNamespaces.items({ accountId }).pipe(
+              Stream.filter((ns) => ns.script === scriptName),
+              Stream.runCollect,
+              Effect.map((namespaces) =>
+                Object.fromEntries(Array.from(namespaces).map((ns) => [ns.class, ns.id])),
+              ),
+            );
+
+          const v1 = yield* scratch.deploy(
+            Cloudflare.Worker("worker", {
+              script: counterClassesScript("Counter"),
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            }),
+          );
+          const before = yield* namespacesOf(v1.workerName);
+
+          const conflict = yield* scratch
+            .deploy(
+              Cloudflare.Worker("worker", {
+                script: counterClassesScript("Meter", "Gauge"),
+                env: {
+                  Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }),
+                  Gauge: Cloudflare.DurableObject("Gauge", { renamedFrom: "Counter" }),
+                },
+              }),
+            )
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(conflict)).toBe(true);
+          expect(String(conflict)).toContain("DurableObjectRenameConflict");
+          // nothing changed on Cloudflare
+          expect(yield* namespacesOf(v1.workerName)).toEqual(before);
+
+          yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 180_000 },
     );

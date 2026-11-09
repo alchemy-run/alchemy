@@ -86,11 +86,21 @@ export interface Connection extends Resource<
     catalogId: string;
   },
   {},
-  Providers
+  Providers,
+  ConnectionLookup
 > {}
 
 /**
- * An AWS Glue connection -- stores the connection details (JDBC URL, VPC
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage, in the ambient account's Data Catalog.
+ */
+export interface ConnectionLookup {
+  /** The name of the existing connection. */
+  connectionName: string;
+}
+
+/**
+ * An AWS Glue connection — stores the connection details (JDBC URL, VPC
  * networking, credentials) that crawlers and jobs use to reach a data store.
  * ### Creating Connections
  * **Example:** JDBC Connection
@@ -111,6 +121,17 @@ export interface Connection extends Resource<
  *     availabilityZone: "us-west-2a",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `connectionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run a job through an existing connection
+ * ```typescript
+ * const warehouse = AWS.Glue.Connection.lookup({ connectionName: "warehouse" });
+ * const connectionName = warehouse.connectionName;
  * ```
  *
  * @resource
@@ -178,6 +199,18 @@ export const ConnectionProvider = () =>
                 catalogId: accountId,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ connectionName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const connection = yield* observe(connectionName, accountId);
+          if (connection?.Name === undefined) return undefined;
+          return {
+            connectionName: connection.Name,
+            connectionArn: connectionArn(region, accountId, connection.Name),
+            connectionType: connection.ConnectionType ?? "",
+            catalogId: accountId,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

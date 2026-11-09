@@ -10,6 +10,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { waitGlobalOperation } from "../Compute/operations.ts";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -72,8 +73,34 @@ export type Connection = Resource<
     projectNumber: string;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectionLookup {
+  /**
+   * Peering service that manages producer connectivity. For Google services
+   * this is `servicenetworking.googleapis.com`. A `services/` prefix is
+   * accepted.
+   */
+  service?: string;
+  /**
+   * Consumer VPC network. Accepts a name (`main`), a resource path
+   * (`projects/{project}/global/networks/{network}`), or a Compute
+   * self-link.
+   */
+  network: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A private services access connection (VPC Network Peering to a
@@ -111,6 +138,19 @@ export type Connection = Resource<
  *   network: network.networkName,
  *   service: "servicenetworking.googleapis.com",
  *   reservedPeeringRanges: [range.addressName, extra.addressName],
+ * });
+ * ```
+ *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connection.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const connection = GCP.ServiceNetworking.Connection.lookup({
+ *   network: "my-network",
  * });
  * ```
  *
@@ -358,6 +398,18 @@ export const ConnectionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ service, network }) {
+      const env = yield* GcpEnvironment.current;
+      const networkName = lastSegment(network ?? "");
+      if (networkName.length === 0) return undefined;
+      const parent = parentServiceOf(service);
+      const projectNumber = yield* getProjectNumber(env.project);
+      const consumerNetwork = consumerNetworkOf(projectNumber, networkName);
+      const existing = yield* getByNetwork(parent, consumerNetwork);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, projectNumber, consumerNetwork, parent);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

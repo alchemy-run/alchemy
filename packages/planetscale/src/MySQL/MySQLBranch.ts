@@ -91,10 +91,36 @@ export type MySQLBranch = Resource<
   MySQLBranchProps,
   MySQLBranchAttributes,
   never,
-  Providers
+  Providers,
+  MySQLBranchLookup
 >;
 
-/** @resource */
+/**
+ * Props for {@link MySQLBranch.lookup}: find a MySQL branch this
+ * stack doesn't manage by its database and name.
+ */
+export interface MySQLBranchLookup {
+  /** Database name. */
+  database: string;
+  /** Branch name. */
+  name: string;
+}
+
+/**
+ * A branch of a PlanetScale MySQL database.
+ *
+ * ### Looking up an existing MySQL branch
+ * `MySQLBranch.lookup` references a MySQL branch Alchemy doesn't manage (created in
+ * the PlanetScale dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Reference an existing branch
+ * ```typescript
+ * const main = Planetscale.MySQLBranch.lookup({ database: "app", name: "main" });
+ * ```
+ *
+ * @resource
+ */
 export const MySQLBranch = Resource<MySQLBranch>("Planetscale.MySQLBranch");
 
 export const MySQLBranchProvider = () =>

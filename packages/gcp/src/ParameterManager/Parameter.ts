@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -93,11 +94,38 @@ export type Parameter = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ParameterLookup
 >;
 
 /**
- * A Parameter Manager parameter -- metadata and encryption for versioned
+ * Props for {@link Parameter.lookup}: find a parameter this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ParameterLookup {
+  /**
+   * Parameter id (the `{parameter}` segment of
+   * `projects/{project}/locations/{location}/parameters/{parameter}`). Must
+   * be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  parameterId: string;
+  /**
+   * Parameter Manager location (`global`, `us-central1`, …). `GLOBAL` is
+   * accepted and normalized to `global`. Regional locations require
+   * Parameter Manager regional access on the project.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Parameter Manager parameter — metadata and encryption for versioned
  * payloads. Version data lives on {@link ParametersVersion}.
  *
  * Changing `parameterId`, `location`, or `format` replaces the parameter.
@@ -127,6 +155,18 @@ export type Parameter = Resource<
  * const version = yield* GCP.ParameterManager.ParametersVersion("V1", {
  *   parameter: parameter.name,
  *   data: JSON.stringify({ host: "api.example.com" }),
+ * });
+ * ```
+ *
+ * ### Looking up an existing parameter
+ * `Parameter.lookup` references a parameter Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared parameter.
+ *
+ * **Example:** Reference an existing parameter
+ * ```typescript
+ * const parameter = GCP.ParameterManager.Parameter.lookup({
+ *   parameterId: "my-parameter",
  * });
  * ```
  *
@@ -181,6 +221,15 @@ export const ParameterProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ parameterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = parameterResourceName(env.project, location, parameterId);
+      const existing = yield* getParameter(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

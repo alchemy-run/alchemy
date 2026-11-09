@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,11 +138,35 @@ export type BackupVault = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupVaultLookup
 >;
 
 /**
- * A Backup and DR backup vault -- the storage location for backups created
+ * Props for {@link BackupVault.lookup}: find a backup vault this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackupVaultLookup {
+  /**
+   * Backup vault id (the `{backupvault}` segment of
+   * `projects/{project}/locations/{location}/backupVaults/{backupvault}`).
+   */
+  backupVaultId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Backup and DR backup vault — the storage location for backups created
  * by Backup Plans.
  *
  * Changing `backupVaultId`, `location`, or `encryptionConfig` replaces
@@ -171,6 +196,19 @@ export type BackupVault = Resource<
  * const vault = yield* GCP.BackupDR.BackupVault("Vault", {
  *   description: "nightly backups v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup vault
+ * `BackupVault.lookup` references a backup vault Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backup vault.
+ *
+ * **Example:** Reference an existing backup vault
+ * ```typescript
+ * const backupVault = GCP.BackupDR.BackupVault.lookup({
+ *   backupVaultId: "my-backup-vault",
  * });
  * ```
  *
@@ -252,6 +290,15 @@ export const BackupVaultProvider = () =>
         extra: previousKey !== undefined && nextKey !== undefined && previousKey !== nextKey,
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupVaultId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, backupVaultId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

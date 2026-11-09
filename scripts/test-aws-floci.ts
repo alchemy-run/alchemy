@@ -134,12 +134,7 @@ const flociFixedValues: Record<string, string> = {
  * (registered without `flociDual` in Providers.ts). This runner points every
  * AWS client at the emulator, so they cannot reach the AWS service they test.
  */
-const liveOnlySuites = new Set([
-  // Floci does not emulate Lambda Web Functions.
-  "Lambda/WebFunction.test.ts",
-  "Lambda/WebFunctionEndpoint.test.ts",
-  "Lambda/WebFunctionPermission.test.ts",
-]);
+const liveOnlySuites = new Set<string>([]);
 
 /** alchemy-test flags whose next argument is their value. */
 const flagsWithValue = new Set([
@@ -349,6 +344,7 @@ const command = Command.make(
     const setEnv = (values: Record<string, string>, overwrite: boolean) =>
       Effect.sync(() => {
         for (const [name, value] of Object.entries(values)) {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so in-process helpers and the child inherit it
           if (overwrite || process.env[name] === undefined) process.env[name] = value;
         }
       });

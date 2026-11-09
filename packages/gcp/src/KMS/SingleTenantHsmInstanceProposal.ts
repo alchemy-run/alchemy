@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -149,11 +150,42 @@ export type SingleTenantHsmInstanceProposal = Resource<
   SingleTenantHsmInstanceProposalProps,
   SingleTenantHsmInstanceProposalAttrs,
   never,
-  Providers
+  Providers,
+  SingleTenantHsmInstanceProposalLookup
 >;
 
 /**
- * A Cloud KMS SingleTenantHsmInstanceProposal -- a quorum-gated operation
+ * Props for {@link SingleTenantHsmInstanceProposal.lookup}: find a single
+ * tenant hsm instance proposal this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface SingleTenantHsmInstanceProposalLookup {
+  /**
+   * Proposal id (the last path segment). Must match `[a-zA-Z0-9_-]{1,63}`.
+   */
+  proposalId: string;
+  /**
+   * Parent SingleTenantHsmInstance. Full name
+   * `projects/{project}/locations/
+   * {location}/singleTenantHsmInstances/{instance}` or the instance id
+   * (combined with `location`).
+   */
+  singleTenantHsmInstance: string;
+  /**
+   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * `singleTenantHsmInstance` is a bare id. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud KMS SingleTenantHsmInstanceProposal — a quorum-gated operation
  * on a single-tenant HSM instance (refresh, enable, disable, delete,
  * register 2FA keys, add/remove quorum members).
  *
@@ -186,6 +218,20 @@ export type SingleTenantHsmInstanceProposal = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing single tenant hsm instance proposal
+ * `SingleTenantHsmInstanceProposal.lookup` references a single tenant hsm
+ * instance proposal Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared single tenant hsm instance proposal.
+ *
+ * **Example:** Reference an existing single tenant hsm instance proposal
+ * ```typescript
+ * const singleTenantHsmInstanceProposal = GCP.KMS.SingleTenantHsmInstanceProposal.lookup({
+ *   proposalId: "my-proposal",
+ *   singleTenantHsmInstance: "my-single-tenant-hsm-instance",
+ * });
  * ```
  *
  * @resource
@@ -548,6 +594,20 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
       }
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ proposalId, singleTenantHsmInstance, location }) {
+      const env = yield* GcpEnvironment.current;
+      const name = singleTenantHsmInstance
+        ? resourceName(
+            resolveParent(env.project, singleTenantHsmInstance ?? "", location, env.region).parent,
+            proposalId,
+          )
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

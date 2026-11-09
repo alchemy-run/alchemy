@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   normalizeLocation,
@@ -129,11 +130,37 @@ export type TlsInspectionPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TlsInspectionPolicyLookup
 >;
 
 /**
- * A Network Security TlsInspectionPolicy -- CA pool and TLS settings used
+ * Props for {@link TlsInspectionPolicy.lookup}: find a tls inspection
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface TlsInspectionPolicyLookup {
+  /**
+   * TlsInspectionPolicy id (the `{tlsInspectionPolicy}` segment of
+   * `projects
+   * /{project}/locations/{location}/tlsInspectionPolicies/{tlsInspectionPoli
+   * cy}`). Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  tlsInspectionPolicyId: string;
+  /**
+   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security TlsInspectionPolicy — CA pool and TLS settings used
  * to intercept TLS for Secure Web Proxy and Cloud NGFW.
  *
  * TlsInspectionPolicy has no labels field, so Alchemy stamps ownership
@@ -177,6 +204,19 @@ export type TlsInspectionPolicy = Resource<
  *   description: "prod intercept v2",
  *   excludePublicCaSet: true,
  *   minTlsVersion: "TLS_1_2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing tls inspection policy
+ * `TlsInspectionPolicy.lookup` references a tls inspection policy Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared tls inspection policy.
+ *
+ * **Example:** Reference an existing tls inspection policy
+ * ```typescript
+ * const tlsInspectionPolicy = GCP.NetworkSecurity.TlsInspectionPolicy.lookup({
+ *   tlsInspectionPolicyId: "my-tls-inspection-policy",
  * });
  * ```
  *
@@ -303,6 +343,15 @@ export const TlsInspectionPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tlsInspectionPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, tlsInspectionPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

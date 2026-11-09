@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -85,8 +86,26 @@ export type InterconnectAttachmentGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterconnectAttachmentGroupLookup
 >;
+
+/**
+ * Props for {@link InterconnectAttachmentGroup.lookup}: find an
+ * interconnect attachment group this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface InterconnectAttachmentGroupLookup {
+  /**
+   * Group name (RFC1035, 1-63 characters).
+   */
+  interconnectAttachmentGroupName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine Interconnect attachment group.
@@ -115,6 +134,19 @@ export type InterconnectAttachmentGroup = Resource<
  *   attachments: {
  *     primary: { attachment: attachment.selfLink },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing interconnect attachment group
+ * `InterconnectAttachmentGroup.lookup` references an interconnect
+ * attachment group Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared interconnect attachment group.
+ *
+ * **Example:** Reference an existing interconnect attachment group
+ * ```typescript
+ * const interconnectAttachmentGroup = GCP.Compute.InterconnectAttachmentGroup.lookup({
+ *   interconnectAttachmentGroupName: "my-interconnect-attachment-group",
  * });
  * ```
  *
@@ -315,6 +347,13 @@ export const InterconnectAttachmentGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interconnectAttachmentGroupName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, interconnectAttachmentGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

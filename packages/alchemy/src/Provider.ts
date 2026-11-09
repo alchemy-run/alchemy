@@ -37,6 +37,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
     TailReq = never,
     LogsReq = never,
     ListReq = never,
+    LookupReq = never,
   >(
     service: Omit<
       ProviderService<
@@ -48,7 +49,8 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "Type"
     >,
@@ -61,7 +63,8 @@ export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >;
 }
 
@@ -101,6 +104,7 @@ export interface ProviderService<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > {
   /**
    * The version of the provider.
@@ -279,6 +283,17 @@ export interface ProviderService<
     previous?: Res["Attributes"];
   }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
   /**
+   * Find a resource this stack does not manage by the key the resource
+   * declares as its `Lookup` type (e.g. a Worker's `name`), and return its
+   * attributes, or `undefined` when nothing matches. Backs
+   * `Resource.lookup(props)`.
+   *
+   * Read-only: it never creates, updates or claims the resource, and the
+   * engine never writes a state row for it, so `destroy` cannot touch it.
+   * It is always called on the live provider.
+   */
+  lookup?(props: Res["Lookup"]): Effect.Effect<Res["Attributes"] | undefined, any, LookupReq>;
+  /**
    * Properties that are always stable across any update.
    */
   stables?: Extract<keyof Res["Attributes"], string>[];
@@ -433,6 +448,7 @@ export type ProviderServiceInput<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > = Omit<
   ProviderService<
     Res,
@@ -443,7 +459,8 @@ export type ProviderServiceInput<
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
   "list"
 > &
@@ -458,7 +475,8 @@ export type ProviderServiceInput<
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "list"
     >
@@ -478,6 +496,7 @@ export const effect = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   eff: Effect.Effect<
@@ -490,7 +509,8 @@ export const effect = <
       DeleteReq,
       TailReq,
       LogsReq,
-      ListReq
+      ListReq,
+      LookupReq
     >,
     never,
     Req
@@ -499,7 +519,7 @@ export const effect = <
   Provider<R>,
   never,
   Exclude<
-    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
+    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq | LookupReq,
     LifecycleServices
   >
 > =>
@@ -522,6 +542,7 @@ export const succeed = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any, any>,
   service: ProviderServiceInput<
@@ -533,12 +554,16 @@ export const succeed = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
 ): Layer.Layer<
   Provider<R>,
   never,
-  Exclude<ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq, LifecycleServices>
+  Exclude<
+    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq | LookupReq,
+    LifecycleServices
+  >
 > =>
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {

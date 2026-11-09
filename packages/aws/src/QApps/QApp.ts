@@ -108,11 +108,30 @@ export interface QApp extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  QAppLookup
 > {}
 
 /**
- * An Amazon Q App -- a lightweight, purpose-built AI app defined as a flow of
+ * Props for {@link QApp.lookup}: find a Q App this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type QAppLookup =
+  | {
+      /** The Amazon Q Business instance the app belongs to. */
+      instanceId: string;
+      /** The id of the existing Q App. */
+      appId: string;
+    }
+  | {
+      /** The Amazon Q Business instance the app belongs to. */
+      instanceId: string;
+      /** The display name of the existing Q App. */
+      title: string;
+    };
+
+/**
+ * An Amazon Q App — a lightweight, purpose-built AI app defined as a flow of
  * cards (text inputs, file uploads, LLM query cards, plugin cards) running
  * inside an Amazon Q Business application environment.
  *
@@ -176,6 +195,16 @@ export interface QApp extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Q App
+ * `QApp.lookup` references a Q App Alchemy doesn't manage (created in the
+ * console or by another stack), found by `instanceId` with `appId` or `title`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Q App
+ * ```typescript
+ * const existing = AWS.QApps.QApp.lookup({ instanceId, title: "main" });
  * ```
  *
  * @resource
@@ -271,6 +300,13 @@ export const QAppProvider = () =>
         // Q Apps are keyed by their parent Q Business application environment
         // instance -- enumeration across all instances is not meaningful here.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "appId" in props
+              ? yield* readQAppById(props.instanceId, props.appId)
+              : yield* findQAppByTitle(props.instanceId, props.title);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const instanceId = output?.instanceId ?? olds?.instanceId;
           if (instanceId === undefined) return undefined;

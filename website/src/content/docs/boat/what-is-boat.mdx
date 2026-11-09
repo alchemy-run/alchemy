@@ -1,0 +1,130 @@
+---
+title: What is Boat?
+description: The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Boat runs sandboxes: Linux machines for agents, untrusted code and dev boxes. A **sandbox** starts in under a second, with Ubuntu, Docker, Node.js, Bun and Python, and `sudo` that needs no password. It runs until its **auto-stop** timer, then Boat stops it and saves its disk, and it picks up where it left off when you resume it. Everything belongs to your **account**, or to an organization you bill to: its sandboxes, snapshots, environments, webhooks and API keys.
+
+Take one small app: an `Agents` environment holding an npm token, and a `Golden` snapshot of a sandbox with the project's dependencies installed. For each task, a Cloudflare Worker creates a sandbox from `Golden` on the `Agents` environment, runs the agent's commands there, and calls the dev server it starts on port 3000.
+
+<Tree
+  nodes={[
+    { id: "account", label: "acme", type: "account", icon: "brand:boat" },
+    { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
+    { id: "agents", label: "Agents", type: "environment", parent: "account", icon: "file-key" },
+    { id: "task", label: "task-42", type: "sandbox · running", parent: "account", wide: true, tone: "accent", icon: "box", specs: [["from", "Golden"], ["environment", "Agents"], [":3000", "task-42-3000.on.boat.dev"]] },
+    { id: "devbox", label: "DevBox", type: "sandbox · stopped, disk saved", parent: "account", wide: true, tone: "muted", icon: "box" },
+  ]}
+  caption="Everything belongs to the account acme. task-42 starts from the Golden snapshot on the Agents environment, and serves port 3000 at its own URL. DevBox stopped on its timer and keeps its disk until it resumes. A Cloudflare Worker outside Boat creates the sandbox, runs commands in it and calls its port."
+/>
+
+## Accounts: where everything lives
+
+Your **account** owns what you create on Boat: its sandboxes, snapshots, environments, webhooks and API keys. An organization's members can bill sandboxes to it instead, and each sandbox stays private to the person who created it. Your profile signs you in to it:
+
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+See [Account & API keys](/boat/account-and-keys).
+
+## API keys: only the actions a caller needs
+
+An **API key** carries a list of **actions** (create sandboxes, run commands, read files, host a port, …) and can be limited to some sandboxes or environments, and to a lifetime. A key can never do more, or live longer, than the key that created it.
+
+```typescript
+export const Ci = Boat.ApiKey("Ci", { preset: "ci" });
+```
+
+See [Account & API keys](/boat/account-and-keys#narrow-a-key-to-what-it-needs).
+
+## Sandboxes: machines that stop and resume
+
+A **sandbox** is one machine, in one of four sizes. You run commands in it, read and write its files, and call its ports. It runs for its `autoStop` (an hour unless you say otherwise), then Boat stops it and saves its disk for 14 days. A stopped sandbox resumes with its files. **Labels** tag a sandbox when it's created, so you can find it again.
+
+```typescript
+const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { task } });
+const result = yield* sandbox.exec("npm test");
+```
+
+See [Sandboxes](/boat/sandboxes/sandboxes).
+
+## Programs: your server in a sandbox
+
+A sandbox can run your own **program**: an Effect HTTP server that Alchemy bundles, uploads and starts with Node.js, served at the sandbox's URL. A code change restarts it in place, in the same sandbox.
+
+```typescript
+export default class Api extends Boat.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, type: "small" },
+  Effect.gen(function* () {
+    return { fetch: HttpServerResponse.json({ ok: true }) };
+  }),
+) {}
+```
+
+See [Programs](/boat/sandboxes/programs).
+
+## Snapshots: a disk to start from
+
+A **snapshot** saves a sandbox's disk under a name. New sandboxes start from it, with a repository cloned and dependencies installed. A **fork** copies one sandbox from its last snapshot, which Boat takes whenever a sandbox stops.
+
+```typescript
+export const Golden = Boat.Snapshot("Golden", { run: ["npm ci"] });
+```
+
+See [Snapshots & forks](/boat/sandboxes/snapshots).
+
+## Environments: what a sandbox starts with
+
+An **environment** holds environment variables, secret files, and which of your credentials a sandbox gets (a GitHub token, your AI logins, its own Boat key). Every change makes a new version; a running sandbox keeps the version it started on.
+
+```typescript
+export const Agents = Boat.Environment("Agents", { env: { NODE_ENV: "production" } });
+```
+
+See [Environments & secrets](/boat/security/environments).
+
+## Ports: a URL for each server
+
+A server that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public, and a port's `fetch` sends it for you:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+See [Ports & URLs](/boat/sandboxes/ports).
+
+## Webhooks: Boat calls you when a sandbox changes
+
+Boat reports what happens to each sandbox (ready, stopped, failed, restored) to a **webhook**: a URL you register for the account, called with each event, signed with a secret. A Worker receives them with `consumeSandboxEvents`, which checks the signature and hands it only your stack's sandboxes.
+
+```typescript
+yield* Boat.consumeSandboxEvents({ events: ["sandbox.archived"] }, (event) =>
+  Effect.log(`${event.data.sandbox.id} stopped`),
+);
+```
+
+See [Lifecycle events](/boat/sandboxes/lifecycle-events).
+
+## State: where Alchemy keeps its record
+
+Boat has no storage for Alchemy's own record of what each Stack created. Keep it on disk, or share it with your team and CI through another cloud's state store:
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+## How @alchemy.run/boat models these concepts
+
+Your profile signs you in, and `Boat.providers()` deploys into your account. What an app shares for its whole life (an environment, a snapshot, a long-lived dev box, a webhook, a key for CI) are resources in the Stack. Sandboxes made per user or task come from bindings your Worker or Function uses while it runs (`CreateSandbox`, `ConnectSandbox`). They aren't deleted when the Stack is destroyed, but they carry their stack, stage and host as labels (`alchemy.stack`, `alchemy.stage`, `alchemy.id`), so you can find them again. Each binding gets an API key of its own, created at deploy with only the actions it needs, never yours.
+
+Next, build one: the [tutorial](/boat/tutorial/part-1) puts these ideas to work, one step at a time.

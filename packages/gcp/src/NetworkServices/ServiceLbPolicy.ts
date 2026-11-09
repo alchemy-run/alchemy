@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,8 +138,33 @@ export type ServiceLbPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLbPolicyLookup
 >;
+
+/**
+ * Props for {@link ServiceLbPolicy.lookup}: find a service lb policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServiceLbPolicyLookup {
+  /**
+   * Policy id (the `{serviceLbPolicy}` segment of
+   * `projects/{project}/locati
+   * ons/{location}/serviceLbPolicies/{serviceLbPolicy}`).
+   */
+  serviceLbPolicyId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A ServiceLbPolicy holds global load-balancing and traffic-distribution
@@ -162,6 +188,19 @@ export type ServiceLbPolicy = Resource<
  *   autoCapacityDrain: { enable: true },
  *   failoverConfig: { failoverHealthThreshold: 70 },
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing service lb policy
+ * `ServiceLbPolicy.lookup` references a service lb policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * service lb policy.
+ *
+ * **Example:** Reference an existing service lb policy
+ * ```typescript
+ * const serviceLbPolicy = GCP.NetworkServices.ServiceLbPolicy.lookup({
+ *   serviceLbPolicyId: "my-service-lb-policy",
  * });
  * ```
  *
@@ -253,6 +292,15 @@ export const ServiceLbPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceLbPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, serviceLbPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

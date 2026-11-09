@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -47,7 +48,7 @@ test.provider(
 
       const created = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferAcl("TestAcl", {
-          name: "alchemy-dnszt-acl-test",
+          name: testName("alchemy-dnszt-acl-test"),
           // Cloudflare normalizes the range to its network address —
           // use one that is already normalized for stable diffs.
           ipRange: "192.0.2.48/28",
@@ -55,27 +56,27 @@ test.provider(
       );
       expect(created.aclId).toBeDefined();
       expect(created.accountId).toEqual(accountId);
-      expect(created.name).toEqual("alchemy-dnszt-acl-test");
+      expect(created.name).toEqual(testName("alchemy-dnszt-acl-test"));
       expect(created.ipRange).toEqual("192.0.2.48/28");
 
       // Out-of-band verify via the SDK.
       const live = yield* getAcl(accountId, created.aclId);
-      expect(live.name).toEqual("alchemy-dnszt-acl-test");
+      expect(live.name).toEqual(testName("alchemy-dnszt-acl-test"));
       expect(live.ipRange).toEqual("192.0.2.48/28");
 
       // Update both mutable fields in place — same physical ACL.
       const updated = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferAcl("TestAcl", {
-          name: "alchemy-dnszt-acl-test-renamed",
+          name: testName("alchemy-dnszt-acl-test-renamed"),
           ipRange: "198.51.100.0/28",
         }),
       );
       expect(updated.aclId).toEqual(created.aclId);
-      expect(updated.name).toEqual("alchemy-dnszt-acl-test-renamed");
+      expect(updated.name).toEqual(testName("alchemy-dnszt-acl-test-renamed"));
       expect(updated.ipRange).toEqual("198.51.100.0/28");
 
       const liveUpdated = yield* getAcl(accountId, created.aclId);
-      expect(liveUpdated.name).toEqual("alchemy-dnszt-acl-test-renamed");
+      expect(liveUpdated.name).toEqual(testName("alchemy-dnszt-acl-test-renamed"));
       expect(liveUpdated.ipRange).toEqual("198.51.100.0/28");
 
       yield* stack.destroy();
@@ -124,7 +125,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Cloudflare.DNS.ZoneTransferAcl("ListAcl", {
-          name: "alchemy-dnszt-acl-list",
+          name: testName("alchemy-dnszt-acl-list"),
           ipRange: "192.0.2.64/28",
         }),
       );
@@ -137,7 +138,7 @@ test.provider(
       const found = all.find((a) => a.aclId === deployed.aclId);
       expect(found).toBeDefined();
       expect(found?.accountId).toEqual(deployed.accountId);
-      expect(found?.name).toEqual("alchemy-dnszt-acl-list");
+      expect(found?.name).toEqual(testName("alchemy-dnszt-acl-list"));
       expect(found?.ipRange).toEqual("192.0.2.64/28");
 
       yield* stack.destroy();

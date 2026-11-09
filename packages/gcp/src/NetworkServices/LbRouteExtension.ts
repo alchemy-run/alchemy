@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -116,11 +117,37 @@ export type LbRouteExtension = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LbRouteExtensionLookup
 >;
 
 /**
- * A Network Services LbRouteExtension -- a Service Extension that
+ * Props for {@link LbRouteExtension.lookup}: find a lb route extension this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LbRouteExtensionLookup {
+  /**
+   * LbRouteExtension id (the `{lbRouteExtension}` segment of
+   * `projects/{proj
+   * ect}/locations/{location}/lbRouteExtensions/{lbRouteExtension}`). Must
+   * be 1-63 characters and not start with a number.
+   */
+  lbRouteExtensionId: string;
+  /**
+   * Location (`us-central1`, `global`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Services LbRouteExtension — a Service Extension that
  * controls where an Application Load Balancer routes a given request.
  *
  * Changing `lbRouteExtensionId`, `location`, or `loadBalancingScheme`
@@ -149,6 +176,19 @@ export type LbRouteExtension = Resource<
  *       ],
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing lb route extension
+ * `LbRouteExtension.lookup` references a lb route extension Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lb route extension.
+ *
+ * **Example:** Reference an existing lb route extension
+ * ```typescript
+ * const lbRouteExtension = GCP.NetworkServices.LbRouteExtension.lookup({
+ *   lbRouteExtensionId: "my-lb-route-extension",
  * });
  * ```
  *
@@ -209,6 +249,15 @@ export const LbRouteExtensionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ lbRouteExtensionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, lbRouteExtensionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

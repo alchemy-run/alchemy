@@ -70,8 +70,18 @@ export interface RealtimeLogConfig extends Resource<
     endpoints: RealtimeLogEndpoint[];
   },
   never,
-  Providers
+  Providers,
+  RealtimeLogConfigLookup
 > {}
+
+/**
+ * Props for {@link RealtimeLogConfig.lookup}: find a realtime log config this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RealtimeLogConfigLookup {
+  /** The name of the existing realtime log config. */
+  name: string;
+}
 
 /**
  * A CloudFront real-time log configuration.
@@ -119,6 +129,16 @@ export interface RealtimeLogConfig extends Resource<
  *   fields: ["timestamp", "c-ip", "cs-uri-stem", "sc-status"],
  *   endpoints: [{ streamArn: stream.streamArn, roleArn: role.roleArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing realtime log config
+ * `RealtimeLogConfig.lookup` references a realtime log config Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing realtime log config
+ * ```typescript
+ * const existing = AWS.CloudFront.RealtimeLogConfig.lookup({ name: "my-realtime-log-config" });
  * ```
  *
  * @resource
@@ -249,6 +269,13 @@ export const RealtimeLogConfigProvider = () =>
           if ((yield* createName(id, olds)) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ name }) {
+          const observed = yield* observe(name);
+          if (!observed) {
+            return undefined;
+          }
+          return toAttrs(observed);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

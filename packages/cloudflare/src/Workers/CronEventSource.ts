@@ -5,6 +5,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 import { isWorkerEvent, Worker } from "./Worker.ts";
 
 /**
@@ -202,13 +203,13 @@ import { isWorkerEvent, Worker } from "./Worker.ts";
 export const cron = <Req = never>(
   expression: string,
   process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
-): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext>> =>
+): Effect.Effect<void, never, CronEventSource | Exclude<Req, RuntimeContext | Scope.Scope>> =>
   CronEventSource.use((source) => source(expression, process));
 
 export type CronEventSourceService = <Req = never>(
   expression: string,
   process: (controller: cf.ScheduledController) => Effect.Effect<void, unknown, Req>,
-) => Effect.Effect<void, never, Exclude<Req, RuntimeContext>>;
+) => Effect.Effect<void, never, Exclude<Req, RuntimeContext | Scope.Scope>>;
 
 export class CronEventSource extends Context.Service<CronEventSource, CronEventSourceService>()(
   "Cloudflare.Workers.CronEventSource",

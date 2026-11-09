@@ -83,11 +83,21 @@ export interface DBParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBParameterGroupLookup
 > {}
 
 /**
- * An RDS DB parameter group -- instance-level engine settings, applied to a
+ * Props for {@link DBParameterGroup.lookup}: find a DB parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBParameterGroupLookup {
+  /** The db parameter group name of the existing DB parameter group. */
+  dbParameterGroupName: string;
+}
+
+/**
+ * An RDS DB parameter group — instance-level engine settings, applied to a
  * `DBInstance` (as opposed to the cluster-wide `DBClusterParameterGroup`).
  *
  * Name, family, and description changes force a replacement (RDS has no
@@ -123,6 +133,16 @@ export interface DBParameterGroup extends Resource<
  *   engine: "aurora-postgresql",
  *   dbParameterGroupName: instanceParams.dbParameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing DB parameter group
+ * `DBParameterGroup.lookup` references a DB parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB parameter group
+ * ```typescript
+ * const existing = AWS.RDS.DBParameterGroup.lookup({ dbParameterGroupName: "my-db-parameter-group" });
  * ```
  *
  * @resource
@@ -273,6 +293,21 @@ export const DBParameterGroupProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ dbParameterGroupName }) {
+          const group = yield* readGroup(dbParameterGroupName);
+          if (!group?.DBParameterGroupName) return undefined;
+          return {
+            dbParameterGroupName: group.DBParameterGroupName,
+            dbParameterGroupArn: group.DBParameterGroupArn,
+            family: group.DBParameterGroupFamily ?? "",
+            description: group.Description,
+            parameters: toManagedParameterRecord(
+              yield* readParameters(group.DBParameterGroupName),
+              undefined,
+            ),
+            tags: yield* readTags(group.DBParameterGroupArn),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??

@@ -207,11 +207,26 @@ export interface Broker extends Resource<
     consoleUrl: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BrokerLookup
 > {}
 
 /**
- * An Amazon MQ broker -- a managed message broker running Apache ActiveMQ or
+ * Props for {@link Broker.lookup}: find a broker this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BrokerLookup =
+  | {
+      /** The id of the existing broker. */
+      brokerId: string;
+    }
+  | {
+      /** The name of the existing broker. */
+      brokerName: string;
+    };
+
+/**
+ * An Amazon MQ broker — a managed message broker running Apache ActiveMQ or
  * RabbitMQ. Amazon MQ handles provisioning, patching, and (for multi-AZ
  * deployments) failover, exposing standard wire protocols (OpenWire, AMQP,
  * MQTT, STOMP, WSS) so existing clients connect unchanged.
@@ -300,6 +315,17 @@ export interface Broker extends Resource<
  *       ),
  *     ),
  * );
+ * ```
+ *
+ * ### Looking up an existing broker
+ * `Broker.lookup` references a broker Alchemy doesn't manage (created in the
+ * console or by another stack), found by `brokerId` or `brokerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Consume from an existing broker
+ * ```typescript
+ * const broker = AWS.MQ.Broker.lookup({ brokerName: "orders" });
+ * const brokerArn = broker.brokerArn;
  * ```
  *
  * @resource
@@ -470,6 +496,14 @@ export const BrokerProvider = () =>
               (olds?.encryptionOptions?.useAwsOwnedKey ?? undefined)
           )
             return { action: "replace" } as const;
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const broker =
+            "brokerId" in props
+              ? yield* readBroker(props.brokerId)
+              : yield* findByName(props.brokerName);
+          return broker === undefined ? undefined : toAttrs(broker);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

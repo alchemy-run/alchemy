@@ -77,11 +77,21 @@ export type Customer = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  CustomerLookup
 >;
 
 /**
- * A Stripe Customer -- the billing identity invoices, subscriptions, and
+ * Props for {@link Customer.lookup}: find a customer this stack
+ * doesn't manage by its id.
+ */
+export interface CustomerLookup {
+  /** Stripe customer id, e.g. `"cus_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Customer — the billing identity invoices, subscriptions, and
  * Checkout sessions attach to. Email, name, description, phone, and
  * metadata are updated in place. Deleting a customer is permanent and
  * immediately cancels any active subscriptions.
@@ -116,6 +126,16 @@ export type Customer = Resource<
  *   name: "Alice Example",
  *   metadata: { plan: "enterprise" },
  * });
+ * ```
+ *
+ * ### Looking up an existing customer
+ * `Customer.lookup` references a customer Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing customer
+ * ```typescript
+ * const ref = Stripe.Customer.lookup({ id: "cus_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -213,6 +233,11 @@ export const CustomerProvider = () =>
     diff: Effect.fn(function* ({ news }) {
       if (!isResolved(news)) return undefined;
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

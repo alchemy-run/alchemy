@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -111,8 +112,31 @@ export type FeatureGroup = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureGroupLookup
 >;
+
+/**
+ * Props for {@link FeatureGroup.lookup}: find a feature group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FeatureGroupLookup {
+  /**
+   * Feature group id. Valid characters `[a-z0-9_]`, must start with a
+   * letter, max 128.
+   */
+  featureGroupId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Registry Feature Group backed by a BigQuery table
@@ -130,6 +154,19 @@ export type FeatureGroup = Resource<
  *     entityIdColumns: ["entity_id"],
  *   },
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing feature group
+ * `FeatureGroup.lookup` references a feature group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * feature group.
+ *
+ * **Example:** Reference an existing feature group
+ * ```typescript
+ * const featureGroup = GCP.AIPlatform.FeatureGroup.lookup({
+ *   featureGroupId: "my-feature-group",
  * });
  * ```
  *
@@ -264,6 +301,15 @@ export const FeatureGroupProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featureGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featureGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

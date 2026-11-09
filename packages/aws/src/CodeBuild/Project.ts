@@ -296,11 +296,21 @@ export interface Project extends Resource<
     projectArn: string;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 > {}
 
 /**
- * An AWS CodeBuild build project -- a reusable definition of how to run a
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProjectLookup {
+  /** The project name of the existing project. */
+  projectName: string;
+}
+
+/**
+ * An AWS CodeBuild build project — a reusable definition of how to run a
  * build: the source, the build container, the compute size, the IAM role,
  * and where artifacts land.
  *
@@ -340,6 +350,16 @@ export interface Project extends Resource<
  *     environmentVariables: [{ name: "STAGE", value: "prod" }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `projectName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const existing = AWS.CodeBuild.Project.lookup({ projectName: "my-project" });
  * ```
  *
  * @resource
@@ -443,6 +463,18 @@ export const ProjectProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ projectName: name }) {
+          const project = yield* getProject(name);
+          if (project === undefined || project.arn === undefined) {
+            return undefined;
+          }
+          const attrs = {
+            projectName: project.name ?? name,
+            projectArn: project.arn,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

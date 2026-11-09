@@ -91,8 +91,23 @@ export interface DataIntegration extends Resource<
     sourceURI: string;
   },
   never,
-  Providers
+  Providers,
+  DataIntegrationLookup
 > {}
+
+/**
+ * Props for {@link DataIntegration.lookup}: find a data integration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataIntegrationLookup =
+  | {
+      /** The id of the existing data integration. */
+      dataIntegrationId: string;
+    }
+  | {
+      /** The name of the existing data integration. */
+      name: string;
+    };
 
 /**
  * An Amazon AppIntegrations data integration. Data integrations reference an
@@ -129,6 +144,16 @@ export interface DataIntegration extends Resource<
  *     scheduleExpression: "rate(1 hours)",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data integration
+ * `DataIntegration.lookup` references a data integration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dataIntegrationId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data integration
+ * ```typescript
+ * const salesforce = AWS.AppIntegrations.DataIntegration.lookup({ name: "salesforce" });
  * ```
  *
  * @resource
@@ -224,6 +249,13 @@ export const DataIntegrationProvider = () =>
             );
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const identifier =
+            "dataIntegrationId" in props ? props.dataIntegrationId : yield* findByName(props.name);
+          if (identifier === undefined) return undefined;
+          const live = yield* observe(identifier);
+          return live === undefined ? undefined : yield* toAttrs(live);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let identifier: string | undefined = output?.dataIntegrationId;
           if (identifier === undefined) {

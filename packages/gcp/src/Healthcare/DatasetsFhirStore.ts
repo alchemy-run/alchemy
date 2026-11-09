@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,37 @@ export type DatasetsFhirStore = Resource<
     defaultSearchHandlingStrict: boolean;
   },
   never,
-  Providers
+  Providers,
+  DatasetsFhirStoreLookup
 >;
+
+/**
+ * Props for {@link DatasetsFhirStore.lookup}: find a datasets fhir store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DatasetsFhirStoreLookup {
+  /**
+   * FHIR store id. Must match letters, numbers, underscores, hyphens, and
+   * periods; 1-256 characters.
+   */
+  fhirStoreId: string;
+  /**
+   * Region used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent dataset. Full name
+   * `projects/{project}/locations/{location}/datasets/{dataset}` or the
+   * dataset id (combined with `location`).
+   */
+  dataset: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare FHIR store inside a dataset.
@@ -133,6 +163,20 @@ export type DatasetsFhirStore = Resource<
  *   fhirStoreId: "clinic-fhir",
  *   version: "R4",
  *   enableUpdateCreate: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing datasets fhir store
+ * `DatasetsFhirStore.lookup` references a datasets fhir store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared datasets fhir store.
+ *
+ * **Example:** Reference an existing datasets fhir store
+ * ```typescript
+ * const datasetsFhirStore = GCP.Healthcare.DatasetsFhirStore.lookup({
+ *   fhirStoreId: "my-fhir-store",
+ *   dataset: "my-dataset",
  * });
  * ```
  *
@@ -214,6 +258,21 @@ export const DatasetsFhirStoreProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      fhirStoreId,
+      location: lookupLocation,
+      dataset: lookupDataset,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataset =
+        lookupDataset !== undefined ? datasetOf(lookupDataset, env.project, location) : "";
+      const name = dataset.length > 0 ? resourceName(dataset, fhirStoreId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

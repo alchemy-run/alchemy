@@ -81,11 +81,21 @@ export interface Recipe extends Resource<
     recipeVersion: string;
   },
   {},
-  Providers
+  Providers,
+  RecipeLookup
 > {}
 
 /**
- * An AWS Glue DataBrew recipe -- an ordered list of data-transformation steps
+ * Props for {@link Recipe.lookup}: find a recipe this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RecipeLookup {
+  /** The name of the existing recipe. */
+  recipeName: string;
+}
+
+/**
+ * An AWS Glue DataBrew recipe — an ordered list of data-transformation steps
  * (rename, filter, case conversion, etc.). Edits modify the `LATEST_WORKING`
  * version; setting `publish: true` snapshots numbered versions that recipe
  * jobs consume.
@@ -125,6 +135,16 @@ export interface Recipe extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing recipe
+ * `Recipe.lookup` references a recipe Alchemy doesn't manage (created in the
+ * console or by another stack), found by `recipeName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing recipe
+ * ```typescript
+ * const existing = AWS.DataBrew.Recipe.lookup({ recipeName: "..." });
  * ```
  *
  * @resource
@@ -203,6 +223,20 @@ export const RecipeProvider = () =>
                 recipeVersion: published.get(r.Name) ?? "LATEST_WORKING",
               }));
           }),
+
+        lookup: Effect.fn(function* ({ recipeName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const recipe = yield* observeWorking(name);
+          if (recipe === undefined) return undefined;
+          const arn = recipe.ResourceArn ?? databrewArn(region, accountId, "recipe", name);
+          const versions = yield* publishedVersions(name);
+          const attrs = {
+            recipeName: name,
+            recipeArn: arn,
+            recipeVersion: latestPublished(versions) ?? "LATEST_WORKING",
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

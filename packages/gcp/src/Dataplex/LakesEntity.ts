@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   fingerprint,
@@ -180,11 +181,35 @@ export type LakesEntity = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LakesEntityLookup
 >;
 
 /**
- * A Dataplex metadata entity -- a table or fileset registered in a zone.
+ * Props for {@link LakesEntity.lookup}: find a lakes entity this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LakesEntityLookup {
+  /**
+   * Entity id used as the published table name. Letters, numbers, and
+   * underscores; at most 256 characters.
+   */
+  entityId: string;
+  /**
+   * Parent zone. Full name
+   * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}`.
+   */
+  zone: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex metadata entity — a table or fileset registered in a zone.
  *
  * Entities have no labels field: `read` reports an entity it finds
  * without prior state as unowned (adopt it with `--adopt`), and `list`
@@ -206,6 +231,20 @@ export type LakesEntity = Resource<
  *     userManaged: true,
  *     fields: [{ name: "id", type: "STRING", mode: "REQUIRED" }],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing lakes entity
+ * `LakesEntity.lookup` references a lakes entity Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * lakes entity.
+ *
+ * **Example:** Reference an existing lakes entity
+ * ```typescript
+ * const lakesEntity = GCP.Dataplex.LakesEntity.lookup({
+ *   entityId: "my-entity",
+ *   zone: "us-central1-a",
  * });
  * ```
  *
@@ -324,6 +363,15 @@ export const LakesEntityProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ entityId, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lookupZone ?? "";
+      const name = resourceNameOf(zone, entityId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

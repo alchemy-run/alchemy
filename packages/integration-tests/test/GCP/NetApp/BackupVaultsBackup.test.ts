@@ -6,6 +6,8 @@ import * as netapp from "@distilled.cloud/gcp/netapp_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
+import { missingTag } from "./entitlement.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -44,7 +46,7 @@ test.provider(
           name: `projects/${project}/locations/us-central1/backupVaults/alchemy-missing-vault/backups/alchemy-missing-backup`,
         }),
       );
-      expect(error._tag).toEqual("NotFound");
+      expect(error._tag).toEqual(missingTag);
 
       const page = yield* netapp.listProjectsLocationsBackupVaultsBackups({
         parent: `projects/${project}/locations/-/backupVaults/-`,
@@ -89,6 +91,14 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetApp.BackupVaultsBackup.lookup({
+          backupId: created.backupId,
+          location: created.location,
+          backupVault: created.backupVault,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/backups/");

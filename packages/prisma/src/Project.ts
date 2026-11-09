@@ -141,8 +141,18 @@ export interface Project extends Resource<
     password: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 > {}
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Prisma project id. */
+  projectId: string;
+}
 
 /**
  * A Prisma project, optionally with a default Prisma Postgres database.
@@ -166,6 +176,20 @@ export interface Project extends Resource<
  * const project = yield* Prisma.Project("control-plane", {
  *   createDatabase: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Prisma returns connection strings only when it creates a database, so a
+ * looked-up one has none; declare a `Prisma.Connection` on it to mint
+ * credentials.
+ *
+ * **Example:** Add a database to an existing project
+ * ```typescript
+ * const project = Prisma.Project.lookup({ projectId: "proj_cmabc123def456ghi789jkl0" });
+ * const db = yield* Prisma.Database("Analytics", { project });
  * ```
  *
  * @resource
@@ -462,7 +486,19 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
-        read: Effect.fn(function* ({ id, output, olds = {} }) {
+        lookup: Effect.fn(function* ({ projectId }) {
+          const project = yield* getProject({ id: projectId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          if (!project) return undefined;
+          const database = yield* defaultDatabase(project.id).pipe(
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return attrsFrom(project, database, {});
+        }),
+
+        read: Effect.fn(function* ({ id, output, olds = {}, previous }) {
           const projectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           const project = projectId
             ? yield* getProject({ id: projectId }).pipe(
@@ -485,8 +521,13 @@ const ProviderLive = () =>
           });
           // An omitted name is derived from this exact PlanScope instance ID.
           // Finding it proves this is create-recovery, not a foreign natural-
-          // key match. User-supplied names still require explicit adoption.
-          return projectId === undefined && olds.name !== undefined ? Unowned(attrs) : attrs;
+          // key match. User-supplied names still require explicit adoption,
+          // except for the generation a replacement is replacing.
+          return projectId === undefined &&
+            olds.name !== undefined &&
+            project.id !== previous?.projectId
+            ? Unowned(attrs)
+            : attrs;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const name = yield* createName(id, news.name);

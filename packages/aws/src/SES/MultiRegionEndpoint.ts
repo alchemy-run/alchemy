@@ -64,11 +64,21 @@ export interface MultiRegionEndpoint extends Resource<
     status: MultiRegionEndpointStatus;
   },
   never,
-  Providers
+  Providers,
+  MultiRegionEndpointLookup
 > {}
 
 /**
- * An Amazon SES v2 multi-region endpoint (global endpoint) -- a single sending
+ * Props for {@link MultiRegionEndpoint.lookup}: find a multi region endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MultiRegionEndpointLookup {
+  /** The endpoint name of the existing multi region endpoint. */
+  endpointName: string;
+}
+
+/**
+ * An Amazon SES v2 multi-region endpoint (global endpoint) — a single sending
  * endpoint that splits email traffic across a primary region (where the
  * endpoint is created) and one or more secondary regions, improving
  * resilience and deliverability.
@@ -133,6 +143,16 @@ export interface MultiRegionEndpoint extends Resource<
  *       times: 40,
  *     }),
  *   );
+ * ```
+ *
+ * ### Looking up an existing multi region endpoint
+ * `MultiRegionEndpoint.lookup` references a multi region endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing multi region endpoint
+ * ```typescript
+ * const existing = AWS.SES.MultiRegionEndpoint.lookup({ endpointName: "my-multi-region-endpoint" });
  * ```
  *
  * @resource
@@ -210,6 +230,17 @@ export const MultiRegionEndpointProvider = () =>
                   ]
                 : [],
             );
+        }),
+
+        lookup: Effect.fn(function* ({ endpointName: name }) {
+          const found = yield* getEndpoint(name);
+          if (!found || !found.EndpointId) return undefined;
+          const attrs = {
+            endpointName: name,
+            endpointId: found.EndpointId,
+            status: found.Status ?? "CREATING",
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

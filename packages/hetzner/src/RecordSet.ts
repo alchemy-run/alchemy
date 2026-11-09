@@ -24,6 +24,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -156,11 +157,25 @@ export type RecordSet = Resource<
   RecordSetProps,
   RecordSetAttributes,
   never,
-  Providers
+  Providers,
+  RecordSetLookup
 >;
 
 /**
- * A Hetzner Cloud DNS resource record set (RRSet) -- one `(name, type)`
+ * Props for {@link RecordSet.lookup}: find a record set this stack
+ * doesn't manage by its zone, name and type.
+ */
+export interface RecordSetLookup {
+  /** Zone domain name or numeric id. */
+  zone: string;
+  /** Record name relative to the zone (`@` for the apex). */
+  name: string;
+  /** Record type. */
+  type: RecordSetType;
+}
+
+/**
+ * A Hetzner Cloud DNS resource record set (RRSet) — one `(name, type)`
  * with one or more records. Two A values are a single resource, not two.
  *
  * Identity is `(zone, name, type)`: changing any of those replaces the
@@ -211,6 +226,16 @@ export type RecordSet = Resource<
  *   records: [{ value: "192.0.2.10" }],
  *   ttl: 600,
  * });
+ * ```
+ *
+ * ### Looking up an existing record set
+ * `RecordSet.lookup` references a record set Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Read an existing record set
+ * ```typescript
+ * const mx = Hetzner.RecordSet.lookup({ zone: "example.com", name: "@", type: "MX" });
  * ```
  *
  * @resource
@@ -369,7 +394,21 @@ export const RecordSetProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ zone, name, type }) {
+      const found = yield* Hetzner.zoneRrsets
+        .getZoneRrset({
+          id_or_name: zone,
+          rr_name: normalizeName(name),
+          rr_type: normalizeType(type),
+        })
+        .pipe(
+          Effect.map(({ rrset }) => rrset),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds?.zone);
       const name =
         output?.name ?? (olds?.name !== undefined ? normalizeName(olds.name) : undefined);
@@ -384,6 +423,20 @@ export const RecordSetProvider = () =>
         current = yield* findByLabels(zoneId, id);
       }
       if (current === undefined) return undefined;
+      // A record set is identified by its name and type.
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: current.id,
+          claimedName:
+            olds?.name !== undefined && olds?.type !== undefined
+              ? `${normalizeName(olds.name)}/${normalizeType(olds.type)}`
+              : undefined,
+          foundName: `${current.name}/${current.type}`,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(current);
       return (yield* hasAlchemyLabels(id, tagRecord(current.labels))) ? attrs : Unowned(attrs);
     }),

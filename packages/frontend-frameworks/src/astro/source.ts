@@ -111,12 +111,12 @@ export interface DevContext extends SourceContext {
     readonly assets: PluginWorker["assets"] | undefined;
     /**
      * The Worker's other runtime settings (crons, Workflows, tail consumers,
-     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Cache API, `request.cf`, Access), spread whole into the runtime
      * Worker.
      */
     readonly options: Pick<
       PluginWorker,
-      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access"
     >;
   };
   readonly runtimeContext: CloudflareVitePluginOptions["context"];
@@ -743,10 +743,13 @@ export const applyWorkerEnvToProcess = (
   Effect.sync(() => {
     for (const [key, value] of Object.entries(env ?? {})) {
       if (typeof value === "string") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = value;
       } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = Redacted.value(value) as string;
       } else if (typeof value === "number" || typeof value === "boolean") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = String(value);
       }
     }
@@ -801,6 +804,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
     // config loading and integrations read env at build time).
     yield* Effect.sync(() => {
       for (const [key, value] of Object.entries(config.env)) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into the child's process.env, not config reading
         process.env[key] = value;
       }
     });

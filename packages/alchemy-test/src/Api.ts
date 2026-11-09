@@ -38,7 +38,8 @@ export type TestOptions =
        *
        * A label (e.g. `"hetzner"`) only serializes the test with others
        * holding the same label, so unrelated tests keep running. Use it for
-       * a shared cloud quota.
+       * a shared cloud quota. A `{ label, permits }` limit lets up to
+       * `permits` holders run at once, for a shared API budget.
        */
       readonly exclusive?: Exclusive;
     };

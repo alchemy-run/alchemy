@@ -30,6 +30,7 @@ import { pipedColorEnv } from "../Util/Terminal.ts";
 import { traceParentEnv } from "../Util/TraceParent.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import { RPC_SERVER_ENVIRONMENT_KEY, type RpcServerEnvironment } from "./RpcServerEnvironment.ts";
+import { makeRpcToken, matchRpcToken, rpcSubpath, withRpcToken } from "./RpcToken.ts";
 
 export class RpcSpawner extends Context.Service<
   RpcSpawner,
@@ -76,6 +77,9 @@ const SidecarLogLineSchema = Schema.Struct({
  * from the exec child, which owns the terminal renderer.
  */
 export const LOGS_PATH = "/logs";
+
+/** The {@link LOGS_PATH} endpoint of a spawner URL, keeping its token. */
+export const spawnerLogsUrl = (spawnerUrl: string): string => rpcSubpath(spawnerUrl, LOGS_PATH);
 
 /** Options for the {@link RpcSpawner} that forks sidecar processes. */
 export type RpcSpawnerOptions = Pick<RpcServerEnvironment, "profile" | "envFile"> & {
@@ -209,18 +213,20 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
     );
     const url = yield* Deferred.await(stdout.address);
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const ws = new WebSocket(new URL("/parent", url));
-        // Keep the parent link active so no idle timer on either end can
-        // close it; the sidecar ignores messages on this link.
-        const heartbeat = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
-        }, 30_000);
-        heartbeat.unref?.();
-        ws.addEventListener("close", () => clearInterval(heartbeat));
-        return ws;
-      }),
+      Effect.sync(() => new WebSocket(rpcSubpath(url, "/parent"))),
       (ws) => Effect.sync(() => ws.close()),
+    );
+    // Keep the parent link active so no idle timer on either end can
+    // close it; the sidecar ignores messages on this link.
+    yield* Effect.sleep("30 seconds").pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
+          return ws.readyState;
+        }),
+      ),
+      Effect.repeat({ while: (state) => state !== WebSocket.CLOSED }),
+      Effect.forkScoped,
     );
     return {
       url,
@@ -259,6 +265,8 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   });
 
   const server = yield* HttpServer.HttpServer;
+  // Only callers that were handed the spawner's URL reach it: see `RpcToken.ts`.
+  const token = yield* makeRpcToken;
 
   const encoder = new TextEncoder();
   // The first heartbeat flushes the response headers immediately; the
@@ -280,7 +288,10 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
       const request = yield* HttpServerRequest;
       // `request.url` is relative under Node and absolute under Bun --
       // normalize to the pathname before matching.
-      const pathname = new URL(request.url, "http://localhost").pathname;
+      const pathname = matchRpcToken(new URL(request.url, "http://localhost").pathname, token);
+      if (pathname === undefined) {
+        return HttpServerResponse.text("Unauthorized", { status: 401 });
+      }
       if (pathname === LOGS_PATH) {
         // Long-lived NDJSON stream of sidecar output. The subscriber (exec
         // child) routes these lines through its logger, which the renderer
@@ -300,6 +311,9 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
           ),
           { contentType: "application/x-ndjson" },
         );
+      }
+      if (pathname !== "" || request.method !== "POST") {
+        return HttpServerResponse.text("Not Found", { status: 404 });
       }
       const decoded = yield* Effect.result(
         request.json.pipe(Effect.flatMap(Schema.decodeUnknownEffect(RpcSpawnPayload))),
@@ -324,7 +338,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   );
 
   return RpcSpawner.of({
-    url: HttpServer.formatAddress(server.address),
+    url: withRpcToken(HttpServer.formatAddress(server.address), token),
   });
 });
 
@@ -400,7 +414,7 @@ export const forwardSidecarLogs: Effect.Effect<void, never, HttpClient.HttpClien
     Effect.flatMap((spawnerUrl) => {
       const streamOnce = Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
-        const response = yield* client.get(new URL(LOGS_PATH, spawnerUrl).toString());
+        const response = yield* client.get(spawnerLogsUrl(spawnerUrl));
         yield* response.stream.pipe(
           Stream.decodeText,
           Stream.splitLines,

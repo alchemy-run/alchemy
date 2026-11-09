@@ -80,11 +80,26 @@ export interface VirtualCluster extends Resource<
     state?: string;
   },
   {},
-  Providers
+  Providers,
+  VirtualClusterLookup
 > {}
 
 /**
- * An Amazon EMR on EKS virtual cluster -- a registration of a Kubernetes
+ * Props for {@link VirtualCluster.lookup}: find a virtual cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type VirtualClusterLookup =
+  | {
+      /** The id of the existing virtual cluster. */
+      virtualClusterId: string;
+    }
+  | {
+      /** The name of the existing virtual cluster. */
+      virtualClusterName: string;
+    };
+
+/**
+ * An Amazon EMR on EKS virtual cluster — a registration of a Kubernetes
  * namespace on an EKS cluster as an EMR job-submission target. Virtual
  * clusters consume no resources themselves (no cost while idle); jobs
  * submitted to the virtual cluster run as pods in the mapped namespace.
@@ -112,6 +127,16 @@ export interface VirtualCluster extends Resource<
  *   },
  * });
  * // virtualCluster.virtualClusterId is passed to StartJobRun
+ * ```
+ *
+ * ### Looking up an existing virtual cluster
+ * `VirtualCluster.lookup` references a virtual cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `virtualClusterId` or `virtualClusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing virtual cluster
+ * ```typescript
+ * const existing = AWS.EMRContainers.VirtualCluster.lookup({ virtualClusterName: "analytics" });
  * ```
  *
  * @resource
@@ -215,6 +240,14 @@ export const VirtualClusterProvider = () =>
               .map(toAttributes);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "virtualClusterId" in props ? props.virtualClusterId : undefined,
+            "virtualClusterName" in props ? props.virtualClusterName : "",
+          );
+          if (found?.id === undefined || found.arn === undefined) return undefined;
+          return toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.virtualClusterName ?? (yield* createName(id, olds ?? {}));
           const vc = yield* observe(output?.virtualClusterId, name);

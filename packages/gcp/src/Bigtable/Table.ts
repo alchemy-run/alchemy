@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceNameOf,
@@ -112,11 +113,34 @@ export type Table = Resource<
     restoreInfo: bigtable.RestoreInfo | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 >;
 
 /**
- * A Cloud Bigtable table -- rows keyed by row key, grouped into column
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface TableLookup {
+  /**
+   * Table id (the `{table}` segment of
+   * `.../instances/{instance}/tables/{table}`). Must be 1-50 characters.
+   */
+  tableId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Bigtable table — rows keyed by row key, grouped into column
  * families.
  *
  * The parent instance must already exist. Changing `tableId`,
@@ -146,6 +170,19 @@ export type Table = Resource<
  * ```typescript
  * const getTable = yield* GCP.Bigtable.GetTable(table);
  * const live = yield* getTable({ view: "SCHEMA_VIEW" });
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared table.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const table = GCP.Bigtable.Table.lookup({
+ *   tableId: "my-table",
+ *   instance: "my-instance",
+ * });
  * ```
  *
  * @resource
@@ -293,6 +330,17 @@ export const TableProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tableId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? `${instanceNameOf(env.project, instance)}/tables/${tableId}`
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

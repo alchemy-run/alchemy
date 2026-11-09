@@ -76,11 +76,21 @@ export interface VariantStore extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  VariantStoreLookup
 > {}
 
 /**
- * An Amazon HealthOmics variant store -- a container for genomic variant data
+ * Props for {@link VariantStore.lookup}: find a variant store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VariantStoreLookup {
+  /** The name of the existing variant store. */
+  name: string;
+}
+
+/**
+ * An Amazon HealthOmics variant store — a container for genomic variant data
  * (VCF) aligned to a reference genome.
  *
  * A variant store name is auto-generated from the app, stage, and logical ID
@@ -96,6 +106,16 @@ export interface VariantStore extends Resource<
  *     referenceArn: "arn:aws:omics:us-east-1:123456789012:referenceStore/1234567890/reference/0987654321",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing variant store
+ * `VariantStore.lookup` references a variant store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing variant store
+ * ```typescript
+ * const existing = AWS.Omics.VariantStore.lookup({ name: "my-variant-store" });
  * ```
  *
  * @resource
@@ -138,6 +158,19 @@ export const VariantStoreProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* omics
+            .getVariantStore({ name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = {
+            variantStoreId: found.id,
+            variantStoreArn: found.storeArn,
+            name: found.name,
+            status: found.status,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics

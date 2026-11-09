@@ -63,11 +63,21 @@ export interface Archive extends Resource<
     archiveState: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ArchiveLookup
 > {}
 
 /**
- * An SES Mail Manager email archive -- durable storage for emails captured
+ * Props for {@link Archive.lookup}: find an archive this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ArchiveLookup {
+  /** The name of the existing archive. */
+  archiveName: string;
+}
+
+/**
+ * An SES Mail Manager email archive — durable storage for emails captured
  * by an `Archive` rule action, searchable and exportable for compliance.
  *
  * Deleting an archive puts it into `PENDING_DELETION` for 30 days before
@@ -105,6 +115,16 @@ export interface Archive extends Resource<
  *   ToTimestamp: new Date(),
  *   MaxResults: 100,
  * });
+ * ```
+ *
+ * ### Looking up an existing archive
+ * `Archive.lookup` references an archive Alchemy doesn't manage (created in the
+ * console or by another stack), found by `archiveName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing archive
+ * ```typescript
+ * const existing = AWS.MailManager.Archive.lookup({ archiveName: "compliance" });
  * ```
  *
  * @resource
@@ -177,6 +197,10 @@ export const ArchiveProvider = () =>
             Effect.map((results) => results.flatMap((a) => (a === undefined ? [] : [toAttrs(a)]))),
           ),
 
+        lookup: Effect.fn(function* ({ archiveName }) {
+          const found = yield* observe(undefined, archiveName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.archiveName ?? (yield* createName(id, olds ?? {}));
           const archive = yield* observe(output, name);

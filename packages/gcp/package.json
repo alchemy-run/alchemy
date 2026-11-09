@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/gcp",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Google Cloud resources, Cloud Run, Cloud Functions and GKE for Alchemy.",
   "keywords": [
     "alchemy",
@@ -1005,6 +1005,7 @@
         "default": "./lib/Workstations/index.js"
       },
       "./Container/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

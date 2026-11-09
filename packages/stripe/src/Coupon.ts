@@ -146,11 +146,21 @@ export type Coupon = Resource<
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CouponLookup
 >;
 
 /**
- * A Stripe Coupon -- a percent-off or amount-off discount applied to
+ * Props for {@link Coupon.lookup}: find a coupon this stack
+ * doesn't manage by its id.
+ */
+export interface CouponLookup {
+  /** Stripe coupon id, e.g. `"SUMMER25"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Coupon — a percent-off or amount-off discount applied to
  * subscriptions, invoices, Checkout sessions, and quotes. Coupons do not
  * apply to one-off charges or PaymentIntents.
  *
@@ -201,6 +211,16 @@ export type Coupon = Resource<
  *   name: "Welcome 20% (updated)",
  *   metadata: { campaign: "spring" },
  * });
+ * ```
+ *
+ * ### Looking up an existing coupon
+ * `Coupon.lookup` references a coupon Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing coupon
+ * ```typescript
+ * const ref = Stripe.Coupon.lookup({ id: "SUMMER25" });
  * ```
  *
  * @resource
@@ -403,6 +423,11 @@ export const CouponProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

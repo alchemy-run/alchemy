@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -71,8 +72,32 @@ export type Datacollector = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatacollectorLookup
 >;
+
+/**
+ * Props for {@link Datacollector.lookup}: find a datacollector this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DatacollectorLookup {
+  /**
+   * Data collector id (the `{data_collector}` segment of
+   * `organizations/{org}/datacollectors/{data_collector}`). Must begin with
+   * `dc_` and contain only letters, numbers, and underscores.
+   */
+  dataCollectorId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee data collector used to capture custom analytics dimensions.
@@ -96,6 +121,19 @@ export type Datacollector = Resource<
  *   dataCollectorId: "dc_proxy_latency",
  *   type: "INTEGER",
  *   description: "proxy latency in milliseconds",
+ * });
+ * ```
+ *
+ * ### Looking up an existing datacollector
+ * `Datacollector.lookup` references a datacollector Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * datacollector.
+ *
+ * **Example:** Reference an existing datacollector
+ * ```typescript
+ * const datacollector = GCP.Apigee.Datacollector.lookup({
+ *   dataCollectorId: "my-data-collector",
  * });
  * ```
  *
@@ -160,6 +198,15 @@ export const DatacollectorProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ dataCollectorId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, dataCollectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

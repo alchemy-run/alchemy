@@ -160,8 +160,27 @@ export interface PullRequest extends Resource<
     updatedAt: string;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  PullRequestLookup
 > {}
+
+/**
+ * Props for {@link PullRequest.lookup}: find a pull request this
+ * stack doesn't manage by its repository and number.
+ */
+export interface PullRequestLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Pull request number. */
+  number: number;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub pull request.
@@ -260,6 +279,16 @@ export interface PullRequest extends Resource<
  * })
  * ```
  *
+ * ### Looking up an existing pull request
+ * `PullRequest.lookup` references a pull request Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing pull request
+ * ```typescript
+ * const pr = GitHub.PullRequest.lookup({ owner: "alchemy-run", repository: "alchemy", number: 3094 });
+ * ```
+ *
  * @resource
  * @product Pull Request
  */
@@ -287,6 +316,16 @@ export const PullRequestProvider = () =>
         return { action: "replace" };
       }
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, repository, number }) {
+        return yield* Pulls.get({ owner, repo: repository, pull_number: number }).pipe(
+          Effect.map(attributes),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, output }) {

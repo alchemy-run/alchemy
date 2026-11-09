@@ -71,11 +71,21 @@ export interface ResponsePlan extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  ResponsePlanLookup
 > {}
 
 /**
- * An Incident Manager response plan -- the template that automates the initial
+ * Props for {@link ResponsePlan.lookup}: find a response plan this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ResponsePlanLookup {
+  /** The name of the existing response plan. */
+  name: string;
+}
+
+/**
+ * An Incident Manager response plan — the template that automates the initial
  * response to incidents by engaging contacts, starting chat-channel
  * collaboration, and running Automation runbooks.
  *
@@ -104,6 +114,17 @@ export interface ResponsePlan extends Resource<
  *   engagements: [oncall.contactArn],
  *   chatChannel: { chatbotSns: [topic.topicArn] },
  * });
+ * ```
+ *
+ * ### Looking up an existing response plan
+ * `ResponsePlan.lookup` references a response plan Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing response plan
+ * ```typescript
+ * const sev1 = AWS.SSMIncidents.ResponsePlan.lookup({ name: "sev1" });
+ * const arn = sev1.arn;
  * ```
  */
 const ResponsePlanResource = Resource<ResponsePlan>("AWS.SSMIncidents.ResponsePlan");
@@ -184,6 +205,10 @@ export const ResponsePlanProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ name }) {
+          const plan = yield* observe(name, undefined);
+          return plan === undefined ? undefined : { arn: plan.arn, name: plan.name };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const plan = yield* observe(name, output?.arn);

@@ -8,7 +8,7 @@ import * as Option from "effect/Option";
 import type { JSX } from "react";
 import packageJson from "../../../../package.json" with { type: "json" };
 import type { Interaction } from "../../../Interaction.ts";
-import { ANSI_BOLD, ANSI_DIM, ansiFg, paint, truncate } from "../../../Util/Terminal.ts";
+import { terminalStyle, truncate } from "../../../Util/Terminal.ts";
 import { glyphsFor, theme } from "../../../Util/Theme.ts";
 import { Box, Heading, Text, useGlyphs } from "../ui/index.ts";
 import { formatView } from "./Format.tsx";
@@ -337,8 +337,9 @@ const formatRootHelp = (cli: Interaction["Service"], doc: HelpDoc) => {
 export const brandedCliFormatter = (cli: Interaction["Service"]): CliOutput.Formatter => {
   const fallback = CliOutput.defaultFormatter();
   const glyphs = glyphsFor(cli.terminal.unicode);
+  const style = terminalStyle();
   const formatErrorLine = (message: string) =>
-    `${paint(ansiFg(theme.color.danger), `${glyphs.error} error:`)} ${message}`;
+    `${style.hex(theme.color.danger)(`${glyphs.error} error:`)} ${message}`;
   return {
     formatCliError: fallback.formatCliError,
     formatHelpDoc: (doc) =>
@@ -346,13 +347,13 @@ export const brandedCliFormatter = (cli: Interaction["Service"]): CliOutput.Form
         ? formatRootHelp(cli, doc)
         : formatSubHelp(cli, doc),
     formatVersion: (name, version) =>
-      `${paint(ansiFg(theme.color.brand), glyphs.selected)} ${paint(ANSI_BOLD, name)} ${paint(ANSI_DIM, `v${version}`)}`,
+      `${style.hex(theme.color.brand)(glyphs.selected)} ${style.bold(name)} ${style.dim(`v${version}`)}`,
     formatError: (error) => `\n${formatErrorLine(error.message)}`,
     formatErrors: (errors) => {
       if (errors.length === 0) return "";
       if (errors.length === 1) return `\n${formatErrorLine(errors[0].message)}`;
       return `\n${formatErrorLine(`${errors.length} problems`)}\n${errors
-        .map((error) => `  ${paint(ANSI_DIM, glyphs.bullet)} ${error.message}`)
+        .map((error) => `  ${style.dim(glyphs.bullet)} ${error.message}`)
         .join("\n")}`;
     },
   };

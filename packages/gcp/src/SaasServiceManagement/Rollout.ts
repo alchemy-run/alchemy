@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -155,11 +156,35 @@ export type Rollout = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RolloutLookup
 >;
 
 /**
- * An App Lifecycle Manager rollout -- one execution of a RolloutKind
+ * Props for {@link Rollout.lookup}: find a rollout this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RolloutLookup {
+  /**
+   * Rollout id (the `{rollout_id}` segment of
+   * `projects/{project}/locations/{location}/rollouts/{rollout_id}`).
+   */
+  rolloutId: string;
+  /**
+   * Region of the rollout (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An App Lifecycle Manager rollout — one execution of a RolloutKind
  * against a Release (or FlagRelease).
  *
  * `rolloutId`, `location`, `rolloutKind`, `release`, and `flagRelease`
@@ -185,6 +210,18 @@ export type Rollout = Resource<
  *   rolloutKind: kind.name,
  *   release: release.name,
  *   control: { action: "ROLLOUT_ACTION_PAUSE" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing rollout
+ * `Rollout.lookup` references a rollout Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared rollout.
+ *
+ * **Example:** Reference an existing rollout
+ * ```typescript
+ * const rollout = GCP.SaasServiceManagement.Rollout.lookup({
+ *   rolloutId: "my-rollout",
  * });
  * ```
  *
@@ -294,6 +331,15 @@ export const RolloutProvider = () =>
             (olds?.flagRelease ?? output?.flagRelease ?? "") !== news.flagRelease),
       });
     }),
+
+    lookup: Effect.fn(function* ({ rolloutId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, rolloutId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

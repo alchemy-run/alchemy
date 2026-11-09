@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,11 +88,37 @@ export type EntryGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EntryGroupLookup
 >;
 
 /**
- * A Dataplex Universal Catalog Entry Group -- a logical grouping of
+ * Props for {@link EntryGroup.lookup}: find an entry group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EntryGroupLookup {
+  /**
+   * Entry group id (the `{entryGroup}` segment of
+   * `projects/{project}/locations/{location}/entryGroups/{entryGroup}`).
+   * Must be 1-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  entryGroupId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex Universal Catalog Entry Group — a logical grouping of
  * Entries.
  *
  * Changing `entryGroupId` or `location` replaces the group. Description,
@@ -120,6 +147,19 @@ export type EntryGroup = Resource<
  *   entryGroupId: "app-catalog",
  *   description: "catalog v2",
  *   labels: { env: "prod", team: "data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing entry group
+ * `EntryGroup.lookup` references an entry group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * entry group.
+ *
+ * **Example:** Reference an existing entry group
+ * ```typescript
+ * const entryGroup = GCP.Dataplex.EntryGroup.lookup({
+ *   entryGroupId: "my-entry-group",
  * });
  * ```
  *
@@ -187,6 +227,15 @@ export const EntryGroupProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ entryGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, entryGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

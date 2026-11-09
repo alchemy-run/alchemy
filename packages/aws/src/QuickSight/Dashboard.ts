@@ -92,11 +92,21 @@ export interface Dashboard extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 > {}
 
 /**
- * An Amazon QuickSight dashboard -- a published, read-only view built from a
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DashboardLookup {
+  /** The id of the existing dashboard. */
+  dashboardId: string;
+}
+
+/**
+ * An Amazon QuickSight dashboard — a published, read-only view built from a
  * template, an analysis, or an inline definition.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -120,6 +130,16 @@ export interface Dashboard extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dashboardId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const sales = AWS.QuickSight.Dashboard.lookup({ dashboardId: "sales" });
  * ```
  *
  * @resource
@@ -170,6 +190,11 @@ export const DashboardProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ dashboardId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readDashboard(accountId, dashboardId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const dashboardId = output?.dashboardId ?? (yield* toId(id, olds));

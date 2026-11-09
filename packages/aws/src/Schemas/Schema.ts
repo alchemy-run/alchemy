@@ -63,11 +63,23 @@ export interface Schema extends Resource<
     type: string;
   },
   never,
-  Providers
+  Providers,
+  SchemaLookup
 > {}
 
 /**
- * An event schema in an EventBridge Schema Registry -- a versioned OpenAPI 3
+ * Props for {@link Schema.lookup}: find a schema this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SchemaLookup {
+  /** The registry holding the schema. */
+  registryName: string;
+  /** The name of the existing schema. */
+  schemaName: string;
+}
+
+/**
+ * An event schema in an EventBridge Schema Registry — a versioned OpenAPI 3
  * or JSONSchema Draft 4 document describing the structure of an event.
  * Updating the content publishes a new schema version; previous versions are
  * retained by the registry.
@@ -110,6 +122,16 @@ export interface Schema extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing schema
+ * `Schema.lookup` references a schema Alchemy doesn't manage (created in the
+ * console or by another stack), found by `registryName` and `schemaName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing schema
+ * ```typescript
+ * const order = AWS.Schemas.Schema.lookup({ registryName: "orders", schemaName: "OrderPlaced" });
+ * ```
+ *
  * @resource
  */
 export const Schema = Resource<Schema>("AWS.Schemas.Schema");
@@ -137,6 +159,17 @@ export const SchemaProvider = () =>
         // RegistryName, so there is no account-wide enumeration.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ registryName, schemaName }) {
+          const found = yield* describe(registryName, schemaName);
+          if (!found) return undefined;
+          return {
+            registryName,
+            schemaName,
+            schemaArn: found.SchemaArn!,
+            schemaVersion: found.SchemaVersion!,
+            type: found.Type ?? "OpenApi3",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const registryName = output?.registryName ?? olds?.registryName;
           if (registryName === undefined) return undefined;

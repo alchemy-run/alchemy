@@ -60,11 +60,23 @@ export interface Environment extends Resource<
     state: string;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 > {}
 
 /**
- * An AWS AppConfig environment -- a deployment group of AppConfig targets
+ * Props for {@link Environment.lookup}: find an environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EnvironmentLookup {
+  /** The application the environment belongs to. */
+  applicationId: string;
+  /** The name of the existing environment. */
+  environmentName: string;
+}
+
+/**
+ * An AWS AppConfig environment — a deployment group of AppConfig targets
  * (e.g. `Beta`, `Production`) within an application. CloudWatch alarms
  * attached via `monitors` trigger an automatic rollback if they fire during a
  * deployment.
@@ -84,6 +96,17 @@ export interface Environment extends Resource<
  *   applicationId: app.applicationId,
  *   monitors: [{ alarmArn: alarm.alarmArn, alarmRoleArn: role.roleArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and `environmentName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Deploy to an existing environment
+ * ```typescript
+ * const prod = AWS.AppConfig.Environment.lookup({ applicationId, environmentName: "prod" });
+ * const environmentId = prod.environmentId;
  * ```
  *
  * @resource
@@ -138,6 +161,19 @@ export const EnvironmentProvider = () =>
           if ((olds?.applicationId ?? undefined) !== news?.applicationId) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ applicationId, environmentName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const env = yield* findByName(applicationId, environmentName);
+          if (env?.Id === undefined) return undefined;
+          return {
+            environmentId: env.Id,
+            environmentName: env.Name!,
+            applicationId,
+            environmentArn: environmentArn(region, accountId, applicationId, env.Id),
+            state: env.State ?? "",
+          };
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

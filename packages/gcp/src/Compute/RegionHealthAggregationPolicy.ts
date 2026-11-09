@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,31 @@ export type RegionHealthAggregationPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionHealthAggregationPolicyLookup
 >;
+
+/**
+ * Props for {@link RegionHealthAggregationPolicy.lookup}: find a region
+ * health aggregation policy this stack doesn't manage by its identifiers,
+ * in the ambient project unless `project` names another.
+ */
+export interface RegionHealthAggregationPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  policyName: string;
+  /**
+   * Region the policy lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine health aggregation policy.
@@ -129,6 +153,19 @@ export type RegionHealthAggregationPolicy = Resource<
  *     healthyPercentThreshold: 80,
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing region health aggregation policy
+ * `RegionHealthAggregationPolicy.lookup` references a region health
+ * aggregation policy Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared region health aggregation policy.
+ *
+ * **Example:** Reference an existing region health aggregation policy
+ * ```typescript
+ * const regionHealthAggregationPolicy = GCP.Compute.RegionHealthAggregationPolicy.lookup({
+ *   policyName: "my-policy",
+ * });
  * ```
  *
  * @resource
@@ -229,6 +266,14 @@ export const RegionHealthAggregationPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ policyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, policyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -126,11 +126,21 @@ export interface AccessPoint extends Resource<
     accountId: AccountID;
   },
   never,
-  Providers
+  Providers,
+  AccessPointLookup
 > {}
 
 /**
- * An Amazon S3 Access Point -- a named network endpoint attached to a bucket
+ * Props for {@link AccessPoint.lookup}: find an access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AccessPointLookup {
+  /** The name of the existing access point. */
+  accessPointName: string;
+}
+
+/**
+ * An Amazon S3 Access Point — a named network endpoint attached to a bucket
  * with its own policy, public-access-block settings, and optional VPC
  * restriction. Use access points to manage shared-dataset access at scale
  * instead of maintaining one giant bucket policy.
@@ -185,6 +195,16 @@ export interface AccessPoint extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing access point
+ * `AccessPoint.lookup` references an access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accessPointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing access point
+ * ```typescript
+ * const existing = AWS.S3Control.AccessPoint.lookup({ accessPointName: "..." });
  * ```
  *
  * @resource
@@ -316,6 +336,13 @@ export const AccessPointProvider = () =>
               })),
             );
           }),
+        lookup: Effect.fn(function* ({ accessPointName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const live = yield* observeAccessPoint(accountId, name);
+          if (live === undefined) return undefined;
+          const attrs = toAttrs(name, live, region, accountId);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.accessPointName ?? (yield* createName(id, olds ?? {}));

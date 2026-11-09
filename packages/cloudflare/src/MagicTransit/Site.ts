@@ -75,7 +75,32 @@ export interface MagicSiteAttributes {
   location: MagicSiteLocation | undefined;
 }
 
-export type MagicSite = Resource<TypeId, MagicSiteProps, MagicSiteAttributes, never, Providers>;
+export type MagicSite = Resource<
+  TypeId,
+  MagicSiteProps,
+  MagicSiteAttributes,
+  never,
+  Providers,
+  MagicSiteLookup
+>;
+
+/**
+ * Props for {@link MagicSite.lookup}: find a Magic WAN site this stack
+ * doesn't manage, by its id or its name.
+ */
+export type MagicSiteLookup =
+  | {
+      /**
+       * The id of the existing site.
+       */
+      siteId: string;
+    }
+  | {
+      /**
+       * The name of the existing site.
+       */
+      name: string;
+    };
 
 /**
  * A Magic WAN site -- represents a physical or logical network location
@@ -110,6 +135,21 @@ export type MagicSite = Resource<TypeId, MagicSiteProps, MagicSiteAttributes, ne
  *   siteId: site.siteId,
  *   physport: 2,
  *   vlanTag: 0,
+ * });
+ * ```
+ *
+ * ### Looking up an existing site
+ * `MagicSite.lookup` references a site Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `siteId` or `name`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a LAN to an existing site
+ * ```typescript
+ * const hq = Cloudflare.MagicTransit.MagicSite.lookup({ name: "hq" });
+ * yield* Cloudflare.MagicTransit.MagicSiteLan("hq-guest-lan", {
+ *   siteId: hq.siteId,
+ *   physport: 3,
+ *   vlanTag: 20,
  * });
  * ```
  *
@@ -151,7 +191,7 @@ export const MagicSiteProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news = {} }) {
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // haMode is create-only -- the update API has no such field.
@@ -161,6 +201,14 @@ export const MagicSiteProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "siteId" in props
+          ? yield* getSite(accountId, props.siteId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -178,7 +226,7 @@ export const MagicSiteProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createSiteName(id, news.name);
       // Inputs have been resolved to concrete strings by Plan.

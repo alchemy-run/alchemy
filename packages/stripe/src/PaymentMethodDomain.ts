@@ -85,11 +85,21 @@ export type PaymentMethodDomain = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PaymentMethodDomainLookup
 >;
 
 /**
- * A Stripe Payment Method Domain -- a web domain registered so Stripe
+ * Props for {@link PaymentMethodDomain.lookup}: find a payment method domain this stack
+ * doesn't manage by its id.
+ */
+export interface PaymentMethodDomainLookup {
+  /** Stripe payment method domain id, e.g. `"pmd_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Payment Method Domain — a web domain registered so Stripe
  * Elements and Embedded Checkout can show domain-gated payment methods
  * (Apple Pay, Google Pay, Link, PayPal, Klarna, Amazon Pay). `enabled`
  * updates in place. `domainName` is create-only and changing it replaces
@@ -131,6 +141,16 @@ export type PaymentMethodDomain = Resource<
  * const domain = yield* Stripe.PaymentMethodDomain("checkout", {
  *   domainName: "checkout.example.com",
  * });
+ * ```
+ *
+ * ### Looking up an existing payment method domain
+ * `PaymentMethodDomain.lookup` references a payment method domain Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing payment method domain
+ * ```typescript
+ * const ref = Stripe.PaymentMethodDomain.lookup({ id: "pmd_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -257,6 +277,11 @@ export const PaymentMethodDomainProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

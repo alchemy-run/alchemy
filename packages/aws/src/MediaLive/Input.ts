@@ -109,11 +109,26 @@ export interface Input extends Resource<
     securityGroups: string[];
   },
   never,
-  Providers
+  Providers,
+  InputLookup
 > {}
 
 /**
- * An AWS Elemental MediaLive input -- the ingest endpoint or source locator a
+ * Props for {@link Input.lookup}: find an input this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type InputLookup =
+  | {
+      /** The id of the existing input. */
+      inputId: string;
+    }
+  | {
+      /** The name of the existing input. */
+      name: string;
+    };
+
+/**
+ * An AWS Elemental MediaLive input — the ingest endpoint or source locator a
  * channel reads live content from (RTMP/RTP push, HLS/MP4 pull,
  * MediaConnect flow, ...).
  *
@@ -149,6 +164,16 @@ export interface Input extends Resource<
  *   encoderSettings,
  *   destinations,
  * });
+ * ```
+ *
+ * ### Looking up an existing input
+ * `Input.lookup` references an input Alchemy doesn't manage (created in the
+ * console or by another stack), found by `inputId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing input
+ * ```typescript
+ * const camera = AWS.MediaLive.Input.lookup({ name: "camera-1" });
  * ```
  *
  * @resource
@@ -233,12 +258,20 @@ export const InputProvider = () =>
             ),
           ),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* (props) {
+          const input =
+            "inputId" in props ? yield* getInput(props.inputId) : yield* findByName(props.name);
+          return input === undefined ? undefined : toAttrs(input);
+        }),
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const input =
             output?.inputId !== undefined
               ? yield* getInput(output.inputId)
               : yield* findByName(yield* createName(id, olds ?? {}));
           if (input === undefined) return undefined;
+          // A create-first replacement finds the input it is replacing by name:
+          // that is not the replacement.
+          if (output === undefined && input.Id === previous?.inputId) return undefined;
           const attrs = toAttrs(input);
           return (yield* hasAlchemyTags(id, toTagRecord(input.Tags))) ? attrs : Unowned(attrs);
         }),

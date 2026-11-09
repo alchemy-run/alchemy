@@ -66,8 +66,25 @@ export interface OrganizationalUnit extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  OrganizationalUnitLookup
 > {}
+
+/**
+ * Props for {@link OrganizationalUnit.lookup}: find an organizational unit this stack doesn't
+ * manage, in the ambient organization.
+ */
+export type OrganizationalUnitLookup =
+  | {
+      /** The id of the existing OU, e.g. `ou-ab12-cd34ef56`. */
+      ouId: string;
+    }
+  | {
+      /** The root or OU the OU sits under. */
+      parentId: string;
+      /** The name of the existing OU. */
+      name: string;
+    };
 
 /**
  * An AWS Organizations organizational unit.
@@ -77,6 +94,20 @@ export interface OrganizationalUnit extends Resource<
  * const workloads = yield* OrganizationalUnit("Workloads", {
  *   parentId: root.rootId,
  *   name: "workloads",
+ * });
+ * ```
+ *
+ * ### Looking up an existing organizational unit
+ * `OrganizationalUnit.lookup` references an organizational unit Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ouId`, or `parentId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Nest an OU under an existing one
+ * ```typescript
+ * const workloads = AWS.Organizations.OrganizationalUnit.lookup({ parentId: rootId, name: "Workloads" });
+ *
+ * yield* AWS.Organizations.OrganizationalUnit("Prod", {
+ *   parentId: workloads.ouId,
  * });
  * ```
  *
@@ -133,6 +164,11 @@ export const OrganizationalUnitProvider = () =>
               AccessDeniedException: () => Effect.succeed([] as OrganizationalUnit["Attributes"][]),
             }),
           ),
+        lookup: Effect.fn(function* (props) {
+          return "ouId" in props
+            ? yield* readOUById(props.ouId)
+            : yield* readOUByParentAndName({ parentId: props.parentId, name: props.name });
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.ouId
             ? yield* readOUById(output.ouId)

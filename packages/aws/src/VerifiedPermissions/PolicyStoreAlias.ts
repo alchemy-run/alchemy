@@ -59,8 +59,18 @@ export interface PolicyStoreAlias extends Resource<
     aliasArn: string;
   },
   {},
-  Providers
+  Providers,
+  PolicyStoreAliasLookup
 > {}
+
+/**
+ * Props for {@link PolicyStoreAlias.lookup}: find a policy store alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PolicyStoreAliasLookup {
+  /** The alias name of the existing policy store alias. */
+  aliasName: string;
+}
 
 /**
  * A named alias for a Verified Permissions policy store. Aliases let callers
@@ -89,6 +99,16 @@ export interface PolicyStoreAlias extends Resource<
  *   aliasName: "photo-app-prod",
  *   deletionMode: "HardDelete",
  * });
+ * ```
+ *
+ * ### Looking up an existing policy store alias
+ * `PolicyStoreAlias.lookup` references a policy store alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `aliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing policy store alias
+ * ```typescript
+ * const existing = AWS.VerifiedPermissions.PolicyStoreAlias.lookup({ aliasName: "my-policy-store-alias" });
  * ```
  *
  * @resource
@@ -142,6 +162,19 @@ export const PolicyStoreAliasProvider = () =>
               aliasArn: item.aliasArn,
             }));
           }),
+
+        lookup: Effect.fn(function* ({ aliasName }) {
+          if (aliasName === undefined) return undefined;
+          const alias = yield* observe(aliasName);
+          if (alias === undefined || alias.state === "PendingDeletion") {
+            return undefined;
+          }
+          return {
+            aliasName: alias.aliasName,
+            policyStoreId: alias.policyStoreId,
+            aliasArn: alias.aliasArn,
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const aliasName =

@@ -145,11 +145,21 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
 
 /**
- * An Amazon DAX cluster -- a fully managed, in-memory write-through cache for
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
+
+/**
+ * An Amazon DAX cluster — a fully managed, in-memory write-through cache for
  * DynamoDB.
  *
  * Clusters are VPC-only and take roughly 5-10 minutes to provision; they are
@@ -194,6 +204,16 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.DAX.Cluster.lookup({ clusterName: "my-cluster" });
+ * ```
+ *
  * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.DAX.Cluster");
@@ -218,10 +238,15 @@ export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
     Effect.gen(function* () {
+      // DAX cluster names must start with a letter. At its 20-character limit
+      // a generated name is all hash and instance suffix, which can start
+      // with a digit, so lead with a letter then.
       const toName = (id: string, props: Partial<ClusterProps>) =>
         props.clusterName
           ? Effect.succeed(props.clusterName)
-          : createPhysicalName({ id, maxLength: 20, lowercase: true });
+          : createPhysicalName({ id, maxLength: 20, lowercase: true }).pipe(
+              Effect.map((name) => (/^[a-z]/.test(name) ? name : `d${name.slice(0, 19)}`)),
+            );
 
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
@@ -343,6 +368,13 @@ export const ClusterProvider = () =>
           if (!sameStringSet(n.availabilityZones, o.availabilityZones)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const cluster = yield* readCluster(name);
+          if (!cluster?.ClusterArn) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -58,11 +58,21 @@ export interface BackupVault extends Resource<
     backupVaultArn: string;
   },
   never,
-  Providers
+  Providers,
+  BackupVaultLookup
 > {}
 
 /**
- * An AWS Backup vault -- a logical container that stores and organizes
+ * Props for {@link BackupVault.lookup}: find a backup vault this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface BackupVaultLookup {
+  /** The backup vault name of the existing backup vault. */
+  backupVaultName: string;
+}
+
+/**
+ * An AWS Backup vault — a logical container that stores and organizes
  * recovery points created by backup jobs.
  *
  * A vault name is auto-generated from the app, stage, and logical ID unless
@@ -101,6 +111,16 @@ export interface BackupVault extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing backup vault
+ * `BackupVault.lookup` references a backup vault Alchemy doesn't manage (created in the
+ * console or by another stack), found by `backupVaultName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing backup vault
+ * ```typescript
+ * const existing = AWS.Backup.BackupVault.lookup({ backupVaultName: "my-backup-vault" });
  * ```
  *
  * @resource
@@ -147,6 +167,25 @@ export const BackupVaultProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ backupVaultName: name }) {
+          // AWS Backup returns AccessDeniedException (with an empty message),
+          // not ResourceNotFoundException, when a vault does not exist — it
+          // hides existence behind a 403. Treat both as "absent".
+          const found = yield* backup
+            .describeBackupVault({ BackupVaultName: name })
+            .pipe(
+              Effect.catchTag(
+                ["ResourceNotFoundException", "AccessDeniedException"],
+                () => Effect.undefined,
+              ),
+            );
+          if (!found?.BackupVaultArn) return undefined;
+          const attrs = {
+            backupVaultName: name,
+            backupVaultArn: found.BackupVaultArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.backupVaultName ?? (yield* createName(id, olds ?? {}));
           // AWS Backup returns AccessDeniedException (with an empty message),

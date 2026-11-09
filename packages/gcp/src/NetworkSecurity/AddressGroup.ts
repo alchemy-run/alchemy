@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -109,11 +110,36 @@ export type AddressGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AddressGroupLookup
 >;
 
 /**
- * A Network Security address group -- a named collection of IP addresses
+ * Props for {@link AddressGroup.lookup}: find an address group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AddressGroupLookup {
+  /**
+   * Address group id (the `{addressGroup}` segment of
+   * `projects/{project}/locations/{location}/addressGroups/{addressGroup}`).
+   * Must be 1-63 characters and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  addressGroupId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security address group — a named collection of IP addresses
  * or CIDR ranges used by firewall policies and Cloud Armor.
  *
  * Changing `addressGroupId`, `location`, `type`, `capacity`, or `purpose`
@@ -147,6 +173,19 @@ export type AddressGroup = Resource<
  *   items: ["10.0.0.0/24", "10.1.0.1"],
  *   description: "prod allowlist v2",
  *   labels: { env: "prod", role: "allowlist" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing address group
+ * `AddressGroup.lookup` references an address group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * address group.
+ *
+ * **Example:** Reference an existing address group
+ * ```typescript
+ * const addressGroup = GCP.NetworkSecurity.AddressGroup.lookup({
+ *   addressGroupId: "my-address-group",
  * });
  * ```
  *
@@ -233,6 +272,15 @@ export const AddressGroupProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ addressGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, addressGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

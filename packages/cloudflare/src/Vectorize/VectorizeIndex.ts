@@ -67,7 +67,18 @@ export type IndexAttributes = {
   modifiedOn: string | undefined;
 };
 
-export type Index = Resource<TypeId, IndexProps, IndexAttributes, never, Providers>;
+/**
+ * Props for {@link Index.lookup}: find a Vectorize index this stack doesn't
+ * manage, by its name.
+ */
+export type IndexLookup = {
+  /**
+   * The name of the existing index.
+   */
+  name: string;
+};
+
+export type Index = Resource<TypeId, IndexProps, IndexAttributes, never, Providers, IndexLookup>;
 
 /**
  * A Cloudflare Vectorize index for storing and querying vector embeddings.
@@ -118,6 +129,18 @@ export type Index = Resource<TypeId, IndexProps, IndexAttributes, never, Provide
  * const matches = yield* index.query([0.1, 0.2, 0.3], { topK: 5 });
  * ```
  *
+ * ### Looking up an existing index
+ * `Index.lookup` binds an index Alchemy doesn't manage (created with wrangler
+ * or by another stack), found by its `name`. It is read during plan/deploy
+ * and never created, replaced or deleted.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const index = yield* Cloudflare.Vectorize.SearchIndex(
+ *   Cloudflare.Vectorize.Index.lookup({ name: "embeddings" }),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/vectorize/
  *
  * @resource
@@ -155,6 +178,13 @@ export const IndexProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* vectorize.getIndex({ accountId, indexName: props.name }).pipe(
+        Effect.map((index) => toAttributes(index, props.name, accountId)),
+        Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined),
+      );
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -69,11 +69,21 @@ export interface Database extends Resource<
     };
   },
   {},
-  Providers
+  Providers,
+  DatabaseLookup
 > {}
 
 /**
- * An AWS Glue Data Catalog database -- the top-level container for Glue tables
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage, in the ambient account's Data Catalog.
+ */
+export interface DatabaseLookup {
+  /** The name of the existing database. */
+  databaseName: string;
+}
+
+/**
+ * An AWS Glue Data Catalog database — the top-level container for Glue tables
  * that Athena, EMR, Redshift Spectrum, and Glue jobs query. Databases are free
  * and instant to create.
  * ### Creating Databases
@@ -93,6 +103,20 @@ export interface Database extends Resource<
  *   description: "Curated analytics tables",
  *   locationUri: "s3://my-data-lake/analytics/",
  *   parameters: { classification: "parquet" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a table to an existing database
+ * ```typescript
+ * const lake = AWS.Glue.Database.lookup({ databaseName: "lake" });
+ *
+ * yield* AWS.Glue.Table("Events", {
+ *   databaseName: lake.databaseName,
  * });
  * ```
  *
@@ -145,6 +169,18 @@ export const DatabaseProvider = () =>
                 catalogId: db.CatalogId ?? accountId,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ databaseName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const db = yield* observe(databaseName, accountId);
+          if (db === undefined) return undefined;
+          return {
+            databaseName: db.Name,
+            databaseArn: databaseArn(region, db.CatalogId ?? accountId, db.Name),
+            catalogId: db.CatalogId ?? accountId,
+            configuration: observeDatabaseConfiguration(db),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

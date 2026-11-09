@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -146,8 +147,34 @@ export type AppConnection = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppConnectionLookup
 >;
+
+/**
+ * Props for {@link AppConnection.lookup}: find an app connection this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppConnectionLookup {
+  /**
+   * AppConnection id (the `{appConnection}` segment of
+   * `projects/{project}/l
+   * ocations/{location}/appConnections/{appConnection}`). Must be 4-63
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  appConnectionId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BeyondCorp AppConnection that links a remote application endpoint
@@ -176,6 +203,19 @@ export type AppConnection = Resource<
  *   gateway: { appGateway: gateway.name },
  *   displayName: "prod app",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing app connection
+ * `AppConnection.lookup` references an app connection Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * app connection.
+ *
+ * **Example:** Reference an existing app connection
+ * ```typescript
+ * const appConnection = GCP.BeyondCorp.AppConnection.lookup({
+ *   appConnectionId: "my-app-connection",
  * });
  * ```
  *
@@ -302,6 +342,15 @@ export const AppConnectionProvider = () =>
           (previousGateway.length > 0 && nextGateway.length > 0 && previousGateway !== nextGateway),
       });
     }),
+
+    lookup: Effect.fn(function* ({ appConnectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, appConnectionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

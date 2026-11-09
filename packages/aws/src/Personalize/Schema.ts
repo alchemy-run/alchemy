@@ -66,12 +66,22 @@ export interface Schema extends Resource<
     domain: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SchemaLookup
 > {}
 
 /**
- * An Amazon Personalize schema -- an Avro definition that describes the fields
- * of a dataset (Interactions, Items, Users, ...). Schemas are immutable once
+ * Props for {@link Schema.lookup}: find a schema this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SchemaLookup {
+  /** The ARN of the existing schema. */
+  schemaArn: string;
+}
+
+/**
+ * An Amazon Personalize schema — an Avro definition that describes the fields
+ * of a dataset (Interactions, Items, Users, …). Schemas are immutable once
  * created; changing any property replaces the schema.
  *
  * ### Creating a Schema
@@ -90,6 +100,16 @@ export interface Schema extends Resource<
  *     version: "1.0",
  *   }),
  * });
+ * ```
+ *
+ * ### Looking up an existing schema
+ * `Schema.lookup` references a schema Alchemy doesn't manage (created in the
+ * console or by another stack), found by `schemaArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing schema
+ * ```typescript
+ * const existing = AWS.Personalize.Schema.lookup({ schemaArn: "..." });
  * ```
  *
  * @resource
@@ -135,6 +155,17 @@ export const SchemaProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ schemaArn }) {
+          const schema = yield* describe(schemaArn);
+          if (schema === undefined) return undefined;
+          return {
+            schemaArn: schema.schemaArn!,
+            name: schema.name!,
+            schema: schema.schema!,
+            domain: schema.domain,
+          };
         }),
 
         read: Effect.fn(function* ({ output }) {

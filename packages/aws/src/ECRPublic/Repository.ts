@@ -85,8 +85,18 @@ export interface PublicRepository extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PublicRepositoryLookup
 > {}
+
+/**
+ * Props for {@link PublicRepository.lookup}: find a public repository this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PublicRepositoryLookup {
+  /** The repository name of the existing public repository. */
+  repositoryName: string;
+}
 
 /**
  * An Amazon ECR Public repository on the public.ecr.aws registry. Images pushed
@@ -129,6 +139,16 @@ export interface PublicRepository extends Resource<
  *     ],
  *   }),
  * });
+ * ```
+ *
+ * ### Looking up an existing public repository
+ * `PublicRepository.lookup` references a public repository Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing public repository
+ * ```typescript
+ * const existing = AWS.ECRPublic.PublicRepository.lookup({ repositoryName: "my-public-repository" });
  * ```
  *
  * @resource
@@ -230,6 +250,26 @@ export const PublicRepositoryProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ repositoryName }) {
+          const repository = yield* observe(repositoryName);
+          if (!repository?.repositoryArn || !repository.repositoryUri) {
+            return undefined;
+          }
+          const listed = yield* pin(
+            ecrpublic.listTagsForResource({
+              resourceArn: repository.repositoryArn,
+            }),
+          );
+          const attrs = {
+            repositoryName,
+            repositoryArn: repository.repositoryArn as RepositoryArn,
+            repositoryUri: repository.repositoryUri,
+            registryId: repository.registryId!,
+            policyText: yield* readPolicy(repositoryName),
+            tags: toTagRecord(listed.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const repositoryName =

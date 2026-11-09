@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -125,8 +126,33 @@ export type Connector = Resource<
     connectedProjects: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  ConnectorLookup
 >;
+
+/**
+ * Props for {@link Connector.lookup}: find a connector this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectorLookup {
+  /**
+   * Connector id (the `{connector}` segment of
+   * `projects/{project}/locations/{location}/connectors/{connector}`). Must
+   * be 1-25 characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  connectorId: string;
+  /**
+   * Region of the connector (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Serverless VPC Access connector.
@@ -170,6 +196,18 @@ export type Connector = Resource<
  *   subnet: { name: subnet.subnetworkName },
  *   minInstances: 2,
  *   maxInstances: 3,
+ * });
+ * ```
+ *
+ * ### Looking up an existing connector
+ * `Connector.lookup` references a connector Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared connector.
+ *
+ * **Example:** Reference an existing connector
+ * ```typescript
+ * const connector = GCP.VpcAccess.Connector.lookup({
+ *   connectorId: "my-connector",
  * });
  * ```
  *
@@ -437,6 +475,15 @@ export const ConnectorProvider = () =>
         deleteFirst: !idChanged && !locationChanged,
       };
     }),
+
+    lookup: Effect.fn(function* ({ connectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

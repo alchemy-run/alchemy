@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,11 +108,37 @@ export type InterceptEndpointGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptEndpointGroupLookup
 >;
 
 /**
- * A Network Security Integration intercept endpoint group -- the consumer
+ * Props for {@link InterceptEndpointGroup.lookup}: find an intercept
+ * endpoint group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InterceptEndpointGroupLookup {
+  /**
+   * Endpoint group id (the `{interceptEndpointGroup}` segment of
+   * `projects/{
+   * project}/locations/{location}/interceptEndpointGroups/{interceptEndpoint
+   * Group}`).
+   */
+  interceptEndpointGroupId: string;
+  /**
+   * Location of the group. Endpoint groups are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security Integration intercept endpoint group — the consumer
  * frontend for an intercept deployment group.
  *
  * Changing `interceptEndpointGroupId`, `location`, or
@@ -144,6 +171,19 @@ export type InterceptEndpointGroup = Resource<
  *   interceptDeploymentGroup: group.name,
  *   description: "prod intercept frontend v2",
  *   labels: { env: "prod", role: "nsi" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing intercept endpoint group
+ * `InterceptEndpointGroup.lookup` references an intercept endpoint group
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared intercept endpoint group.
+ *
+ * **Example:** Reference an existing intercept endpoint group
+ * ```typescript
+ * const interceptEndpointGroup = GCP.NetworkSecurity.InterceptEndpointGroup.lookup({
+ *   interceptEndpointGroupId: "my-intercept-endpoint-group",
  * });
  * ```
  *
@@ -303,6 +343,15 @@ export const InterceptEndpointGroupProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ interceptEndpointGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, interceptEndpointGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

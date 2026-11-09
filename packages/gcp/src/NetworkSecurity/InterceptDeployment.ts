@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -98,11 +99,36 @@ export type InterceptDeployment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptDeploymentLookup
 >;
 
 /**
- * A zonal intercept deployment -- a GENEVE backend (typically an
+ * Props for {@link InterceptDeployment.lookup}: find an intercept
+ * deployment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InterceptDeploymentLookup {
+  /**
+   * Deployment id (the `{interceptDeployment}` segment of
+   * `projects/{project
+   * }/locations/{location}/interceptDeployments/{interceptDeployment}`).
+   */
+  interceptDeploymentId: string;
+  /**
+   * Zone of the deployment (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A zonal intercept deployment — a GENEVE backend (typically an
  * internal passthrough load balancer) that belongs to a global
  * InterceptDeploymentGroup.
  *
@@ -122,6 +148,19 @@ export type InterceptDeployment = Resource<
  *     description: "us-central1-a interceptors",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing intercept deployment
+ * `InterceptDeployment.lookup` references an intercept deployment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared intercept deployment.
+ *
+ * **Example:** Reference an existing intercept deployment
+ * ```typescript
+ * const interceptDeployment = GCP.NetworkSecurity.InterceptDeployment.lookup({
+ *   interceptDeploymentId: "my-intercept-deployment",
+ * });
  * ```
  *
  * @resource
@@ -201,6 +240,15 @@ export const InterceptDeploymentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interceptDeploymentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, interceptDeploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -71,11 +71,21 @@ export interface FindingsFilter extends Resource<
     action: FindingsFilterAction;
   },
   never,
-  Providers
+  Providers,
+  FindingsFilterLookup
 > {}
 
 /**
- * An Amazon Macie findings filter -- matches findings against criteria and
+ * Props for {@link FindingsFilter.lookup}: find a findings filter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FindingsFilterLookup {
+  /** The id of the existing findings filter. */
+  findingsFilterId: string;
+}
+
+/**
+ * An Amazon Macie findings filter — matches findings against criteria and
  * either keeps (`NOOP`) or auto-suppresses (`ARCHIVE`) them. Requires Macie to
  * be enabled for the account (see `Macie2.Session`). Name, description,
  * action, position, and criteria are all updatable in place.
@@ -103,6 +113,16 @@ export interface FindingsFilter extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing findings filter
+ * `FindingsFilter.lookup` references a findings filter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `findingsFilterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing findings filter
+ * ```typescript
+ * const existing = AWS.Macie2.FindingsFilter.lookup({ findingsFilterId });
  * ```
  */
 const FindingsFilterResource = Resource<FindingsFilter>("AWS.Macie2.FindingsFilter");
@@ -136,6 +156,10 @@ export const FindingsFilterProvider = () =>
       return {
         stables: ["id", "arn"],
 
+        lookup: Effect.fn(function* ({ findingsFilterId }) {
+          const live = yield* getFilter(findingsFilterId);
+          return live ? buildFilterAttrs(findingsFilterId, live) : undefined;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.id) return undefined;
           const live = yield* getFilter(output.id);

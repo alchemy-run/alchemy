@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
 import { isTransientGcpError } from "../Errors.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -97,11 +98,37 @@ export type TagTemplate = Resource<
     dataplexTransferStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TagTemplateLookup
 >;
 
 /**
- * A Data Catalog tag template -- a schema for tags attached to catalog
+ * Props for {@link TagTemplate.lookup}: find a tag template this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TagTemplateLookup {
+  /**
+   * Tag template id (the `{tagTemplate}` segment of
+   * `projects/{project}/locations/{location}/tagTemplates/{tagTemplate}`).
+   * Must contain only lowercase letters, numbers, or underscores, start
+   * with a letter or underscore, and be at most 64 bytes.
+   */
+  tagTemplateId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Data Catalog tag template — a schema for tags attached to catalog
  * entries.
  *
  * Tag templates have no labels field. Alchemy stamps ownership into a
@@ -145,6 +172,19 @@ export type TagTemplate = Resource<
  *       type: { primitiveType: "STRING" },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing tag template
+ * `TagTemplate.lookup` references a tag template Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * tag template.
+ *
+ * **Example:** Reference an existing tag template
+ * ```typescript
+ * const tagTemplate = GCP.DataCatalog.TagTemplate.lookup({
+ *   tagTemplateId: "my-tag-template",
  * });
  * ```
  *
@@ -320,6 +360,15 @@ export const TagTemplateProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ tagTemplateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, tagTemplateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

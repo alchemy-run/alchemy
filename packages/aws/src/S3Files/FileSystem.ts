@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { PolicyDocument } from "../IAM/Policy.ts";
@@ -96,11 +97,21 @@ export interface FileSystem extends Resource<
     prefix?: string;
   },
   never,
-  Providers
+  Providers,
+  FileSystemLookup
 > {}
 
 /**
- * An Amazon S3 File System -- POSIX-style file system access over an S3
+ * Props for {@link FileSystem.lookup}: find a file system this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FileSystemLookup {
+  /** The id of the existing file system. */
+  fileSystemId: string;
+}
+
+/**
+ * An Amazon S3 File System — POSIX-style file system access over an S3
  * general purpose bucket (mountable from EC2/ECS via mount targets, with
  * application-scoped access via {@link AccessPoint}s).
  *
@@ -158,6 +169,16 @@ export interface FileSystem extends Resource<
  *   prefix: "shared/",
  *   roleArn: role.roleArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing file system
+ * `FileSystem.lookup` references a file system Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fileSystemId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing file system
+ * ```typescript
+ * const shared = AWS.S3Files.FileSystem.lookup({ fileSystemId });
  * ```
  *
  * @resource
@@ -296,6 +317,10 @@ export const FileSystemProvider = () =>
               status: fs.status,
             }));
           }),
+        lookup: Effect.fn(function* ({ fileSystemId }) {
+          const found = yield* observe(fileSystemId);
+          return found === undefined ? undefined : yield* toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.fileSystemId !== undefined
@@ -317,7 +342,8 @@ export const FileSystemProvider = () =>
           // fall through: engine default update (tags + policy sync)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 

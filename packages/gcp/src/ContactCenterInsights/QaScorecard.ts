@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -81,11 +82,36 @@ export type QaScorecard = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QaScorecardLookup
 >;
 
 /**
- * A Contact Center AI Insights QA scorecard -- a collection of questions
+ * Props for {@link QaScorecard.lookup}: find a qa scorecard this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface QaScorecardLookup {
+  /**
+   * Scorecard id (the `{qa_scorecard}` segment of
+   * `projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
+   * Must match `^[a-z0-9-]{4,64}$`.
+   */
+  qaScorecardId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Contact Center AI Insights QA scorecard — a collection of questions
  * scored during analysis.
  *
  * Scorecards have no labels field -- Alchemy stamps ownership into the
@@ -99,6 +125,19 @@ export type QaScorecard = Resource<
  * const card = yield* GCP.ContactCenterInsights.QaScorecard("Quality", {
  *   displayName: "quality",
  *   description: "call quality",
+ * });
+ * ```
+ *
+ * ### Looking up an existing qa scorecard
+ * `QaScorecard.lookup` references a qa scorecard Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * qa scorecard.
+ *
+ * **Example:** Reference an existing qa scorecard
+ * ```typescript
+ * const qaScorecard = GCP.ContactCenterInsights.QaScorecard.lookup({
+ *   qaScorecardId: "my-qa-scorecard",
  * });
  * ```
  *
@@ -175,7 +214,16 @@ export const QaScorecardProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ qaScorecardId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, qaScorecardId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const qaScorecardId = yield* toResourceId(id, olds?.qaScorecardId, output?.qaScorecardId);
       const location = normalizeLocation(olds?.location ?? output?.location ?? env.region);
@@ -183,7 +231,9 @@ export const QaScorecardProvider = () =>
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* ownedByAlchemy(id, existing.description)) ? attrs : Unowned(attrs);
+      return (yield* ownedByAlchemy(id, existing.description))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

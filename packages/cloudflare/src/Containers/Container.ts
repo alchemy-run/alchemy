@@ -446,9 +446,9 @@ type ContainerShape<Shape> = {
  * A container's image comes from one of three sources, picked by which
  * prop you set:
  *
- * - `main` -- bundle your Effect program into a generated image.
- * - `context` (+ optional `dockerfile`) -- build your own Dockerfile.
- * - `image` -- pull a pre-built remote image and re-push it.
+ * - `main` — bundle your Effect program into a generated image.
+ * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
+ * - `image` — pull a pre-built image and re-push it.
  *
  * Only the `main` source bundles and injects an Effect runtime -- so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
@@ -529,18 +529,43 @@ type ContainerShape<Shape> = {
  *
  * ```text
  * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
- * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
  * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
  * ```
  *
  * The build hash identifies the inputs; the manifest digest identifies the
  * published artifact. Applications and stages in the same account can use
- * `publish: { repository: "web" }` to reuse matching published builds. Changed
- * inputs produce another hash tag in the same repository. Builds targeting
- * that repository import reusable layers from its shared `:buildcache` tag,
- * including when full input hashes differ. This mutable tag points to the
- * latest exported inline cache, not a combined cache of every historical
- * image. Reusing a finished image does not move the layer-cache tag.
+ * `publish: { repository: "web" }` to reuse matching published builds without
+ * invoking Docker. Changed inputs produce another hash tag in the same
+ * repository.
+ *
+ * ### Caching Build Layers
+ * A changed build reuses the layers in the local BuildKit cache of the
+ * machine it runs on. A builder that has never built the image, such as a
+ * fresh CI runner, reruns every step. Set `build.cache: true` to keep every
+ * stage's layers at the repository's `:buildcache` tag, so fresh builders
+ * resume from the last unchanged step, including steps in earlier stages of
+ * a multi-stage Dockerfile.
+ *
+ * **Example:** Cache build layers in the registry
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: { cache: true },
+ * }) {}
+ * ```
+ *
+ * **Example:** Cache build layers in GitHub Actions
+ * ```typescript
+ * export class Agent extends Cloudflare.Container<Agent>()("Agent", {
+ *   context: `${import.meta.dirname}/context`,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=agent"],
+ *       to: ["type=gha,scope=agent,mode=max"],
+ *     },
+ *   },
+ * }) {}
+ * ```
  *
  * Pin base images and downloaded dependencies: changes outside the build
  * context cannot invalidate the input hash. Each stage still has its own
@@ -569,6 +594,28 @@ type ContainerShape<Shape> = {
  *   image: "mendhak/http-https-echo:latest",
  * }) {}
  * ```
+ *
+ * Alchemy pulls an `image` as `linux/amd64` on every deploy and every
+ * `alchemy dev` start, so a mutable tag like `:latest` picks up a newly
+ * pushed image. A private registry needs a `docker login` first.
+ *
+ * **Example:** Image built on this machine
+ * ```typescript
+ * // docker build --platform linux/amd64 -t local-only/app:dev .
+ * export class App extends Cloudflare.Container<App>()("App", {
+ *   image: "local-only/app:dev",
+ * }) {}
+ * ```
+ *
+ * An image only in the local Docker, built on this machine or loaded with
+ * `docker load`, has no registry to pull from. When the pull fails and the
+ * image is present locally, Alchemy uses the local copy, in `alchemy dev`
+ * and on deploy. Build it with `--platform linux/amd64`, the platform
+ * Cloudflare runs: deploy fails on an image built only for another
+ * platform. When the image can be neither pulled nor found locally,
+ * Alchemy fails with the image name and the commands that fix it. The
+ * image name alone is the identity, so rebuilding under the same tag does
+ * not redeploy; give each build its own tag.
  *
  * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript

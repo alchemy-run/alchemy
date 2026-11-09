@@ -95,11 +95,21 @@ export interface Extension extends Resource<
     versionNumber: number;
   },
   never,
-  Providers
+  Providers,
+  ExtensionLookup
 > {}
 
 /**
- * An AWS AppConfig extension -- a set of actions AppConfig performs at
+ * Props for {@link Extension.lookup}: find an extension this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ExtensionLookup {
+  /** The id of the existing extension. */
+  extensionId: string;
+}
+
+/**
+ * An AWS AppConfig extension — a set of actions AppConfig performs at
  * specific points of the configuration workflow (before a version is
  * created, before/while/after a deployment). Actions can invoke Lambda
  * functions, publish to SNS/SQS, or emit EventBridge events.
@@ -133,6 +143,16 @@ export interface Extension extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing extension
+ * `Extension.lookup` references an extension Alchemy doesn't manage (created in the
+ * console or by another stack), found by `extensionId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing extension
+ * ```typescript
+ * const existing = AWS.AppConfig.Extension.lookup({ extensionId: "..." });
  * ```
  *
  * @resource
@@ -228,6 +248,13 @@ export const ExtensionProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ extensionId }) {
+          const extension = yield* readExtension(extensionId);
+          if (extension?.Id === undefined) return undefined;
+          const attrs = toAttrs(extension);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

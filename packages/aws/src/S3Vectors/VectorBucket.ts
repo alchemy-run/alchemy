@@ -70,11 +70,21 @@ export interface VectorBucket extends Resource<
     vectorBucketArn: string;
   },
   never,
-  Providers
+  Providers,
+  VectorBucketLookup
 > {}
 
 /**
- * An Amazon S3 Vectors bucket -- durable storage for vector embeddings,
+ * Props for {@link VectorBucket.lookup}: find a vector bucket this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VectorBucketLookup {
+  /** The vector bucket name of the existing vector bucket. */
+  vectorBucketName: string;
+}
+
+/**
+ * An Amazon S3 Vectors bucket — durable storage for vector embeddings,
  * queryable by similarity. Create one or more {@link Index}es inside it to
  * store and query vectors.
  *
@@ -110,6 +120,16 @@ export interface VectorBucket extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing vector bucket
+ * `VectorBucket.lookup` references a vector bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vectorBucketName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing vector bucket
+ * ```typescript
+ * const existing = AWS.S3Vectors.VectorBucket.lookup({ vectorBucketName: "my-vector-bucket" });
  * ```
  *
  * @resource
@@ -181,6 +201,15 @@ export const VectorBucketProvider = () =>
               vectorBucketArn: b.vectorBucketArn,
             }));
           }),
+        lookup: Effect.fn(function* ({ vectorBucketName: name }) {
+          const found = yield* observe(name);
+          if (!found) return undefined;
+          const attrs = {
+            vectorBucketName: found.vectorBucketName,
+            vectorBucketArn: found.vectorBucketArn,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.vectorBucketName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observe(name);

@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -127,11 +128,21 @@ export interface ImageRecipe extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImageRecipeLookup
 > {}
 
 /**
- * An EC2 Image Builder image recipe -- the blueprint that combines a parent
+ * Props for {@link ImageRecipe.lookup}: find an image recipe this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImageRecipeLookup {
+  /** The image recipe arn of the existing image recipe. */
+  imageRecipeArn: string;
+}
+
+/**
+ * An EC2 Image Builder image recipe — the blueprint that combines a parent
  * image with an ordered list of components to produce a new AMI.
  *
  * Recipes are immutable versions: every property except `tags` replaces the
@@ -153,6 +164,16 @@ export interface ImageRecipe extends Resource<
  *   imageRecipeArn: recipe.imageRecipeArn,
  *   infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing image recipe
+ * `ImageRecipe.lookup` references an image recipe Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imageRecipeArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image recipe
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImageRecipe.lookup({ imageRecipeArn: "my-image-recipe" });
  * ```
  *
  * @resource
@@ -223,6 +244,13 @@ export const ImageRecipeProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ imageRecipeArn: arn }) {
+          const recipe = yield* getRecipe(arn);
+          if (recipe === undefined) return undefined;
+          const attrs = yield* toAttrs(recipe);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.imageRecipeArn ?? (yield* toArn(yield* toName(id, olds), toVersion(olds)));
@@ -236,7 +264,8 @@ export const ImageRecipeProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.imageRecipeName ?? (yield* toName(id, news));
           const version = output?.semanticVersion ?? toVersion(news);
           const internalTags = yield* createInternalTags(id);

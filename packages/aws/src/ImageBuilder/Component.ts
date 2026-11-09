@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -116,11 +117,21 @@ export interface Component extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ComponentLookup
 > {}
 
 /**
- * An EC2 Image Builder component -- a YAML document that defines the build,
+ * Props for {@link Component.lookup}: find a component this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComponentLookup {
+  /** The component build version arn of the existing component. */
+  componentBuildVersionArn: string;
+}
+
+/**
+ * An EC2 Image Builder component — a YAML document that defines the build,
  * validation, and test steps applied to an instance during image creation.
  *
  * Components are immutable versions: every property except `tags` replaces
@@ -154,6 +165,16 @@ export interface Component extends Resource<
  *   parentImage: "arn:aws:imagebuilder:us-west-2:aws:image/amazon-linux-2023-x86/x.x.x",
  *   components: [{ componentArn: component.componentBuildVersionArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing component
+ * `Component.lookup` references a component Alchemy doesn't manage (created in the
+ * console or by another stack), found by `componentBuildVersionArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing component
+ * ```typescript
+ * const existing = AWS.ImageBuilder.Component.lookup({ componentBuildVersionArn: "my-component" });
  * ```
  *
  * @resource
@@ -227,6 +248,13 @@ export const ComponentProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ componentBuildVersionArn: arn }) {
+          const component = yield* getComponent(arn);
+          if (component === undefined) return undefined;
+          const attrs = yield* toAttrs(component);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.componentBuildVersionArn ??
@@ -241,7 +269,8 @@ export const ComponentProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           if ((news.data === undefined) === (news.uri === undefined)) {
             return yield* new ComponentSourceInvalid({
               message:

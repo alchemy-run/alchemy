@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -126,11 +127,40 @@ export type ServicesConnector = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServicesConnectorLookup
 >;
 
 /**
- * A Firebase Data Connect connector -- a set of GraphQL queries and
+ * Props for {@link ServicesConnector.lookup}: find a services connector
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ServicesConnectorLookup {
+  /**
+   * Connector id (the `{connector}` segment).
+   */
+  connectorId: string;
+  /**
+   * Region used when `service` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Data Connect service. Full name
+   * `projects/{project}/locations/{location}/services/{service}` or the
+   * service id (combined with `location`). The service must already have an
+   * active schema compatible with `source`.
+   */
+  service: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Firebase Data Connect connector — a set of GraphQL queries and
  * mutations compiled against the service's active schema.
  *
  * Changing `connectorId`, `service`, or `location` replaces the
@@ -185,6 +215,20 @@ export type ServicesConnector = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing services connector
+ * `ServicesConnector.lookup` references a services connector Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared services connector.
+ *
+ * **Example:** Reference an existing services connector
+ * ```typescript
+ * const servicesConnector = GCP.FirebaseDataConnect.ServicesConnector.lookup({
+ *   connectorId: "my-connector",
+ *   service: "my-service",
+ * });
  * ```
  *
  * @resource
@@ -289,6 +333,23 @@ export const ServicesConnectorProvider = () =>
         nextParent,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      connectorId,
+      location: lookupLocation,
+      service: lookupService,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const service = lookupService
+        ? expandParent(lookupService, env.project, location, "services")
+        : undefined;
+      const name = service ? resourceName(service, connectorId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

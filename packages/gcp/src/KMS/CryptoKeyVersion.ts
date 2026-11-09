@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   type OperationFailed,
   type OperationTimedOut,
@@ -117,11 +118,51 @@ export type CryptoKeyVersion = Resource<
   CryptoKeyVersionProps,
   CryptoKeyVersionAttrs,
   never,
-  Providers
+  Providers,
+  CryptoKeyVersionLookup
 >;
 
 /**
- * A Cloud KMS CryptoKeyVersion -- one generation of key material under a
+ * Props for {@link CryptoKeyVersion.lookup}: find a crypto key version this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CryptoKeyVersionLookup {
+  /**
+   * Parent CryptoKey. Full name
+   * `projects/{project}/locations/{location}/key
+   * Rings/{keyRing}/cryptoKeys/{cryptoKey}` or the crypto key id (combined
+   * with `keyRing` / `location`).
+   */
+  cryptoKey: string;
+  /**
+   * Parent KeyRing. Full name
+   * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the key
+   * ring id. Used when `cryptoKey` is a bare id.
+   */
+  keyRing?: string;
+  /**
+   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * `cryptoKey` is a bare id. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * CryptoKeyVersion id (the last path segment, typically a decimal
+   * sequence assigned by Cloud KMS). Create always assigns the next
+   * sequential id; this field targets an existing version on adopt or
+   * update.
+   */
+  cryptoKeyVersionId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud KMS CryptoKeyVersion — one generation of key material under a
  * CryptoKey.
  *
  * Parent CryptoKey, KeyRing, location, and version id are identity
@@ -152,6 +193,20 @@ export type CryptoKeyVersion = Resource<
  * const version = yield* GCP.KMS.CryptoKeyVersion("V1", {
  *   cryptoKey: key.name,
  *   state: "DISABLED",
+ * });
+ * ```
+ *
+ * ### Looking up an existing crypto key version
+ * `CryptoKeyVersion.lookup` references a crypto key version Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * crypto key version.
+ *
+ * **Example:** Reference an existing crypto key version
+ * ```typescript
+ * const cryptoKeyVersion = GCP.KMS.CryptoKeyVersion.lookup({
+ *   cryptoKey: "my-crypto-key",
+ *   cryptoKeyVersionId: "my-crypto-key-version",
  * });
  * ```
  *
@@ -584,6 +639,24 @@ export const CryptoKeyVersionProvider = () =>
       if (!idChanged && !parentChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ cryptoKey, keyRing, location, cryptoKeyVersionId }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = cryptoKey
+        ? resolveParent(env.project, cryptoKey ?? "", keyRing, location, env.region).parent
+        : undefined;
+      const name = resolveName({
+        outputName: undefined,
+        outputVersionId: undefined,
+        propsVersionId: cryptoKeyVersionId,
+        parent: parent ?? "",
+      });
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      if (DELETABLE_STATES.has(existing.state ?? "")) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

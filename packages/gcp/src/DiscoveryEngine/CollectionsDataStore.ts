@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -147,8 +148,34 @@ export type CollectionsDataStore = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsDataStoreLookup
 >;
+
+/**
+ * Props for {@link CollectionsDataStore.lookup}: find a collections data
+ * store this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CollectionsDataStoreLookup {
+  /**
+   * Data store id (the `{data_store}` segment).
+   */
+  dataStoreId: string;
+  /**
+   * Location (`global`, `us`, `eu`).
+   */
+  location?: string;
+  /**
+   * Collection id.
+   */
+  collection?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine data store under a collection.
@@ -180,6 +207,19 @@ export type CollectionsDataStore = Resource<
  * // Same logical id as before; only the changed props differ.
  * const store = yield* GCP.DiscoveryEngine.CollectionsDataStore("Docs", {
  *   displayName: "product docs v2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing collections data store
+ * `CollectionsDataStore.lookup` references a collections data store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared collections data store.
+ *
+ * **Example:** Reference an existing collections data store
+ * ```typescript
+ * const collectionsDataStore = GCP.DiscoveryEngine.CollectionsDataStore.lookup({
+ *   dataStoreId: "my-data-store",
  * });
  * ```
  *
@@ -312,6 +352,21 @@ export const CollectionsDataStoreProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({
+      dataStoreId,
+      location: lookupLocation,
+      collection: lookupCollection,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const collection = normalizeCollection(lookupCollection);
+      const existing = yield* getByName(
+        dataStoreName(env.project, location, collection, dataStoreId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

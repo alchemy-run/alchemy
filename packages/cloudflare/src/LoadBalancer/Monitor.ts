@@ -126,7 +126,33 @@ export interface MonitorAttributes {
   modifiedOn: string | undefined;
 }
 
-export type Monitor = Resource<TypeId, MonitorProps, MonitorAttributes, never, Providers>;
+/**
+ * Props for {@link Monitor.lookup}: find a monitor this stack doesn't
+ * manage, by its id or its description.
+ */
+export type MonitorLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing monitor.
+       */
+      monitorId: string;
+    }
+  | {
+      /**
+       * The description of the existing monitor (monitors have no name).
+       * If several monitors share it, the oldest is used.
+       */
+      description: string;
+    };
+
+export type Monitor = Resource<
+  TypeId,
+  MonitorProps,
+  MonitorAttributes,
+  never,
+  Providers,
+  MonitorLookup
+>;
 
 /**
  * A Cloudflare Load Balancing monitor -- an active health check (HTTP,
@@ -160,6 +186,23 @@ export type Monitor = Resource<TypeId, MonitorProps, MonitorAttributes, never, P
  * ### Using with a Pool
  * **Example:** Attach the monitor to a pool
  * ```typescript
+ * const pool = yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
+ *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
+ *   monitor: monitor.monitorId,
+ * });
+ * ```
+ *
+ * ### Looking up an existing Monitor
+ * `Monitor.lookup` reads a monitor Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `monitorId` or `description`, so
+ * pools can use it. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Health-check a new pool with an existing monitor
+ * ```typescript
+ * const monitor = Cloudflare.LoadBalancer.Monitor.lookup({
+ *   description: "shared-http-health",
+ * });
  * const pool = yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitor: monitor.monitorId,
@@ -207,6 +250,17 @@ export const MonitorProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const monitorId =
+        "monitorId" in props
+          ? props.monitorId
+          : (yield* findByDescription(accountId, props.description))?.id;
+      if (!monitorId) return undefined;
+      const observed = yield* getMonitor(accountId, monitorId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
+
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -228,7 +282,7 @@ export const MonitorProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const description = yield* createDescription(id, news.description);
       const body = buildBody(news, description);

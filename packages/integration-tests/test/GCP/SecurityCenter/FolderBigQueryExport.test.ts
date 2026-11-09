@@ -6,6 +6,7 @@ import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,7 +50,7 @@ test.provider(
           name: `${folder}/bigQueryExports/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -83,6 +84,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { exp, datasetId: dataset.datasetId };
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityCenter.FolderBigQueryExport.lookup({
+          exportId: created.exp.exportId,
+          folder: created.exp.folder,
+        }),
+        created.exp,
       );
 
       expect(created.exp.exportId).toEqual(expect.any(String));

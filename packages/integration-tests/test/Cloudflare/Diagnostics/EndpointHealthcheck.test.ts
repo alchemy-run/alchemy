@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -77,7 +78,7 @@ const cleanLeftovers = (accountId: string) =>
     Effect.flatMap(
       Effect.fn(function* (list) {
         for (const hc of list) {
-          if (hc.name?.startsWith("alchemy-diag-ehc") && hc.id) {
+          if (hc.name?.startsWith(testName("alchemy-diag-ehc")) && hc.id) {
             yield* diagnostics
               .deleteEndpointHealthcheck({ accountId, id: hc.id })
               .pipe(Effect.catchTag("EndpointHealthcheckNotFound", () => Effect.void));
@@ -99,7 +100,7 @@ test.provider(
       const check = yield* stack.deploy(
         Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.1",
-          name: "alchemy-diag-ehc",
+          name: testName("alchemy-diag-ehc"),
         }),
       );
 
@@ -107,33 +108,33 @@ test.provider(
       expect(check.accountId).toEqual(accountId);
       expect(check.checkType).toEqual("icmp");
       expect(check.endpoint).toEqual("10.77.0.1");
-      expect(check.name).toEqual("alchemy-diag-ehc");
+      expect(check.name).toEqual(testName("alchemy-diag-ehc"));
 
       // Out-of-band verification via the distilled API.
       const live = yield* getHealthcheckLive(accountId, check.healthcheckId);
       expect(live.endpoint).toEqual("10.77.0.1");
-      expect(live.name).toEqual("alchemy-diag-ehc");
+      expect(live.name).toEqual(testName("alchemy-diag-ehc"));
 
       // Update the probed endpoint in place — same UUID.
       const updated = yield* stack.deploy(
         Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.2",
-          name: "alchemy-diag-ehc",
+          name: testName("alchemy-diag-ehc"),
         }),
       );
       expect(updated.healthcheckId).toEqual(check.healthcheckId);
       expect(updated.endpoint).toEqual("10.77.0.2");
-      expect(updated.name).toEqual("alchemy-diag-ehc");
+      expect(updated.name).toEqual(testName("alchemy-diag-ehc"));
 
       const liveUpdated = yield* getHealthcheckLive(accountId, check.healthcheckId);
       expect(liveUpdated.endpoint).toEqual("10.77.0.2");
-      expect(liveUpdated.name).toEqual("alchemy-diag-ehc");
+      expect(liveUpdated.name).toEqual(testName("alchemy-diag-ehc"));
 
       // No-op deploy — converges without churn, same UUID.
       const noop = yield* stack.deploy(
         Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.2",
-          name: "alchemy-diag-ehc",
+          name: testName("alchemy-diag-ehc"),
         }),
       );
       expect(noop.healthcheckId).toEqual(check.healthcheckId);
@@ -145,15 +146,15 @@ test.provider(
       const replaced = yield* stack.deploy(
         Cloudflare.Diagnostics.EndpointHealthcheck("Check", {
           endpoint: "10.77.0.3",
-          name: "alchemy-diag-ehc-v2",
+          name: testName("alchemy-diag-ehc-v2"),
         }),
       );
       expect(replaced.healthcheckId).not.toEqual(check.healthcheckId);
-      expect(replaced.name).toEqual("alchemy-diag-ehc-v2");
+      expect(replaced.name).toEqual(testName("alchemy-diag-ehc-v2"));
       yield* expectGone(accountId, check.healthcheckId);
 
       const liveReplaced = yield* getHealthcheckLive(accountId, replaced.healthcheckId);
-      expect(liveReplaced.name).toEqual("alchemy-diag-ehc-v2");
+      expect(liveReplaced.name).toEqual(testName("alchemy-diag-ehc-v2"));
 
       yield* stack.destroy();
 
@@ -179,7 +180,6 @@ test.provider(
       const deployed = yield* stack.deploy(
         Cloudflare.Diagnostics.EndpointHealthcheck("ListCheck", {
           endpoint: "10.78.0.1",
-          name: "alchemy-diag-ehc-list",
         }),
       );
 

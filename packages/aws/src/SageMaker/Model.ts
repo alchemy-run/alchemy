@@ -78,11 +78,21 @@ export interface Model extends Resource<
     modelArn: string;
   },
   never,
-  Providers
+  Providers,
+  ModelLookup
 > {}
 
 /**
- * An Amazon SageMaker Model -- the immutable pairing of an inference
+ * Props for {@link Model.lookup}: find a model this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ModelLookup {
+  /** The model name of the existing model. */
+  modelName: string;
+}
+
+/**
+ * An Amazon SageMaker Model — the immutable pairing of an inference
  * container image (and optional S3 model artifacts) with an execution role.
  * A model is pure configuration: it costs nothing until it is deployed to an
  * endpoint via an `EndpointConfig` + `Endpoint`.
@@ -127,6 +137,16 @@ export interface Model extends Resource<
  * const endpoint = yield* AWS.SageMaker.Endpoint("MyEndpoint", {
  *   endpointConfigName: config.endpointConfigName,
  * });
+ * ```
+ *
+ * ### Looking up an existing model
+ * `Model.lookup` references a model Alchemy doesn't manage (created in the
+ * console or by another stack), found by `modelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing model
+ * ```typescript
+ * const existing = AWS.SageMaker.Model.lookup({ modelName: "my-model" });
  * ```
  *
  * @resource
@@ -190,6 +210,11 @@ export const ModelProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ modelName }) {
+          const attrs = yield* readModel(modelName);
+          if (!attrs) return undefined;
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const modelName = output?.modelName ?? (yield* createModelName(id, olds ?? {}));
           const attrs = yield* readModel(modelName);

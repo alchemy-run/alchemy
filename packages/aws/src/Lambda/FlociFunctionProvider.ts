@@ -32,6 +32,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as TempRoot from "alchemy/Bundle/TempRoot";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -154,7 +155,7 @@ export const FlociFunctionProvider = () =>
           // back to its original content hashes the same) is the signal
           // that a re-point happened and the function must be re-enrolled.
           let enrolledAttrs: Function["Attributes"] | undefined;
-          let startedAt = Date.now();
+          let startedAt = yield* Clock.currentTimeMillis;
 
           const swap = Effect.fn(function* (result: FunctionBundleResult) {
             if (result.identityHash === lastHash) return;
@@ -187,7 +188,9 @@ export const FlociFunctionProvider = () =>
               enrolledAttrs = current;
             }
             lastHash = result.identityHash;
-            yield* Effect.logInfo(`code swapped in ${Date.now() - startedAt}ms`);
+            yield* Effect.logInfo(
+              `code swapped in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
+            );
           });
 
           if (props.bundle === false) {
@@ -200,7 +203,7 @@ export const FlociFunctionProvider = () =>
               Stream.debounce("200 millis"),
               Stream.runForEach(() =>
                 Effect.gen(function* () {
-                  startedAt = Date.now();
+                  startedAt = yield* Clock.currentTimeMillis;
                   const result = yield* bundler.prebuiltCode(realMain);
                   yield* swap(result);
                 }).pipe(Effect.catchCause((cause) => Effect.logWarning(`code swap failed`, cause))),
@@ -215,7 +218,7 @@ export const FlociFunctionProvider = () =>
                 Effect.gen(function* () {
                   switch (event._tag) {
                     case "Start": {
-                      startedAt = Date.now();
+                      startedAt = yield* Clock.currentTimeMillis;
                       return;
                     }
                     case "Error": {

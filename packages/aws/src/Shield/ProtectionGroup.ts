@@ -87,11 +87,21 @@ export interface ProtectionGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ProtectionGroupLookup
 > {}
 
 /**
- * An AWS Shield Advanced Protection Group -- a collective of protected
+ * Props for {@link ProtectionGroup.lookup}: find a protection group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProtectionGroupLookup {
+  /** The protection group id of the existing protection group. */
+  protectionGroupId: string;
+}
+
+/**
+ * An AWS Shield Advanced Protection Group — a collective of protected
  * resources whose traffic Shield Advanced monitors as a unit, improving
  * detection accuracy and reducing false positives.
  *
@@ -125,6 +135,16 @@ export interface ProtectionGroup extends Resource<
  *   members: [distribution.distributionArn],
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing protection group
+ * `ProtectionGroup.lookup` references a protection group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `protectionGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing protection group
+ * ```typescript
+ * const existing = AWS.Shield.ProtectionGroup.lookup({ protectionGroupId: "my-protection-group" });
  * ```
  */
 export const ProtectionGroup = Resource<ProtectionGroup>("AWS.Shield.ProtectionGroup");
@@ -199,6 +219,14 @@ export const ProtectionGroupProvider = () =>
           if ((yield* toGroupId(id, olds)) !== (yield* toGroupId(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ protectionGroupId: groupId }) {
+          const group = yield* observeGroup(groupId);
+          if (!group?.ProtectionGroupArn) return undefined;
+          const tags = yield* readGroupTags(group.ProtectionGroupArn);
+          const attrs = buildAttrs(group, tags);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

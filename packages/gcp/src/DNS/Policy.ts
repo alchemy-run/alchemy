@@ -1,5 +1,5 @@
 import * as dns from "@distilled.cloud/gcp/dns_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -105,8 +106,28 @@ export type Policy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 >;
+
+/**
+ * Props for {@link Policy.lookup}: find a policy this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PolicyLookup {
+  /**
+   * User-assigned policy name, unique within the project. Must be 1-63
+   * characters, begin with a letter, end with a letter or digit, and
+   * contain only lowercase letters, digits, or dashes.
+   */
+  policyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud DNS server policy applied to one or more VPC networks.
@@ -150,6 +171,16 @@ export type Policy = Resource<
  *   networks: ["app-vpc"],
  *   alternativeNameServers: [{ ipv4Address: "192.0.2.53" }],
  * });
+ * ```
+ *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a policy Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared policy.
+ *
+ * **Example:** Reference an existing policy
+ * ```typescript
+ * const policy = GCP.DNS.Policy.lookup({ policyName: "my-policy" });
  * ```
  *
  * @resource
@@ -312,14 +343,23 @@ export const PolicyProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ policyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, policyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const policyName = yield* toPolicyName(id, olds?.policyName, output?.policyName);
       const existing = yield* getByName(env.project, policyName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, parsed.labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, parsed.labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "policyName");
     }),
 
     list: () =>

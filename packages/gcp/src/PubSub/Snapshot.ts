@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -57,8 +58,27 @@ export type Snapshot = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SnapshotLookup
 >;
+
+/**
+ * Props for {@link Snapshot.lookup}: find a snapshot this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SnapshotLookup {
+  /**
+   * Snapshot id (the `{snapshot}` segment of
+   * `projects/{project}/snapshots/{snapshot}`).
+   */
+  snapshotId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub snapshot of a subscription's message backlog.
@@ -91,6 +111,16 @@ export type Snapshot = Resource<
  *   subscription: subscription.name,
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing snapshot
+ * `Snapshot.lookup` references a snapshot Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared snapshot.
+ *
+ * **Example:** Reference an existing snapshot
+ * ```typescript
+ * const snapshot = GCP.PubSub.Snapshot.lookup({ snapshotId: "my-snapshot" });
  * ```
  *
  * @resource
@@ -211,6 +241,14 @@ export const SnapshotProvider = () =>
           (news.snapshotId ?? previousId) === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ snapshotId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, snapshotId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

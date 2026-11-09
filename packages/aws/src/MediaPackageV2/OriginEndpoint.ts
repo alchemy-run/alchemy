@@ -136,11 +136,25 @@ export interface OriginEndpoint extends Resource<
     mssManifests: ManifestRef[];
   },
   never,
-  Providers
+  Providers,
+  OriginEndpointLookup
 > {}
 
 /**
- * An AWS Elemental MediaPackage v2 origin endpoint -- the output side of a
+ * Props for {@link OriginEndpoint.lookup}: find an origin endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface OriginEndpointLookup {
+  /** The channel group the endpoint belongs to. */
+  channelGroupName: string;
+  /** The channel the endpoint serves. */
+  channelName: string;
+  /** The name of the existing endpoint. */
+  originEndpointName: string;
+}
+
+/**
+ * An AWS Elemental MediaPackage v2 origin endpoint — the output side of a
  * channel. The endpoint packages the channel's ingested content into HLS,
  * low-latency HLS, DASH, and/or MSS manifests and serves them to downstream
  * devices (players or CDNs) on the channel group's egress domain.
@@ -210,6 +224,21 @@ export interface OriginEndpoint extends Resource<
  * **Example:** Read the served manifest URLs
  * ```typescript
  * const playbackUrl = endpoint.hlsManifests.map((m) => m.url);
+ * ```
+ *
+ * ### Looking up an existing origin endpoint
+ * `OriginEndpoint.lookup` references an origin endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelGroupName`, `channelName` and
+`originEndpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing origin endpoint
+ * ```typescript
+ * const hls = AWS.MediaPackageV2.OriginEndpoint.lookup({
+ *   channelGroupName: "broadcast",
+ *   channelName: "live",
+ *   originEndpointName: "hls",
+ * });
  * ```
  *
  * @resource
@@ -296,6 +325,10 @@ export const OriginEndpointProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ channelGroupName, channelName, originEndpointName }) {
+          const endpoint = yield* getEndpoint(channelGroupName, channelName, originEndpointName);
+          return endpoint === undefined ? undefined : toAttrs(endpoint);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const channelGroupName = output?.channelGroupName ?? olds?.channelGroupName;
           const channelName = output?.channelName ?? olds?.channelName;

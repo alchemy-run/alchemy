@@ -82,11 +82,26 @@ export interface Contact extends Resource<
     displayName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContactLookup
 > {}
 
 /**
- * An Incident Manager contact -- a person Incident Manager engages during an
+ * Props for {@link Contact.lookup}: find a contact this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ContactLookup =
+  | {
+      /** The ARN of the existing contact. */
+      contactArn: string;
+    }
+  | {
+      /** The alias of the existing contact. */
+      alias: string;
+    };
+
+/**
+ * An Incident Manager contact — a person Incident Manager engages during an
  * incident, an escalation plan that engages contacts in phases, or an
  * on-call schedule backed by rotations.
  *
@@ -123,6 +138,17 @@ export interface Contact extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing contact
+ * `Contact.lookup` references a contact Alchemy doesn't manage (created in the
+ * console or by another stack), found by `contactArn` or `alias`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing contact
+ * ```typescript
+ * const oncall = AWS.SSMContacts.Contact.lookup({ alias: "oncall" });
+ * const contactArn = oncall.contactArn;
  * ```
  */
 const ContactResource = Resource<Contact>("AWS.SSMContacts.Contact");
@@ -212,6 +238,11 @@ export const ContactProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "contactArn" in props ? props.contactArn : yield* contactArn(props.alias);
+          const found = yield* getContact(arn);
+          return found === undefined ? undefined : buildAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const alias = output?.alias ?? (yield* createAlias(id, olds ?? {}));
           const arn = output?.contactArn ?? (yield* contactArn(alias));

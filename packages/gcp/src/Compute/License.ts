@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -137,8 +138,26 @@ export type License = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LicenseLookup
 >;
+
+/**
+ * Props for {@link License.lookup}: find a license this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LicenseLookup {
+  /**
+   * License name (RFC1035, 1-63 characters).
+   */
+  licenseName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine License.
@@ -166,6 +185,16 @@ export type License = Resource<
  *   transferable: false,
  *   removableFromDisk: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing license
+ * `License.lookup` references a license Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared license.
+ *
+ * **Example:** Reference an existing license
+ * ```typescript
+ * const license = GCP.Compute.License.lookup({ licenseName: "my-license" });
  * ```
  *
  * @resource
@@ -396,14 +425,23 @@ export const LicenseProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ licenseName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, licenseName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const licenseName = yield* toName(id, olds?.licenseName, output?.licenseName);
       const existing = yield* getByName(env.project, licenseName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "licenseName");
     }),
 
     list: () =>

@@ -112,11 +112,21 @@ export interface Namespace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 > {}
 
 /**
- * An Amazon Redshift Serverless namespace -- the storage-and-database half of
+ * Props for {@link Namespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface NamespaceLookup {
+  /** The namespace name of the existing namespace. */
+  namespaceName: string;
+}
+
+/**
+ * An Amazon Redshift Serverless namespace — the storage-and-database half of
  * a serverless data warehouse.
  *
  * A namespace holds databases, schemas, tables, admin credentials, and IAM
@@ -154,6 +164,16 @@ export interface Namespace extends Resource<
  *   kmsKeyId: key.keyId,
  *   logExports: ["userlog", "connectionlog"],
  * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const existing = AWS.RedshiftServerless.Namespace.lookup({ namespaceName: "my-namespace" });
  * ```
  *
  * @resource
@@ -254,6 +274,13 @@ export const NamespaceProvider = () =>
           if ((news?.kmsKeyId ?? undefined) !== (olds?.kmsKeyId ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ namespaceName: name }) {
+          const ns = yield* readNamespace(name);
+          if (ns === undefined) return undefined;
+          const attrs = toAttrs(ns);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

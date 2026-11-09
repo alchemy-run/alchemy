@@ -72,11 +72,30 @@ export type MonitorGroup = Resource<
   MonitorGroupProps,
   MonitorGroupAttributes,
   never,
-  Providers
+  Providers,
+  MonitorGroupLookup
 >;
 
 /**
- * A Cloudflare Load Balancing monitor group -- aggregates several
+ * Props for {@link MonitorGroup.lookup}: find a monitor group this stack
+ * doesn't manage, by its id or its description.
+ */
+export type MonitorGroupLookup =
+  | {
+      /**
+       * The id of the existing monitor group.
+       */
+      monitorGroupId: string;
+    }
+  | {
+      /**
+       * The description of the existing monitor group, its display name.
+       */
+      description: string;
+    };
+
+/**
+ * A Cloudflare Load Balancing monitor group — aggregates several
  * {@link Monitor}s into one health signal that a
  * {@link Pool} can reference via `monitorGroup` (mutually
  * exclusive with `monitor`).
@@ -97,6 +116,21 @@ export type MonitorGroup = Resource<
  * ### Using with a Pool
  * **Example:** Attach the group to a pool
  * ```typescript
+ * yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
+ *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
+ *   monitorGroup: group.monitorGroupId,
+ * });
+ * ```
+ *
+ * ### Looking up an existing monitor group
+ * `MonitorGroup.lookup` references a group Alchemy doesn't manage (created
+ * in the dashboard or by another stack), found by `monitorGroupId` or
+ * `description`. It is read during plan/deploy and never created, updated
+ * or deleted.
+ *
+ * **Example:** Health-check a new pool with an existing group
+ * ```typescript
+ * const group = Cloudflare.LoadBalancer.MonitorGroup.lookup({ description: "api-health" });
  * yield* Cloudflare.LoadBalancer.Pool("ApiPool", {
  *   origins: [{ name: "origin-1", address: "203.0.113.10" }],
  *   monitorGroup: group.monitorGroupId,
@@ -144,6 +178,14 @@ export const MonitorGroupProvider = () =>
       );
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "monitorGroupId" in props
+          ? yield* getMonitorGroup(accountId, props.monitorGroupId)
+          : yield* findByDescription(accountId, props.description);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

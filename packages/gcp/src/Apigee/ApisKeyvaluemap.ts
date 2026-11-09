@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, resolveOrgId, toPhysicalId } from "./operations.ts";
@@ -53,8 +54,34 @@ export type ApisKeyvaluemap = Resource<
     encrypted: boolean;
   },
   never,
-  Providers
+  Providers,
+  ApisKeyvaluemapLookup
 >;
+
+/**
+ * Props for {@link ApisKeyvaluemap.lookup}: find an apis keyvaluemap this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApisKeyvaluemapLookup {
+  /**
+   * Key value map id.
+   */
+  mapId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Parent API proxy id or `organizations/{org}/apis/{api}`.
+   */
+  api: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API-proxy-scoped Apigee key value map.
@@ -72,6 +99,20 @@ export type ApisKeyvaluemap = Resource<
  * ```typescript
  * const map = yield* GCP.Apigee.ApisKeyvaluemap("Config", {
  *   api: proxy.apiId,
+ * });
+ * ```
+ *
+ * ### Looking up an existing apis keyvaluemap
+ * `ApisKeyvaluemap.lookup` references an apis keyvaluemap Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apis keyvaluemap.
+ *
+ * **Example:** Reference an existing apis keyvaluemap
+ * ```typescript
+ * const apisKeyvaluemap = GCP.Apigee.ApisKeyvaluemap.lookup({
+ *   mapId: "my-map",
+ *   api: "my-api",
  * });
  * ```
  *
@@ -174,6 +215,17 @@ export const ApisKeyvaluemapProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ mapId, organizationId: lookupOrganizationId, api }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const apiId = lastSegment(api ?? "");
+      if (apiId.length === 0) return undefined;
+      const name = resourceName(organizationId, apiId, mapId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId, apiId, name);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

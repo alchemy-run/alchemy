@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -130,11 +131,37 @@ export type EntryType = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EntryTypeLookup
 >;
 
 /**
- * A Dataplex Universal Catalog Entry Type -- a template for creating
+ * Props for {@link EntryType.lookup}: find an entry type this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface EntryTypeLookup {
+  /**
+   * Entry type id (the `{entryType}` segment of
+   * `projects/{project}/locations/{location}/entryTypes/{entryType}`). Must
+   * be 1-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  entryTypeId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Dataplex Universal Catalog Entry Type — a template for creating
  * Entries.
  *
  * Changing `entryTypeId`, `location`, or `authorization` replaces the
@@ -168,6 +195,19 @@ export type EntryType = Resource<
  *   entryTypeId: "app-table",
  *   description: "table v2",
  *   typeAliases: ["TABLE", "DATASET"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing entry type
+ * `EntryType.lookup` references an entry type Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * entry type.
+ *
+ * **Example:** Reference an existing entry type
+ * ```typescript
+ * const entryType = GCP.Dataplex.EntryType.lookup({
+ *   entryTypeId: "my-entry-type",
  * });
  * ```
  *
@@ -242,6 +282,15 @@ export const EntryTypeProvider = () =>
         extra: nextAuth !== previousAuth,
       });
     }),
+
+    lookup: Effect.fn(function* ({ entryTypeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, entryTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

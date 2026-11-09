@@ -98,11 +98,26 @@ export interface FHIRDatastore extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FHIRDatastoreLookup
 > {}
 
 /**
- * An AWS HealthLake FHIR-enabled data store -- a HIPAA-eligible, managed
+ * Props for {@link FHIRDatastore.lookup}: find a FHIR datastore this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FHIRDatastoreLookup =
+  | {
+      /** The id of the existing datastore. */
+      datastoreId: string;
+    }
+  | {
+      /** The name of the existing datastore. */
+      datastoreName: string;
+    };
+
+/**
+ * An AWS HealthLake FHIR-enabled data store — a HIPAA-eligible, managed
  * store for FHIR R4 health data with a FHIR REST endpoint plus bulk
  * import/export.
  *
@@ -131,6 +146,17 @@ export interface FHIRDatastore extends Resource<
  * const datastore = yield* FHIRDatastore("Records", {
  *   kmsKeyId: key.keyArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing FHIR datastore
+ * `FHIRDatastore.lookup` references a FHIR datastore Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datastoreId` or `datastoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing FHIR datastore
+ * ```typescript
+ * const records = AWS.HealthLake.FHIRDatastore.lookup({ datastoreName: "records" });
+ * const datastoreEndpoint = records.datastoreEndpoint;
  * ```
  *
  * @resource
@@ -305,6 +331,14 @@ export const FHIRDatastoreProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const properties =
+            "datastoreId" in props
+              ? yield* readDatastore(props.datastoreId)
+              : yield* findByName(props.datastoreName);
+          if (properties === undefined || isGoneOrGoing(properties)) return undefined;
+          return yield* toAttrs(properties);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let properties = output?.datastoreId
             ? yield* readDatastore(output.datastoreId)

@@ -19,7 +19,8 @@ declare global {
    * Build-time constant naming the cloud identity a bundle's host runs as,
    * defined by the bundler of a host that has one: `"AWS.IAM.Role"` for a
    * Lambda, ECS task or EC2 instance, `"GCP.IAM.ServiceAccount"` for Cloud Run,
-   * Cloud Functions or GKE. `undefined` everywhere else.
+   * Cloud Functions or GKE, `"Fly.OIDC"` for a Fly Service's Machines.
+   * `undefined` everywhere else.
    *
    * A provider's bindings compare it against their own identity type to drop
    * the code that host never runs (signing with a key Alchemy created).

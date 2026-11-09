@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -102,11 +103,37 @@ export type MulticloudDataTransferConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MulticloudDataTransferConfigLookup
 >;
 
 /**
- * A Data Transfer Essentials `MulticloudDataTransferConfig` -- the
+ * Props for {@link MulticloudDataTransferConfig.lookup}: find a multicloud
+ * data transfer config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface MulticloudDataTransferConfigLookup {
+  /**
+   * Config id (the `{multicloud_data_transfer_config}` segment of
+   * `projects/
+   * {project}/locations/{location}/multicloudDataTransferConfigs/{multicloud
+   * _data_transfer_config}`).
+   */
+  multicloudDataTransferConfigId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Data Transfer Essentials `MulticloudDataTransferConfig` — the
  * billing/metering configuration for services whose traffic is billed
  * through DTE.
  *
@@ -146,6 +173,19 @@ export type MulticloudDataTransferConfig = Resource<
  *     labels: { env: "prod", role: "dte" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing multicloud data transfer config
+ * `MulticloudDataTransferConfig.lookup` references a multicloud data
+ * transfer config Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared multicloud data transfer config.
+ *
+ * **Example:** Reference an existing multicloud data transfer config
+ * ```typescript
+ * const multicloudDataTransferConfig = GCP.NetworkConnectivity.MulticloudDataTransferConfig.lookup({
+ *   multicloudDataTransferConfigId: "my-multicloud-data-transfer-config",
+ * });
  * ```
  *
  * @resource
@@ -236,6 +276,15 @@ export const MulticloudDataTransferConfigProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ multicloudDataTransferConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, multicloudDataTransferConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

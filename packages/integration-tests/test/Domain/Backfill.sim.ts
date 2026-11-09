@@ -615,10 +615,12 @@ export class Sim {
           {
             // The consumer's own code routes the rows it reads from a source's log.
             route: (target, ref, rows) =>
-              (rows as SourceData["events"]).map((event) => ({
-                seq: event.seq,
-                deliveries: this.deliveries(this.source(ref), event, true, target),
-              })),
+              Effect.sync(() =>
+                (rows as SourceData["events"]).map((event) => ({
+                  seq: event.seq,
+                  deliveries: this.deliveries(this.source(ref), event, true, target),
+                })),
+              ),
           },
           this.limits,
         ),
@@ -778,10 +780,12 @@ export class Sim {
           singleSource: () => this.singleSource,
           // The key's own code routes the rows it reads from its source's log.
           history: (ref, rows) =>
-            (rows as SourceData["events"]).map((event) => ({
-              seq: event.seq,
-              deliveries: this.deliveries(this.source(ref), event, true, this.targetOfKey(key)),
-            })),
+            Effect.sync(() =>
+              (rows as SourceData["events"]).map((event) => ({
+                seq: event.seq,
+                deliveries: this.deliveries(this.source(ref), event, true, this.targetOfKey(key)),
+              })),
+            ),
           apply: (deliveries) => Effect.sync(() => this.apply(keyData, deliveries, true)),
         },
         this.limits,

@@ -98,11 +98,21 @@ export interface Subscriber extends Resource<
     resourceShareName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SubscriberLookup
 > {}
 
 /**
- * A Security Lake subscriber -- a consumer (account or service) granted access
+ * Props for {@link Subscriber.lookup}: find a subscriber this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SubscriberLookup {
+  /** The id of the existing subscriber. */
+  subscriberId: string;
+}
+
+/**
+ * A Security Lake subscriber — a consumer (account or service) granted access
  * to data in the Security Lake data lake for specific log sources.
  *
  * ### Creating a Subscriber
@@ -130,6 +140,16 @@ export interface Subscriber extends Resource<
  *   accessTypes: ["LAKEFORMATION"],
  *   tags: { team: "security" },
  * });
+ * ```
+ *
+ * ### Looking up an existing subscriber
+ * `Subscriber.lookup` references a subscriber Alchemy doesn't manage (created in the
+ * console or by another stack), found by `subscriberId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing subscriber
+ * ```typescript
+ * const existing = AWS.SecurityLake.Subscriber.lookup({ subscriberId: "..." });
  * ```
  */
 const SubscriberResource = Resource<Subscriber>("AWS.SecurityLake.Subscriber");
@@ -209,6 +229,16 @@ export const SubscriberProvider = () =>
         );
 
       return {
+        lookup: Effect.fn(function* ({ subscriberId }) {
+          // An account that never onboarded Security Lake rejects subscriber
+          // APIs with UnauthorizedException — that means "no subscriber".
+          const subscriber = yield* getById(subscriberId).pipe(
+            Effect.catchTag("UnauthorizedException", () => Effect.undefined),
+          );
+          if (subscriber === undefined) return undefined;
+          const attrs = buildAttrs(subscriber);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // An account that never onboarded Security Lake rejects subscriber
           // APIs with UnauthorizedException -- that means "no subscriber".

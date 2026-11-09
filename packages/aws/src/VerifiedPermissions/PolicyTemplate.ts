@@ -44,8 +44,20 @@ export interface PolicyTemplate extends Resource<
     policyTemplateId: string;
   },
   {},
-  Providers
+  Providers,
+  PolicyTemplateLookup
 > {}
+
+/**
+ * Props for {@link PolicyTemplate.lookup}: find a policy template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PolicyTemplateLookup {
+  /** The policy store the template belongs to. */
+  policyStoreId: string;
+  /** The id of the existing template. */
+  policyTemplateId: string;
+}
 
 /**
  * A Cedar policy template in a Verified Permissions policy store. Templates
@@ -79,6 +91,16 @@ export interface PolicyTemplate extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing policy template
+ * `PolicyTemplate.lookup` references a policy template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyStoreId` and `policyTemplateId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing policy template
+ * ```typescript
+ * const owner = AWS.VerifiedPermissions.PolicyTemplate.lookup({ policyStoreId, policyTemplateId });
+ * ```
+ *
  * @resource
  */
 export const PolicyTemplate = Resource<PolicyTemplate>("AWS.VerifiedPermissions.PolicyTemplate");
@@ -99,6 +121,12 @@ export const PolicyTemplateProvider = () =>
         // child of a policy store -- not enumerable account-wide
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ policyStoreId, policyTemplateId }) {
+          const template = yield* observe(policyStoreId, policyTemplateId);
+          return template === undefined
+            ? undefined
+            : { policyStoreId, policyTemplateId: template.policyTemplateId };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const policyStoreId = output?.policyStoreId ?? olds?.policyStoreId;
           const policyTemplateId = output?.policyTemplateId;

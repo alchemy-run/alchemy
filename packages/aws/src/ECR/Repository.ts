@@ -81,8 +81,18 @@ export interface Repository extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 > {}
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface RepositoryLookup {
+  /** The name of the existing repository. */
+  repositoryName: string;
+}
 
 /**
  * An Amazon ECR repository for container images.
@@ -110,6 +120,17 @@ export interface Repository extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference images in an existing repository
+ * ```typescript
+ * const repo = AWS.ECR.Repository.lookup({ repositoryName: "web" });
+ * const image = Output.interpolate`${repo.repositoryUri}:latest`;
  * ```
  *
  * @resource
@@ -189,6 +210,27 @@ export const RepositoryProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ repositoryName }) {
+          const described = yield* ecr
+            .describeRepositories({ repositoryNames: [repositoryName] })
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
+          const repository = described?.repositories?.[0];
+          if (!repository?.repositoryArn || !repository.repositoryUri) return undefined;
+          const listedTags = yield* ecr.listTagsForResource({
+            resourceArn: repository.repositoryArn,
+          });
+          return {
+            repositoryName,
+            repositoryArn: repository.repositoryArn as RepositoryArn,
+            repositoryUri: repository.repositoryUri as RepositoryUri,
+            registryId: repository.registryId!,
+            imageTagMutability: repository.imageTagMutability ?? "MUTABLE",
+            scanOnPush: repository.imageScanningConfiguration?.scanOnPush ?? false,
+            lifecyclePolicyText: undefined,
+            policy: yield* readPolicy(repositoryName),
+            tags: tagListRecord(listedTags.tags),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const repositoryName =

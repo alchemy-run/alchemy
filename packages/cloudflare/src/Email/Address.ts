@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -33,8 +34,27 @@ export type Address = Resource<
     modified: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AddressLookup
 >;
+
+/**
+ * Props for {@link Address.lookup}: find a destination address this stack
+ * doesn't manage, by its email or its id.
+ */
+export type AddressLookup =
+  | {
+      /**
+       * The registered email address.
+       */
+      email: string;
+    }
+  | {
+      /**
+       * The Cloudflare-assigned ID of the destination address.
+       */
+      addressId: string;
+    };
 
 /**
  * A verified destination email address on the account.
@@ -52,6 +72,22 @@ export type Address = Resource<
  *
  * Cloudflare sends a verification email when the address is first created.
  * The address must be verified before it can receive routed mail.
+ *
+ * ### Looking up an existing Address
+ * `Address.lookup` reads a destination address Alchemy doesn't manage
+ * (registered in the dashboard or by another stack), found by `email` or
+ * `addressId`. It is read during plan/deploy and never created or deleted,
+ * so no verification email is sent.
+ *
+ * **Example:** Forward to an address another stack registered
+ * ```typescript
+ * const ops = Cloudflare.Email.Address.lookup({ email: "ops@example.com" });
+ * yield* Cloudflare.Email.Rule("Support", {
+ *   zone: "example.com",
+ *   matchers: [{ type: "literal", field: "to", value: "support@example.com" }],
+ *   actions: [{ type: "forward", value: [ops.email] }],
+ * });
+ * ```
  *
  * @resource
  * @product Email
@@ -121,6 +157,17 @@ export const AddressProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailRouting.listAddresses.items({ accountId }).pipe(
+        Stream.map((addr) => toAttrs(accountId, addr)),
+        Stream.filter((a) =>
+          "email" in props ? a.email === props.email : a.addressId === props.addressId,
+        ),
+        Stream.runHead,
+        Effect.map(Option.getOrUndefined),
+      );
     }),
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

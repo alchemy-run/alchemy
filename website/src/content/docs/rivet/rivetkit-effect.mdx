@@ -1,0 +1,107 @@
+---
+title: RivetKit Effect Actors
+description: Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
+---
+
+RivetKit Effect Actors are Actors written with `@rivetkit/effect`, Rivet's Effect SDK, as [Rivet's quickstart](https://rivet.dev/actors/docs/quickstart/effect) describes. Alchemy deploys them as they are: it bundles your program and runs it on a pool's nodes, connected to your control plane.
+
+## Write the Actors
+
+Declare each Actor's actions as schemas:
+
+```typescript title="src/actors/counter/api.ts"
+import { Action, Actor } from "@rivetkit/effect";
+import * as Schema from "effect/Schema";
+
+export const Add = Action.make("Add", {
+  payload: { amount: Schema.Number },
+  success: Schema.Number,
+});
+
+export const Read = Action.make("Read", {
+  success: Schema.Number,
+});
+
+export const Counter = Actor.make("Counter", { actions: [Add, Read] });
+```
+
+Then implement them, and serve them from a program that runs until it's stopped:
+
+```typescript title="src/main.ts"
+import { NodeRuntime } from "@effect/platform-node";
+import { Client, Registry, State } from "@rivetkit/effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Counter } from "./actors/counter/api.ts";
+
+const CounterLive = Counter.toLayer(
+  Effect.fnUntraced(function* ({ state }) {
+    return Counter.of({
+      Add: Effect.fnUntraced(function* ({ payload }) {
+        const updated = yield* State.updateAndGet(state, (s) => ({
+          count: s.count + payload.amount,
+        })).pipe(Effect.orDie);
+        return updated.count;
+      }),
+      Read: () =>
+        State.get(state).pipe(
+          Effect.map((s) => s.count),
+          Effect.orDie,
+        ),
+    });
+  }),
+  {
+    state: {
+      schema: Schema.Struct({ count: Schema.Number }),
+      initialValue: () => ({ count: 0 }),
+    },
+    name: "Counter",
+  },
+);
+
+const ActorLayer = CounterLive.pipe(
+  Layer.provide(Client.layer({ endpoint: process.env.RIVET_ENDPOINT! })),
+);
+
+Layer.launch(Registry.serve(ActorLayer).pipe(Layer.provide(Registry.layer()))).pipe(
+  NodeRuntime.runMain,
+);
+```
+
+`Registry.layer()` takes its settings from the environment. On the pool's nodes, Alchemy sets `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL`.
+
+## Declare it
+
+Point a `Rivet.DurableObject` at the program, and give it a pool:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Counters } from "./cluster.ts";
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/main.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Alchemy bundles `src/main.ts` with everything it imports, `@rivetkit/effect` included, and leaves out only `rivetkit`, which the pool's nodes install.
+
+## Give it a pool of its own
+
+Like any RivetKit program, it runs its own process on every node, so its pool runs nothing else:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+```
+
+## Reach it from other code
+
+Callers use `@rivetkit/effect`'s client, with the Durable Object's `endpoint`, `namespace`, `pool` and `token` attributes, as [Rivet's quickstart](https://rivet.dev/actors/docs/quickstart/effect) describes. For bindings and `yield*` calls from your other runtimes, write the Actor as a [Durable Object](/rivet/durable-objects).
+
+Next, [Rust Actors](/rivet/rivetkit-rust): the same for Rivet's Rust SDK.

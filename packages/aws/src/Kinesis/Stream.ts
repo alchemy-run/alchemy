@@ -181,8 +181,23 @@ export interface Stream extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  StreamLookup
 > {}
+
+/**
+ * Props for {@link Stream.lookup}: find a stream this stack doesn't manage,
+ * in the ambient account and region, by its name or ARN.
+ */
+export type StreamLookup =
+  | {
+      /** The name of the existing stream. */
+      streamName: string;
+    }
+  | {
+      /** The ARN of the existing stream. */
+      streamArn: string;
+    };
 
 /**
  * An Amazon Kinesis Data Stream.
@@ -254,6 +269,20 @@ export interface Stream extends Resource<
  *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing stream
+ * `Stream.lookup` references a stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `streamName` or `streamArn`. It is
+ * read during plan/deploy and never created, updated or deleted, and binds
+ * like a declared stream.
+ *
+ * **Example:** Write records to an existing stream
+ * ```typescript
+ * const stream = Kinesis.Stream.lookup({ streamName: "clickstream" });
+ *
+ * // init
+ * const putRecord = yield* Kinesis.PutRecord(stream);
  * ```
  *
  * @resource
@@ -458,6 +487,7 @@ export const StreamProvider = () =>
 
             return hydrated.filter((attrs): attrs is Stream["Attributes"] => attrs !== undefined);
           }),
+        lookup: (props) => readStream(props),
         read: Effect.fn(function* ({ id, olds, output }) {
           const streamName = output?.streamName ?? (yield* createStreamName(id, olds ?? {}));
           const state = yield* readStream({

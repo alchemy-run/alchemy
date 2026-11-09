@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -286,11 +287,41 @@ export type CertificateAuthority = Resource<
   CertificateAuthorityProps,
   CertificateAuthorityAttrs,
   never,
-  Providers
+  Providers,
+  CertificateAuthorityLookup
 >;
 
 /**
- * A Certificate Authority Service CertificateAuthority -- a named CA in a
+ * Props for {@link CertificateAuthority.lookup}: find a certificate
+ * authority this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CertificateAuthorityLookup {
+  /**
+   * CertificateAuthority id (the last path segment). Must match
+   * `[a-zA-Z0-9_-]{1,63}`.
+   */
+  certificateAuthorityId: string;
+  /**
+   * Parent CaPool. Full name
+   * `projects/{project}/locations/{location}/caPools/{caPool}` or the pool
+   * id (combined with `location`).
+   */
+  caPool: string;
+  /**
+   * Location (`us-central1`, …). Used when `caPool` is a bare id.
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Certificate Authority Service CertificateAuthority — a named CA in a
  * CaPool that issues certificates.
  *
  * Changing `certificateAuthorityId`, `caPool`, `location`, `type`,
@@ -348,6 +379,20 @@ export type CertificateAuthority = Resource<
  * const ca = yield* GCP.PrivateCA.CertificateAuthority("Root", {
  *   caPool: pool.name,
  *   desiredState: "STAGED",
+ * });
+ * ```
+ *
+ * ### Looking up an existing certificate authority
+ * `CertificateAuthority.lookup` references a certificate authority Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate authority.
+ *
+ * **Example:** Reference an existing certificate authority
+ * ```typescript
+ * const certificateAuthority = GCP.PrivateCA.CertificateAuthority.lookup({
+ *   certificateAuthorityId: "my-certificate-authority",
+ *   caPool: "my-ca-pool",
  * });
  * ```
  *
@@ -846,6 +891,32 @@ export const CertificateAuthorityProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ certificateAuthorityId, caPool, location }) {
+      const env = yield* GcpEnvironment.current;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (typeof caPool !== "string" || caPool.length === 0) {
+        return undefined;
+      }
+      const { parent } = resolveParent(
+        env.project,
+        typeof caPool === "string" ? caPool : "",
+        location ?? env.region,
+      );
+      const name = resourceName(parent, certificateAuthorityId);
+      if (name.endsWith("/certificateAuthorities/") || name.endsWith("/_")) {
+        return undefined;
+      }
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      if ((existing.state ?? "").toUpperCase() === "DELETED") {
+        return undefined;
+      }
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

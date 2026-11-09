@@ -95,8 +95,25 @@ export interface Policy extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 > {}
+
+/**
+ * Props for {@link Policy.lookup}: find an organization policy (an SCP, tag
+ * policy, ...) this stack doesn't manage, in the ambient organization.
+ */
+export type PolicyLookup =
+  | {
+      /** The id of the existing policy, e.g. `p-abcd1234`. */
+      policyId: string;
+    }
+  | {
+      /** The policy's type. */
+      type: organizations.PolicyType;
+      /** The name of the existing policy. */
+      name: string;
+    };
 
 /**
  * An AWS Organizations policy such as an SCP or tag policy.
@@ -154,6 +171,17 @@ export interface Policy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyId`, or `type` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach an existing SCP to an OU
+ * ```typescript
+ * const denyRegions = AWS.Organizations.Policy.lookup({ type: "SERVICE_CONTROL_POLICY", name: "deny-regions" });
+ * const policyId = denyRegions.policyId;
+ * ```
+ *
  * @resource
  */
 export const Policy = Resource<Policy>("AWS.Organizations.Policy");
@@ -175,6 +203,11 @@ export const PolicyProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          return "policyId" in props
+            ? yield* readPolicyById(props.policyId)
+            : yield* readPolicyByName({ type: props.type, name: props.name });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.policyId

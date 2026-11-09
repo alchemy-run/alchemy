@@ -67,6 +67,7 @@ type RpcProviderService<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > = Omit<
   Provider.ProviderService<
     R,
@@ -77,7 +78,8 @@ type RpcProviderService<
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
   "list"
 > &
@@ -92,7 +94,8 @@ type RpcProviderService<
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "list"
     >
@@ -115,6 +118,7 @@ const withDefaultList = <
   TailReq,
   LogsReq,
   ListReq,
+  LookupReq,
 >(
   provider: RpcProviderService<
     R,
@@ -125,7 +129,8 @@ const withDefaultList = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
 ): Provider.ProviderService<
   R,
@@ -136,7 +141,8 @@ const withDefaultList = <
   DeleteReq,
   TailReq,
   LogsReq,
-  ListReq
+  ListReq,
+  LookupReq
 > =>
   (provider.list
     ? provider
@@ -152,7 +158,8 @@ const withDefaultList = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >;
 
 export const effect = <
@@ -166,6 +173,7 @@ export const effect = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   providersUrl: string,
@@ -179,7 +187,8 @@ export const effect = <
       DeleteReq,
       TailReq,
       LogsReq,
-      ListReq
+      ListReq,
+      LookupReq
     >,
     never,
     Req

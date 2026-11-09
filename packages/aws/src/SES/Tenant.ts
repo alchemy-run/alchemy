@@ -73,11 +73,21 @@ export interface Tenant extends Resource<
     tenantArn: string;
   },
   never,
-  Providers
+  Providers,
+  TenantLookup
 > {}
 
 /**
- * An Amazon SES v2 tenant -- a logical container that groups related SES
+ * Props for {@link Tenant.lookup}: find a tenant this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TenantLookup {
+  /** The tenant name of the existing tenant. */
+  tenantName: string;
+}
+
+/**
+ * An Amazon SES v2 tenant — a logical container that groups related SES
  * resources (email identities, configuration sets, templates) together, each
  * with its own reputation metrics, sending status, and optional
  * tenant-scoped suppression list. Useful for isolating email sending across
@@ -153,6 +163,16 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing tenant
+ * `Tenant.lookup` references a tenant Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tenantName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tenant
+ * ```typescript
+ * const existing = AWS.SES.Tenant.lookup({ tenantName: "my-tenant" });
+ * ```
+ *
  * @resource
  */
 export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
@@ -205,6 +225,17 @@ export const TenantProvider = () =>
                   ]
                 : [],
             );
+        }),
+
+        lookup: Effect.fn(function* ({ tenantName: name }) {
+          const found = yield* getTenant(name);
+          if (!found || !found.TenantId || !found.TenantArn) return undefined;
+          const attrs = {
+            tenantName: name,
+            tenantId: found.TenantId,
+            tenantArn: found.TenantArn,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

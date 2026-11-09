@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceNameOf,
@@ -105,11 +106,36 @@ export type AppProfile = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppProfileLookup
 >;
 
 /**
- * A Cloud Bigtable app profile -- how client traffic is routed across
+ * Props for {@link AppProfile.lookup}: find an app profile this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppProfileLookup {
+  /**
+   * App profile id (the `{appProfile}` segment of
+   * `.../instances/{instance}/appProfiles/{appProfile}`). Must be 1-50
+   * characters.
+   */
+  appProfileId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Bigtable app profile — how client traffic is routed across
  * clusters in an instance.
  *
  * The parent instance must already exist. Every instance has a built-in
@@ -141,6 +167,20 @@ export type AppProfile = Resource<
  *     clusterId: "cluster",
  *     allowTransactionalWrites: true,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing app profile
+ * `AppProfile.lookup` references an app profile Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * app profile.
+ *
+ * **Example:** Reference an existing app profile
+ * ```typescript
+ * const appProfile = GCP.Bigtable.AppProfile.lookup({
+ *   appProfileId: "my-app-profile",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -264,6 +304,17 @@ export const AppProfileProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ appProfileId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const name = instance
+        ? `${instanceNameOf(env.project, instance)}/appProfiles/${appProfileId}`
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

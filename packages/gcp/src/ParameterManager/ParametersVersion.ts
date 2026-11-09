@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -103,11 +104,42 @@ export type ParametersVersion = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ParametersVersionLookup
 >;
 
 /**
- * A Parameter Manager parameter version -- an immutable payload attached
+ * Props for {@link ParametersVersion.lookup}: find a parameters version
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ParametersVersionLookup {
+  /**
+   * Version id (the `{version}` segment of
+   * `.../parameters/{parameter}/versions/{version}`). Must be 1-63
+   * characters, start with a letter, and match `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  parameterVersionId: string;
+  /**
+   * Parameter Manager location used when `parameter` is a bare id. `GLOBAL`
+   * is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Parent parameter. Full name
+   * `projects/{project}/locations/{location}/parameters/{parameter}` or the
+   * parameter id (combined with `location`).
+   */
+  parameter: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Parameter Manager parameter version — an immutable payload attached
  * to a {@link Parameter}. Versions have no labels field; `list` / nuke
  * find versions whose parent parameter carries Alchemy labels.
  *
@@ -143,6 +175,20 @@ export type ParametersVersion = Resource<
  *   parameterVersionId: "v1",
  *   data: "host=api.example.com",
  *   disabled: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing parameters version
+ * `ParametersVersion.lookup` references a parameters version Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared parameters version.
+ *
+ * **Example:** Reference an existing parameters version
+ * ```typescript
+ * const parametersVersion = GCP.ParameterManager.ParametersVersion.lookup({
+ *   parameterVersionId: "my-parameter-version",
+ *   parameter: "my-parameter",
  * });
  * ```
  *
@@ -229,6 +275,22 @@ export const ParametersVersionProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({
+      parameterVersionId,
+      location: lookupLocation,
+      parameter: lookupParameter,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? locationFromParameter(lookupParameter, DEFAULT_LOCATION),
+      );
+      const parameter = expandParameter(lookupParameter ?? "", env.project, location);
+      const name = versionResourceName(parameter, parameterVersionId);
+      const existing = yield* getVersion(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

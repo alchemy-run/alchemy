@@ -42,11 +42,21 @@ export interface Application extends Resource<
     computePlatform: string;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
 
 /**
- * An AWS CodeDeploy application -- a logical container that groups the
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApplicationLookup {
+  /** The name of the existing application. */
+  applicationName: string;
+}
+
+/**
+ * An AWS CodeDeploy application — a logical container that groups the
  * deployment groups and revisions for a single deployable unit on a given
  * compute platform (EC2/on-prem `Server`, `Lambda`, or `ECS`).
  *
@@ -65,6 +75,16 @@ export interface Application extends Resource<
  *   computePlatform: "Server",
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.CodeDeploy.Application.lookup({ applicationName: "..." });
  * ```
  *
  * @resource
@@ -132,6 +152,20 @@ export const ApplicationProvider = () =>
           if ((news?.computePlatform ?? "Server") !== (olds?.computePlatform ?? "Server")) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ applicationName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const application = yield* getApplication(name);
+          if (application?.applicationId === undefined) return undefined;
+          const arn = applicationArn(region, accountId, name);
+          const attrs = {
+            applicationName: application.applicationName ?? name,
+            applicationId: application.applicationId,
+            applicationArn: arn,
+            computePlatform: application.computePlatform ?? "Server",
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

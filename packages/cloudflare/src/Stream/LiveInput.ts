@@ -110,7 +110,25 @@ export type LiveInputAttributes = {
   meta: Record<string, unknown>;
 };
 
-export type LiveInput = Resource<TypeId, LiveInputProps, LiveInputAttributes, never, Providers>;
+export type LiveInput = Resource<
+  TypeId,
+  LiveInputProps,
+  LiveInputAttributes,
+  never,
+  Providers,
+  LiveInputLookup
+>;
+
+/**
+ * Props for {@link LiveInput.lookup}: find a live input this stack doesn't
+ * manage, by its id.
+ */
+export interface LiveInputLookup {
+  /**
+   * The uid of the existing live input.
+   */
+  liveInputId: string;
+}
 
 /**
  * A Cloudflare Stream live input -- an ingest endpoint (RTMPS/SRT/WebRTC)
@@ -148,6 +166,23 @@ export type LiveInput = Resource<TypeId, LiveInputProps, LiveInputAttributes, ne
  * });
  * ```
  *
+ * ### Looking up an existing live input
+ * `LiveInput.lookup` references an input Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `liveInputId`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Restream an existing input
+ * ```typescript
+ * const input = Cloudflare.Stream.LiveInput.lookup({
+ *   liveInputId: "66be4bf738797e01e1fca35a7bdecdcd",
+ * });
+ * yield* Cloudflare.Stream.LiveInputOutput("YouTube", {
+ *   liveInputId: input.liveInputId,
+ *   url: "rtmps://a.rtmps.youtube.com/live2",
+ *   streamKey: youtubeStreamKey,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/stream/stream-live/
  *
  * @resource
@@ -175,6 +210,12 @@ export const LiveInputProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ liveInputId }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getLiveInput(accountId, liveInputId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
+
     read: Effect.fn(function* ({ output }) {
       // Live inputs have no deterministic name or tags, so a cold read
       // (state lost before the uid was persisted) cannot recover the
@@ -197,7 +238,7 @@ export const LiveInputProvider = () =>
         .map((li) => toAttributes(li, accountId));
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const meta = news.meta ?? {
         name: yield* createPhysicalName({ id, lowercase: true }),

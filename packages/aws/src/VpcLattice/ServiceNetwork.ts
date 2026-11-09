@@ -67,11 +67,21 @@ export interface ServiceNetwork extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServiceNetworkLookup
 > {}
 
 /**
- * An Amazon VPC Lattice service network -- the logical boundary that connects
+ * Props for {@link ServiceNetwork.lookup}: find a service network this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceNetworkLookup {
+  /** The id of the existing service network. */
+  serviceNetworkId: string;
+}
+
+/**
+ * An Amazon VPC Lattice service network — the logical boundary that connects
  * services and VPCs into one application network. Cheap control-plane resource
  * with no per-hour charge until VPCs or services are associated.
  *
@@ -87,6 +97,16 @@ export interface ServiceNetwork extends Resource<
  *   authType: "AWS_IAM",
  *   tags: { Environment: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing service network
+ * `ServiceNetwork.lookup` references a service network Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceNetworkId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service network
+ * ```typescript
+ * const existing = AWS.VpcLattice.ServiceNetwork.lookup({ serviceNetworkId: "..." });
  * ```
  *
  * @resource
@@ -274,6 +294,21 @@ export const ServiceNetworkProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ serviceNetworkId }) {
+          const network = yield* observe(serviceNetworkId);
+          if (!network?.arn || !network.id) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({
+            resourceArn: network.arn,
+          });
+          const attrs = {
+            serviceNetworkId: network.id,
+            serviceNetworkArn: network.arn,
+            name: network.name!,
+            authType: (network.authType as ServiceNetworkAuthType) ?? "NONE",
+            tags: tagRecord(listed.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const network = output?.serviceNetworkId

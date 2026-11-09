@@ -63,11 +63,23 @@ export interface Type extends Resource<
     keyspaceArn: string;
   },
   never,
-  Providers
+  Providers,
+  TypeLookup
 > {}
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) -- a
+ * Props for {@link Type.lookup}: find a user-defined type this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TypeLookup {
+  /** The keyspace the type belongs to. */
+  keyspaceName: string;
+  /** The name of the existing type. */
+  typeName: string;
+}
+
+/**
+ * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) — a
  * named group of fields usable as a column type in tables of the same
  * keyspace.
  *
@@ -97,6 +109,16 @@ export interface Type extends Resource<
  *   ],
  *   partitionKeys: ["id"],
  * });
+ * ```
+ *
+ * ### Looking up an existing user-defined type
+ * `Type.lookup` references a user-defined type Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName` and `typeName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user-defined type
+ * ```typescript
+ * const address = AWS.Keyspaces.Type.lookup({ keyspaceName: "app", typeName: "address" });
  * ```
  *
  * @resource
@@ -148,6 +170,10 @@ export const TypeProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ keyspaceName, typeName }) {
+          const found = yield* readType(keyspaceName, typeName);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = (olds ?? {}) as Partial<TypeProps>;
           const keyspaceName = output?.keyspaceName ?? props.keyspaceName;

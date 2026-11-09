@@ -124,6 +124,14 @@ export type TestEvent =
       readonly logs?: ReadonlyArray<LogEntry>;
     }
   | {
+      /**
+       * The test holds its run lock (`exclusive`) and starts executing. Until
+       * then it is queued: an exclusive test can wait out a busy phase.
+       */
+      readonly _tag: "TestLocked";
+      readonly test: TestMeta;
+    }
+  | {
       readonly _tag: "TestEnd";
       readonly test: TestMeta;
       readonly result: TestResult;

@@ -82,11 +82,27 @@ export interface RegexPatternSet extends Resource<
     regularExpressions: string[];
   },
   never,
-  Providers
+  Providers,
+  RegexPatternSetLookup
 > {}
 
 /**
- * An AWS WAFv2 regex pattern set -- a named collection of regular expressions
+ * Props for {@link RegexPatternSet.lookup}: find a regex pattern set this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface RegexPatternSetLookup {
+  /** The name of the existing regex pattern set. */
+  regexPatternSetName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
+
+/**
+ * An AWS WAFv2 regex pattern set — a named collection of regular expressions
  * referenced from web ACL and rule group rules via
  * `RegexPatternSetReferenceStatement`.
  *
@@ -121,6 +137,17 @@ export interface RegexPatternSet extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing regex pattern set
+ * `RegexPatternSet.lookup` references a regex pattern set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `regexPatternSetName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing regex pattern set
+ * ```typescript
+ * const bots = AWS.WAFv2.RegexPatternSet.lookup({ regexPatternSetName: "bad-bots" });
+ * const regexPatternSetArn = bots.regexPatternSetArn;
  * ```
  *
  * @resource
@@ -263,6 +290,11 @@ export const RegexPatternSetProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ regexPatternSetName, scope = defaultScope }) {
+          const found = yield* findSet(scope, regexPatternSetName, undefined);
+          return found?.RegexPatternSet ? toAttrs(found.RegexPatternSet, scope) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

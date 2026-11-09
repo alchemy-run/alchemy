@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -151,11 +152,35 @@ export type UnitKind = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UnitKindLookup
 >;
 
 /**
- * An App Lifecycle Manager unit kind -- the blueprint family that Units
+ * Props for {@link UnitKind.lookup}: find an unit kind this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface UnitKindLookup {
+  /**
+   * UnitKind id (the `{unitKind}` segment of
+   * `projects/{project}/locations/{location}/unitKinds/{unitKind}`).
+   */
+  unitKindId: string;
+  /**
+   * Region of the unit kind (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An App Lifecycle Manager unit kind — the blueprint family that Units
  * of a SaaS share.
  *
  * Units of the same kind follow the same release model and are typically
@@ -183,6 +208,18 @@ export type UnitKind = Resource<
  *   saas: product.name,
  *   defaultRelease: release.name,
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing unit kind
+ * `UnitKind.lookup` references an unit kind Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared unit kind.
+ *
+ * **Example:** Reference an existing unit kind
+ * ```typescript
+ * const unitKind = GCP.SaasServiceManagement.UnitKind.lookup({
+ *   unitKindId: "my-unit-kind",
  * });
  * ```
  *
@@ -283,6 +320,15 @@ export const UnitKindProvider = () =>
               fingerprint(olds?.dependencies ?? output?.dependencies)),
       });
     }),
+
+    lookup: Effect.fn(function* ({ unitKindId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, unitKindId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

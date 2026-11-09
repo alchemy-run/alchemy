@@ -97,11 +97,25 @@ export interface Environment extends Resource<
     environmentProfileId: string | undefined;
     /** The identifier of the blueprint the environment came from. */
     environmentBlueprintId: string | undefined;
-  }
+  },
+  never,
+  undefined,
+  EnvironmentLookup
 > {}
 
 /**
- * An Amazon DataZone environment -- the provisioned collection of AWS
+ * Props for {@link Environment.lookup}: find an environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EnvironmentLookup {
+  /** The domain the environment belongs to. */
+  domainId: string;
+  /** The id of the existing environment. */
+  environmentId: string;
+}
+
+/**
+ * An Amazon DataZone environment — the provisioned collection of AWS
  * resources (Glue databases, IAM roles, Athena workgroups, ...) a project
  * works with, deployed from an environment blueprint via CloudFormation.
  *
@@ -133,6 +147,16 @@ export interface Environment extends Resource<
  *     { name: "glueDbName", value: "analytics_db" },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainId` and `environmentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const analytics = AWS.DataZone.Environment.lookup({ domainId, environmentId: "abcdefghijklmn" });
  * ```
  *
  * @resource
@@ -292,6 +316,12 @@ export const EnvironmentProvider = () =>
         // no account-level enumeration without those identifiers.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ domainId, environmentId }) {
+          const env = yield* getEnvironmentOrUndefined(domainId, environmentId);
+          if (env === undefined || env.status === "DELETING" || env.status === "DELETED")
+            return undefined;
+          return toAttributes(env, environmentId);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const domainId = output?.domainId ?? olds?.domainId;
           const projectId = output?.projectId ?? olds?.projectId;

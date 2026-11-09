@@ -116,8 +116,29 @@ export type OrganizationsFirewallEndpoint = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsFirewallEndpointLookup
 >;
+
+/**
+ * Props for {@link OrganizationsFirewallEndpoint.lookup}: find an
+ * organizations firewall endpoint this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsFirewallEndpointLookup {
+  /**
+   * Firewall endpoint id.
+   */
+  firewallEndpointId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Zone (`us-central1-a`, …). Firewall endpoints are zonal.
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped Cloud NGFW firewall endpoint.
@@ -149,6 +170,19 @@ export type OrganizationsFirewallEndpoint = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations firewall endpoint
+ * `OrganizationsFirewallEndpoint.lookup` references an organizations
+ * firewall endpoint Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared organizations firewall endpoint.
+ *
+ * **Example:** Reference an existing organizations firewall endpoint
+ * ```typescript
+ * const organizationsFirewallEndpoint = GCP.NetworkSecurity.OrganizationsFirewallEndpoint.lookup({
+ *   firewallEndpointId: "my-firewall-endpoint",
+ * });
  * ```
  *
  * @resource
@@ -274,6 +308,23 @@ export const OrganizationsFirewallEndpointProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      firewallEndpointId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeZone(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, firewallEndpointId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

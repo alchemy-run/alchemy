@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -131,11 +132,36 @@ export type InsightsConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InsightsConfigLookup
 >;
 
 /**
- * A Developer Connect InsightsConfig -- the SDLC event hub that ties an
+ * Props for {@link InsightsConfig.lookup}: find an insights config this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InsightsConfigLookup {
+  /**
+   * Insights config id (the `{insightsConfig}` segment of
+   * `projects/{project
+   * }/locations/{location}/insightsConfigs/{insightsConfig}`).
+   */
+  insightsConfigId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Developer Connect InsightsConfig — the SDLC event hub that ties an
  * App Hub application, runtime environments, and deployed artifacts
  * together.
  *
@@ -178,6 +204,19 @@ export type InsightsConfig = Resource<
  *   insightsConfigId: "app-sdlc",
  *   projects: { projectIds: ["{project}"] },
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing insights config
+ * `InsightsConfig.lookup` references an insights config Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * insights config.
+ *
+ * **Example:** Reference an existing insights config
+ * ```typescript
+ * const insightsConfig = GCP.DeveloperConnect.InsightsConfig.lookup({
+ *   insightsConfigId: "my-insights-config",
  * });
  * ```
  *
@@ -290,6 +329,15 @@ export const InsightsConfigProvider = () =>
               fingerprint(news.projects?.projectIds ?? [])),
       });
     }),
+
+    lookup: Effect.fn(function* ({ insightsConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, insightsConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

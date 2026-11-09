@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -112,11 +113,21 @@ export interface AccessPoint extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AccessPointLookup
 > {}
 
 /**
- * An Amazon S3 File System Access Point -- application-specific access to a
+ * Props for {@link AccessPoint.lookup}: find an access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AccessPointLookup {
+  /** The id of the existing access point. */
+  accessPointId: string;
+}
+
+/**
+ * An Amazon S3 File System Access Point — application-specific access to a
  * {@link FileSystem} with POSIX user identity and root directory
  * enforcement, for managing shared datasets in multi-tenant scenarios.
  *
@@ -140,6 +151,16 @@ export interface AccessPoint extends Resource<
  *     creationPermissions: { ownerUid: 1000, ownerGid: 1000, permissions: "0755" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing access point
+ * `AccessPoint.lookup` references an access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accessPointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing access point
+ * ```typescript
+ * const app = AWS.S3Files.AccessPoint.lookup({ accessPointId });
  * ```
  *
  * @resource
@@ -244,6 +265,10 @@ export const AccessPointProvider = () =>
             }
             return out;
           }),
+        lookup: Effect.fn(function* ({ accessPointId }) {
+          const found = yield* observe(accessPointId);
+          return found === undefined ? undefined : toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.accessPointId !== undefined
@@ -265,7 +290,8 @@ export const AccessPointProvider = () =>
           // fall through: engine default update (tags sync)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 

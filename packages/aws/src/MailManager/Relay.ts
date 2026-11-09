@@ -56,11 +56,21 @@ export interface Relay extends Resource<
     relayName: string;
   },
   never,
-  Providers
+  Providers,
+  RelayLookup
 > {}
 
 /**
- * An SES Mail Manager relay -- a downstream SMTP destination that rule-set
+ * Props for {@link Relay.lookup}: find a relay this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RelayLookup {
+  /** The name of the existing relay. */
+  relayName: string;
+}
+
+/**
+ * An SES Mail Manager relay — a downstream SMTP destination that rule-set
  * `Relay` actions forward incoming email to (e.g. an on-prem Exchange
  * server or a third-party filter).
  *
@@ -97,6 +107,16 @@ export interface Relay extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing relay
+ * `Relay.lookup` references a relay Alchemy doesn't manage (created in the
+ * console or by another stack), found by `relayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing relay
+ * ```typescript
+ * const existing = AWS.MailManager.Relay.lookup({ relayName: "smarthost" });
  * ```
  *
  * @resource
@@ -171,6 +191,10 @@ export const RelayProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ relayName }) {
+          const found = yield* observe(undefined, relayName);
+          return found === undefined ? undefined : yield* toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.relayName ?? (yield* createName(id, olds ?? {}));
           const relay = yield* observe(output, name);

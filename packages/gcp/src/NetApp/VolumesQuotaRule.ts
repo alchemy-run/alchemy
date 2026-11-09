@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,36 @@ export type VolumesQuotaRule = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumesQuotaRuleLookup
 >;
+
+/**
+ * Props for {@link VolumesQuotaRule.lookup}: find a volumes quota rule this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface VolumesQuotaRuleLookup {
+  /**
+   * Quota rule id (the `{quotaRule}` segment).
+   */
+  quotaRuleId: string;
+  /**
+   * Region used when `volume` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent volume. Full name
+   * `projects/{project}/locations/{location}/volumes/{volume}` or the
+   * volume id (combined with `location`).
+   */
+  volume: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes quota rule that caps disk usage for a user or
@@ -145,6 +174,20 @@ export type VolumesQuotaRule = Resource<
  *   diskLimitMib: 4096,
  *   description: "default user v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing volumes quota rule
+ * `VolumesQuotaRule.lookup` references a volumes quota rule Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * volumes quota rule.
+ *
+ * **Example:** Reference an existing volumes quota rule
+ * ```typescript
+ * const volumesQuotaRule = GCP.NetApp.VolumesQuotaRule.lookup({
+ *   quotaRuleId: "my-quota-rule",
+ *   volume: "my-volume",
  * });
  * ```
  *
@@ -217,6 +260,18 @@ export const VolumesQuotaRuleProvider = () =>
           (previousTarget ?? "") !== (news.target ?? previousTarget ?? ""),
       });
     }),
+
+    lookup: Effect.fn(function* ({ quotaRuleId, location: lookupLocation, volume: lookupVolume }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A row whose lookupVolume never resolved (failed create) has nothing to read.
+      if (!lookupVolume) return undefined;
+      const volume = expandParent(lookupVolume ?? "", env.project, location, "volumes");
+      const name = resourceName(volume, quotaRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

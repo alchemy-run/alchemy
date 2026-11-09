@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 export class OriginRequestPolicyConflict extends Data.TaggedError("OriginRequestPolicyConflict")<{
@@ -78,8 +79,23 @@ export interface OriginRequestPolicy extends Resource<
     queryStringsConfig: cloudfront.OriginRequestPolicyQueryStringsConfig;
   },
   never,
-  Providers
+  Providers,
+  OriginRequestPolicyLookup
 > {}
+
+/**
+ * Props for {@link OriginRequestPolicy.lookup}: find an origin request policy this stack doesn't
+ * manage, custom or AWS managed.
+ */
+export type OriginRequestPolicyLookup =
+  | {
+      /** The id of the existing policy. */
+      originRequestPolicyId: string;
+    }
+  | {
+      /** The policy's name, including AWS managed policies such as `Managed-AllViewer`. */
+      name: string;
+    };
 
 /**
  * A CloudFront origin request policy.
@@ -100,6 +116,17 @@ export interface OriginRequestPolicy extends Resource<
  *   cookiesConfig: { CookieBehavior: "all" },
  *   queryStringsConfig: { QueryStringBehavior: "all" },
  * });
+ * ```
+ *
+ * ### Looking up an existing origin request policy
+ * `OriginRequestPolicy.lookup` references an origin request policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `originRequestPolicyId` or `name`, AWS managed policies included. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Use an AWS managed policy
+ * ```typescript
+ * const policy = AWS.CloudFront.OriginRequestPolicy.lookup({ name: "Managed-AllViewer" });
+ * const originRequestPolicyId = policy.originRequestPolicyId;
  * ```
  *
  * @resource
@@ -167,6 +194,26 @@ export const OriginRequestPolicyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const id =
+            "originRequestPolicyId" in props
+              ? props.originRequestPolicyId
+              : (yield* single(
+                  "AWS.CloudFront.OriginRequestPolicy",
+                  props.name,
+                  (
+                    (yield* cloudfront.listOriginRequestPolicies({})).OriginRequestPolicyList
+                      ?.Items ?? []
+                  ).filter(
+                    (item) =>
+                      item.OriginRequestPolicy?.OriginRequestPolicyConfig?.Name === props.name,
+                  ),
+                  (item) => item.OriginRequestPolicy?.Id,
+                ))?.OriginRequestPolicy?.Id;
+          if (id === undefined) return undefined;
+          const found = yield* getById(id);
+          return found ? toAttrs(id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.originRequestPolicyId) {

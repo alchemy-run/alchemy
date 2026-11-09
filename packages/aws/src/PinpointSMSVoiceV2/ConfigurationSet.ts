@@ -52,8 +52,18 @@ export interface ConfigurationSet extends Resource<
     configurationSetArn: string;
   },
   never,
-  Providers
+  Providers,
+  ConfigurationSetLookup
 > {}
+
+/**
+ * Props for {@link ConfigurationSet.lookup}: find a configuration set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConfigurationSetLookup {
+  /** The configuration set name of the existing configuration set. */
+  configurationSetName: string;
+}
 
 /**
  * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) configuration
@@ -88,6 +98,16 @@ export interface ConfigurationSet extends Resource<
  *   matchingEventTypes: ["ALL"],
  *   snsDestination: { topicArn: events.topicArn },
  * });
+ * ```
+ *
+ * ### Looking up an existing configuration set
+ * `ConfigurationSet.lookup` references a configuration set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `configurationSetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing configuration set
+ * ```typescript
+ * const existing = AWS.PinpointSMSVoiceV2.ConfigurationSet.lookup({ configurationSetName: "my-configuration-set" });
  * ```
  *
  * @resource
@@ -130,6 +150,16 @@ export const ConfigurationSetProvider = () =>
 
       return {
         stables: ["configurationSetName", "configurationSetArn"],
+
+        lookup: Effect.fn(function* ({ configurationSetName: name }) {
+          const observed = yield* getByName(name);
+          if (observed === undefined) return undefined;
+          const attrs = {
+            configurationSetName: observed.ConfigurationSetName,
+            configurationSetArn: observed.ConfigurationSetArn,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.configurationSetName ?? (yield* toName(id, olds ?? {}));

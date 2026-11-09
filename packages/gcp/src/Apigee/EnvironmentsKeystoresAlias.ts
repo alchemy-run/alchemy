@@ -136,11 +136,36 @@ export type EnvironmentsKeystoresAlias = Resource<
     expiryDate: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsKeystoresAliasLookup
 >;
 
 /**
- * An alias in an Apigee environment keystore -- a certificate or
+ * Props for {@link EnvironmentsKeystoresAlias.lookup}: find an environments
+ * keystores alias this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsKeystoresAliasLookup {
+  /**
+   * Alias id. Must match `[\w\s-.]{1,255}`.
+   */
+  aliasId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+  /**
+   * Parent keystore id or
+   * `organizations/{org}/environments/{env}/keystores/{keystore}`.
+   */
+  keystore: string;
+}
+
+/**
+ * An alias in an Apigee environment keystore — a certificate or
  * key/certificate pair used for TLS.
  *
  * Aliases have no labels or description, so `list` enumerates every alias
@@ -158,6 +183,21 @@ export type EnvironmentsKeystoresAlias = Resource<
  *   environment: "eval",
  *   keystore: keystore.keystoreId,
  *   subject: { commonName: "api.example.com" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments keystores alias
+ * `EnvironmentsKeystoresAlias.lookup` references an environments keystores
+ * alias Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared environments keystores alias.
+ *
+ * **Example:** Reference an existing environments keystores alias
+ * ```typescript
+ * const environmentsKeystoresAlias = GCP.Apigee.EnvironmentsKeystoresAlias.lookup({
+ *   aliasId: "my-alias",
+ *   environment: "my-environment",
+ *   keystore: "my-keystore",
  * });
  * ```
  *
@@ -273,6 +313,17 @@ export const EnvironmentsKeystoresAliasProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ aliasId, organization, environment, keystore }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const keystoreId = keystoreIdOf(keystore ?? "");
+      const name = resourceName(organizationId, environmentId, keystoreId, aliasId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId, keystoreId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

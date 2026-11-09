@@ -73,8 +73,23 @@ export interface PublicKey extends Resource<
     comment: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PublicKeyLookup
 > {}
+
+/**
+ * Props for {@link PublicKey.lookup}: find a public key this stack doesn't
+ * manage, in the ambient account.
+ */
+export type PublicKeyLookup =
+  | {
+      /** The id of the existing public key. */
+      publicKeyId: string;
+    }
+  | {
+      /** The name of the existing public key. */
+      name: string;
+    };
 
 /**
  * A CloudFront public key.
@@ -91,6 +106,17 @@ export interface PublicKey extends Resource<
  *   encodedKey: Redacted.make(yield* fs.readFileString("./public_key.pem")),
  *   comment: "RSA-2048 signed URL key for /private",
  * });
+ * ```
+ *
+ * ### Looking up an existing public key
+ * `PublicKey.lookup` references a public key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `publicKeyId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Sign URLs with an existing public key
+ * ```typescript
+ * const signers = AWS.CloudFront.PublicKey.lookup({ name: "signers" });
+ * const publicKeyId = signers.publicKeyId;
  * ```
  *
  * @resource
@@ -189,6 +215,16 @@ export const PublicKeyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "publicKeyId" in props
+              ? Option.fromUndefinedOr(yield* getById(props.publicKeyId)).pipe(
+                  Option.map((f) => ({ ...f, id: props.publicKeyId })),
+                  Option.getOrUndefined,
+                )
+              : yield* getByName(props.name);
+          return found ? toAttrs(found.id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.publicKeyId) {

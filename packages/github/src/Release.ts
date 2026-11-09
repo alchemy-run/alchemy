@@ -136,8 +136,27 @@ export interface Release extends Resource<
     publishedAt: string | null;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  ReleaseLookup
 > {}
+
+/**
+ * Props for {@link Release.lookup}: find a release this stack
+ * doesn't manage by its repository and tag.
+ */
+export interface ReleaseLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Git tag the release is for. */
+  tag: string;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub release.
@@ -283,6 +302,17 @@ export interface Release extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing release
+ * `Release.lookup` references a release Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ * Draft releases have no tag yet, so a lookup finds only published ones.
+ *
+ * **Example:** Reference an existing release
+ * ```typescript
+ * const latest = GitHub.Release.lookup({ owner: "alchemy-run", repository: "alchemy", tag: "v2.0.0" });
+ * ```
+ *
  * @resource
  * @product Release
  */
@@ -311,6 +341,16 @@ export const ReleaseProvider = () =>
       const observed = yield* findRelease(olds, output?.releaseId);
       return observed === undefined ? undefined : attrsOf(observed);
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, repository, tag }) {
+        return yield* Repos.getReleaseByTag({ owner, repo: repository, tag }).pipe(
+          Effect.map(attrsOf),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, output }) {

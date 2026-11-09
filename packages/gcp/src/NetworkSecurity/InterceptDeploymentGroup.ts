@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -116,11 +117,36 @@ export type InterceptDeploymentGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptDeploymentGroupLookup
 >;
 
 /**
- * A global intercept deployment group -- aggregates zonal intercept
+ * Props for {@link InterceptDeploymentGroup.lookup}: find an intercept
+ * deployment group this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InterceptDeploymentGroupLookup {
+  /**
+   * Deployment group id (the `{interceptDeploymentGroup}` segment of
+   * `projec
+   * ts/{project}/locations/global/interceptDeploymentGroups/{interceptDeploy
+   * mentGroup}`).
+   */
+  interceptDeploymentGroupId: string;
+  /**
+   * Location. Intercept deployment groups are global.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A global intercept deployment group — aggregates zonal intercept
  * backends into a single intercept service that consumers attach via
  * an endpoint group.
  *
@@ -134,6 +160,19 @@ export type InterceptDeploymentGroup = Resource<
  *   network: `projects/${vpc.project}/global/networks/${vpc.networkName}`,
  *   description: "prod intercept",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing intercept deployment group
+ * `InterceptDeploymentGroup.lookup` references an intercept deployment
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared intercept deployment group.
+ *
+ * **Example:** Reference an existing intercept deployment group
+ * ```typescript
+ * const interceptDeploymentGroup = GCP.NetworkSecurity.InterceptDeploymentGroup.lookup({
+ *   interceptDeploymentGroupId: "my-intercept-deployment-group",
  * });
  * ```
  *
@@ -210,6 +249,15 @@ export const InterceptDeploymentGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interceptDeploymentGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, interceptDeploymentGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -81,11 +81,21 @@ export interface Link extends Resource<
     sinkArn: string;
   },
   never,
-  Providers
+  Providers,
+  LinkLookup
 > {}
 
 /**
- * A CloudWatch cross-account observability **link** -- created in a source
+ * Props for {@link Link.lookup}: find an observability link this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LinkLookup {
+  /** The ARN of the existing link. */
+  linkArn: string;
+}
+
+/**
+ * A CloudWatch cross-account observability **link** — created in a source
  * account, it attaches to a monitoring-account {@link Sink} and shares the
  * selected telemetry types (metrics, log groups, traces, Application
  * Signals) with that account.
@@ -117,6 +127,16 @@ export interface Link extends Resource<
  *     metricConfiguration: { filter: "Namespace NOT LIKE 'AWS/%'" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing observability link
+ * `Link.lookup` references an observability link Alchemy doesn't manage (created in the
+ * console or by another stack), found by `linkArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing observability link
+ * ```typescript
+ * const toMonitoring = AWS.OAM.Link.lookup({ linkArn });
  * ```
  *
  * @resource
@@ -183,6 +203,16 @@ export const LinkProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ linkArn }) {
+          const found = yield* getLinkByArn(linkArn);
+          if (!found?.Arn) return undefined;
+          return {
+            linkArn: found.Arn,
+            linkId: found.Id!,
+            label: found.Label ?? "",
+            sinkArn: found.SinkArn ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, output }) {
           // Links are identified by an auto-assigned ARN. With a cached ARN
           // we look it up directly; without one (state persistence failed

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -179,11 +180,36 @@ export type CustomTargetType = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CustomTargetTypeLookup
 >;
 
 /**
- * A Cloud Deploy custom target type -- a reusable render/deploy
+ * Props for {@link CustomTargetType.lookup}: find a custom target type this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CustomTargetTypeLookup {
+  /**
+   * Custom target type id (the `{customTargetType}` segment of
+   * `projects/{pr
+   * oject}/locations/{location}/customTargetTypes/{customTargetType}`).
+   */
+  customTargetTypeId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Deploy custom target type — a reusable render/deploy
  * definition for deploying to systems besides the supported runtimes.
  *
  * Changing `customTargetTypeId` or `location` replaces the type.
@@ -221,6 +247,19 @@ export type CustomTargetType = Resource<
  *   customActions: { deployAction: "helm-deploy" },
  *   description: "helm custom target v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing custom target type
+ * `CustomTargetType.lookup` references a custom target type Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * custom target type.
+ *
+ * **Example:** Reference an existing custom target type
+ * ```typescript
+ * const customTargetType = GCP.CloudDeploy.CustomTargetType.lookup({
+ *   customTargetTypeId: "my-custom-target-type",
  * });
  * ```
  *
@@ -321,6 +360,15 @@ export const CustomTargetTypeProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ customTargetTypeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, customTargetTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

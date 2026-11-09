@@ -513,6 +513,7 @@ export const ServerProviderLocal = () =>
             yield* Effect.sync(() => {
               for (const [key, value] of Object.entries(props.env!)) {
                 if (value === undefined) continue;
+                // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports props.env into the sidecar's process env for the dev server, not config reading
                 process.env[key] = String(value);
               }
             });

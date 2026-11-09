@@ -169,11 +169,21 @@ export type TerminalLocation = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  TerminalLocationLookup
 >;
 
 /**
- * A Stripe Terminal Location -- a grouping of Terminal readers at a
+ * Props for {@link TerminalLocation.lookup}: find a Terminal location this stack
+ * doesn't manage by its id.
+ */
+export interface TerminalLocationLookup {
+  /** Stripe Terminal location id, e.g. `"tml_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Terminal Location — a grouping of Terminal readers at a
  * physical site. Display name, phone, metadata, configuration overrides,
  * and address fields other than `country` update in place. Changing
  * `address.country` replaces the location; re-register readers on the
@@ -242,6 +252,16 @@ export type TerminalLocation = Resource<
  *     country: "US",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Terminal location
+ * `TerminalLocation.lookup` references a Terminal location Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Terminal location
+ * ```typescript
+ * const ref = Stripe.TerminalLocation.lookup({ id: "tml_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -429,6 +449,11 @@ export const TerminalLocationProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

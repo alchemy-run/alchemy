@@ -240,8 +240,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster identifier of the existing cluster. */
+  clusterIdentifier: string;
+}
 
 /**
  * A provisioned Amazon Redshift data-warehouse cluster.
@@ -275,6 +285,16 @@ export interface Cluster extends Resource<
  *   publiclyAccessible: false,
  *   encrypted: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.Redshift.Cluster.lookup({ clusterIdentifier: "my-cluster" });
  * ```
  *
  * @resource
@@ -436,6 +456,13 @@ export const ClusterProvider = () =>
           if ((n.availabilityZone ?? undefined) !== (o.availabilityZone ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterIdentifier: identifier }) {
+          const cluster = yield* readCluster(identifier);
+          if (cluster === undefined) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

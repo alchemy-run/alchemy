@@ -59,11 +59,26 @@ export interface View extends Resource<
     scope: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ViewLookup
 > {}
 
 /**
- * An AWS Resource Explorer view -- a saved search lens with an optional
+ * Props for {@link View.lookup}: find a view this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ViewLookup =
+  | {
+      /** The ARN of the existing view. */
+      viewArn: string;
+    }
+  | {
+      /** The name of the existing view. */
+      viewName: string;
+    };
+
+/**
+ * An AWS Resource Explorer view — a saved search lens with an optional
  * filter and a set of included properties that `Search` queries run
  * through.
  *
@@ -99,6 +114,16 @@ export interface View extends Resource<
  *     return HttpServerResponse.json({ count: results.Count });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing view
+ * `View.lookup` references a view Alchemy doesn't manage (created in the
+ * console or by another stack), found by `viewArn` or `viewName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing view
+ * ```typescript
+ * const all = AWS.ResourceExplorer.View.lookup({ viewName: "all-resources" });
  * ```
  */
 const ViewResource = Resource<View>("AWS.ResourceExplorer.View");
@@ -212,6 +237,13 @@ export const ViewProvider = () =>
             return items.filter((item): item is View["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "viewArn" in props ? props.viewArn : yield* findViewArnByName(props.viewName);
+          if (arn === undefined) return undefined;
+          const found = yield* getViewSafe(arn);
+          if (!found?.View?.ViewArn) return undefined;
+          return toAttrs(found.View, found.View.ViewName ?? arn.split("/")[1]!);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Prefer the cached ARN; fall back to a by-name scan (state may
           // have been lost after a persistence failure).

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -82,11 +83,39 @@ export type AppsVersion = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsVersionLookup
 >;
 
 /**
- * A Customer Engagement Suite app version -- an immutable snapshot of an
+ * Props for {@link AppsVersion.lookup}: find an apps version this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppsVersionLookup {
+  /**
+   * App version id.
+   */
+  appVersionId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Customer Engagement Suite app version — an immutable snapshot of an
  * app at a point in time.
  *
  * Versions have no labels field and no patch RPC. Alchemy stamps
@@ -101,6 +130,20 @@ export type AppsVersion = Resource<
  *   app: app.name,
  *   displayName: "v1",
  *   description: "initial",
+ * });
+ * ```
+ *
+ * ### Looking up an existing apps version
+ * `AppsVersion.lookup` references an apps version Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apps version.
+ *
+ * **Example:** Reference an existing apps version
+ * ```typescript
+ * const appsVersion = GCP.CES.AppsVersion.lookup({
+ *   appVersionId: "my-app-version",
+ *   app: "my-app",
  * });
  * ```
  *
@@ -164,6 +207,16 @@ export const AppsVersionProvider = () =>
         nextParent: news.app,
       });
     }),
+
+    lookup: Effect.fn(function* ({ appVersionId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, appVersionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

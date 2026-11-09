@@ -53,11 +53,26 @@ export interface EmailContact extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  EmailContactLookup
 > {}
 
 /**
- * An AWS User Notifications Contacts **email contact** -- an email address
+ * Props for {@link EmailContact.lookup}: find an email contact this stack doesn't
+ * manage, in the ambient account.
+ */
+export type EmailContactLookup =
+  | {
+      /** The ARN of the existing email contact. */
+      emailContactArn: string;
+    }
+  | {
+      /** The contact's email address. */
+      emailAddress: string;
+    };
+
+/**
+ * An AWS User Notifications Contacts **email contact** — an email address
  * that can be attached to a notification configuration as a delivery
  * channel.
  *
@@ -85,6 +100,16 @@ export interface EmailContact extends Resource<
  *   emailAddress: "oncall@example.com",
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing email contact
+ * `EmailContact.lookup` references an email contact Alchemy doesn't manage (created in the
+ * console or by another stack), found by `emailContactArn` or `emailAddress`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing email contact
+ * ```typescript
+ * const ops = AWS.NotificationsContacts.EmailContact.lookup({ emailAddress: "ops@example.com" });
  * ```
  *
  * @resource
@@ -166,6 +191,13 @@ export const EmailContactProvider = () =>
             Effect.map((chunk) => Array.from(chunk).map(toAttrs)),
           ),
 
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "emailContactArn" in props
+              ? yield* getByArn(props.emailContactArn)
+              : yield* findByAddress(props.emailAddress);
+          return found ? toAttrs(found) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found = output?.emailContactArn
             ? yield* getByArn(output.emailContactArn)

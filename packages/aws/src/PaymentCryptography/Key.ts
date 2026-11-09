@@ -151,11 +151,21 @@ export interface Key extends Resource<
     exportable: boolean;
   },
   never,
-  Providers
+  Providers,
+  KeyLookup
 > {}
 
 /**
- * An AWS Payment Cryptography key -- a managed cryptographic key with TR-31
+ * Props for {@link Key.lookup}: find a key this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KeyLookup {
+  /** The key arn of the existing key. */
+  keyArn: string;
+}
+
+/**
+ * An AWS Payment Cryptography key — a managed cryptographic key with TR-31
  * attributes (algorithm, class, usage, modes of use) used for data
  * encryption, MAC generation/verification, and other payment-domain
  * cryptographic operations.
@@ -215,6 +225,16 @@ export interface Key extends Resource<
  *     return HttpServerResponse.json({ cipherText: result.CipherText });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing key
+ * `Key.lookup` references a key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing key
+ * ```typescript
+ * const existing = AWS.PaymentCryptography.Key.lookup({ keyArn: "my-key" });
  * ```
  *
  * @resource
@@ -311,6 +331,13 @@ export const KeyProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ keyArn }) {
+          if (keyArn === undefined) return undefined;
+          const key = yield* observeKey(keyArn);
+          if (key === undefined) return undefined;
+          const attrs = toAttrs(key);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           const keyArn = output?.keyArn ?? (yield* findKeyByTags(id));
           if (keyArn === undefined) return undefined;

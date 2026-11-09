@@ -109,11 +109,21 @@ export interface Workflow extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  WorkflowLookup
 > {}
 
 /**
- * An Amazon HealthOmics private workflow -- a bioinformatics workflow (WDL,
+ * Props for {@link Workflow.lookup}: find a workflow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkflowLookup {
+  /** The id of the existing workflow. */
+  workflowId: string;
+}
+
+/**
+ * An Amazon HealthOmics private workflow — a bioinformatics workflow (WDL,
  * Nextflow, or CWL) that is executed as one or more runs.
  *
  * A workflow name is auto-generated from the app, stage, and logical ID
@@ -139,6 +149,16 @@ export interface Workflow extends Resource<
  *   engine: "NEXTFLOW",
  *   definitionUri: "s3://my-bucket/workflows/hello.zip",
  * });
+ * ```
+ *
+ * ### Looking up an existing workflow
+ * `Workflow.lookup` references a workflow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workflowId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing workflow
+ * ```typescript
+ * const existing = AWS.Omics.Workflow.lookup({ workflowId: "..." });
  * ```
  *
  * @resource
@@ -184,6 +204,19 @@ export const WorkflowProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ workflowId }) {
+          const found = yield* omics
+            .getWorkflow({ id: workflowId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined || found.id === undefined) return undefined;
+          const attrs = {
+            workflowId: found.id,
+            workflowArn: found.arn!,
+            name: found.name ?? "",
+            status: found.status ?? "",
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output?.workflowId === undefined) return undefined;
           const found = yield* omics

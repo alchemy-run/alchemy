@@ -113,8 +113,27 @@ export interface Environment extends Resource<
     updatedAt: string;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  EnvironmentLookup
 > {}
+
+/**
+ * Props for {@link Environment.lookup}: find a deployment
+ * environment this stack doesn't manage by its repository and name.
+ */
+export interface EnvironmentLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Environment name. */
+  name: string;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub Actions deployment environment.
@@ -206,6 +225,20 @@ export interface Environment extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const production = GitHub.Environment.lookup({
+ *   owner: "alchemy-run",
+ *   repository: "alchemy",
+ *   name: "production",
+ * });
+ * ```
+ *
  * @resource
  * @product Actions
  */
@@ -241,6 +274,27 @@ export const EnvironmentProvider = () =>
         return { action: "replace" };
       }
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, repository, name }) {
+        return yield* Repos.getEnvironment({
+          owner,
+          repo: repository,
+          environment_name: name,
+        }).pipe(
+          Effect.map((environment) => ({
+            environmentId: environment.id,
+            nodeId: environment.node_id,
+            name: environment.name,
+            htmlUrl: environment.html_url,
+            createdAt: environment.created_at,
+            updatedAt: environment.updated_at,
+          })),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, olds }) {

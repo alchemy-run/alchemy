@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   listLocations,
@@ -54,11 +55,38 @@ export type ReservationGroup = Resource<
     location: string;
   },
   never,
-  Providers
+  Providers,
+  ReservationGroupLookup
 >;
 
 /**
- * A BigQuery reservation group -- a named container for reservations.
+ * Props for {@link ReservationGroup.lookup}: find a reservation group this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ReservationGroupLookup {
+  /**
+   * Reservation group id (the `{reservationGroup}` segment of
+   * `projects/{pro
+   * ject}/locations/{location}/reservationGroups/{reservationGroup}`). Must
+   * contain only lowercase letters, digits, or dashes; start with a letter;
+   * not end with a dash; max 64 characters.
+   */
+  reservationGroupId: string;
+  /**
+   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * and `EU` stay uppercase; regional ids are lowercased.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A BigQuery reservation group — a named container for reservations.
  *
  * Groups have no labels or description, so Alchemy stamps ownership into
  * the group id (`alch---...`) so `list` / `pnpm nuke:gcp` can find them.
@@ -76,6 +104,19 @@ export type ReservationGroup = Resource<
  * const group = yield* GCP.BigQueryReservation.ReservationGroup("Team", {
  *   reservationGroupId: "analytics-prod",
  *   location: "US",
+ * });
+ * ```
+ *
+ * ### Looking up an existing reservation group
+ * `ReservationGroup.lookup` references a reservation group Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * reservation group.
+ *
+ * **Example:** Reference an existing reservation group
+ * ```typescript
+ * const reservationGroup = GCP.BigQueryReservation.ReservationGroup.lookup({
+ *   reservationGroupId: "my-reservation-group",
  * });
  * ```
  *
@@ -149,6 +190,15 @@ export const ReservationGroupProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ reservationGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, reservationGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

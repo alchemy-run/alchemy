@@ -58,11 +58,21 @@ export interface Fleet extends Resource<
     signalCatalogArn: string;
   },
   never,
-  Providers
+  Providers,
+  FleetLookup
 > {}
 
 /**
- * An AWS IoT FleetWise fleet -- a group of vehicles that campaigns can
+ * Props for {@link Fleet.lookup}: find a fleet this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FleetLookup {
+  /** The fleet id of the existing fleet. */
+  fleetId: string;
+}
+
+/**
+ * An AWS IoT FleetWise fleet — a group of vehicles that campaigns can
  * target collectively.
  *
  * Fleets are free, provisioned near-instantly, and only carry a
@@ -75,6 +85,16 @@ export interface Fleet extends Resource<
  *   signalCatalogArn: catalog.signalCatalogArn,
  *   description: "west-coast pilot vehicles",
  * });
+ * ```
+ *
+ * ### Looking up an existing fleet
+ * `Fleet.lookup` references a fleet Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fleetId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing fleet
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.Fleet.lookup({ fleetId: "my-fleet" });
  * ```
  *
  * @resource
@@ -113,6 +133,13 @@ export const FleetProvider = () =>
           if (news.signalCatalogArn !== olds.signalCatalogArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ fleetId }) {
+          const found = yield* readFleet(fleetId);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

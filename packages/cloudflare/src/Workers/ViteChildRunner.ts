@@ -121,7 +121,6 @@ const program = Effect.scoped(
                   streamingTails: runtimeWorker.streamingTails,
                   cache: runtimeWorker.cache,
                   cf: runtimeWorker.cf,
-                  zone: runtimeWorker.zone,
                   access: devAccess,
                   workerd: runtimeWorker.workerd,
                 },

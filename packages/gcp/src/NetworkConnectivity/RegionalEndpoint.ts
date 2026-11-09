@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -125,8 +126,34 @@ export type RegionalEndpoint = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionalEndpointLookup
 >;
+
+/**
+ * Props for {@link RegionalEndpoint.lookup}: find a regional endpoint this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionalEndpointLookup {
+  /**
+   * RegionalEndpoint id (the `{regional_endpoint}` segment of
+   * `projects/{pro
+   * ject}/locations/{location}/regionalEndpoints/{regional_endpoint}`).
+   * Must match `[-a-z0-9]([-a-z0-9]{0,44})[a-z0-9]`.
+   */
+  regionalEndpointId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Private Service Connect regional endpoint for a Google API.
@@ -152,6 +179,19 @@ export type RegionalEndpoint = Resource<
  *   network: network.selfLink ?? network.networkName,
  *   subnetwork: subnet.selfLink ?? subnet.subnetworkName,
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing regional endpoint
+ * `RegionalEndpoint.lookup` references a regional endpoint Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * regional endpoint.
+ *
+ * **Example:** Reference an existing regional endpoint
+ * ```typescript
+ * const regionalEndpoint = GCP.NetworkConnectivity.RegionalEndpoint.lookup({
+ *   regionalEndpointId: "my-regional-endpoint",
  * });
  * ```
  *
@@ -258,6 +298,15 @@ export const RegionalEndpointProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ regionalEndpointId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, regionalEndpointId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

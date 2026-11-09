@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -87,8 +88,30 @@ export type ResponsePolicyRule = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ResponsePolicyRuleLookup
 >;
+
+/**
+ * Props for {@link ResponsePolicyRule.lookup}: find a response policy rule
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ResponsePolicyRuleLookup {
+  /**
+   * User-assigned rule name, unique within the response policy.
+   */
+  ruleName: string;
+  /**
+   * Response policy name that owns this rule.
+   */
+  responsePolicy: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud DNS response policy rule.
@@ -117,6 +140,20 @@ export type ResponsePolicyRule = Resource<
  *   responsePolicy: policy.responsePolicyName,
  *   dnsName: "cdn.example.com.",
  *   behavior: "bypassResponsePolicy",
+ * });
+ * ```
+ *
+ * ### Looking up an existing response policy rule
+ * `ResponsePolicyRule.lookup` references a response policy rule Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared response policy rule.
+ *
+ * **Example:** Reference an existing response policy rule
+ * ```typescript
+ * const responsePolicyRule = GCP.DNS.ResponsePolicyRule.lookup({
+ *   ruleName: "my-rule",
+ *   responsePolicy: "my-response-policy",
  * });
  * ```
  *
@@ -284,6 +321,14 @@ export const ResponsePolicyRuleProvider = () =>
       if (!policyChanged && !nameChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ ruleName, responsePolicy }) {
+      const env = yield* GcpEnvironment.current;
+      if (responsePolicy === undefined) return undefined;
+      const existing = yield* getByName(env.project, responsePolicy, ruleName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, responsePolicy);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

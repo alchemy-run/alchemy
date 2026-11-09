@@ -105,11 +105,23 @@ export interface WebExperience extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  WebExperienceLookup
 > {}
 
 /**
- * An Amazon Q Business web experience -- the hosted chat UI end users open
+ * Props for {@link WebExperience.lookup}: find a web experience this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WebExperienceLookup {
+  /** The application the web experience belongs to. */
+  applicationId: string;
+  /** The id of the existing web experience. */
+  webExperienceId: string;
+}
+
+/**
+ * An Amazon Q Business web experience — the hosted chat UI end users open
  * to converse with an application.
  *
  * ### Creating Web Experiences
@@ -131,6 +143,16 @@ export interface WebExperience extends Resource<
  *   origins: ["https://intranet.example.com"],
  *   samplePromptsControlMode: "ENABLED",
  * });
+ * ```
+ *
+ * ### Looking up an existing web experience
+ * `WebExperience.lookup` references a web experience Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and `webExperienceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing web experience
+ * ```typescript
+ * const chat = AWS.QBusiness.WebExperience.lookup({ applicationId, webExperienceId });
  * ```
  *
  * @resource
@@ -248,6 +270,9 @@ export const WebExperienceProvider = () =>
         // without iterating every application -- treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ applicationId, webExperienceId }) {
+          return (yield* readWebExperienceById(applicationId, webExperienceId))?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           // Web experience summaries carry no display name, so there is no

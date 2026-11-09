@@ -139,11 +139,26 @@ export interface Index extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  IndexLookup
 > {}
 
 /**
- * An Amazon Kendra index -- a machine-learning powered enterprise search
+ * Props for {@link Index.lookup}: find an index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IndexLookup =
+  | {
+      /** The id of the existing index. */
+      id: string;
+    }
+  | {
+      /** The name of the existing index. */
+      name: string;
+    };
+
+/**
+ * An Amazon Kendra index — a machine-learning powered enterprise search
  * index that data sources (S3, SharePoint, databases, ...) sync documents
  * into and that applications query with natural language.
  *
@@ -183,6 +198,16 @@ export interface Index extends Resource<
  *   edition: "DEVELOPER_EDITION",
  *   roleArn: role.roleArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing index
+ * `Index.lookup` references an index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing index
+ * ```typescript
+ * const docs = AWS.Kendra.Index.lookup({ name: "docs" });
  * ```
  *
  * @resource
@@ -330,6 +355,14 @@ export const IndexProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* currentArnOf;
+          const state =
+            "id" in props
+              ? yield* readIndexById(props.id, arnOf)
+              : yield* findIndexByName(props.name, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* currentArnOf;
           const state = output?.id

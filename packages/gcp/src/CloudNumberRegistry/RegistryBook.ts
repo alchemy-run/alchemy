@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,11 +93,35 @@ export type RegistryBook = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegistryBookLookup
 >;
 
 /**
- * A Cloud Number Registry book -- a container for IP address management
+ * Props for {@link RegistryBook.lookup}: find a registry book this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegistryBookLookup {
+  /**
+   * Registry book id (the `{registryBook}` segment of
+   * `projects/{project}/locations/{location}/registryBooks/{registryBook}`).
+   */
+  registryBookId: string;
+  /**
+   * Location of the registry book. Cloud Number Registry is global —
+   * `global` is the only supported value.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Cloud Number Registry book — a container for IP address management
  * information. Creating an IPAM admin scope also creates a default book;
  * additional books organize discovered or user-managed realms.
  *
@@ -124,6 +149,19 @@ export type RegistryBook = Resource<
  * const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
  *   registryBookId: "inventory",
  *   labels: { env: "prod", role: "ipam" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing registry book
+ * `RegistryBook.lookup` references a registry book Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * registry book.
+ *
+ * **Example:** Reference an existing registry book
+ * ```typescript
+ * const registryBook = GCP.CloudNumberRegistry.RegistryBook.lookup({
+ *   registryBookId: "my-registry-book",
  * });
  * ```
  *
@@ -192,6 +230,15 @@ export const RegistryBookProvider = () =>
         nextLocation: normalizeLocation(news.location ?? olds?.location ?? output?.location),
       });
     }),
+
+    lookup: Effect.fn(function* ({ registryBookId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, registryBookId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,11 +102,37 @@ export type InterceptEndpointGroupAssociation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptEndpointGroupAssociationLookup
 >;
 
 /**
- * A Network Security Integration intercept endpoint-group association --
+ * Props for {@link InterceptEndpointGroupAssociation.lookup}: find an
+ * intercept endpoint group association this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface InterceptEndpointGroupAssociationLookup {
+  /**
+   * Association id (the `{interceptEndpointGroupAssociation}` segment of
+   * `pr
+   * ojects/{project}/locations/{location}/interceptEndpointGroupAssociations
+   * /{interceptEndpointGroupAssociation}`).
+   */
+  interceptEndpointGroupAssociationId: string;
+  /**
+   * Location of the association. Associations are global — always
+   * `"global"`. `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security Integration intercept endpoint-group association —
  * the link between a VPC and an intercept endpoint group.
  *
  * Creating an association does not enable intercept by itself; a firewall
@@ -141,6 +168,20 @@ export type InterceptEndpointGroupAssociation = Resource<
  *   interceptEndpointGroup: endpoints.name,
  *   network: vpc.selfLink,
  *   labels: { env: "prod", role: "nsi" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing intercept endpoint group association
+ * `InterceptEndpointGroupAssociation.lookup` references an intercept
+ * endpoint group association Alchemy doesn't manage (created in the console
+ * or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted, and binds like a declared intercept endpoint group
+ * association.
+ *
+ * **Example:** Reference an existing intercept endpoint group association
+ * ```typescript
+ * const interceptEndpointGroupAssociation = GCP.NetworkSecurity.InterceptEndpointGroupAssociation.lookup({
+ *   interceptEndpointGroupAssociationId: "my-intercept-endpoint-group-association",
  * });
  * ```
  *
@@ -309,6 +350,23 @@ export const InterceptEndpointGroupAssociationProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({
+      interceptEndpointGroupAssociationId,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(
+        env.project,
+        location,
+        COLLECTION,
+        interceptEndpointGroupAssociationId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

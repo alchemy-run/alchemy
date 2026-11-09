@@ -8,6 +8,7 @@ import { createInternalTags, tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { deleteRestApiAndWait, restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
 
@@ -102,8 +103,23 @@ export interface RestApi extends Resource<
     tags: Record<string, string>;
   },
   RestApiBinding,
-  Providers
+  Providers,
+  RestApiLookup
 > {}
+
+/**
+ * Props for {@link RestApi.lookup}: find a REST API this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type RestApiLookup =
+  | {
+      /** The id of the existing API. */
+      restApiId: string;
+    }
+  | {
+      /** The API's name; fails when several APIs share it. */
+      name: string;
+    };
 
 /**
  * An Amazon API Gateway REST API (v1).
@@ -190,6 +206,17 @@ export interface RestApi extends Resource<
  *   endpointConfiguration: { types: ["REGIONAL"] },
  *   disableExecuteApiEndpoint: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing REST API
+ * `RestApi.lookup` references a REST API Alchemy doesn't manage (created in the
+ * console or by another stack), found by `restApiId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Deploy a stage of an existing API
+ * ```typescript
+ * const api = AWS.ApiGateway.RestApi.lookup({ name: "public" });
+ * const restApiId = api.restApiId;
  * ```
  *
  * @resource
@@ -373,6 +400,24 @@ export const RestApiProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* (props) {
+          const api =
+            "restApiId" in props
+              ? yield* ag
+                  .getRestApi({ restApiId: props.restApiId })
+                  .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
+              : yield* single(
+                  "AWS.ApiGateway.RestApi",
+                  props.name,
+                  yield* ag.getRestApis.items({}).pipe(
+                    Stream.filter((api) => api.name === props.name),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk)),
+                  ),
+                  (api) => api.id,
+                );
+          return api?.id ? snapshotFromApi(api) : undefined;
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.restApiId) return undefined;
           const api = yield* ag

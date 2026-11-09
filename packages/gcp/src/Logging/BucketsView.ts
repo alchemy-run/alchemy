@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listProjectBuckets } from "./operations.ts";
@@ -83,8 +84,37 @@ export type BucketsView = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketsViewLookup
 >;
+
+/**
+ * Props for {@link BucketsView.lookup}: find a buckets view this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BucketsViewLookup {
+  /**
+   * View id (the `{view}` segment of `.../buckets/{bucket}/views/{view}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens.
+   */
+  viewId: string;
+  /**
+   * Parent log bucket. Full name
+   * `projects/{project}/locations/{location}/buckets/{bucket}` or the
+   * bucket id (combined with `location`).
+   */
+  bucket: string;
+  /**
+   * Bucket location used when `bucket` is a bare id.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging view over log entries in a log bucket.
@@ -123,6 +153,20 @@ export type BucketsView = Resource<
  *   bucket: bucket.name,
  *   filter: 'LOG_ID("stderr")',
  *   description: "stderr only",
+ * });
+ * ```
+ *
+ * ### Looking up an existing buckets view
+ * `BucketsView.lookup` references a buckets view Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * buckets view.
+ *
+ * **Example:** Reference an existing buckets view
+ * ```typescript
+ * const bucketsView = GCP.Logging.BucketsView.lookup({
+ *   viewId: "my-view",
+ *   bucket: "my-bucket",
  * });
  * ```
  *
@@ -231,6 +275,24 @@ export const BucketsViewProvider = () =>
       if (!idChanged && !bucketChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ viewId, bucket, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (typeof bucket !== "string" || bucket.length === 0) {
+        return undefined;
+      }
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const parent = parseBucket(bucket ?? "", env.project, location);
+      const name = resourceName(parent.project, parent.location, parent.bucketId, viewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, parent.project, parent.location, parent.bucketId);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

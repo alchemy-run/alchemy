@@ -275,11 +275,30 @@ export interface Fleet extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FleetLookup
 > {}
 
 /**
- * An AWS Deadline Cloud fleet -- a group of workers (customer-managed hosts
+ * Props for {@link Fleet.lookup}: find a fleet this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type FleetLookup =
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The id of the existing fleet. */
+      fleetId: string;
+    }
+  | {
+      /** The farm it belongs to. */
+      farmId: string;
+      /** The display name of the existing fleet. */
+      displayName: string;
+    };
+
+/**
+ * An AWS Deadline Cloud fleet — a group of workers (customer-managed hosts
  * or service-managed EC2 instances) that run render jobs from associated
  * queues.
  *
@@ -325,6 +344,16 @@ export interface Fleet extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing fleet
+ * `Fleet.lookup` references a fleet Alchemy doesn't manage (created in the
+ * console or by another stack), found by `farmId` with `fleetId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing fleet
+ * ```typescript
+ * const existing = AWS.Deadline.Fleet.lookup({ farmId, displayName: "main" });
  * ```
  *
  * @resource
@@ -463,6 +492,14 @@ export const FleetProvider = () =>
         stables: ["farmId", "fleetId", "fleetArn", "roleArn"],
         // Keyed by a parent farm -- sub-resource list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* deadlineArnOf;
+          const state =
+            "fleetId" in props
+              ? yield* readFleetById(props.farmId, props.fleetId, arnOf)
+              : yield* findFleetByDisplayName(props.farmId, props.displayName, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* deadlineArnOf;
           const farmId = output?.farmId ?? olds?.farmId;

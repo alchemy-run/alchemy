@@ -16,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -201,8 +202,29 @@ export interface SecurityGroup extends Resource<
     tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SecurityGroupLookup
 > {}
+
+/**
+ * Props for {@link SecurityGroup.lookup}: find a security group this
+ * stack doesn't manage, in the ambient account and region.
+ */
+export type SecurityGroupLookup =
+  | {
+      /** The group's id. */
+      groupId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC the group belongs to. */
+      vpcId: string;
+      /** The group's name, unique within its VPC. */
+      groupName: string;
+    };
 /**
  * An EC2 security group -- a stateful virtual firewall that controls inbound
  * (`ingress`) and outbound (`egress`) traffic for resources in a VPC. Rules can
@@ -443,6 +465,27 @@ export interface SecurityGroup extends Resource<
  * corporate egress IPs) by ID, so the rule updates automatically as the list
  * changes. The ICMP rule with type/code `-1` permits ping and other ICMP within
  * the VPC.
+ *
+ * ### Looking up an existing security group
+ * `SecurityGroup.lookup` references a security group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `groupId`, its `Name` tag, or
+`vpcId` and `groupName`. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Allow traffic from an existing group
+ * ```typescript
+ * const lb = AWS.EC2.SecurityGroup.lookup({ vpcId, groupName: "load-balancer" });
+ *
+ * yield* AWS.EC2.SecurityGroupRule("FromLoadBalancer", {
+ *   groupId: app.groupId,
+ *   type: "ingress",
+ *   ipProtocol: "tcp",
+ *   fromPort: 8080,
+ *   toPort: 8080,
+ *   sourceSecurityGroupId: lb.groupId,
+ * });
+ * ```
  *
  * @resource
  */
@@ -701,6 +744,39 @@ export const SecurityGroupProvider = () =>
 
       return {
         stables: ["groupId", "groupArn", "ownerId"],
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeSecurityGroups(
+              "groupId" in props
+                ? { GroupIds: [props.groupId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : {
+                      Filters: [
+                        { Name: "vpc-id", Values: [props.vpcId] },
+                        { Name: "group-name", Values: [props.groupName] },
+                      ],
+                    },
+            )
+            .pipe(
+              Effect.catchTag("InvalidGroup.NotFound", () =>
+                Effect.succeed({ SecurityGroups: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.SecurityGroup",
+            "groupId" in props
+              ? props.groupId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `${props.vpcId}/${props.groupName}`,
+            found.SecurityGroups ?? [],
+            (x) => x.GroupId,
+          );
+          if (!match?.GroupId) return undefined;
+          return yield* toAttrs(match, yield* describeSecurityGroupRules(match.GroupId));
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const sg = output

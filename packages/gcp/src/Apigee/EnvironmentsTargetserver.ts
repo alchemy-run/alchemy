@@ -130,11 +130,31 @@ export type EnvironmentsTargetserver = Resource<
     sSLInfo: TargetServerTlsInfo | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsTargetserverLookup
 >;
 
 /**
- * An Apigee environment TargetServer -- a named backend host:port used by
+ * Props for {@link EnvironmentsTargetserver.lookup}: find an environments
+ * targetserver this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsTargetserverLookup {
+  /**
+   * Target server id.
+   */
+  targetserverId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
+
+/**
+ * An Apigee environment TargetServer — a named backend host:port used by
  * proxy TargetEndpoints.
  *
  * Target servers have no labels, so Alchemy stamps ownership into
@@ -150,6 +170,20 @@ export type EnvironmentsTargetserver = Resource<
  *   port: 443,
  *   protocol: "HTTP",
  *   sSLInfo: { enabled: true },
+ * });
+ * ```
+ *
+ * ### Looking up an existing environments targetserver
+ * `EnvironmentsTargetserver.lookup` references an environments targetserver
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared environments targetserver.
+ *
+ * **Example:** Reference an existing environments targetserver
+ * ```typescript
+ * const environmentsTargetserver = GCP.Apigee.EnvironmentsTargetserver.lookup({
+ *   targetserverId: "my-targetserver",
+ *   environment: "my-environment",
  * });
  * ```
  *
@@ -251,6 +285,16 @@ export const EnvironmentsTargetserverProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ targetserverId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, targetserverId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

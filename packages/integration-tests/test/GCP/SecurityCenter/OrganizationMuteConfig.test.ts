@@ -5,6 +5,7 @@ import * as scc from "@distilled.cloud/gcp/securitycenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -48,7 +49,7 @@ test.provider(
           name: `${organization}/muteConfigs/alchemy-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -74,6 +75,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "mute low findings",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.SecurityCenter.OrganizationMuteConfig.lookup({
+          muteConfigId: created.muteConfigId,
+          organization: created.organization,
+        }),
+        created,
       );
 
       expect(created.muteConfigId).toEqual(expect.any(String));

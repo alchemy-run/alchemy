@@ -79,11 +79,21 @@ export type Product = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  ProductLookup
 >;
 
 /**
- * A Stripe Product -- the catalog item that Prices, invoices, and Checkout
+ * Props for {@link Product.lookup}: find a product this stack
+ * doesn't manage by its id.
+ */
+export interface ProductLookup {
+  /** Stripe product id, e.g. `"prod_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
+
+/**
+ * A Stripe Product — the catalog item that Prices, invoices, and Checkout
  * attach to. Name, description, active, images, and metadata are updated
  * in place. Deleting a product is only possible when it has no Prices.
  *
@@ -120,6 +130,22 @@ export type Product = Resource<
  * ```typescript
  * // alchemy destroy deletes the Product. If prices remain, Stripe
  * // rejects the delete and Alchemy archives it (`active: false`).
+ * ```
+ *
+ * ### Looking up an existing product
+ * `Product.lookup` references a product Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Price an existing product
+ * ```typescript
+ * const product = Stripe.Product.lookup({ id: "prod_A2b3C4d5E6f7G8" });
+ * const monthly = yield* Stripe.Price("Monthly", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1500,
+ *   recurring: { interval: "month" },
+ * });
  * ```
  *
  * @resource
@@ -224,6 +250,11 @@ export const ProductProvider = () =>
     diff: Effect.fn(function* ({ news }) {
       if (!isResolved(news)) return undefined;
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

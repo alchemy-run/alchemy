@@ -56,8 +56,18 @@ export interface Listener extends Resource<
     clientAffinity: string;
   },
   never,
-  Providers
+  Providers,
+  ListenerLookup
 > {}
+
+/**
+ * Props for {@link Listener.lookup}: find a listener this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface ListenerLookup {
+  /** The ARN of the existing listener. */
+  listenerArn: string;
+}
 
 /**
  * A Global Accelerator listener that accepts inbound client connections on
@@ -87,6 +97,16 @@ export interface Listener extends Resource<
  *   protocol: "UDP",
  *   clientAffinity: "SOURCE_IP",
  * });
+ * ```
+ *
+ * ### Looking up an existing listener
+ * `Listener.lookup` references a listener Alchemy doesn't manage (created in the
+ * console or by another stack), found by `listenerArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing listener
+ * ```typescript
+ * const tcp = AWS.GlobalAccelerator.Listener.lookup({ listenerArn });
  * ```
  *
  * @resource
@@ -147,6 +167,10 @@ export const ListenerProvider = () =>
     // Sub-resource keyed entirely by its parent accelerator (and untagged) --
     // account-wide enumeration happens via the Accelerator resource.
     list: () => Effect.succeed([]),
+    lookup: Effect.fn(function* ({ listenerArn }) {
+      const live = yield* describeListener(listenerArn);
+      return live ? toAttributes(live, listenerArn) : undefined;
+    }),
     read: Effect.fn(function* ({ olds, output }) {
       if (output?.listenerArn) {
         const live = yield* describeListener(output.listenerArn);

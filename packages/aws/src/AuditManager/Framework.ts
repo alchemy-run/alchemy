@@ -90,11 +90,21 @@ export interface Framework extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FrameworkLookup
 > {}
 
 /**
- * A custom assessment framework in AWS Audit Manager -- a named collection
+ * Props for {@link Framework.lookup}: find a framework this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FrameworkLookup {
+  /** The id of the existing framework. */
+  frameworkId: string;
+}
+
+/**
+ * A custom assessment framework in AWS Audit Manager — a named collection
  * of control sets that assessments are created from.
  *
  * :::note
@@ -121,6 +131,16 @@ export interface Framework extends Resource<
  *     controls: [{ id: control.controlId }],
  *   }],
  * });
+ * ```
+ *
+ * ### Looking up an existing framework
+ * `Framework.lookup` references a framework Alchemy doesn't manage (created in the
+ * console or by another stack), found by `frameworkId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing framework
+ * ```typescript
+ * const existing = AWS.AuditManager.Framework.lookup({ frameworkId: "..." });
  * ```
  *
  * @resource
@@ -194,6 +214,12 @@ export const FrameworkProvider = () =>
               framework === undefined ? [] : [toAttributes(framework)],
             );
           }),
+        lookup: Effect.fn(function* ({ frameworkId }) {
+          const framework = yield* readFrameworkById(frameworkId);
+          if (!framework) return undefined;
+          const attrs = toAttributes(framework);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const framework = output?.frameworkId
             ? yield* readFrameworkById(output.frameworkId)

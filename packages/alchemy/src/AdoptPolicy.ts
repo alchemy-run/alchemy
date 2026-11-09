@@ -128,6 +128,29 @@ export const Unowned: {
 );
 
 /**
+ * {@link Unowned} unless `attrs` is the generation a replacement is replacing:
+ * during a replacement `read` and `observe` receive that generation's
+ * attributes as `previous`, and a delete-first replacement that reuses its
+ * identity finds it under that same identity. `key` must identify the
+ * resource uniquely (a full resource name or an API id, not a display name).
+ *
+ * ```ts
+ * read: Effect.fn(function* ({ output, olds, previous }) {
+ *   // ...
+ *   return output ? attrs : unownedUnlessPrevious(attrs, previous, "name");
+ * }),
+ * ```
+ */
+export const unownedUnlessPrevious = <T extends object, K extends keyof T>(
+  attrs: T,
+  previous: Partial<Record<K, unknown>> | undefined,
+  key: K,
+): T =>
+  previous !== undefined && previous[key] !== undefined && previous[key] === attrs[key]
+    ? attrs
+    : Unowned(attrs);
+
+/**
  * A provider's `observe` answer when the identity `precreate` would claim
  * depends on props that have not resolved yet, so nothing can be checked.
  * Unlike `undefined`, it does not report the identity as absent: the engine

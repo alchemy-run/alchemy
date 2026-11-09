@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,11 +102,37 @@ export type SecurityProfileGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfileGroupLookup
 >;
 
 /**
- * A Network Security SecurityProfileGroup -- a named bundle of
+ * Props for {@link SecurityProfileGroup.lookup}: find a security profile
+ * group this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface SecurityProfileGroupLookup {
+  /**
+   * SecurityProfileGroup id (the `{securityProfileGroup}` segment of
+   * `projec
+   * ts/{project}/locations/{location}/securityProfileGroups/{securityProfile
+   * Group}`). Must be 1-63 characters, letters, numbers, hyphens, and
+   * underscores, and must not start with a number.
+   */
+  securityProfileGroupId: string;
+  /**
+   * Location. Security profile groups live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * A Network Security SecurityProfileGroup — a named bundle of
  * SecurityProfile references applied together by firewall policy rules.
  *
  * Changing `securityProfileGroupId` or `location` replaces the group.
@@ -138,6 +165,19 @@ export type SecurityProfileGroup = Resource<
  *   description: "prod ngfw v2",
  *   labels: { env: "prod", role: "ngfw" },
  *   threatPreventionProfile: profile.name,
+ * });
+ * ```
+ *
+ * ### Looking up an existing security profile group
+ * `SecurityProfileGroup.lookup` references a security profile group Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared security profile group.
+ *
+ * **Example:** Reference an existing security profile group
+ * ```typescript
+ * const securityProfileGroup = GCP.NetworkSecurity.SecurityProfileGroup.lookup({
+ *   securityProfileGroupId: "my-security-profile-group",
  * });
  * ```
  *
@@ -254,6 +294,15 @@ export const SecurityProfileGroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityProfileGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, securityProfileGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

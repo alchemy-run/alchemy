@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -83,8 +83,36 @@ export type BillingBucketsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BillingBucketsLinkLookup
 >;
+
+/**
+ * Props for {@link BillingBucketsLink.lookup}: find a billing buckets link
+ * this stack doesn't manage by its identifiers.
+ */
+export interface BillingBucketsLinkLookup {
+  /**
+   * Link id (the `{link}` segment of
+   * `billingAccounts/{billingAccount}/locat
+   * ions/{location}/buckets/{bucket}/links/{link}`). Must be alphanumeric
+   * plus underscores (BigQuery dataset naming).
+   */
+  linkId: string;
+  /**
+   * Location of the parent bucket.
+   */
+  location?: string;
+  /**
+   * Analytics-enabled bucket id that owns this link. A bucket may have only
+   * one link.
+   */
+  bucketId: string;
+  /**
+   * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or `billingAccounts/{id}`).
+   */
+  billingAccountId?: string;
+}
 
 /**
  * A BigQuery dataset link for a billing-account log bucket.
@@ -117,6 +145,20 @@ export type BillingBucketsLink = Resource<
  *   location: "global",
  *   bucketId: "app-logs",
  *   linkId: "app_logs_link",
+ * });
+ * ```
+ *
+ * ### Looking up an existing billing buckets link
+ * `BillingBucketsLink.lookup` references a billing buckets link Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared billing buckets link.
+ *
+ * **Example:** Reference an existing billing buckets link
+ * ```typescript
+ * const billingBucketsLink = GCP.Logging.BillingBucketsLink.lookup({
+ *   linkId: "my-link",
+ *   bucketId: "my-bucket",
  * });
  * ```
  *
@@ -250,7 +292,23 @@ export const BillingBucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({
+      linkId,
+      location: lookupLocation,
+      bucketId: lookupBucketId,
+      billingAccountId: lookupBillingAccountId,
+    }) {
+      const billingAccountId = yield* resolveBillingAccountId(lookupBillingAccountId, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const bucketId = lookupBucketId ?? "";
+      const name = resourceName(billingAccountId, location, bucketId, linkId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      const attrs = toAttrs(existing, billingAccountId, location, bucketId);
+      return attrs;
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const billingAccountId = yield* resolveBillingAccountId(
         olds?.billingAccountId,
         output?.billingAccountId,
@@ -263,7 +321,9 @@ export const BillingBucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, billingAccountId, location, bucketId);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

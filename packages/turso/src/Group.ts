@@ -81,7 +81,23 @@ export interface GroupAttributes {
   deleteProtection: boolean;
 }
 
-export type Group = Resource<"Turso.Group", GroupProps, GroupAttributes, never, Providers>;
+export type Group = Resource<
+  "Turso.Group",
+  GroupProps,
+  GroupAttributes,
+  never,
+  Providers,
+  GroupLookup
+>;
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack
+ * doesn't manage by its name, in the credentialed organization.
+ */
+export interface GroupLookup {
+  /** Group name. */
+  name: string;
+}
 
 /**
  * A Turso group. Every Turso database belongs to one group, and the group
@@ -110,6 +126,17 @@ export type Group = Resource<"Turso.Group", GroupProps, GroupAttributes, never, 
  * **Example:** Create a database in the group
  * ```typescript
  * const db = yield* Turso.Database("Db", { group: group.name });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created with
+ * the Turso CLI or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted.
+ *
+ * **Example:** Create a database in an existing group
+ * ```typescript
+ * const group = Turso.Group.lookup({ name: "default" });
+ * const db = yield* Turso.Database("App", { group: group.name });
  * ```
  *
  * @resource
@@ -163,6 +190,12 @@ export const GroupProvider = () =>
             return { action: "replace", deleteFirst: news.name !== undefined } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ name }) {
+          const org = yield* organization;
+          const group = yield* observe(org, name);
+          return group ? toAttrs(org, group, group.delete_protection ?? false) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const org = output?.organization ?? (yield* organization);
           const name = output?.name ?? (yield* groupName(id, olds?.name));

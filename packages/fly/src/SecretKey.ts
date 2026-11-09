@@ -64,8 +64,20 @@ export type SecretKey = Resource<
     updatedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretKeyLookup
 >;
+
+/**
+ * Props for {@link SecretKey.lookup}: find a secret key this stack
+ * doesn't manage by its App and name.
+ */
+export interface SecretKeyLookup {
+  /** Fly App name the key belongs to. */
+  appName: string;
+  /** Secret key name. */
+  name: string;
+}
 
 const resolveSecretKeyProps = (
   props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
@@ -171,6 +183,17 @@ const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
  * ```typescript
  * const verify = yield* Fly.Verify(Signing);
  * const { valid } = yield* verify({ plaintext, signature });
+ * ```
+ *
+ * ### Looking up an existing key
+ * `SecretKey.lookup` references a key Alchemy doesn't manage (created with
+ * `fly secrets keys` or by another stack). It is read during plan/deploy,
+ * never generated or deleted. Bind it like a declared key.
+ *
+ * **Example:** Verify with an existing key
+ * ```typescript
+ * const Signing = Fly.SecretKey.lookup({ appName: "my-site", name: "signing" });
+ * const verify = yield* Fly.Verify(Signing);
  * ```
  *
  * @resource
@@ -283,6 +306,11 @@ export const SecretKeyProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, name }) {
+      const found = yield* getByName(appName, name);
+      return found === undefined ? undefined : toAttrs(appName, found, name);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

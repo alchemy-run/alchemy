@@ -1,3 +1,4 @@
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -236,11 +237,21 @@ export interface Environment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 > {}
 
 /**
- * An Amazon Managed Workflows for Apache Airflow (MWAA) environment -- a fully
+ * Props for {@link Environment.lookup}: find an environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EnvironmentLookup {
+  /** The environment name of the existing environment. */
+  environmentName: string;
+}
+
+/**
+ * An Amazon Managed Workflows for Apache Airflow (MWAA) environment — a fully
  * managed Apache Airflow deployment that runs your DAGs.
  *
  * Environments take roughly 20-30 minutes to create and are billed hourly for
@@ -280,6 +291,16 @@ export interface Environment extends Resource<
  *     "core.default_task_retries": "3",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const existing = AWS.MWAA.Environment.lookup({ environmentName: "my-environment" });
  * ```
  *
  * @resource
@@ -352,6 +373,9 @@ const sameConfigOptions = (
   const bMap = b ?? {};
   return ea.every(([k, v]) => configValue(bMap[k]) === configValue(v));
 };
+
+/** The modules MWAA creates `airflow-{environment}-{module}` log groups for. */
+const MWAA_LOG_MODULES = ["DAGProcessing", "Scheduler", "Task", "WebServer", "Worker"] as const;
 
 export const EnvironmentProvider = () =>
   Provider.effect(
@@ -459,6 +483,13 @@ export const EnvironmentProvider = () =>
           if ((n.endpointManagement ?? undefined) !== (o.endpointManagement ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ environmentName: name }) {
+          const env = yield* readEnvironment(name);
+          if (!env?.Arn) return undefined;
+          const attrs = yield* toAttrs(env);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -709,6 +740,16 @@ export const EnvironmentProvider = () =>
               while: (e) => e instanceof Error && !e.message.includes("terminal state"),
               schedule: Schedule.max([Schedule.fixed("30 seconds"), Schedule.recurs(90)]),
             }),
+          );
+          // MWAA creates a log group per enabled module and leaves them when
+          // the environment is deleted, so every environment would leak them.
+          yield* Effect.forEach(
+            MWAA_LOG_MODULES,
+            (module) =>
+              logs
+                .deleteLogGroup({ logGroupName: `airflow-${name}-${module}` })
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+            { discard: true },
           );
         }),
 
