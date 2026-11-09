@@ -1,5 +1,14 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpEffect from "effect/http/HttpEffect";
+import * as Layer from "effect/Layer";
+import * as Rpc from "effect/rpc/Rpc";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcServer from "effect/rpc/RpcServer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Cbor from "@/Cbor";
 
 const hex = (text: string) =>
@@ -281,4 +290,51 @@ describe("Cbor", { tags: ["unit", "local"] }, () => {
       expect(() => decoder.end()).toThrow();
     });
   });
+});
+
+class Api extends RpcGroup.make(
+  Rpc.make("Echo", {
+    payload: { text: Schema.String, bytes: Schema.Uint8Array },
+    success: Schema.Struct({ text: Schema.String, bytes: Schema.Uint8Array }),
+  }),
+  Rpc.make("Count", { payload: { n: Schema.Number }, success: Schema.Number, stream: true }),
+) {}
+
+const ApiLive = Api.toLayer({
+  Echo: (payload) => Effect.succeed(payload),
+  Count: ({ n }) => Stream.range(1, n),
+});
+
+describe("Cbor.layerRpcSerialization", { tags: ["unit", "local"] }, () => {
+  it.effect("carries Effect RPC calls and streams over HTTP", () =>
+    Effect.gen(function* () {
+      const handler = yield* RpcServer.toHttpEffect(Api).pipe(
+        Effect.provide(Layer.mergeAll(ApiLive, Cbor.layerRpcSerialization)),
+      );
+      const web = HttpEffect.toWebHandler(handler as never);
+      let contentType: string | null = null;
+      const fetchImpl = ((url: string, init?: RequestInit) => {
+        const request = new Request(url, init);
+        contentType = request.headers.get("content-type");
+        return web(request);
+      }) as typeof globalThis.fetch;
+
+      const client = yield* RpcClient.make(Api).pipe(
+        Effect.provide(
+          RpcClient.layerProtocolHttp({ url: "http://rpc/" }).pipe(
+            Layer.provide(Cbor.layerRpcSerialization),
+            Layer.provide(FetchHttpClient.layer),
+            Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetchImpl)),
+          ),
+        ),
+      );
+
+      const echoed = yield* client.Echo({ text: "hi", bytes: new Uint8Array([1, 2, 255]) });
+      expect(echoed).toEqual({ text: "hi", bytes: new Uint8Array([1, 2, 255]) });
+      expect(contentType).toBe("application/cbor");
+
+      const counted = yield* Stream.runCollect(client.Count({ n: 5 }));
+      expect(Array.from(counted)).toEqual([1, 2, 3, 4, 5]);
+    }).pipe(Effect.scoped),
+  );
 });

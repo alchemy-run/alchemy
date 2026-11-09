@@ -17,6 +17,9 @@
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Schema from "effect/Schema";
 
 /** A value CBOR can't represent: a cycle, or a key that isn't a string. */
 export class CborEncodeError extends Data.TaggedError("CborEncodeError")<{
@@ -658,3 +661,43 @@ export const makeSequenceDecoder = () => {
     },
   };
 };
+
+// ---------------------------------------------------------------------------
+// Effect RPC serialization
+// ---------------------------------------------------------------------------
+
+/**
+ * Effect RPC serialization over CBOR: every protocol message is one CBOR
+ * value, and a stream of messages is a CBOR sequence, so message framing is
+ * built in. Payloads go through each schema's JSON codec, as
+ * `RpcSerialization.json` does, so a schema behaves the same under either
+ * serialization; CBOR only changes the bytes on the wire.
+ */
+export const rpcSerialization: RpcSerialization.RpcSerialization["Service"] =
+  RpcSerialization.RpcSerialization.of({
+    contentType,
+    includesFraming: true,
+    codecFor: Schema.toCodecJson,
+    makeUnsafe: () => {
+      const sequence = makeSequenceDecoder();
+      return {
+        decode: (data) => sequence.push(typeof data === "string" ? textEncoder.encode(data) : data),
+        encode: (message) => encodeUnsafe(message),
+      };
+    },
+  });
+
+/**
+ * Provide {@link rpcSerialization} as Effect RPC's `RpcSerialization`.
+ *
+ * **Example:** Effect RPC over CBOR
+ * ```ts
+ * const protocol = RpcClient.layerProtocolHttp({ url }).pipe(
+ *   Layer.provide(Cbor.layerRpcSerialization),
+ * );
+ * ```
+ */
+export const layerRpcSerialization: Layer.Layer<RpcSerialization.RpcSerialization> = Layer.succeed(
+  RpcSerialization.RpcSerialization,
+  rpcSerialization,
+);
