@@ -64,6 +64,29 @@ const extraDirs: Record<string, ReadonlyArray<string>> = {
   SecretsManager: ["Secret"],
 };
 
+/**
+ * Services with bindings but no resources, so nothing in Providers.ts names
+ * them. Their suites deploy a Lambda (which runs on floci) that calls the
+ * service, so they run once floci emulates it.
+ */
+const bindingOnlyServices = [
+  "AICapabilities",
+  "Comprehend",
+  "ComprehendMedical",
+  "ExternalHost",
+  "Geo",
+  "GeoMaps",
+  "GeoPlaces",
+  "GeoRoutes",
+  "Pricing",
+  "RDSData",
+  "RedshiftData",
+  "Rekognition",
+  "Route53Domains",
+  "SageMakerRuntime",
+  "Transcribe",
+];
+
 // Opt-in gates whose tests are gated only for live-AWS cost, quota, slow
 // provisioning, or preview access. Floci emulates all of them, so enable them
 // here unless the caller set them explicitly. Gates that need standing
@@ -189,7 +212,7 @@ const splitArgs = (args: ReadonlyArray<string>) => {
 const dualizedServices = Effect.fn(function* (providersFile: string) {
   const fs = yield* FileSystem.FileSystem;
   const source = yield* fs.readFileString(providersFile);
-  const names = new Set<string>(["Local"]);
+  const names = new Set<string>(["Local", ...bindingOnlyServices]);
   const pattern = /(?:flociDual|ProviderLayer\.dual)\(\s*([A-Za-z0-9]+)\./g;
   for (const match of source.matchAll(pattern)) {
     const service = match[1]!;
