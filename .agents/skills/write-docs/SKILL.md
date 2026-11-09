@@ -60,8 +60,9 @@ from JSDoc (see AGENTS.md "Documentation Generation").
    `website/src/components/diagrams/` in the shared style, try it on its best
    page, and show the user before using it elsewhere.
 8. **Build, look, push.** Run `pnpm run build` in `website/` (it regenerates
-   llms and the reference). Put every new or changed diagram on one sheet with
-   `scripts/diagram-sheet.py` and read it, screenshot whole pages with
+   llms and the reference). Check every changed Tree with
+   `scripts/tree-check.mjs` at both widths, put every new or changed diagram
+   on one sheet with `scripts/diagram-sheet.py` and read it, screenshot whole pages with
    `scripts/screenshot.sh`, and check links with `scripts/check-links.sh`. Commit
    and push after each coherent change; don't batch a day's work. Docs-only PRs
    get a `docs(<scope>):` title. Add the `deploy-website` label for a preview at
@@ -187,6 +188,24 @@ gotchas are in [Diagrams](references/structure.md#diagrams).
   arrow is only for something that moves or calls. Never write containment into a
   label either ("subnet in your VPC"): draw every layer, and don't drop
   layers to make a smaller copy of a diagram the chapter already draws.
+- **Connections are arrows, not text.** Draw what holds what as borders and
+  what calls what as `links` on a `Tree`, each with a short verb ("binds",
+  "mounts", "runs as"). Writing "binds Uploads · Rooms · Jobs" inside a box
+  was rejected as no thought given to how the boxes connect.
+  More: [Tree: borders and arrows](references/structure.md#tree-borders-and-arrows).
+- **Every diagram works on a phone and a desktop, flush.** Lay boxes out with
+  `areas` and `phoneAreas` so arrows run short and straight at both widths,
+  then run `scripts/tree-check.mjs` and read its screenshots before showing
+  anyone. Ragged rows, stretched or empty boxes, labels on lines and
+  arrowheads on tiny stubs were each caught by the user first, which is what
+  the checker is for.
+- **The same thing gets the same icon on every page.** Postgres is always
+  `brand:postgresql`, whether it's a container, a managed database or a branch's
+  compute. An Api that is a service, app or container is always `server`; one
+  that is a Worker or Function is `square-function`. Images (`package`) and
+  volumes (`hard-drive`) keep their kind's icon. Before picking an icon, grep
+  the other diagrams for the same thing and reuse theirs. The Docker diagram
+  drew Postgres and Api with generic container icons and was flagged.
 - **A property is not a node.** An instance's type and image, or a Worker's
   tokens, go inside its box (`specs`), not in boxes of their own with arrows.
 - **Draw the platform's real model, in full.** An AWS organization is a tree of
