@@ -12,15 +12,15 @@ Take one small app: an `Agents` environment holding an npm token, and a `Golden`
 
 <Tree
   nodes={[
-    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["golden task", "agents task", "devbox devbox"], colGap: 3, gutter: true },
+    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["golden task", "agents task", "devbox devbox"], phoneAreas: ["golden agents", "task task", "devbox devbox"], colGap: 3.75 },
     { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
-    { id: "agents", label: "Agents", type: "environment", parent: "account", icon: "file-key" },
+    { id: "agents", label: "Agents", type: "environment", parent: "account", icon: "file-key", specs: [["NPM_TOKEN", "secret"]] },
     { id: "task", label: "task-42", type: "sandbox · running", parent: "account", tone: "accent", icon: "box", specs: [[":3000", "task-42-3000.on.boat.dev"]] },
     { id: "devbox", label: "DevBox", type: "sandbox · stopped, disk saved", parent: "account", tone: "muted", icon: "box" },
   ]}
   links={[
-    { from: "golden", to: "task", label: "from" },
-    { from: "agents", to: "task", label: "env" },
+    { from: "golden", to: "task", label: "disk" },
+    { from: "agents", to: "task", label: "secrets" },
   ]}
   caption="Everything belongs to the account acme. task-42 starts from the Golden snapshot on the Agents environment, and serves port 3000 at its own URL. DevBox stopped on its timer and keeps its disk until it resumes. A Cloudflare Worker outside Boat creates the sandbox, runs commands in it and calls its port."
 />
