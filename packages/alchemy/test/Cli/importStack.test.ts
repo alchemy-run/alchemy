@@ -175,7 +175,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
         return yield* Effect.forEach([throwing, aggregate, missing], (main) =>
           collectAuthProviders({ main, envFile: Option.none<string>(), profile: "default" }).pipe(
             Effect.flip,
-            Effect.map((error) => error.message),
+            Effect.map((error) => `${error._tag}: ${error.message}`),
           ),
         );
       }).pipe(Effect.scoped, Effect.provide(Interaction.layerNonInteractive())),
@@ -183,13 +183,13 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     );
 
     expect(failures[0]).toMatch(
-      /^Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
+      /^AuthProviderImportError: Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
     );
     expect(failures[1]).toMatch(
-      /^Could not load auth providers from '.+aggregate\.run\.ts': TypeError: fetch failed; caused by AggregateError \(Error \[ECONNREFUSED\]: connect ECONNREFUSED ::1:5432, Error: connect ECONNREFUSED 127\.0\.0\.1:5432\)$/,
+      /^AuthProviderImportError: Could not load auth providers from '.+aggregate\.run\.ts': TypeError: fetch failed; caused by AggregateError \(Error \[ECONNREFUSED\]: connect ECONNREFUSED ::1:5432, Error: connect ECONNREFUSED 127\.0\.0\.1:5432\)$/,
     );
     expect(failures[2]).toMatch(
-      /^Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
+      /^AuthProviderImportError: Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
     );
   });
 
