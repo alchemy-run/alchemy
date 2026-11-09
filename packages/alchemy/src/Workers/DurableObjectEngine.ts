@@ -519,10 +519,10 @@ const executionObject = <State>(
         // The next run replays with the instance marked interrupted, which
         // fails the workflow and runs its compensations.
         interrupt: () =>
-          reportDefects(
-            transaction(
-              query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake())),
-            ),
+          query("UPDATE workflow_execution SET interrupted = 1").pipe(
+            Effect.andThen(wake()),
+            transaction,
+            reportDefects,
           ),
         // Stop without running compensations.
         interruptUnsafe: () =>
