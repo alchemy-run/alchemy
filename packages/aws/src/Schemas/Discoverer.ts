@@ -71,7 +71,7 @@ export interface DiscovererLookup {
 }
 
 /**
- * An EventBridge schema discoverer — automatically infers schemas from the
+ * An EventBridge schema discoverer -- automatically infers schemas from the
  * events flowing through an event bus and publishes them (versioned) to the
  * AWS-managed `discovered-schemas` registry.
  *

@@ -135,7 +135,7 @@ export interface OrganizationsFirewallEndpointLookup {
    */
   organization?: string;
   /**
-   * Zone (`us-central1-a`, …). Firewall endpoints are zonal.
+   * Zone (`us-central1-a`, ...). Firewall endpoints are zonal.
    */
   location?: string;
 }

@@ -156,7 +156,7 @@ export interface BackupLookup {
    */
   instanceLocation?: string;
   /**
-   * Region that stores the backup (`us-central1`, …). Backups are regional
+   * Region that stores the backup (`us-central1`, ...). Backups are regional
    * and may live in a different region than the instance. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */

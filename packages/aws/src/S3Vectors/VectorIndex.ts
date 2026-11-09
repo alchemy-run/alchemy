@@ -85,7 +85,7 @@ export interface IndexLookup {
 }
 
 /**
- * A vector index inside an S3 Vectors {@link VectorBucket} — stores vectors of
+ * A vector index inside an S3 Vectors {@link VectorBucket} -- stores vectors of
  * a fixed dimension and answers similarity queries under a distance metric.
  *
  * The index shape (data type, dimension, distance metric, non-filterable

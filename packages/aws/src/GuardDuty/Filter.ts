@@ -92,7 +92,7 @@ export interface FilterLookup {
 }
 
 /**
- * A GuardDuty findings filter — matches findings against criteria and either
+ * A GuardDuty findings filter -- matches findings against criteria and either
  * keeps (`NOOP`) or auto-archives (`ARCHIVE`) them. Identity is the
  * `(detectorId, name)` pair; description, action, rank, and criteria are
  * updatable in place.

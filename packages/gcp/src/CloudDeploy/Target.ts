@@ -264,7 +264,7 @@ export interface TargetLookup {
    */
   targetId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -276,7 +276,7 @@ export interface TargetLookup {
 }
 
 /**
- * A Cloud Deploy target — a location a Skaffold configuration can be
+ * A Cloud Deploy target -- a location a Skaffold configuration can be
  * deployed to (GKE, Cloud Run, Anthos, a custom target type, or a
  * multi-target).
  *

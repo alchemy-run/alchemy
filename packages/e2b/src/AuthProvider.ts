@@ -97,7 +97,7 @@ const storedFields: ReadonlyArray<ConfigureField> = [
   { name: "teamId", label: "E2B team id, if not your default team", optional: true },
   {
     name: "apiKey",
-    label: "E2B API key (e2b_…)",
+    label: "E2B API key (e2b_\u2026)",
     description: "Only without an access token: enough for resources, not for bindings.",
     secret: true,
     optional: true,
@@ -218,7 +218,7 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
           {
             value: "oauth" as const,
             label: "Browser login",
-            description: "recommended — sign in to E2B; the token refreshes itself",
+            description: "recommended \u2014 sign in to E2B; the token refreshes itself",
           },
           {
             value: "stored" as const,

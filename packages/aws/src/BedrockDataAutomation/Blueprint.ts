@@ -87,7 +87,7 @@ export type BlueprintLookup =
     };
 
 /**
- * An Amazon Bedrock Data Automation Blueprint — a JSON schema describing the
+ * An Amazon Bedrock Data Automation Blueprint -- a JSON schema describing the
  * custom output fields to extract from documents, images, audio, or video.
  * Attach blueprints to a `DataAutomationProject` via its
  * `customOutputConfiguration`.

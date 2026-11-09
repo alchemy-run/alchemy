@@ -88,7 +88,7 @@ export interface ModelManifestLookup {
 }
 
 /**
- * An AWS IoT FleetWise model manifest (vehicle model) — the subset of
+ * An AWS IoT FleetWise model manifest (vehicle model) -- the subset of
  * signal-catalog nodes that describes one vehicle type.
  *
  * A manifest is created in `DRAFT` status; set `status: "ACTIVE"` to make

@@ -91,7 +91,7 @@ export interface AccessPointLookup {
 }
 
 /**
- * An Amazon EFS access point — an application-specific entry point into a
+ * An Amazon EFS access point -- an application-specific entry point into a
  * file system that enforces a POSIX identity and a root directory.
  *
  * Access points are how Lambda (and other serverless compute) mounts EFS:

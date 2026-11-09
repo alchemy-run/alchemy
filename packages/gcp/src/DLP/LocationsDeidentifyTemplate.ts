@@ -100,7 +100,7 @@ export interface LocationsDeidentifyTemplateLookup {
    */
   templateId: string;
   /**
-   * Processing location (`global`, `us`, `us-central1`, …).
+   * Processing location (`global`, `us`, `us-central1`, ...).
    */
   location?: string;
   /**

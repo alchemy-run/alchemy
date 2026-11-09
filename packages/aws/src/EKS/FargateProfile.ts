@@ -96,7 +96,7 @@ export interface FargateProfileLookup {
 }
 
 /**
- * An Amazon EKS Fargate profile — declares which pods (by namespace + labels)
+ * An Amazon EKS Fargate profile -- declares which pods (by namespace + labels)
  * run on AWS Fargate serverless compute instead of on EC2 nodes.
  *
  * Fargate profiles are immutable except for tags: any change to selectors, the

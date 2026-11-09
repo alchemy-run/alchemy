@@ -171,7 +171,7 @@ export interface RepositoryLookup {
    */
   repositoryId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -183,7 +183,7 @@ export interface RepositoryLookup {
 }
 
 /**
- * A Dataform Git repository — the container for workspaces, release
+ * A Dataform Git repository -- the container for workspaces, release
  * configs, workflow configs, and workflow invocations.
  *
  * Changing `repositoryId`, `location`, or `kmsKeyName` replaces the

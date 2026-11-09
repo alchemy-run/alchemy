@@ -59,7 +59,7 @@ export type InsightLookup =
     };
 
 /**
- * A Security Hub custom insight — a saved finding query grouped by an
+ * A Security Hub custom insight -- a saved finding query grouped by an
  * attribute. Read its aggregated results at runtime with the
  * {@link GetInsightResults} binding.
  *

@@ -149,7 +149,7 @@ export interface CaPoolLookup {
    */
   caPoolId: string;
   /**
-   * Certificate Authority Service location (`us-central1`, `us-east1`, …).
+   * Certificate Authority Service location (`us-central1`, `us-east1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -161,7 +161,7 @@ export interface CaPoolLookup {
 }
 
 /**
- * A Certificate Authority Service CaPool — a group of Certificate
+ * A Certificate Authority Service CaPool -- a group of Certificate
  * Authorities that share issuance policy and form a trust anchor.
  *
  * Changing `caPoolId`, `location`, `tier`, or `encryptionSpec` replaces

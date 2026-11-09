@@ -103,7 +103,7 @@ export type IdentityPoolLookup =
     };
 
 /**
- * An Amazon Cognito identity pool (federated identities) — exchanges tokens
+ * An Amazon Cognito identity pool (federated identities) -- exchanges tokens
  * from user pools, social providers, OIDC/SAML IdPs, or developer backends
  * for temporary AWS credentials.
  * ### Creating an Identity Pool

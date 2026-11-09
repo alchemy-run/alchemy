@@ -310,7 +310,7 @@ export interface PaymentMethodConfigurationLookup {
 }
 
 /**
- * A Stripe Payment Method Configuration — which payment methods Checkout,
+ * A Stripe Payment Method Configuration -- which payment methods Checkout,
  * PaymentIntents, and SetupIntents show when payment method types are not
  * set explicitly. `name` and per-method `displayPreference` update in
  * place. `parent` is create-only and changing it replaces the

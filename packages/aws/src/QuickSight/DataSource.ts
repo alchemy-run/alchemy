@@ -108,7 +108,7 @@ export interface DataSourceLookup {
 }
 
 /**
- * An Amazon QuickSight data source — a connection to an external data store
+ * An Amazon QuickSight data source -- a connection to an external data store
  * that datasets read from.
  *
  * QuickSight requires an active account subscription in the region. Without

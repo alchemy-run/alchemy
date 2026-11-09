@@ -17,7 +17,7 @@ import { Credentials } from "./Credentials.ts";
  * alchemy.
  *
  * They read the token and base URL from the distilled {@link Credentials}
- * service — the same service every migrated operation authenticates with —
+ * service -- the same service every migrated operation authenticates with --
  * rather than from `PrismaEnvironment`. `providers()` resolves
  * `PrismaEnvironment` lazily inside the management client (see the lazy-auth
  * note on `stackManagementApiLayer`), so it isn't in the stack's context.

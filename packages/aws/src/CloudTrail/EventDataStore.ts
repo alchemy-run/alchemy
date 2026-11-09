@@ -137,7 +137,7 @@ export interface EventDataStoreLookup {
 }
 
 /**
- * A CloudTrail Lake event data store — an immutable collection of events
+ * A CloudTrail Lake event data store -- an immutable collection of events
  * that can be queried with SQL via CloudTrail Lake.
  *
  * Deleting an event data store schedules it for deletion

@@ -144,7 +144,7 @@ export interface ControlLookup {
 }
 
 /**
- * A custom control in AWS Audit Manager — a compliance requirement paired
+ * A custom control in AWS Audit Manager -- a compliance requirement paired
  * with the data sources (CloudTrail, Config, Security Hub, API calls, or
  * manual evidence) Audit Manager collects evidence from to demonstrate it.
  *

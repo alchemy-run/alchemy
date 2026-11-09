@@ -102,7 +102,7 @@ export type HostLookup =
     };
 
 /**
- * An AWS CodeConnections host — the infrastructure representation of a
+ * An AWS CodeConnections host -- the infrastructure representation of a
  * self-managed source provider (GitHub Enterprise Server or GitLab
  * self-managed). One host serves all connections to that provider.
  *

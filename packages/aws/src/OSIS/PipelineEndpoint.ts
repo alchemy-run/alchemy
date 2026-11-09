@@ -82,7 +82,7 @@ export interface PipelineEndpointLookup {
 }
 
 /**
- * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline — lets
+ * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline -- lets
  * clients inside a VPC ingest data into a pipeline privately, without
  * traversing the public ingest endpoint.
  *

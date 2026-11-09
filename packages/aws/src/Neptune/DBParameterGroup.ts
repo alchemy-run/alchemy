@@ -78,7 +78,7 @@ export interface DBParameterGroupLookup {
 }
 
 /**
- * An Amazon Neptune DB (instance-level) parameter group — a named set of
+ * An Amazon Neptune DB (instance-level) parameter group -- a named set of
  * engine configuration parameters applied to individual Neptune
  * {@link DBInstance}s via `dbParameterGroupName` (cluster-wide settings live
  * in a {@link DBClusterParameterGroup} instead).

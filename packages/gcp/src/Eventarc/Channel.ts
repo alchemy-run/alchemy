@@ -120,7 +120,7 @@ export interface ChannelLookup {
    */
   channelId: string;
   /**
-   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Eventarc location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;

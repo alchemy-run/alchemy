@@ -164,7 +164,7 @@ export interface ProjectLookup {
  *
  * **Example:** Add a database to an existing project
  * ```typescript
- * const project = Railway.Project.lookup({ projectId: "a1b2c3d4-…" });
+ * const project = Railway.Project.lookup({ projectId: "a1b2c3d4-..." });
  * const db = yield* Railway.Postgres("Db", { project });
  * ```
  *

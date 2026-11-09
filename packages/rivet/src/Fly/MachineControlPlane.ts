@@ -61,7 +61,7 @@ const ENTRYPOINT = [
  * the bucket and talk over the App's private network. A namespace is
  * created for the stage.
  *
- * Pools of nodes anywhere reach it at its public address —
+ * Pools of nodes anywhere reach it at its public address --
  * `RivetFly.MachinePool` on Fly, or a pool on any other cloud.
  *
  * ### Running a control plane on Fly

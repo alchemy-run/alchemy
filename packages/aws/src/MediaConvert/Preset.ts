@@ -61,7 +61,7 @@ export interface PresetLookup {
 }
 
 /**
- * An AWS Elemental MediaConvert output preset — a reusable, named bundle of
+ * An AWS Elemental MediaConvert output preset -- a reusable, named bundle of
  * output settings (container, video codec/resolution/bitrate, audio, and
  * captions) that job templates and jobs reference to produce one output.
  *

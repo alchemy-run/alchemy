@@ -53,7 +53,7 @@ export interface AutoscalerSettingsState {
 }
 
 export interface FunctionAutoscalerAttributes {
-  /** Function ID (`fu-…`). */
+  /** Function ID (`fu-...`). */
   functionId: string;
   /** The settings in effect after the last deploy. */
   settings: AutoscalerSettingsState;

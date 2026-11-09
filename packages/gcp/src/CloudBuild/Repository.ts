@@ -114,7 +114,7 @@ export interface RepositoryLookup {
    */
   connection: string;
   /**
-   * Cloud Build location (`us-central1`, `us-east1`, …). Used when
+   * Cloud Build location (`us-central1`, `us-east1`, ...). Used when
    * `connection` is a bare id. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
@@ -127,7 +127,7 @@ export interface RepositoryLookup {
 }
 
 /**
- * A Cloud Build v2 repository — links a remote Git repository to a
+ * A Cloud Build v2 repository -- links a remote Git repository to a
  * {@link Connection}.
  *
  * Changing `repositoryId`, `connection`, `location`, `remoteUri`, or

@@ -18,7 +18,7 @@ import {
 } from "../Snapshot.ts";
 
 /**
- * INTERNAL — the snapshot a sandbox boots from when its bindings bind
+ * INTERNAL -- the snapshot a sandbox boots from when its bindings bind
  * `alchemy/Mount` capabilities: `FROM` the base snapshot's image plus the
  * capabilities' install lines, built on Daytona. It is named from the
  * sandbox and a hash of its Dockerfile, belongs to the sandbox, and is

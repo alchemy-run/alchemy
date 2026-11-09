@@ -74,7 +74,7 @@ export interface ReservationGroupLookup {
    */
   reservationGroupId: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Multi-regions `US`
    * and `EU` stay uppercase; regional ids are lowercased.
    */
   location?: string;
@@ -86,7 +86,7 @@ export interface ReservationGroupLookup {
 }
 
 /**
- * A BigQuery reservation group — a named container for reservations.
+ * A BigQuery reservation group -- a named container for reservations.
  *
  * Groups have no labels or description, so Alchemy stamps ownership into
  * the group id (`alch---...`) so `list` / `pnpm nuke:gcp` can find them.

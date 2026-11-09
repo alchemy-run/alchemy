@@ -159,7 +159,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An Amazon DAX cluster — a fully managed, in-memory write-through cache for
+ * An Amazon DAX cluster -- a fully managed, in-memory write-through cache for
  * DynamoDB.
  *
  * Clusters are VPC-only and take roughly 5-10 minutes to provision; they are

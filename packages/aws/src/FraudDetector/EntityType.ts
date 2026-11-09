@@ -51,7 +51,7 @@ export interface EntityTypeLookup {
 }
 
 /**
- * An Amazon Fraud Detector entity type — the classification of who or what an
+ * An Amazon Fraud Detector entity type -- the classification of who or what an
  * event is about (e.g. `customer`, `merchant`). Event types reference entity
  * types; they are cheap metadata objects.
  *

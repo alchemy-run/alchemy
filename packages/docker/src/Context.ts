@@ -55,7 +55,7 @@ export interface ContextLookup {
 }
 
 /**
- * A named Docker CLI context — a pointer to a Docker engine (local socket,
+ * A named Docker CLI context -- a pointer to a Docker engine (local socket,
  * SSH host, or TCP endpoint) that other Docker resources deploy through.
  *
  * Pass the context (or its name) to any Docker resource's `context` prop to

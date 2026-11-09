@@ -143,7 +143,7 @@ export interface ClientTlsPolicyLookup {
    */
   clientTlsPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -155,7 +155,7 @@ export interface ClientTlsPolicyLookup {
 }
 
 /**
- * A Network Security ClientTlsPolicy — how a client authenticates
+ * A Network Security ClientTlsPolicy -- how a client authenticates
  * connections to backends. The policy has no effect until it is
  * attached to a backend service.
  *

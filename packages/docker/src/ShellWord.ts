@@ -8,7 +8,7 @@
 import * as Data from "effect/Data";
 import * as Result from "effect/Result";
 
-/** A word Docker cannot process: an unterminated quote or a bad `${…}`. */
+/** A word Docker cannot process: an unterminated quote or a bad `${...}`. */
 export class ShellWordError extends Data.TaggedError("ShellWordError")<{
   readonly message: string;
 }> {}
@@ -30,7 +30,7 @@ const isWhitespace = (ch: string | undefined) => ch === "\t" || ch === "\r" || c
 
 /**
  * The word being built. BuildKit's lexer has one per lexer, and every
- * `processStopOn` resets it, including the nested ones inside `${…}`: so
+ * `processStopOn` resets it, including the nested ones inside `${...}`: so
  * `he${X:-y}z` splits to `${X:-y}z`. Docker splits words this way, so we do.
  */
 interface WordBuffer {

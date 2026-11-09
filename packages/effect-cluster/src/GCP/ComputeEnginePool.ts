@@ -82,7 +82,7 @@ pgrep -f "docker logs -f cluster-runner" >/dev/null || setsid sh -c 'while true;
  * runners from a Cloud Storage bucket, behind a regional load balancer on a
  * static address that serves their gateway to callers anywhere. Runners
  * reach each other and the database through the cluster's network tag.
- * Requires a database on a GCP network — `ClusterGCP.Database`.
+ * Requires a database on a GCP network -- `ClusterGCP.Database`.
  *
  * Cloud Run can't host runners: runners take connections from each other.
  *

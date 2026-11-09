@@ -194,7 +194,7 @@ export interface CanaryLookup {
 }
 
 /**
- * A CloudWatch Synthetics canary — a scripted probe that monitors your
+ * A CloudWatch Synthetics canary -- a scripted probe that monitors your
  * endpoints and APIs on a schedule from the outside in.
  *
  * The canary script is provided inline and packaged automatically for the

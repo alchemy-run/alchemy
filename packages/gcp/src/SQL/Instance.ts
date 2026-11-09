@@ -284,7 +284,7 @@ export interface InstanceLookup {
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Must start with a letter,
    * contain only lowercase letters, numbers, and hyphens, and not end with
-   * a hyphen (1–98 characters).
+   * a hyphen (1-98 characters).
    */
   instanceName: string;
   /**

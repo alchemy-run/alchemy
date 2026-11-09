@@ -172,7 +172,7 @@ export interface NfsShareLookup {
    */
   nfsShareId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -184,7 +184,7 @@ export interface NfsShareLookup {
 }
 
 /**
- * A Bare Metal Solution NFS share — file storage attached to BMS
+ * A Bare Metal Solution NFS share -- file storage attached to BMS
  * networks in the same region and pod.
  *
  * Changing `nfsShareId`, `location`, `storageType`, or `pod` replaces the

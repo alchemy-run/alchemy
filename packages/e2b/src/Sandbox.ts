@@ -353,7 +353,7 @@ export const SandboxProvider = () =>
           const mounts = mountsOf(news);
           const templateBuild = templateBuildOf(news);
 
-          // Observe — `output` caches the id; the sandbox may be gone.
+          // Observe -- `output` caches the id; the sandbox may be gone.
           let detail = output === undefined ? undefined : yield* observeSandbox(output.sandboxId);
           let trafficAccessToken = output?.trafficAccessToken;
 
@@ -392,7 +392,7 @@ export const SandboxProvider = () =>
             );
           }
 
-          // Sync — egress rules, observed against what E2B stores.
+          // Sync -- egress rules, observed against what E2B stores.
           const desiredNetwork = mutableNetwork(news.network);
           const observedNetwork = mutableNetwork(detail.network);
           const dnsMatches =
@@ -416,7 +416,7 @@ export const SandboxProvider = () =>
             });
           }
 
-          // Sync — the run's timeout. E2B doesn't report the configured
+          // Sync -- the run's timeout. E2B doesn't report the configured
           // timeout, so `olds` is the only signal it changed.
           if (olds !== undefined && secondsOf(olds.timeout) !== timeout) {
             if (detail.state === "paused") {

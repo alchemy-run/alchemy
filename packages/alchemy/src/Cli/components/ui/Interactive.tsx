@@ -900,8 +900,8 @@ export function PromptFrame({
 }: PromptFrameProps) {
   const glyphs = useGlyphs();
   useAlchemyStatus({ state: "blocked", kind: blocked, msg: message });
-  // The active-step glyph shares the heading's brand colour: `◆ question` is
-  // the step being answered, `✓ question` (AnsweredPrompt) one that is done.
+  // The active-step glyph shares the heading's brand colour: `\u25c6 question` is
+  // the step being answered, `ok question` (AnsweredPrompt) one that is done.
   const heading = (suffix = "") => (
     <Text>
       <Text bold color={theme.color.brand}>

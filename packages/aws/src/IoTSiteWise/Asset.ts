@@ -89,7 +89,7 @@ export interface AssetLookup {
 }
 
 /**
- * An AWS IoT SiteWise asset — an instance of an asset model representing
+ * An AWS IoT SiteWise asset -- an instance of an asset model representing
  * a physical piece of industrial equipment or a logical grouping.
  *
  * Asset creation and updates are asynchronous (`CREATING`/`UPDATING` ->

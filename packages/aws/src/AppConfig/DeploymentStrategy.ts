@@ -83,7 +83,7 @@ export interface DeploymentStrategyLookup {
 }
 
 /**
- * An AWS AppConfig deployment strategy — defines how a configuration version
+ * An AWS AppConfig deployment strategy -- defines how a configuration version
  * rolls out to an environment: the total duration, the per-interval growth,
  * and the final bake time during which alarms can trigger a rollback.
  *

@@ -93,7 +93,7 @@ export interface StateTemplateLookup {
 }
 
 /**
- * An AWS IoT FleetWise state template — a definition of which signals'
+ * An AWS IoT FleetWise state template -- a definition of which signals'
  * last-known state the Edge Agent reports for a {@link Vehicle}
  * (associated via the vehicle's `stateTemplates` prop).
  *

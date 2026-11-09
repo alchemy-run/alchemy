@@ -249,7 +249,7 @@ export interface RestorePlanLookup {
    */
   restorePlanId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Must match the target cluster
+   * Region (`us-central1`, `us-east1`, ...). Must match the target cluster
    * region.
    */
   location?: string;
@@ -261,7 +261,7 @@ export interface RestorePlanLookup {
 }
 
 /**
- * A Backup for GKE restore plan — the configuration for restoring
+ * A Backup for GKE restore plan -- the configuration for restoring
  * Backups from a BackupPlan into a target cluster.
  *
  * Changing `restorePlanId`, `location`, `cluster`, or `backupPlan`

@@ -131,7 +131,7 @@ export interface BackupPlanLookup {
 }
 
 /**
- * An AWS Backup plan — a policy expression that defines *when* and *how* you
+ * An AWS Backup plan -- a policy expression that defines *when* and *how* you
  * want to back up your resources, composed of one or more scheduled rules
  * that each target a backup vault.
  *

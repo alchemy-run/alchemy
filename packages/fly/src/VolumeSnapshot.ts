@@ -67,9 +67,9 @@ export type VolumeSnapshot = Resource<
 export interface VolumeSnapshotLookup {
   /** Fly App name the Volume belongs to. */
   appName: string;
-  /** Fly Volume id (`vol_…`). */
+  /** Fly Volume id (`vol_...`). */
   volumeId: string;
-  /** Fly snapshot id (`vs_…`). */
+  /** Fly snapshot id (`vs_...`). */
   snapshotId: string;
 }
 

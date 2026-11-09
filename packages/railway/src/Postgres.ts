@@ -338,9 +338,9 @@ const PostgresResource = Resource<Postgres>("Railway.Postgres");
  * **Example:** Connect to an existing Postgres
  * ```typescript
  * const db = Railway.Postgres.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   serviceId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   serviceId: "c9d0e1f2-...",
  * });
  * const url = db.connectionUri;
  * ```

@@ -357,7 +357,7 @@ export interface BillingPortalConfigurationLookup {
 }
 
 /**
- * A Stripe Customer Portal configuration — the features, branding, and
+ * A Stripe Customer Portal configuration -- the features, branding, and
  * return URL used when creating portal sessions. `features` is required
  * on create. Name, metadata, business profile, login page, return URL,
  * features, and `active` update in place. Stripe does not hard-delete

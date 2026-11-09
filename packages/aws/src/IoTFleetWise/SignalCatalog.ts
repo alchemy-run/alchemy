@@ -75,7 +75,7 @@ export interface SignalCatalogLookup {
 }
 
 /**
- * An AWS IoT FleetWise signal catalog — the account-wide collection of
+ * An AWS IoT FleetWise signal catalog -- the account-wide collection of
  * standardized vehicle signals (branches, sensors, actuators, attributes)
  * that model manifests draw from.
  *

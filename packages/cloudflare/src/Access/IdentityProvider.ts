@@ -423,13 +423,13 @@ export type IdentityProviderProps = IdentityProviderBaseProps &
         config?: OneTimePinConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "passkeys";
         /** Passkeys configuration. */
         config?: PasskeysConfig;
       }
     | {
-        /** The identity provider type. Immutable — changing it triggers a replacement. */
+        /** The identity provider type. Immutable -- changing it triggers a replacement. */
         type: "github" | "facebook" | "linkedin" | "yandex";
         /** OAuth client credentials for the social provider. */
         config: SocialOAuthConfig;
@@ -571,7 +571,7 @@ export type IdentityProviderLookup = {
 );
 
 /**
- * A Cloudflare Zero Trust Access identity provider — the login method
+ * A Cloudflare Zero Trust Access identity provider -- the login method
  * (one-time PIN, passkeys, generic OIDC/SAML, or a named provider like GitHub,
  * Google, Okta, or Azure AD) users authenticate with before Access
  * policies evaluate.

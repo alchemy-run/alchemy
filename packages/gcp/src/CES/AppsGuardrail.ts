@@ -165,7 +165,7 @@ export interface AppsGuardrailLookup {
 }
 
 /**
- * A Customer Engagement Suite guardrail — content filter, LLM policy,
+ * A Customer Engagement Suite guardrail -- content filter, LLM policy,
  * model safety, or callback checks attached to an app or agent.
  *
  * Guardrails have no labels field -- Alchemy stamps ownership into

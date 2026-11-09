@@ -80,8 +80,8 @@ export interface SchemaLookup {
 }
 
 /**
- * An Amazon Personalize schema — an Avro definition that describes the fields
- * of a dataset (Interactions, Items, Users, …). Schemas are immutable once
+ * An Amazon Personalize schema -- an Avro definition that describes the fields
+ * of a dataset (Interactions, Items, Users, ...). Schemas are immutable once
  * created; changing any property replaces the schema.
  *
  * ### Creating a Schema

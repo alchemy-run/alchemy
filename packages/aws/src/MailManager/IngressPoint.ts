@@ -105,7 +105,7 @@ export interface IngressPointLookup {
 }
 
 /**
- * An SES Mail Manager ingress point — the SMTP endpoint that receives
+ * An SES Mail Manager ingress point -- the SMTP endpoint that receives
  * incoming email, screens it with a traffic policy, and processes it with a
  * rule set.
  *

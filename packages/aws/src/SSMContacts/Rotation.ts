@@ -87,7 +87,7 @@ export type RotationLookup =
     };
 
 /**
- * An Incident Manager on-call rotation — a recurring schedule that rotates
+ * An Incident Manager on-call rotation -- a recurring schedule that rotates
  * engagement duty between contacts. Attach rotations to an
  * `ONCALL_SCHEDULE` contact via its engagement plan's `RotationIds`.
  *

@@ -36,9 +36,9 @@ export interface WebhookTokenProps {
 }
 
 export interface WebhookTokenAttributes {
-  /** Token ID (`wk-…`), sent as the `Modal-Key` header. */
+  /** Token ID (`wk-...`), sent as the `Modal-Key` header. */
   tokenId: string;
-  /** Token secret (`ws-…`), sent as the `Modal-Secret` header. */
+  /** Token secret (`ws-...`), sent as the `Modal-Secret` header. */
   tokenSecret: Redacted.Redacted<string>;
   /** Display name. */
   name: string;

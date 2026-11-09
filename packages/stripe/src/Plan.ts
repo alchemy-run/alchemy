@@ -157,7 +157,7 @@ export interface PlanLookup {
 }
 
 /**
- * A Stripe Plan — the legacy (pre-Price) catalog object that defines
+ * A Stripe Plan -- the legacy (pre-Price) catalog object that defines
  * currency, amount, and billing interval for a Product. Prefer
  * {@link Price} for new catalogs; Plan exists for the Plans API.
  *

@@ -154,7 +154,7 @@ export interface EndpointLookup {
 }
 
 /**
- * An AWS Database Migration Service (DMS) endpoint — the source or target
+ * An AWS Database Migration Service (DMS) endpoint -- the source or target
  * database of a replication. Endpoints are metadata-only (they store
  * connection information, not data), so they are free and fast to create.
  * ### Creating Endpoints

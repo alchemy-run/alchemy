@@ -116,7 +116,7 @@ export interface TagTemplateLookup {
    */
   tagTemplateId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -128,7 +128,7 @@ export interface TagTemplateLookup {
 }
 
 /**
- * A Data Catalog tag template — a schema for tags attached to catalog
+ * A Data Catalog tag template -- a schema for tags attached to catalog
  * entries.
  *
  * Tag templates have no labels field. Alchemy stamps ownership into a

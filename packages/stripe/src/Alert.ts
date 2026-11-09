@@ -129,7 +129,7 @@ export interface AlertLookup {
 }
 
 /**
- * A Stripe Billing Alert — notifies you when a usage threshold on a
+ * A Stripe Billing Alert -- notifies you when a usage threshold on a
  * [Billing Meter](https://docs.stripe.com/api/billing/meter) is crossed.
  * `title`, `alertType`, and `usageThreshold` are immutable; changing them
  * replaces the alert. `status` is changed with Stripe's activate/deactivate

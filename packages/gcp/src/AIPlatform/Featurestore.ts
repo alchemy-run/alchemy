@@ -124,7 +124,7 @@ export interface FeaturestoreLookup {
 }
 
 /**
- * A Vertex AI Feature Store (legacy) — a container for Entity Types and
+ * A Vertex AI Feature Store (legacy) -- a container for Entity Types and
  * Features.
  *
  * Id, location, and encryption are identity. Labels, online serving, and

@@ -279,7 +279,7 @@ export interface DomainLookup {
 }
 
 /**
- * An Amazon OpenSearch Service domain — a managed OpenSearch/Elasticsearch
+ * An Amazon OpenSearch Service domain -- a managed OpenSearch/Elasticsearch
  * cluster with a search/HTTP endpoint.
  *
  * Domains take roughly 15-25 minutes to provision (and about as long for

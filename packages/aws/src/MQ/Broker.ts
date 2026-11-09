@@ -226,7 +226,7 @@ export type BrokerLookup =
     };
 
 /**
- * An Amazon MQ broker — a managed message broker running Apache ActiveMQ or
+ * An Amazon MQ broker -- a managed message broker running Apache ActiveMQ or
  * RabbitMQ. Amazon MQ handles provisioning, patching, and (for multi-AZ
  * deployments) failover, exposing standard wire protocols (OpenWire, AMQP,
  * MQTT, STOMP, WSS) so existing clients connect unchanged.

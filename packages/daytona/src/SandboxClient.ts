@@ -254,7 +254,7 @@ export interface SandboxBulkFiles {
  * acts on a sandbox is a method here, with Daytona's own parameters and
  * typed errors and the sandbox filled in: lifecycle on the handle itself
  * (`startSandbox`, `forkSandbox`, `createSandboxSnapshot`,
- * `getSignedPortPreviewUrl`, …) and the in-sandbox toolbox under
+ * `getSignedPortPreviewUrl`, ...) and the in-sandbox toolbox under
  * `process`, `fs`, `git`, `lsp`, `interpreter`, `computerUse`, `ports`,
  * `info`, `system` and `server`. Telemetry from Daytona's analytics API is
  * under `telemetry`.

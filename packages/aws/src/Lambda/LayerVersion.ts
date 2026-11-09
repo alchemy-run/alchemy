@@ -157,7 +157,7 @@ export interface LayerVersionLookup {
 }
 
 /**
- * A version of a Lambda layer — a zip archive of libraries, a custom runtime,
+ * A version of a Lambda layer -- a zip archive of libraries, a custom runtime,
  * or other dependencies that Lambda extracts into `/opt` alongside your
  * function code.
  *

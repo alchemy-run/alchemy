@@ -154,7 +154,7 @@ export interface EnvironmentsTargetserverLookup {
 }
 
 /**
- * An Apigee environment TargetServer — a named backend host:port used by
+ * An Apigee environment TargetServer -- a named backend host:port used by
  * proxy TargetEndpoints.
  *
  * Target servers have no labels, so Alchemy stamps ownership into

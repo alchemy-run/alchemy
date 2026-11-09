@@ -194,7 +194,7 @@ export interface CryptoKeyLookup {
    */
   keyRing: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `keyRing` is a bare id. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
@@ -207,7 +207,7 @@ export interface CryptoKeyLookup {
 }
 
 /**
- * A Cloud KMS CryptoKey — a named key that holds zero or more versions.
+ * A Cloud KMS CryptoKey -- a named key that holds zero or more versions.
  *
  * Purpose, location, parent KeyRing, import-only, backend,
  * `destroyScheduledDuration`, and `versionTemplate.protectionLevel` are

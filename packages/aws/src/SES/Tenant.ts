@@ -87,7 +87,7 @@ export interface TenantLookup {
 }
 
 /**
- * An Amazon SES v2 tenant — a logical container that groups related SES
+ * An Amazon SES v2 tenant -- a logical container that groups related SES
  * resources (email identities, configuration sets, templates) together, each
  * with its own reputation metrics, sending status, and optional
  * tenant-scoped suppression list. Useful for isolating email sending across

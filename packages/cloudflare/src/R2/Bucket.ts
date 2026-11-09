@@ -1041,7 +1041,7 @@ export const ProviderLive = () =>
         },
       ) =>
         Effect.gen(function* () {
-          // The hydration reads are independent — issue them
+          // The hydration reads are independent -- issue them
           // concurrently so each bucket costs one round-trip of wall
           // clock instead of four (a large leaked-bucket census can
           // otherwise blow the nuke scan's per-provider timeout).
@@ -1100,7 +1100,7 @@ export const ProviderLive = () =>
           // retries each call's transient blips; don't stack another
           // retry here (the budgets multiply into minutes per bucket).
           // A bucket that still 500s must not abort the account-wide
-          // enumeration (nuke would then see ZERO buckets) — degrade
+          // enumeration (nuke would then see ZERO buckets) -- degrade
           // it to an un-hydrated shape; delete can still tear the
           // bucket down.
           Effect.catchTag("InternalServerError", () =>

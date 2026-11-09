@@ -121,7 +121,7 @@ export interface MulticloudDataTransferConfigLookup {
    */
   multicloudDataTransferConfigId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;
@@ -133,7 +133,7 @@ export interface MulticloudDataTransferConfigLookup {
 }
 
 /**
- * A Data Transfer Essentials `MulticloudDataTransferConfig` — the
+ * A Data Transfer Essentials `MulticloudDataTransferConfig` -- the
  * billing/metering configuration for services whose traffic is billed
  * through DTE.
  *

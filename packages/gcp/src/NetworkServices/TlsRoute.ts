@@ -169,7 +169,7 @@ export interface TlsRouteLookup {
    */
   tlsRouteId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

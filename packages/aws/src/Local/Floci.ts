@@ -133,7 +133,7 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
     });
     // Point local workerd (and any other child process spawned after this)
     // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
-    // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
+    // under `alchemy dev` -- Node reads NODE_EXTRA_CA_CERTS once at startup,
     // so setting it here (before local workers spawn during the apply) only
     // affects children, which is exactly the target. Never clobber a value
     // the caller set deliberately.
@@ -292,7 +292,7 @@ export const checkHealth = (endpoint: string): Effect.Effect<void, FlociError> =
 /** Resolve the image to run: env override, config, pinned default. */
 export const resolveImage = (config?: FlociConfig): Effect.Effect<string> =>
   // An empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means "no override", not
-  // "run the image named ''" (an unrunnable docker ref) — the env provider
+  // "run the image named ''" (an unrunnable docker ref) -- the env provider
   // treats empty strings as missing.
   Config.option(Config.String("ALCHEMY_FLOCI_IMAGE")).pipe(
     Effect.map((override) =>

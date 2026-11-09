@@ -160,7 +160,7 @@ export interface CouponLookup {
 }
 
 /**
- * A Stripe Coupon — a percent-off or amount-off discount applied to
+ * A Stripe Coupon -- a percent-off or amount-off discount applied to
  * subscriptions, invoices, Checkout sessions, and quotes. Coupons do not
  * apply to one-off charges or PaymentIntents.
  *

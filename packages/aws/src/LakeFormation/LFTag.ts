@@ -50,7 +50,7 @@ export interface LFTagLookup {
 }
 
 /**
- * A Lake Formation LF-tag definition — a key with a list of allowed values
+ * A Lake Formation LF-tag definition -- a key with a list of allowed values
  * used for tag-based access control (attach values to databases/tables with
  * {@link LFTagAssociation | AWS.LakeFormation.LFTagAssociation}, grant on
  * expressions with {@link Permissions | AWS.LakeFormation.Permissions}).

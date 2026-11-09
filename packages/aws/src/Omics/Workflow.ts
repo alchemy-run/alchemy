@@ -123,7 +123,7 @@ export interface WorkflowLookup {
 }
 
 /**
- * An Amazon HealthOmics private workflow — a bioinformatics workflow (WDL,
+ * An Amazon HealthOmics private workflow -- a bioinformatics workflow (WDL,
  * Nextflow, or CWL) that is executed as one or more runs.
  *
  * A workflow name is auto-generated from the app, stage, and logical ID

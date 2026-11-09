@@ -204,7 +204,7 @@ export interface InstanceLookup {
    */
   instanceId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

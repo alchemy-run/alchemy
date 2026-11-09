@@ -83,7 +83,7 @@ export interface ApiKeyAttributes {
   /** Boat's key id. */
   apiKeyId: string;
   name: string;
-  /** The key (`boat_…`), sent as a bearer token. Boat shows it once; Alchemy keeps it in state. */
+  /** The key (`boat_...`), sent as a bearer token. Boat shows it once; Alchemy keeps it in state. */
   key: Redacted.Redacted<string>;
   /** The key's first characters, as the dashboard shows them. */
   keyPrefix: string;
@@ -166,8 +166,8 @@ const attributesOf = (key: boat.ApiKey, secret: Redacted.Redacted<string>): ApiK
 });
 
 /**
- * Seconds until the signing key expires, from Boat's refusal ("…signed
- * with an API key that expires 2027-11-07T16:21:12.757Z…"), less a minute;
+ * Seconds until the signing key expires, from Boat's refusal ("...signed
+ * with an API key that expires 2027-11-07T16:21:12.757Z..."), less a minute;
  * Boat's 90-day default when the message names no date.
  */
 const ttlUntilSignerExpires = (message: string | undefined) => {
@@ -207,7 +207,7 @@ export const ApiKeyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* boatName(id, news.name ?? output?.name);
 
-          // Observe — a key is usable only while its value is in state.
+          // Observe -- a key is usable only while its value is in state.
           const observed = output === undefined ? undefined : yield* findById(output.apiKeyId);
           if (output !== undefined && observed !== undefined && observed.expired !== true) {
             return attributesOf(observed, output.key);

@@ -101,7 +101,7 @@ export interface UserLookup {
 }
 
 /**
- * A MemoryDB user — an RBAC identity that authenticates to a cluster and is
+ * A MemoryDB user -- an RBAC identity that authenticates to a cluster and is
  * granted permissions through an access string. Users are grouped into
  * {@link ACL}s, which are attached to clusters.
  *

@@ -114,7 +114,7 @@ export interface EmailIdentityLookup {
 }
 
 /**
- * An Amazon SES v2 email identity — a verified email address or domain that
+ * An Amazon SES v2 email identity -- a verified email address or domain that
  * you send email from.
  *
  * Creating the identity starts verification: email-address identities receive

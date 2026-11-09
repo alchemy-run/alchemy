@@ -309,7 +309,7 @@ export interface CertificateAuthorityLookup {
    */
   caPool: string;
   /**
-   * Location (`us-central1`, …). Used when `caPool` is a bare id.
+   * Location (`us-central1`, ...). Used when `caPool` is a bare id.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -321,7 +321,7 @@ export interface CertificateAuthorityLookup {
 }
 
 /**
- * A Certificate Authority Service CertificateAuthority — a named CA in a
+ * A Certificate Authority Service CertificateAuthority -- a named CA in a
  * CaPool that issues certificates.
  *
  * Changing `certificateAuthorityId`, `caPool`, `location`, `type`,

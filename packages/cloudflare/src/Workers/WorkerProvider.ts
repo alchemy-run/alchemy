@@ -1726,8 +1726,8 @@ export const LiveWorkerProvider = () =>
         const targetName = params.domain?.name;
         // Zones to touch: every zone hosting a desired redirect, plus every
         // zone that hosted one before (so removals converge). A hostname
-        // missing from the attached-domain map — the domain list lags a
-        // fresh attach, or the domain is already detached — is looked up by
+        // missing from the attached-domain map -- the domain list lags a
+        // fresh attach, or the domain is already detached -- is looked up by
         // name, so its rule is still removed. Hostnames whose zone can't be
         // resolved at all are skipped: dead config at worst, never a failed
         // destroy.
@@ -3321,7 +3321,7 @@ export const LiveWorkerProvider = () =>
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
         // `transferredFrom` and `renamedFrom` are alchemy-only migration
-        // metadata on durable_object_namespace bindings — they drive the
+        // metadata on durable_object_namespace bindings -- they drive the
         // `transferred_classes` and `renamed_classes` migrations below and
         // must be stripped from the wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>

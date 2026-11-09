@@ -170,7 +170,7 @@ export interface AdminTopicLookup {
 }
 
 /**
- * A Pub/Sub Lite topic — a zonal or regional partitioned log.
+ * A Pub/Sub Lite topic -- a zonal or regional partitioned log.
  *
  * Pub/Sub Lite topics have no labels. Alchemy stamps
  * `alchemy-stack` / `alchemy-stage` / `alchemy-id` into the topic id so

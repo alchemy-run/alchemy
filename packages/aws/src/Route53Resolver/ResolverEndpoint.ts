@@ -115,7 +115,7 @@ export interface ResolverEndpointLookup {
 }
 
 /**
- * A Route 53 Resolver endpoint — the set of elastic network interfaces that
+ * A Route 53 Resolver endpoint -- the set of elastic network interfaces that
  * connect your VPC's `.2` resolver to DNS resolvers on your own network.
  *
  * An `INBOUND` endpoint lets DNS resolvers on your network forward queries

@@ -121,7 +121,7 @@ export interface ApplicationLookup {
    */
   applicationId: string;
   /**
-   * Region (`us-central1`, …) or `global`. `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, ...) or `global`. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. Regional applications use `scope.type =
    * REGIONAL`; global applications use `scope.type = GLOBAL`.
    */
@@ -134,7 +134,7 @@ export interface ApplicationLookup {
 }
 
 /**
- * An App Hub application — the governance boundary for services and
+ * An App Hub application -- the governance boundary for services and
  * workloads that perform a logical end-to-end business function.
  *
  * Applications have no labels field, so Alchemy stamps ownership into

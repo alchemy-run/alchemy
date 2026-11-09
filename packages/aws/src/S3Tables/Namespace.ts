@@ -50,7 +50,7 @@ export interface NamespaceLookup {
 }
 
 /**
- * A namespace within an Amazon S3 Tables {@link TableBucket} — a logical
+ * A namespace within an Amazon S3 Tables {@link TableBucket} -- a logical
  * grouping of {@link Table}s, equivalent to a database in an Iceberg catalog.
  * ### Creating Namespaces
  * **Example:** Basic Namespace

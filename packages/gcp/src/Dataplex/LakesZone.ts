@@ -185,7 +185,7 @@ export interface LakesZoneLookup {
 }
 
 /**
- * A Dataplex zone — a logical grouping of assets inside a lake (`RAW` or
+ * A Dataplex zone -- a logical grouping of assets inside a lake (`RAW` or
  * `CURATED`).
  *
  * Changing `lake`, `zoneId`, `location`, `type`, or `locationType`

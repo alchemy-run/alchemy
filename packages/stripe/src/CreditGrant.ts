@@ -203,7 +203,7 @@ export interface CreditGrantLookup {
 }
 
 /**
- * A Stripe Credit Grant — prepaid or promotional billing credits allocated
+ * A Stripe Credit Grant -- prepaid or promotional billing credits allocated
  * to a customer and applied against metered prices. Amount, customer,
  * applicability, category, effective time, and priority are immutable;
  * changing them replaces the grant. `expiresAt` and `metadata` update in

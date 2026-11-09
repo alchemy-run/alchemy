@@ -64,7 +64,7 @@ export interface AlarmLookup {
 }
 
 /**
- * A CloudWatch metric alarm — watches a single metric (or metric-math
+ * A CloudWatch metric alarm -- watches a single metric (or metric-math
  * expression) and transitions between `OK`, `ALARM`, and
  * `INSUFFICIENT_DATA`, optionally firing actions on state change.
  * ### Creating Alarms

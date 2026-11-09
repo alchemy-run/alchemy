@@ -50,7 +50,7 @@ export interface LabelLookup {
 }
 
 /**
- * An Amazon Fraud Detector label — a classification (e.g. `fraud`, `legit`)
+ * An Amazon Fraud Detector label -- a classification (e.g. `fraud`, `legit`)
  * used to tag stored events for supervised model training. Event types
  * reference labels; they are cheap metadata objects.
  *

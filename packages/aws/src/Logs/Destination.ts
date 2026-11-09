@@ -60,7 +60,7 @@ export interface DestinationLookup {
 }
 
 /**
- * A CloudWatch Logs destination — a cross-account subscription target that
+ * A CloudWatch Logs destination -- a cross-account subscription target that
  * forwards log events to a Kinesis stream. Producers in other accounts create
  * subscription filters whose `destinationArn` points at this destination;
  * the `accessPolicy` controls which accounts may subscribe.

@@ -174,7 +174,7 @@ export interface EntryGroupsEntryLookup {
 }
 
 /**
- * A Dataplex Universal Catalog Entry — a metadata record for a data
+ * A Dataplex Universal Catalog Entry -- a metadata record for a data
  * resource.
  *
  * Entries have no top-level labels field, so Alchemy stamps ownership

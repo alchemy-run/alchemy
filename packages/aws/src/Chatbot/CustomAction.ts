@@ -119,7 +119,7 @@ export type CustomActionLookup =
     };
 
 /**
- * An AWS Chatbot (Amazon Q Developer in chat applications) custom action —
+ * An AWS Chatbot (Amazon Q Developer in chat applications) custom action --
  * a reusable CLI command that chat users invoke by alias or as a button on
  * notifications.
  *

@@ -132,7 +132,7 @@ export interface SecurityProfileGroupLookup {
 }
 
 /**
- * A Network Security SecurityProfileGroup — a named bundle of
+ * A Network Security SecurityProfileGroup -- a named bundle of
  * SecurityProfile references applied together by firewall policy rules.
  *
  * Changing `securityProfileGroupId` or `location` replaces the group.

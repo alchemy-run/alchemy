@@ -64,7 +64,7 @@ export interface GroupLookup {
 }
 
 /**
- * A CloudWatch Synthetics group — associates canaries (including
+ * A CloudWatch Synthetics group -- associates canaries (including
  * cross-Region canaries) so you can view aggregated run results and manage
  * them as a unit. A group can hold as many as 10 canaries, and an account
  * can have as many as 20 groups.

@@ -85,7 +85,7 @@ export interface FindingsFilterLookup {
 }
 
 /**
- * An Amazon Macie findings filter — matches findings against criteria and
+ * An Amazon Macie findings filter -- matches findings against criteria and
  * either keeps (`NOOP`) or auto-suppresses (`ARCHIVE`) them. Requires Macie to
  * be enabled for the account (see `Macie2.Session`). Name, description,
  * action, position, and criteria are all updatable in place.

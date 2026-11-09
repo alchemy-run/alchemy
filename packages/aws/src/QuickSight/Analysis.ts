@@ -103,7 +103,7 @@ export interface AnalysisLookup {
 }
 
 /**
- * An Amazon QuickSight analysis — an editable workspace built from a template
+ * An Amazon QuickSight analysis -- an editable workspace built from a template
  * or an inline definition, which can be published as a dashboard.
  *
  * QuickSight requires an active account subscription in the region. Without

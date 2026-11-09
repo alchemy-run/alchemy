@@ -133,7 +133,7 @@ export interface PrivateConnectionLookup {
    */
   privateConnectionId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;

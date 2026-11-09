@@ -94,7 +94,7 @@ export interface ClusterSubnetGroupLookup {
 }
 
 /**
- * An Amazon Redshift cluster subnet group — the set of VPC subnets a
+ * An Amazon Redshift cluster subnet group -- the set of VPC subnets a
  * provisioned Redshift cluster's nodes are placed into.
  *
  * Subnet groups are free and provision instantly. A {@link Cluster}

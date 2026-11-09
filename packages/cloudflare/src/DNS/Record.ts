@@ -41,7 +41,7 @@ export type KnownRecordType =
   | "TLSA"
   | "URI";
 
-/** DNS record type literal — a known type, or any other string. */
+/** DNS record type literal -- a known type, or any other string. */
 export type RecordType = KnownRecordType | (string & {});
 
 /**
@@ -418,7 +418,7 @@ export const RecordProvider = () =>
         observed.name === body.name ||
         observed.name === normalizeRecordName(body.name, (yield* zones.getZone({ zoneId })).name);
       if (!sameName || observed.type !== body.type || !bodyEqualsObserved(body, observed)) {
-        // Suppress noise when we just created the record above — the
+        // Suppress noise when we just created the record above -- the
         // server echo already matches and any diff is a CF-side
         // normalisation we shouldn't fight on the very first reconcile.
         const justCreated = !output?.recordId && !foundByScan;
@@ -476,7 +476,7 @@ export const RecordProvider = () =>
       // Adoption path: no state of our own, but a record with this
       // `(zoneId, name, type)` may already exist. DNS records carry no
       // ownership markers we can inspect, so we cannot prove we created
-      // it — brand it `Unowned` so the engine refuses to take over
+      // it -- brand it `Unowned` so the engine refuses to take over
       // unless `adopt` is set. Only a record whose `content`/`priority`
       // match the declaration is this one; any other is a sibling. A
       // CNAME is exclusive at its name, so the one there is this record.
@@ -545,7 +545,7 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
 // name first and then its zone-qualified form. Used both for the adoption path
 // and to surface a conflict when the caller hasn't opted into adoption.
 //
-// `(name, type)` alone is NOT a unique identity — several records may share
+// `(name, type)` alone is NOT a unique identity -- several records may share
 // it, so the desired record value/priority must select the record (a CNAME,
 // exclusive at its name, matches whatever its content):
 //   - exactly one exact match -> that record

@@ -151,7 +151,7 @@ export interface WebACLLookup {
 }
 
 /**
- * An AWS WAFv2 Web ACL — a collection of rules that inspect and control web
+ * An AWS WAFv2 Web ACL -- a collection of rules that inspect and control web
  * requests for the AWS resources it is associated with.
  *
  * `REGIONAL` web ACLs protect regional resources (Application Load Balancer,

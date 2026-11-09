@@ -39,7 +39,7 @@ export interface ReceiptRuleSetLookup {
 }
 
 /**
- * An Amazon SES receipt rule set — the ordered container for the receipt rules
+ * An Amazon SES receipt rule set -- the ordered container for the receipt rules
  * that decide what happens to inbound email (deliver to S3, invoke a Lambda,
  * publish to SNS, bounce, etc.).
  *

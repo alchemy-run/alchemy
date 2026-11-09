@@ -50,7 +50,7 @@ export interface ThingLookup {
 }
 
 /**
- * An AWS IoT Thing — the cloud representation of a physical device.
+ * An AWS IoT Thing -- the cloud representation of a physical device.
  *
  * ### Creating a Thing
  * **Example:** Basic Thing

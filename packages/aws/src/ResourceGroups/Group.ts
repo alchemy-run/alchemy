@@ -117,7 +117,7 @@ export interface GroupLookup {
 }
 
 /**
- * An AWS Resource Groups group — a collection of AWS resources defined by a
+ * An AWS Resource Groups group -- a collection of AWS resources defined by a
  * tag-based query, a CloudFormation stack query, or an attached service
  * configuration.
  *

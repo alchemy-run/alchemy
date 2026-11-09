@@ -395,7 +395,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
 
 /**
  * The exact rolldown input/output options `bundleMainProgram` hands to
- * `Bundle.build` — shared with {@link watchMain} so a dev watcher's
+ * `Bundle.build` -- shared with {@link watchMain} so a dev watcher's
  * `Bundle.watch` observes the identical module graph.
  */
 export const mainBundleOptions = (

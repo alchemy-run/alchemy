@@ -51,8 +51,8 @@ export class StoryFailure extends Data.TaggedError("StoryFailure")<{
   readonly events: Readonly<Record<string, ReadonlyArray<string>>>;
   /**
    * When the story failed only in another order of its concurrent work: what
-   * ran earlier than it was queued, e.g. `policy Settlement ← Settled
-   * (Subject/s#2) ran before saga Process/s → admit-next`. Empty otherwise.
+   * ran earlier than it was queued, e.g. `policy Settlement <- Settled
+   * (Subject/s#2) ran before saga Process/s -> admit-next`. Empty otherwise.
    */
   readonly order: ReadonlyArray<string>;
 }> {}

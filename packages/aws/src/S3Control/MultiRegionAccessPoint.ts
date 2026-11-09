@@ -94,7 +94,7 @@ export interface MultiRegionAccessPointLookup {
 }
 
 /**
- * An Amazon S3 Multi-Region Access Point — a single global endpoint that
+ * An Amazon S3 Multi-Region Access Point -- a single global endpoint that
  * routes requests to buckets in multiple regions over the AWS global
  * network.
  *

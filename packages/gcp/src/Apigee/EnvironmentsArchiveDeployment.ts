@@ -114,7 +114,7 @@ export interface EnvironmentsArchiveDeploymentLookup {
 }
 
 /**
- * An Apigee archive deployment — a zip of API proxies deployed as a unit
+ * An Apigee archive deployment -- a zip of API proxies deployed as a unit
  * to an archive-mode environment.
  *
  * Labels carry Alchemy ownership so `list` / nuke can find leaked rows.

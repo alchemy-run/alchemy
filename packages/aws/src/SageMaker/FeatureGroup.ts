@@ -113,7 +113,7 @@ export interface FeatureGroupLookup {
 }
 
 /**
- * An Amazon SageMaker Feature Store FeatureGroup — a typed, versioned table
+ * An Amazon SageMaker Feature Store FeatureGroup -- a typed, versioned table
  * of ML features with an optional low-latency online store (for inference
  * lookups) and an S3-backed offline store (for training).
  *

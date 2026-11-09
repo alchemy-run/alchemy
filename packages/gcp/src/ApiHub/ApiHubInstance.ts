@@ -135,7 +135,7 @@ export interface ApiHubInstanceLookup {
    */
   apiHubInstanceId: string;
   /**
-   * Location (`us-central1`, …). Only one ApiHub instance is allowed per
+   * Location (`us-central1`, ...). Only one ApiHub instance is allowed per
    * project.
    */
   location?: string;

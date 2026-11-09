@@ -126,7 +126,7 @@ export interface DiscoveryConfigLookup {
    */
   configId: string;
   /**
-   * Processing location (`us`, `us-central1`, …).
+   * Processing location (`us`, `us-central1`, ...).
    */
   location?: string;
   /**

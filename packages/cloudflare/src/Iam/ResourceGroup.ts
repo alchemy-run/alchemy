@@ -94,7 +94,7 @@ export type ResourceGroupLookup =
     };
 
 /**
- * A Cloudflare IAM resource group — a named set of account resources
+ * A Cloudflare IAM resource group -- a named set of account resources
  * (zones, or the whole account) that fine-grained policies attach to.
  *
  * Resource groups pair with permission groups inside a user group policy:

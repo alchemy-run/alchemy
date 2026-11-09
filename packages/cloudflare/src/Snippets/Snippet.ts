@@ -84,7 +84,7 @@ export interface SnippetLookup {
 }
 
 /**
- * A Cloudflare Snippet — a lightweight JavaScript module that runs on
+ * A Cloudflare Snippet -- a lightweight JavaScript module that runs on
  * Cloudflare's edge to modify HTTP traffic for a zone.
  *
  * Uploading a snippet does not activate it: traffic only flows through a

@@ -79,7 +79,7 @@ export interface TypeLookup {
 }
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) — a
+ * An Amazon Keyspaces (for Apache Cassandra) user-defined type (UDT) -- a
  * named group of fields usable as a column type in tables of the same
  * keyspace.
  *

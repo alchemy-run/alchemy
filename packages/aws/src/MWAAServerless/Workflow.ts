@@ -156,7 +156,7 @@ export interface WorkflowLookup {
 }
 
 /**
- * An Amazon Managed Workflows for Apache Airflow **Serverless** workflow —
+ * An Amazon Managed Workflows for Apache Airflow **Serverless** workflow --
  * a serverless Airflow DAG defined by a YAML file in S3 and executed by
  * AWS-managed, multi-tenant Airflow infrastructure without provisioning an
  * environment.

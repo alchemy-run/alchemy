@@ -78,7 +78,7 @@ export type RepositoryLinkLookup =
     };
 
 /**
- * An AWS CodeConnections repository link — associates a connection with a
+ * An AWS CodeConnections repository link -- associates a connection with a
  * specific external Git repository so Git sync can monitor and sync changes
  * (e.g. CloudFormation git sync).
  *

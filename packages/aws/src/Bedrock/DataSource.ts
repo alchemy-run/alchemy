@@ -92,7 +92,7 @@ export interface DataSourceLookup {
 }
 
 /**
- * A data source attached to an Amazon Bedrock {@link KnowledgeBase} — the
+ * A data source attached to an Amazon Bedrock {@link KnowledgeBase} -- the
  * origin of the documents the knowledge base embeds and indexes.
  *
  * The most common source is an S3 bucket. After the data source is created,

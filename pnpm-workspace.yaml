@@ -206,6 +206,7 @@ catalog:
   octane: "0.16.0"
   oxfmt: "^0.74.0"
   oxlint: "^1.89.0"
+  "@oxlint/plugins": "1.89.0"
   pathe: "^2.0.3"
   pg: "^8.22.0"
   picomatch: "^4.0.7"

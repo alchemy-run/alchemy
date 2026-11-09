@@ -285,7 +285,7 @@ export interface NodeLookup {
    */
   nodeId: string;
   /**
-   * Zone (`us-central1-c`, `us-central1-b`, …). TPU nodes are zonal.
+   * Zone (`us-central1-c`, `us-central1-b`, ...). TPU nodes are zonal.
    * `US-CENTRAL1-C` is accepted and normalized to `us-central1-c`.
    */
   location?: string;

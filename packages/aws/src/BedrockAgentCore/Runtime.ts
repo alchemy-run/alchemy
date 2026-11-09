@@ -125,7 +125,7 @@ export interface RuntimeLookup {
 }
 
 /**
- * An Amazon Bedrock AgentCore Runtime — serverless hosting for containerized
+ * An Amazon Bedrock AgentCore Runtime -- serverless hosting for containerized
  * AI agents.
  *
  * A runtime deploys an agent (an ECR container image or managed-runtime code

@@ -150,7 +150,7 @@ export interface AuthProviderLookup {
 }
 
 /**
- * An Agent Identity auth provider — the credential configuration agents
+ * An Agent Identity auth provider -- the credential configuration agents
  * use to call third-party APIs (API keys, 2LO, or 3LO OAuth).
  *
  * `authProviderId` and `location` replace the resource. Description,

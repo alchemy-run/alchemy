@@ -107,7 +107,7 @@ export type ReportGroupLookup =
     };
 
 /**
- * An AWS CodeBuild report group — a named collection of test or
+ * An AWS CodeBuild report group -- a named collection of test or
  * code-coverage reports produced by builds. A build's buildspec `reports:`
  * section uploads its test results into a report group, and the report-read
  * bindings ({@link BatchGetReports}, {@link DescribeTestCases}, ...) let

@@ -63,7 +63,7 @@ export interface AddressListLookup {
 }
 
 /**
- * An SES Mail Manager address list — a named set of email addresses that
+ * An SES Mail Manager address list -- a named set of email addresses that
  * traffic policies and rule conditions can match against (allow lists,
  * block lists, routing groups).
  *

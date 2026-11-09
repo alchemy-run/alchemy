@@ -173,7 +173,7 @@ export interface EndpointPolicyLookup {
    */
   endpointPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -185,7 +185,7 @@ export interface EndpointPolicyLookup {
 }
 
 /**
- * A Network Services EndpointPolicy — applies TLS and authorization
+ * A Network Services EndpointPolicy -- applies TLS and authorization
  * configuration to Traffic Director endpoints that match a metadata
  * selector.
  *

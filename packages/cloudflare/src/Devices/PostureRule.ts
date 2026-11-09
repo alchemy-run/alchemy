@@ -124,7 +124,7 @@ export type DevicePostureRuleLookup =
     };
 
 /**
- * A Cloudflare Zero Trust **device posture rule** — a periodic check the
+ * A Cloudflare Zero Trust **device posture rule** -- a periodic check the
  * WARP client runs on enrolled devices (OS version, firewall status, disk
  * encryption, file presence, or a third-party security provider's
  * verdict). Posture results can then gate Access policies and Gateway

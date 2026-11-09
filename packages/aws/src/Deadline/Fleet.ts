@@ -298,7 +298,7 @@ export type FleetLookup =
     };
 
 /**
- * An AWS Deadline Cloud fleet — a group of workers (customer-managed hosts
+ * An AWS Deadline Cloud fleet -- a group of workers (customer-managed hosts
  * or service-managed EC2 instances) that run render jobs from associated
  * queues.
  *

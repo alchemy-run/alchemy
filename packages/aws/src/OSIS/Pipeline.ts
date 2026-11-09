@@ -164,7 +164,7 @@ export interface PipelineLookup {
 }
 
 /**
- * An Amazon OpenSearch Ingestion (OSIS) pipeline — a managed Data Prepper
+ * An Amazon OpenSearch Ingestion (OSIS) pipeline -- a managed Data Prepper
  * pipeline that ingests, transforms, and delivers data to OpenSearch domains,
  * serverless collections, or S3.
  *

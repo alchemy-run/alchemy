@@ -77,7 +77,7 @@ export interface EventTrackerLookup {
 }
 
 /**
- * An Amazon Personalize event tracker — the ingestion endpoint for streaming
+ * An Amazon Personalize event tracker -- the ingestion endpoint for streaming
  * interaction events into a dataset group's Interactions dataset. Creating a
  * tracker yields a `trackingId` that the {@link PutEvents} data-plane binding
  * uses to record events in real time.

@@ -116,7 +116,7 @@ export interface TenantLookup {
    */
   tenantId: string;
   /**
-   * Region of the tenant (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the tenant (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -128,7 +128,7 @@ export interface TenantLookup {
 }
 
 /**
- * An App Lifecycle Manager tenant — the producer-side instance of a
+ * An App Lifecycle Manager tenant -- the producer-side instance of a
  * SaaS created for one consumer.
  *
  * `tenantId`, `location`, `saas`, and `consumerResource` replace the

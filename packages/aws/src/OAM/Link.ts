@@ -95,7 +95,7 @@ export interface LinkLookup {
 }
 
 /**
- * A CloudWatch cross-account observability **link** — created in a source
+ * A CloudWatch cross-account observability **link** -- created in a source
  * account, it attaches to a monitoring-account {@link Sink} and shares the
  * selected telemetry types (metrics, log groups, traces, Application
  * Signals) with that account.

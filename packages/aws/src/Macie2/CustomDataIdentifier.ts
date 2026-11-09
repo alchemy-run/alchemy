@@ -92,7 +92,7 @@ export interface CustomDataIdentifierLookup {
 }
 
 /**
- * An Amazon Macie custom data identifier — a regex-based detection criterion
+ * An Amazon Macie custom data identifier -- a regex-based detection criterion
  * (with optional keywords, ignore words, and severity thresholds) that
  * classification jobs and automated discovery use to detect organization-
  * specific sensitive data. Requires Macie to be enabled for the account (see

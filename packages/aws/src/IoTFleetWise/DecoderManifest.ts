@@ -101,7 +101,7 @@ export interface DecoderManifestLookup {
 }
 
 /**
- * An AWS IoT FleetWise decoder manifest — the decoding rules (network
+ * An AWS IoT FleetWise decoder manifest -- the decoding rules (network
  * interfaces + signal decoders) that turn raw bus data from a vehicle
  * modeled by a {@link ModelManifest} into standardized signals.
  *

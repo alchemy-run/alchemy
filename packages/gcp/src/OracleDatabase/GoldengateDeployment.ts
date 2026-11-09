@@ -239,7 +239,7 @@ export interface GoldengateDeploymentLookup {
    */
   goldengateDeploymentId: string;
   /**
-   * Region (`us-central1`, `us-east4`, …).
+   * Region (`us-central1`, `us-east4`, ...).
    */
   location?: string;
   /**

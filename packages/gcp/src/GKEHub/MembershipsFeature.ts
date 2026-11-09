@@ -114,7 +114,7 @@ export interface MembershipsFeatureLookup {
    */
   featureId: string;
   /**
-   * Location of the parent membership (`global`, `us-central1`, …). Used
+   * Location of the parent membership (`global`, `us-central1`, ...). Used
    * when `membership` is a bare id. Fleet memberships are typically
    * `global`.
    */
@@ -133,7 +133,7 @@ export interface MembershipsFeatureLookup {
 }
 
 /**
- * A GKE Hub MembershipFeature — the per-membership settings for a Fleet
+ * A GKE Hub MembershipFeature -- the per-membership settings for a Fleet
  * Feature such as Config Management or Service Mesh.
  *
  * Changing `featureId`, `membership`, or `location` replaces the

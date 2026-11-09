@@ -96,7 +96,7 @@ export type AgentAliasLookup =
     };
 
 /**
- * An alias for an Amazon Bedrock {@link Agent} — a stable, invocable pointer
+ * An alias for an Amazon Bedrock {@link Agent} -- a stable, invocable pointer
  * to one or more agent versions.
  *
  * An alias is what applications invoke (via `bedrock-agent-runtime`

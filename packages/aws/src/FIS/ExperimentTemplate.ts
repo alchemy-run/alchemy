@@ -290,7 +290,7 @@ export interface ExperimentTemplateLookup {
 }
 
 /**
- * An AWS Fault Injection Service (FIS) experiment template — a reusable
+ * An AWS Fault Injection Service (FIS) experiment template -- a reusable
  * definition of a chaos-engineering experiment: the targets to disrupt, the
  * fault actions to run against them, and the stop conditions that abort a
  * runaway experiment.

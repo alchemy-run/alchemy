@@ -123,7 +123,7 @@ export type IndexLookup =
     };
 
 /**
- * An Amazon Q Business index — the document store that data sources sync
+ * An Amazon Q Business index -- the document store that data sources sync
  * content into and retrievers query.
  *
  * :::caution

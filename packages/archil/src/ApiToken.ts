@@ -27,7 +27,7 @@ export interface ApiTokenAttributes {
   name: string;
   /** Last characters of the key, as shown in the console. */
   tokenSuffix: string | undefined;
-  /** The API key (`key-…`). */
+  /** The API key (`key-...`). */
   token: Redacted.Redacted<string>;
   /** Archil region the key was created for, e.g. `aws-us-east-1`. */
   region: string;
@@ -132,7 +132,7 @@ export const ApiTokenProvider = () =>
           if (output !== undefined && output.tokenId === observed.id) return output;
           if (previous !== undefined && previous.tokenId === observed.id) return previous;
           // The key is only revealed at creation, so a token we have no state
-          // for can't be adopted with its value — reconcile re-mints.
+          // for can't be adopted with its value -- reconcile re-mints.
           return Unowned({
             tokenId: observed.id ?? "",
             name,
@@ -153,7 +153,7 @@ export const ApiTokenProvider = () =>
           ) {
             return output;
           }
-          // Ensure — a key we hold no secret for is revoked and re-minted.
+          // Ensure -- a key we hold no secret for is revoked and re-minted.
           if (observed?.id) {
             yield* session.note(`Re-minting API token ${name}...`);
             yield* revoke(observed.id);

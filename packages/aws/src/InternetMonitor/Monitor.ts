@@ -105,7 +105,7 @@ export interface MonitorLookup {
 }
 
 /**
- * An Amazon CloudWatch Internet Monitor **monitor** — measures internet
+ * An Amazon CloudWatch Internet Monitor **monitor** -- measures internet
  * availability and performance between your AWS-hosted application and your
  * end users' city-networks (client locations and ASNs, typically ISPs).
  *

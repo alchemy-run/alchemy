@@ -33,7 +33,7 @@ export interface ViewLookup {
 }
 
 /**
- * An Axiom saved view — a named, shareable APL query. Useful for building
+ * An Axiom saved view -- a named, shareable APL query. Useful for building
  * starter dashboards, providing canned "open in Axiom" links from your app,
  * or pinning common investigations the team revisits.
  *

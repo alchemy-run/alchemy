@@ -84,7 +84,7 @@ export interface IapDestGroupLookup {
    */
   destGroupId: string;
   /**
-   * Region of the destination group (`us-central1`, …). `US-CENTRAL1` is
+   * Region of the destination group (`us-central1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;

@@ -148,7 +148,7 @@ export interface TlsInspectionPolicyLookup {
    */
   tlsInspectionPolicyId: string;
   /**
-   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -160,7 +160,7 @@ export interface TlsInspectionPolicyLookup {
 }
 
 /**
- * A Network Security TlsInspectionPolicy — CA pool and TLS settings used
+ * A Network Security TlsInspectionPolicy -- CA pool and TLS settings used
  * to intercept TLS for Secure Web Proxy and Cloud NGFW.
  *
  * TlsInspectionPolicy has no labels field, so Alchemy stamps ownership

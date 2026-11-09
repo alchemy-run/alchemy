@@ -90,7 +90,7 @@ export interface VariantStoreLookup {
 }
 
 /**
- * An Amazon HealthOmics variant store — a container for genomic variant data
+ * An Amazon HealthOmics variant store -- a container for genomic variant data
  * (VCF) aligned to a reference genome.
  *
  * A variant store name is auto-generated from the app, stage, and logical ID

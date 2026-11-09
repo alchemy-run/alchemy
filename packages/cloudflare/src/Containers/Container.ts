@@ -446,9 +446,9 @@ type ContainerShape<Shape> = {
  * A container's image comes from one of three sources, picked by which
  * prop you set:
  *
- * - `main` — bundle your Effect program into a generated image.
- * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — pull a pre-built image and re-push it.
+ * - `main` -- bundle your Effect program into a generated image.
+ * - `context` (+ optional `dockerfile`) -- build your own Dockerfile.
+ * - `image` -- pull a pre-built image and re-push it.
  *
  * Only the `main` source bundles and injects an Effect runtime -- so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two

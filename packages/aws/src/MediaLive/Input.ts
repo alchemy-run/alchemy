@@ -128,7 +128,7 @@ export type InputLookup =
     };
 
 /**
- * An AWS Elemental MediaLive input — the ingest endpoint or source locator a
+ * An AWS Elemental MediaLive input -- the ingest endpoint or source locator a
  * channel reads live content from (RTMP/RTP push, HLS/MP4 pull,
  * MediaConnect flow, ...).
  *

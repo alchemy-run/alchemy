@@ -126,7 +126,7 @@ export interface NamespaceLookup {
 }
 
 /**
- * An Amazon Redshift Serverless namespace — the storage-and-database half of
+ * An Amazon Redshift Serverless namespace -- the storage-and-database half of
  * a serverless data warehouse.
  *
  * A namespace holds databases, schemas, tables, admin credentials, and IAM

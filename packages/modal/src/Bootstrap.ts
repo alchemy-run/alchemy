@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for `Modal.Sandbox` (a Node process in a Modal sandbox serving the
  * bundled program). The generated entry imports this module and the user's
- * `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
+ * `main`, nothing else -- see `alchemy/Runtime/Bootstrap` for why.
  */
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "alchemy/Http";

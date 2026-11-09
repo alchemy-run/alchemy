@@ -224,7 +224,7 @@ export interface GrpcRouteLookup {
    */
   grpcRouteId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -236,7 +236,7 @@ export interface GrpcRouteLookup {
 }
 
 /**
- * A Network Services GrpcRoute — how a Mesh or Gateway routes gRPC
+ * A Network Services GrpcRoute -- how a Mesh or Gateway routes gRPC
  * traffic for a set of hostnames.
  *
  * Changing `grpcRouteId` or `location` replaces the route. Hostnames,

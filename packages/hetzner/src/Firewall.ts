@@ -146,7 +146,7 @@ export interface FirewallLookup {
 }
 
 /**
- * A Hetzner Cloud firewall — a named set of inbound/outbound rules that
+ * A Hetzner Cloud firewall -- a named set of inbound/outbound rules that
  * can be applied to one or more Servers.
  *
  * Name, rules, labels, and `applyTo` are all mutable. Changing the name

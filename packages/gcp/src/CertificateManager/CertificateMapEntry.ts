@@ -154,7 +154,7 @@ export interface CertificateMapEntryLookup {
 }
 
 /**
- * A Certificate Manager certificate map entry — binds one or more
+ * A Certificate Manager certificate map entry -- binds one or more
  * certificates to an SNI hostname (or the PRIMARY fallback) inside a
  * certificate map.
  *

@@ -1466,7 +1466,7 @@ export type Worker<Bindings = any> = Resource<
     cache?: WorkerCache;
     /**
      * Workers Observability traces and logs fields set on
-     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * `Cloudflare.Telemetry()` -- only the fields its caller set, so
      * they can be merged with `WorkerProps.observability` field by field.
      * Where the props omit `traces` / `logs`, these fill in over the
      * defaults (on); a field set to different values in both fails the

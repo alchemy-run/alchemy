@@ -111,7 +111,7 @@ export type GroupLookup =
     };
 
 /**
- * A Cloudflare Zero Trust Access group — a reusable, account-scoped set of
+ * A Cloudflare Zero Trust Access group -- a reusable, account-scoped set of
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.

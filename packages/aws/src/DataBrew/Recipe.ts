@@ -95,7 +95,7 @@ export interface RecipeLookup {
 }
 
 /**
- * An AWS Glue DataBrew recipe — an ordered list of data-transformation steps
+ * An AWS Glue DataBrew recipe -- an ordered list of data-transformation steps
  * (rename, filter, case conversion, etc.). Edits modify the `LATEST_WORKING`
  * version; setting `publish: true` snapshots numbered versions that recipe
  * jobs consume.

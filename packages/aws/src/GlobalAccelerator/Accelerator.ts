@@ -115,7 +115,7 @@ export type AcceleratorLookup =
     };
 
 /**
- * An AWS Global Accelerator standard accelerator — two anycast static IP
+ * An AWS Global Accelerator standard accelerator -- two anycast static IP
  * addresses that route client traffic over the AWS global network to the
  * closest healthy regional endpoint.
  *

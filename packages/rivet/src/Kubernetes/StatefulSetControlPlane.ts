@@ -52,7 +52,7 @@ export type ControlPlaneExposure =
 export interface StatefulSetControlPlaneProps {
   /**
    * The cluster to run on: a cluster resource (`Kubernetes.LocalCluster`,
-   * `AWS.EKS.Cluster`, …), a `Kubernetes.KubeConfig(...)`, or a connection.
+   * `AWS.EKS.Cluster`, ...), a `Kubernetes.KubeConfig(...)`, or a connection.
    */
   cluster: Kubernetes.ClusterLike | Effect.Effect<Input<Kubernetes.ClusterLike>, never, any>;
   /**
@@ -120,12 +120,12 @@ const storageEnvironment = (storage: ObjectStorage | undefined) =>
  * A Rivet control plane on Kubernetes, as a `Rivet.Cluster` Layer: a
  * StatefulSet of engines, each with a volume of its own, a Service for the
  * API, a headless Service for the engines' peer traffic, the admin token in
- * a Secret, and a namespace for the stage. Runs on any cluster — EKS, GKE,
+ * a Secret, and a namespace for the stage. Runs on any cluster -- EKS, GKE,
  * AKS, a local kind cluster.
  *
  * One engine keeps actor data on its own volume. More need shared object
  * storage (`objectStorage`: S3, an S3-compatible service, or GCS) reached
- * over HTTPS. Pools of nodes on the same cluster — `RivetKubernetes.DeploymentPool` —
+ * over HTTPS. Pools of nodes on the same cluster -- `RivetKubernetes.DeploymentPool` --
  * connect to the engines inside the cluster.
  *
  * ### Running a control plane on Kubernetes

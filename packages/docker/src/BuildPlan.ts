@@ -62,7 +62,7 @@ export interface BuildPlan {
    * written into the `ARG` defaults of {@link dockerfile}.
    */
   readonly args: Readonly<Record<string, string>>;
-  /** BuildKit secrets, by id (`RUN --mount=type=secret,id=…`). */
+  /** BuildKit secrets, by id (`RUN --mount=type=secret,id=...`). */
   readonly secrets: Readonly<Record<string, Redacted.Redacted<string>>>;
   /** Instructions the platform ignores (see {@link Capabilities.instructions}). */
   readonly warnings: ReadonlyArray<string>;
@@ -92,7 +92,7 @@ export interface Capabilities {
   readonly multiStage?: boolean;
   /** `RUN <<EOF` / `COPY <<EOF`. @default true */
   readonly heredocs?: boolean;
-  /** `RUN --mount=…` (secrets, caches). @default true */
+  /** `RUN --mount=...` (secrets, caches). @default true */
   readonly runMounts?: boolean;
   /** `ADD <url>`. @default true */
   readonly remoteAdd?: boolean;

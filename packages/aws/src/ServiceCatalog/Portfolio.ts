@@ -69,7 +69,7 @@ export type PortfolioLookup =
     };
 
 /**
- * An AWS Service Catalog portfolio — a container that organizes products
+ * An AWS Service Catalog portfolio -- a container that organizes products
  * and grants access to them for a set of principals.
  *
  * ### Creating a Portfolio

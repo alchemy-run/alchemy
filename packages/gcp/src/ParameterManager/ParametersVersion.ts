@@ -139,7 +139,7 @@ export interface ParametersVersionLookup {
 }
 
 /**
- * A Parameter Manager parameter version — an immutable payload attached
+ * A Parameter Manager parameter version -- an immutable payload attached
  * to a {@link Parameter}. Versions have no labels field; `list` / nuke
  * find versions whose parent parameter carries Alchemy labels.
  *

@@ -119,7 +119,7 @@ export interface EnvironmentLookup {
 }
 
 /**
- * An Amazon FinSpace environment — a managed data management and analytics
+ * An Amazon FinSpace environment -- a managed data management and analytics
  * workspace for the financial services industry.
  *
  * :::caution

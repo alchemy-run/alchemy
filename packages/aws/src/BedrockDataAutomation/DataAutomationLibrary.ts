@@ -79,7 +79,7 @@ export interface DataAutomationLibraryLookup {
 }
 
 /**
- * An Amazon Bedrock Data Automation Library — a store of reusable entities
+ * An Amazon Bedrock Data Automation Library -- a store of reusable entities
  * (currently `VOCABULARY` entities: domain phrases with display forms) that
  * data automation projects reference via their
  * `dataAutomationLibraryConfiguration` to improve extraction accuracy.

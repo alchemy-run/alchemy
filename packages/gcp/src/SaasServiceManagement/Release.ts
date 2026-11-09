@@ -151,7 +151,7 @@ export interface ReleaseLookup {
    */
   releaseId: string;
   /**
-   * Region of the release (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the release (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -163,7 +163,7 @@ export interface ReleaseLookup {
 }
 
 /**
- * An App Lifecycle Manager release — a version of a UnitKind packaged
+ * An App Lifecycle Manager release -- a version of a UnitKind packaged
  * as an OCI blueprint.
  *
  * `releaseId`, `location`, `unitKind`, and `blueprint.package` replace

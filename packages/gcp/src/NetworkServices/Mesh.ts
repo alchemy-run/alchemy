@@ -111,7 +111,7 @@ export interface MeshLookup {
    */
   meshId: string;
   /**
-   * Location (`global`, `us-central1`, …). Meshes are typically `global`.
+   * Location (`global`, `us-central1`, ...). Meshes are typically `global`.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;

@@ -271,7 +271,7 @@ export const HostnameAssociationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The association is a settings singleton — "delete" means clearing
+      // The association is a settings singleton -- "delete" means clearing
       // the hostname list with a PUT of an empty list, re-sent until the
       // clear is visible: Cloudflare sometimes keeps the old list after the
       // PUT. An association that outlives its CA survives the CA's delete,

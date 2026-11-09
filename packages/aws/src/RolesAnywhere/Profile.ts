@@ -148,7 +148,7 @@ export interface ProfileLookup {
 }
 
 /**
- * An IAM Roles Anywhere profile — the list of IAM roles that the Roles
+ * An IAM Roles Anywhere profile -- the list of IAM roles that the Roles
  * Anywhere service is trusted to assume for authenticated certificate
  * identities, optionally intersected with managed policies and an inline
  * session policy.

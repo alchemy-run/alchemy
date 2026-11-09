@@ -135,7 +135,7 @@ export interface AppProfileLookup {
 }
 
 /**
- * A Cloud Bigtable app profile — how client traffic is routed across
+ * A Cloud Bigtable app profile -- how client traffic is routed across
  * clusters in an instance.
  *
  * The parent instance must already exist. Every instance has a built-in

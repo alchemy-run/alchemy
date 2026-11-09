@@ -74,7 +74,7 @@ export interface DistributionConfigurationLookup {
 }
 
 /**
- * An EC2 Image Builder distribution configuration — defines where and how
+ * An EC2 Image Builder distribution configuration -- defines where and how
  * the output AMIs (or containers) of a pipeline are distributed across
  * regions and accounts.
  * ### Creating a Distribution Configuration

@@ -54,7 +54,7 @@ export interface ApplicationLookup {
 }
 
 /**
- * An AWS Service Catalog AppRegistry application — the top-level node that
+ * An AWS Service Catalog AppRegistry application -- the top-level node that
  * groups related cloud resources and metadata under a single logical
  * application (surfaced in myApplications and the `awsApplication` tag).
  *

@@ -207,7 +207,7 @@ export interface GatewayLookup {
    */
   gatewayId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -219,7 +219,7 @@ export interface GatewayLookup {
 }
 
 /**
- * A Network Services Gateway — the ip:port a Mesh or Secure Web Gateway
+ * A Network Services Gateway -- the ip:port a Mesh or Secure Web Gateway
  * proxy listens on, plus TLS and routing policy.
  *
  * Changing `gatewayId`, `location`, `type`, `network`, or `subnetwork`

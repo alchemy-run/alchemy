@@ -109,7 +109,7 @@ export interface PeeringLookup {
 }
 
 /**
- * A Managed Microsoft AD domain peering — attaches a VPC in this
+ * A Managed Microsoft AD domain peering -- attaches a VPC in this
  * project to a Managed AD domain that lives in a **different** project
  * so VMs on that network can join the domain. Same-project access uses
  * `Domain.authorizedNetworks` instead; creating a peering when domain

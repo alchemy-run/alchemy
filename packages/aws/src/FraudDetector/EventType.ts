@@ -75,7 +75,7 @@ export interface EventTypeLookup {
 }
 
 /**
- * An Amazon Fraud Detector event type — the schema of an event (its variables,
+ * An Amazon Fraud Detector event type -- the schema of an event (its variables,
  * labels, and entity types) that detectors evaluate. Event types are cheap
  * metadata objects.
  *

@@ -101,7 +101,7 @@ export interface MemoryLookup {
 }
 
 /**
- * An Amazon Bedrock AgentCore Memory — managed short- and long-term memory
+ * An Amazon Bedrock AgentCore Memory -- managed short- and long-term memory
  * for AI agents.
  *
  * Short-term memory stores raw session events (turn-by-turn conversation);

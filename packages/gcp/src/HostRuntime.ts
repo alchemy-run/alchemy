@@ -197,7 +197,7 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
   for (const source of injected) {
     for (const [name, value] of Object.entries(source ?? {})) {
       if (value === undefined) continue;
-      // A string is already an env value — the runtime context packed its
+      // A string is already an env value -- the runtime context packed its
       // bound values (a `Redacted` marker among them) when it recorded them;
       // packing it again would wrap the marker in a second layer of JSON
       // that the runtime `get` unwraps only once.

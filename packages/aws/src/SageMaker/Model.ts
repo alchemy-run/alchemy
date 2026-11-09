@@ -92,7 +92,7 @@ export interface ModelLookup {
 }
 
 /**
- * An Amazon SageMaker Model — the immutable pairing of an inference
+ * An Amazon SageMaker Model -- the immutable pairing of an inference
  * container image (and optional S3 model artifacts) with an execution role.
  * A model is pure configuration: it costs nothing until it is deployed to an
  * endpoint via an `EndpointConfig` + `Endpoint`.

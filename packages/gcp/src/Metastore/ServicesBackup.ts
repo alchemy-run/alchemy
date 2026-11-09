@@ -114,7 +114,7 @@ export interface ServicesBackupLookup {
 }
 
 /**
- * A Dataproc Metastore service backup — a point-in-time capture of a
+ * A Dataproc Metastore service backup -- a point-in-time capture of a
  * Hive metastore.
  *
  * Changing `backupId`, `service`, or `location` replaces the backup.

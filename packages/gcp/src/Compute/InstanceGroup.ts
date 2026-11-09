@@ -97,7 +97,7 @@ export type InstanceGroup = Resource<
  */
 export interface InstanceGroupLookup {
   /**
-   * Name of the instance group. Must be 1–63 characters and comply with
+   * Name of the instance group. Must be 1-63 characters and comply with
    * RFC1035.
    */
   instanceGroupName: string;

@@ -117,7 +117,7 @@ export type FHIRDatastoreLookup =
     };
 
 /**
- * An AWS HealthLake FHIR-enabled data store — a HIPAA-eligible, managed
+ * An AWS HealthLake FHIR-enabled data store -- a HIPAA-eligible, managed
  * store for FHIR R4 health data with a FHIR REST endpoint plus bulk
  * import/export.
  *

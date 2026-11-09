@@ -62,9 +62,9 @@ export interface ServiceUserAttributes {
   serviceUserId: string;
   /** Service user name. */
   name: string;
-  /** Token ID (`ak-…`), the `MODAL_TOKEN_ID` of the user. */
+  /** Token ID (`ak-...`), the `MODAL_TOKEN_ID` of the user. */
   tokenId: string;
-  /** Token secret (`as-…`), the `MODAL_TOKEN_SECRET` of the user. */
+  /** Token secret (`as-...`), the `MODAL_TOKEN_SECRET` of the user. */
   tokenSecret: Redacted.Redacted<string>;
   /** Whether the user is limited to its environments. */
   scoped: boolean;

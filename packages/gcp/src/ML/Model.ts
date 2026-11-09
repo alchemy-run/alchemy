@@ -125,7 +125,7 @@ export interface ModelLookup {
 }
 
 /**
- * An AI Platform (legacy ML Engine) model — a named container for
+ * An AI Platform (legacy ML Engine) model -- a named container for
  * deployed {@link ModelsVersion}s.
  *
  * Labels are set at create time but are not patchable, so Alchemy also

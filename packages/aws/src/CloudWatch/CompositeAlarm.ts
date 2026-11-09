@@ -67,7 +67,7 @@ export interface CompositeAlarmLookup {
 }
 
 /**
- * A CloudWatch composite alarm — combines the states of other alarms with
+ * A CloudWatch composite alarm -- combines the states of other alarms with
  * a boolean `AlarmRule` expression so a single alarm (and its actions)
  * reflects overall health.
  * ### Creating Composite Alarms

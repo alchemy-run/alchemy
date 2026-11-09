@@ -31,7 +31,7 @@ export interface MachinePoolOptions extends PoolSettings {
  * Run a pool's nodes on Fly.io: a pool on the control plane, and a private
  * Fly Service whose Machines host every `Rivet.DurableObject` given this
  * pool. Nodes only connect out to the control plane, so the Service takes
- * no traffic and works with any control plane it can reach —
+ * no traffic and works with any control plane it can reach --
  * `RivetFly.MachineControlPlane`, `RivetCloud.ControlPlane`, or one on another
  * cloud.
  *

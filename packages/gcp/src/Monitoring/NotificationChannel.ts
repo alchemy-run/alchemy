@@ -97,7 +97,7 @@ export interface NotificationChannelLookup {
 }
 
 /**
- * A Cloud Monitoring notification channel — email, webhook, Pub/Sub, or
+ * A Cloud Monitoring notification channel -- email, webhook, Pub/Sub, or
  * another supported delivery type.
  *
  * Channel ids are assigned by the API. Alchemy stamps ownership into

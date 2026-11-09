@@ -469,7 +469,7 @@ export interface WorkstationClustersWorkstationConfigLookup {
 }
 
 /**
- * A Cloud Workstations configuration — the template for workstation VMs
+ * A Cloud Workstations configuration -- the template for workstation VMs
  * (machine type, image, disks, timeouts).
  *
  * Changing `workstationConfigId`, `location`, `workstationCluster`,

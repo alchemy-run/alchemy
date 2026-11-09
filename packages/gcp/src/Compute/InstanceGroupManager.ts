@@ -141,7 +141,7 @@ export type InstanceGroupManager = Resource<
  */
 export interface InstanceGroupManagerLookup {
   /**
-   * Name of the managed instance group. Must be 1–63 characters and comply
+   * Name of the managed instance group. Must be 1-63 characters and comply
    * with RFC1035.
    */
   managerName: string;

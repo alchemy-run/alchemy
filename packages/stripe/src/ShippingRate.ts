@@ -176,7 +176,7 @@ export interface ShippingRateLookup {
 }
 
 /**
- * A Stripe Shipping Rate — the price of shipping presented to customers
+ * A Stripe Shipping Rate -- the price of shipping presented to customers
  * and applied to a purchase. Amount, currency, display name, delivery
  * estimate, and tax code are immutable (changing them replaces the
  * rate). `active`, metadata, `taxBehavior`, and per-currency

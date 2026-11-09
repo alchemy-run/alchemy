@@ -30,7 +30,7 @@ export interface ProcessEventOptions<T, Build extends WorkerBuild<any, any>> {
   ) => readonly [Effect.Effect<any, any, any>, Context.Context<never>];
   /**
    * Per-event services that shadow the captured services and the built
-   * instance context — e.g. the real per-event execution context, which
+   * instance context -- e.g. the real per-event execution context, which
    * must win over the *deferred* one the instance context carries.
    */
   readonly services?: ((built: Build) => Layer.Layer<never>) | undefined;
@@ -85,7 +85,7 @@ export const processEvent = <T, Build extends WorkerBuild<any, any>>(
               // their batching fibers and flush finalizers to the request
               // `scope` (not this build's transient scope), so buffered
               // telemetry flushes when the scope closes into `waitUntil`
-              // below — never on the instance scope, which workerd never
+              // below -- never on the instance scope, which workerd never
               // finalizes.
               Layer.effectContext(buildEventTelemetry(built.context, scope, built.telemetry())),
             ).pipe(
@@ -121,7 +121,7 @@ export const processEvent = <T, Build extends WorkerBuild<any, any>>(
 /**
  * Normalize an RPC dispatcher's return value into the effect the bridge
  * runs. Effects (including nested-RPC values built by `asEffectOrStream`,
- * which are Effects *branded* as Streams) run as effects — their resolved
+ * which are Effects *branded* as Streams) run as effects -- their resolved
  * value may itself be a `Stream`, which `handleRpcExit` then encodes. A
  * *genuine* `Stream` (not an Effect) or a plain value is lifted into the
  * success channel so `handleRpcExit` encodes it directly.

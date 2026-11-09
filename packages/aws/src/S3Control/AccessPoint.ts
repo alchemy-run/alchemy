@@ -140,7 +140,7 @@ export interface AccessPointLookup {
 }
 
 /**
- * An Amazon S3 Access Point — a named network endpoint attached to a bucket
+ * An Amazon S3 Access Point -- a named network endpoint attached to a bucket
  * with its own policy, public-access-block settings, and optional VPC
  * restriction. Use access points to manage shared-dataset access at scale
  * instead of maintaining one giant bucket policy.

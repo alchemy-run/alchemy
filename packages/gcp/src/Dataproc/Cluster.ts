@@ -300,7 +300,7 @@ export interface ClusterLookup {
    */
   clusterName: string;
   /**
-   * Dataproc region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Dataproc region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   region?: string;
@@ -648,7 +648,7 @@ const isGrantNotPropagated = (error: { readonly _tag: string; readonly message?:
   error._tag === "BadRequest" && (error.message ?? "").includes("Permissions are missing for the");
 
 // A RUNNING cluster can still be finishing an operation of its own:
-// `BadRequest: Cannot update cluster '…' while it has other pending update
+// `BadRequest: Cannot update cluster '...' while it has other pending update
 // operations.`
 const isUpdatePending = (error: { readonly _tag: string; readonly message?: string }) =>
   error._tag === "BadRequest" && (error.message ?? "").includes("other pending update operations");

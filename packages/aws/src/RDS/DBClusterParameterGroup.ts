@@ -75,7 +75,7 @@ export interface DBClusterParameterGroupLookup {
 }
 
 /**
- * An Aurora cluster parameter group — cluster-wide engine settings shared by
+ * An Aurora cluster parameter group -- cluster-wide engine settings shared by
  * every instance in a `DBCluster`.
  *
  * Name, family, and description changes force a replacement (RDS has no

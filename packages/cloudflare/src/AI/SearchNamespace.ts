@@ -68,7 +68,7 @@ export interface SearchNamespaceLookup {
 }
 
 /**
- * A Cloudflare.AI. Search namespace — a logical grouping for AI Search
+ * A Cloudflare.AI. Search namespace -- a logical grouping for AI Search
  * instances within an account.
  *
  * Namespaces partition AI Search (formerly AutoRAG) instances: each

@@ -75,7 +75,7 @@ export interface QueueLookup {
 }
 
 /**
- * An AWS Elemental MediaConvert queue — the pool that submitted transcode jobs
+ * An AWS Elemental MediaConvert queue -- the pool that submitted transcode jobs
  * are scheduled against. Every account has a system `Default` on-demand queue;
  * create additional queues to isolate workloads or to purchase reserved
  * render capacity.

@@ -106,7 +106,7 @@ export interface DashboardLookup {
 }
 
 /**
- * An Amazon QuickSight dashboard — a published, read-only view built from a
+ * An Amazon QuickSight dashboard -- a published, read-only view built from a
  * template, an analysis, or an inline definition.
  *
  * QuickSight requires an active account subscription in the region. Without

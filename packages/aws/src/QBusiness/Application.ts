@@ -167,7 +167,7 @@ export type ApplicationLookup =
     };
 
 /**
- * An Amazon Q Business application — the top-level container that indices,
+ * An Amazon Q Business application -- the top-level container that indices,
  * retrievers, data sources, and web experiences attach to.
  *
  * :::caution

@@ -179,7 +179,7 @@ export interface IssuingPersonalizationDesignLookup {
 }
 
 /**
- * A Stripe Issuing Personalization Design — a physical bundle, optional
+ * A Stripe Issuing Personalization Design -- a physical bundle, optional
  * card logo, and optional carrier text that represent a card product
  * line. Name, lookup key, logo, carrier text, physical bundle,
  * preferences, and metadata update in place.

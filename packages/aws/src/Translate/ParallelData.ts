@@ -104,7 +104,7 @@ export interface ParallelDataLookup {
 }
 
 /**
- * Amazon Translate parallel data — segment-aligned translation examples
+ * Amazon Translate parallel data -- segment-aligned translation examples
  * imported from S3 that steer the style, tone, and word choice of batch
  * translation jobs (Active Custom Translation). The import is asynchronous:
  * the resource waits for the parallel data to become `ACTIVE`.

@@ -69,7 +69,7 @@ export interface MetricStreamLookup {
 }
 
 /**
- * A CloudWatch metric stream — continuously exports CloudWatch metrics to
+ * A CloudWatch metric stream -- continuously exports CloudWatch metrics to
  * a Kinesis Data Firehose delivery stream (and on to S3, Datadog, etc.).
  * ### Creating Metric Streams
  * **Example:** Firehose Delivery Stream

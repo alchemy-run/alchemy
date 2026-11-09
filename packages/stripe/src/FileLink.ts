@@ -84,7 +84,7 @@ export interface FileLinkLookup {
 }
 
 /**
- * A Stripe File Link — a public URL for a File that does not require
+ * A Stripe File Link -- a public URL for a File that does not require
  * Stripe authentication. `file` is create-only; changing it replaces the
  * link. `expiresAt` and `metadata` update in place. Expired links cannot
  * be updated. Destroy expires the link (`expires_at: "now"`) rather than

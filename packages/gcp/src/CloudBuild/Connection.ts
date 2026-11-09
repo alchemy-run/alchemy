@@ -310,7 +310,7 @@ export interface ConnectionLookup {
    */
   connectionId: string;
   /**
-   * Cloud Build location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Cloud Build location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;

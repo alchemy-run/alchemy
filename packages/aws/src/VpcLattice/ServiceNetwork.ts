@@ -81,7 +81,7 @@ export interface ServiceNetworkLookup {
 }
 
 /**
- * An Amazon VPC Lattice service network — the logical boundary that connects
+ * An Amazon VPC Lattice service network -- the logical boundary that connects
  * services and VPCs into one application network. Cheap control-plane resource
  * with no per-hour charge until VPCs or services are associated.
  *

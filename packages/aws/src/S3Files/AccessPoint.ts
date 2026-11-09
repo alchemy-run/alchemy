@@ -127,7 +127,7 @@ export interface AccessPointLookup {
 }
 
 /**
- * An Amazon S3 File System Access Point — application-specific access to a
+ * An Amazon S3 File System Access Point -- application-specific access to a
  * {@link FileSystem} with POSIX user identity and root directory
  * enforcement, for managing shared datasets in multi-tenant scenarios.
  *

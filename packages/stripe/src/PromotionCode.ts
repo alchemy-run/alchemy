@@ -149,7 +149,7 @@ export interface PromotionCodeLookup {
 }
 
 /**
- * A Stripe Promotion Code — a customer-redeemable code for an underlying
+ * A Stripe Promotion Code -- a customer-redeemable code for an underlying
  * coupon. Stripe does not hard-delete promotion codes; destroying this
  * resource deactivates it (`active: false`).
  *

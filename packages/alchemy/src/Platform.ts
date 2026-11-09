@@ -514,7 +514,7 @@ export const Platform = <
                   const fetch = shape.fetch as any;
                   const hasRpcMethods = Object.keys(shape).some((key) => key !== "fetch");
                   // `alwaysServe` runtimes (ones that route Durable Object calls) serve routes
-                  // of their own — boot the server even for an impl with no
+                  // of their own -- boot the server even for an impl with no
                   // fetch handler and no RPC methods (e.g. a worker that only
                   // hosts Durable Objects).
                   if (!fetch && !hasRpcMethods && runtimeContext.alwaysServe !== true) {

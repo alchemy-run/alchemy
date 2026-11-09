@@ -147,7 +147,7 @@ export interface CertificateIssuanceConfigLookup {
    */
   certificateIssuanceConfigId: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …).
+   * Certificate Manager location (`global`, `us-central1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`. A regional
    * CA pool may be referenced from a `global` issuance config.
    */
@@ -160,7 +160,7 @@ export interface CertificateIssuanceConfigLookup {
 }
 
 /**
- * A Certificate Manager issuance config — how Google-managed certificates
+ * A Certificate Manager issuance config -- how Google-managed certificates
  * are minted from Certificate Authority Service (lifetime, rotation,
  * key algorithm, and CA pool).
  *

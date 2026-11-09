@@ -168,7 +168,7 @@ export interface UnitKindLookup {
    */
   unitKindId: string;
   /**
-   * Region of the unit kind (`us-central1`, …). `US-CENTRAL1` is accepted
+   * Region of the unit kind (`us-central1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;
@@ -180,7 +180,7 @@ export interface UnitKindLookup {
 }
 
 /**
- * An App Lifecycle Manager unit kind — the blueprint family that Units
+ * An App Lifecycle Manager unit kind -- the blueprint family that Units
  * of a SaaS share.
  *
  * Units of the same kind follow the same release model and are typically

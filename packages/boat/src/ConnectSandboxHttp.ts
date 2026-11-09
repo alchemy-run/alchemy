@@ -21,7 +21,7 @@ const CONNECT_SANDBOX_ACTIONS: ApiKeyAction[] = [
   "snapshot.write",
 ];
 
-/** `DevBox` → `DEV_BOX`, for the env var that carries its key. */
+/** `DevBox` -> `DEV_BOX`, for the env var that carries its key. */
 const envSuffix = (logicalId: string) =>
   logicalId
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")

@@ -115,7 +115,7 @@ export interface EnvironmentLookup {
 }
 
 /**
- * An Amazon DataZone environment — the provisioned collection of AWS
+ * An Amazon DataZone environment -- the provisioned collection of AWS
  * resources (Glue databases, IAM roles, Athena workgroups, ...) a project
  * works with, deployed from an environment blueprint via CloudFormation.
  *

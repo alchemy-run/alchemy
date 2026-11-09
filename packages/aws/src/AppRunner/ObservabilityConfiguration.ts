@@ -84,7 +84,7 @@ export interface ObservabilityConfigurationLookup {
 }
 
 /**
- * An AWS App Runner observability configuration — enables AWS X-Ray tracing
+ * An AWS App Runner observability configuration -- enables AWS X-Ray tracing
  * for the App Runner services that reference it.
  *
  * Observability configurations are immutable revisions: changing

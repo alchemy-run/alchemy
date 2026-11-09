@@ -142,7 +142,7 @@ export interface AssignmentLookup {
   assignee?: string;
   /**
    * Job type that uses the reservation (`QUERY`, `PIPELINE`, `ML_EXTERNAL`,
-   * `BACKGROUND`, `CONTINUOUS`, …).
+   * `BACKGROUND`, `CONTINUOUS`, ...).
    */
   jobType?: AssignmentJobType;
   /**
@@ -153,7 +153,7 @@ export interface AssignmentLookup {
 }
 
 /**
- * A BigQuery reservation assignment — grants a project, folder, or
+ * A BigQuery reservation assignment -- grants a project, folder, or
  * organization slots from a {@link Reservation} for one job type.
  *
  * Assignments have no labels. Alchemy stamps ownership into

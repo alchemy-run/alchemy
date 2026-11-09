@@ -84,7 +84,7 @@ export interface VectorBucketLookup {
 }
 
 /**
- * An Amazon S3 Vectors bucket — durable storage for vector embeddings,
+ * An Amazon S3 Vectors bucket -- durable storage for vector embeddings,
  * queryable by similarity. Create one or more {@link Index}es inside it to
  * store and query vectors.
  *

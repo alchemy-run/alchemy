@@ -110,7 +110,7 @@ export interface IpamAdminScopeLookup {
    */
   ipamAdminScopeId: string;
   /**
-   * Location of the scope. Cloud Number Registry is global — `global` is
+   * Location of the scope. Cloud Number Registry is global -- `global` is
    * the only supported value.
    */
   location?: string;
@@ -122,7 +122,7 @@ export interface IpamAdminScopeLookup {
 }
 
 /**
- * A Cloud Number Registry IPAM admin scope — the organization-wide
+ * A Cloud Number Registry IPAM admin scope -- the organization-wide
  * boundary for IP address discovery. Only one project in an
  * organization may own the admin scope. Creating it also creates a
  * default registry book and starts discovery (up to 24 hours).

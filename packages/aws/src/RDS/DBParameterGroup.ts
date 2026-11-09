@@ -97,7 +97,7 @@ export interface DBParameterGroupLookup {
 }
 
 /**
- * An RDS DB parameter group — instance-level engine settings, applied to a
+ * An RDS DB parameter group -- instance-level engine settings, applied to a
  * `DBInstance` (as opposed to the cluster-wide `DBClusterParameterGroup`).
  *
  * Name, family, and description changes force a replacement (RDS has no

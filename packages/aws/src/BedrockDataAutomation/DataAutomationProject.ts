@@ -118,7 +118,7 @@ export type DataAutomationProjectLookup =
     };
 
 /**
- * An Amazon Bedrock Data Automation Project — the configuration unit that
+ * An Amazon Bedrock Data Automation Project -- the configuration unit that
  * turns documents, images, audio, and video into structured output, with
  * optional custom output driven by `Blueprint`s.
  *

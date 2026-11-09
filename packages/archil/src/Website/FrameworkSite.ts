@@ -228,7 +228,7 @@ const runFrameworkSite = Effect.fn("Archil.Website.FrameworkSite")(function* (
 
 /**
  * Composite-level tagged errors (`FrameworkSiteError`, filesystem) are
- * defects — `Alchemy.Stack` only admits `ConfigError` on the user effect.
+ * defects -- `Alchemy.Stack` only admits `ConfigError` on the user effect.
  */
 export const makeFrameworkSite = (
   id: string,

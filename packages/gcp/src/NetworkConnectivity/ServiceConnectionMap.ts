@@ -158,7 +158,7 @@ export interface ServiceConnectionMapLookup {
    */
   serviceConnectionMapId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;

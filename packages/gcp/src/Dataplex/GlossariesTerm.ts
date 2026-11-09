@@ -126,7 +126,7 @@ export interface GlossariesTermLookup {
 }
 
 /**
- * A Dataplex glossary term — a defined business concept that can be
+ * A Dataplex glossary term -- a defined business concept that can be
  * attached to catalog entries.
  *
  * Changing `glossary`, `termId`, or `location` replaces the term. Display

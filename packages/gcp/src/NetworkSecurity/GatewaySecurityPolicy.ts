@@ -97,7 +97,7 @@ export interface GatewaySecurityPolicyLookup {
    */
   gatewaySecurityPolicyId: string;
   /**
-   * Region of the policy (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the policy (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -109,7 +109,7 @@ export interface GatewaySecurityPolicyLookup {
 }
 
 /**
- * A Gateway Security Policy — a collection of
+ * A Gateway Security Policy -- a collection of
  * GatewaySecurityPolicyRules used by Secure Web Proxy.
  *
  * The API has no labels field, so Alchemy stamps ownership into the

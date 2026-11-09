@@ -214,7 +214,7 @@ export const FlociMicrovmImageProvider = () =>
             Stream.runForEach(() =>
               Effect.gen(function* () {
                 const startedAt = yield* Clock.currentTimeMillis;
-                yield* Effect.logInfo(`microvm source changed — rebuilding`);
+                yield* Effect.logInfo(`microvm source changed \u2014 rebuilding`);
                 const previous = yield* ctx.currentAttrs;
                 const attrs = yield* ctx.rerunReconcile;
                 if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {

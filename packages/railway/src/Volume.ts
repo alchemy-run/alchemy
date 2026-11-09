@@ -322,9 +322,9 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * **Example:** Reference an existing volume
  * ```typescript
  * const data = Railway.Volume.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   volumeId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   volumeId: "c9d0e1f2-...",
  * });
  * ```
  *

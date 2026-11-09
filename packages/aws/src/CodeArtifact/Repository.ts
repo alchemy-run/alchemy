@@ -79,7 +79,7 @@ export interface RepositoryLookup {
 }
 
 /**
- * An AWS CodeArtifact repository — a package store inside a
+ * An AWS CodeArtifact repository -- a package store inside a
  * {@link Domain}. Repositories host packages (npm, PyPI, Maven, NuGet, etc.)
  * and can chain to upstream repositories and a single external connection to a
  * public registry.

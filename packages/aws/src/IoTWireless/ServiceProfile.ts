@@ -64,7 +64,7 @@ export interface ServiceProfileLookup {
 }
 
 /**
- * An AWS IoT Core for LoRaWAN service profile — the network-level parameters
+ * An AWS IoT Core for LoRaWAN service profile -- the network-level parameters
  * (data-rate bounds, gateway metadata reporting, roaming permissions) shared
  * by a fleet of wireless devices.
  *

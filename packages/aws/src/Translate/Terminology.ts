@@ -94,7 +94,7 @@ export interface TerminologyLookup {
 }
 
 /**
- * An Amazon Translate custom terminology — a glossary of term pairs (CSV,
+ * An Amazon Translate custom terminology -- a glossary of term pairs (CSV,
  * TMX, or TSV) that pins how specific words and phrases (brand names,
  * product names, domain jargon) are translated. Reference it by name from
  * `TranslateText`, `TranslateDocument`, or batch translation jobs.

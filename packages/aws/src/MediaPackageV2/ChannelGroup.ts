@@ -60,7 +60,7 @@ export interface ChannelGroupLookup {
 }
 
 /**
- * An AWS Elemental MediaPackage v2 channel group — the top-level container
+ * An AWS Elemental MediaPackage v2 channel group -- the top-level container
  * for channels and origin endpoints. All channels and origin endpoints in a
  * group share one egress domain, giving downstream players and CDNs
  * predictable URLs for stream delivery.

@@ -841,7 +841,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ### Background Work & Scopes
  * Every RPC call, fetch, alarm and WebSocket event in a Durable Object gets
  * its own Effect `Scope`. When the method finishes, the bridge closes that scope and
- * registers the close promise with workerd's `state.waitUntil` — so
+ * registers the close promise with workerd's `state.waitUntil` -- so
  * finalizers added with `Effect.addFinalizer` inside a method run *after*
  * the result is returned to the caller, without blocking it, and the
  * object stays alive until they settle.
@@ -1511,7 +1511,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           ],
         });
 
-        // `undefined` at plan time — every method is only called at runtime.
+        // `undefined` at plan time -- every method is only called at runtime.
         const binding = yield* resolveDurableObjectNamespace<cf.DurableObjectNamespace>(namespace);
 
         // `undefined` at plan time; every method is only called at runtime.
@@ -1605,7 +1605,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     } else {
       // Tagged Effect DO. Yielding the class resolves the `tag`, which
       // forces the `CounterLive` Layer (built by `Counter.make(impl)`) to
-      // run so `worker.export(className, …)` is invoked — without this,
+      // run so `worker.export(className, ...)` is invoked -- without this,
       // the class would never be registered with the Worker's exports
       // map and the deployed bundle would have no DO class for
       // Cloudflare to instantiate.

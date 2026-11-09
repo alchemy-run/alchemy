@@ -175,7 +175,7 @@ export interface RecordSetLookup {
 }
 
 /**
- * A Hetzner Cloud DNS resource record set (RRSet) — one `(name, type)`
+ * A Hetzner Cloud DNS resource record set (RRSet) -- one `(name, type)`
  * with one or more records. Two A values are a single resource, not two.
  *
  * Identity is `(zone, name, type)`: changing any of those replaces the

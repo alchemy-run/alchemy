@@ -162,8 +162,8 @@ export interface ImageLookup {
 }
 
 /**
- * A Hetzner Cloud custom Image — a snapshot (or backup) of a Server's
- * disk. Stock system/app Images (`ubuntu-24.04`, …) are Catalog lookups
+ * A Hetzner Cloud custom Image -- a snapshot (or backup) of a Server's
+ * disk. Stock system/app Images (`ubuntu-24.04`, ...) are Catalog lookups
  * via `Hetzner.findImage`, not this resource.
  *
  * Snapshots are created with `POST /servers/{id}/actions/create_image`

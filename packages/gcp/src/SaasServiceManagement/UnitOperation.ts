@@ -201,7 +201,7 @@ export interface UnitOperationLookup {
    */
   unitOperationId: string;
   /**
-   * Region of the operation (`us-central1`, …). `US-CENTRAL1` is accepted
+   * Region of the operation (`us-central1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;
@@ -213,7 +213,7 @@ export interface UnitOperationLookup {
 }
 
 /**
- * An App Lifecycle Manager unit operation — one provision, upgrade,
+ * An App Lifecycle Manager unit operation -- one provision, upgrade,
  * deprovision, or flag-update of a Unit.
  *
  * `unitOperationId`, `location`, `unit`, and the chosen operation type

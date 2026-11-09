@@ -178,7 +178,7 @@ export interface LakesAssetLookup {
 }
 
 /**
- * A Dataplex asset — a Cloud Storage bucket or BigQuery dataset managed
+ * A Dataplex asset -- a Cloud Storage bucket or BigQuery dataset managed
  * inside a lake zone.
  *
  * Changing `zone`, `assetId`, `location`, or the attached resource

@@ -68,7 +68,7 @@ export interface RuleSetLookup {
 }
 
 /**
- * An SES Mail Manager rule set — the ordered rules an ingress point applies
+ * An SES Mail Manager rule set -- the ordered rules an ingress point applies
  * to incoming email (drop, archive, write to S3, deliver, bounce, invoke
  * Lambda, ...).
  *

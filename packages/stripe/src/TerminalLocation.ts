@@ -183,7 +183,7 @@ export interface TerminalLocationLookup {
 }
 
 /**
- * A Stripe Terminal Location — a grouping of Terminal readers at a
+ * A Stripe Terminal Location -- a grouping of Terminal readers at a
  * physical site. Display name, phone, metadata, configuration overrides,
  * and address fields other than `country` update in place. Changing
  * `address.country` replaces the location; re-register readers on the

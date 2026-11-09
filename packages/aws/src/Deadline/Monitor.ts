@@ -120,7 +120,7 @@ export type MonitorLookup =
     };
 
 /**
- * An AWS Deadline Cloud monitor — the hosted web console where artists and
+ * An AWS Deadline Cloud monitor -- the hosted web console where artists and
  * administrators view farms, queues, and jobs, authenticated through IAM
  * Identity Center.
  *

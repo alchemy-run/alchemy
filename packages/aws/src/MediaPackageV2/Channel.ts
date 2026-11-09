@@ -99,7 +99,7 @@ export interface ChannelLookup {
 }
 
 /**
- * An AWS Elemental MediaPackage v2 channel — the entry point for live
+ * An AWS Elemental MediaPackage v2 channel -- the entry point for live
  * content into MediaPackage. An encoder (such as AWS Elemental MediaLive)
  * pushes an HLS or CMAF stream to the channel's ingest endpoints; origin
  * endpoints then package and serve that content downstream.

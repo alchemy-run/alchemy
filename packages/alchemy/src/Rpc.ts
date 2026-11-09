@@ -523,7 +523,7 @@ export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 /**
  * The RPC method a request addresses, or `undefined` when the request is
  * not an RPC call. Matches the {@link RPC_PATH_PREFIX} on the URL's
- * *pathname* only — a query string or fragment containing the prefix is
+ * *pathname* only -- a query string or fragment containing the prefix is
  * not a dispatch.
  */
 export const rpcMethodOf = (request: { readonly url: string }): string | undefined => {

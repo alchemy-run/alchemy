@@ -152,7 +152,7 @@ export interface ProcessesRunsLineageEventLookup {
 }
 
 /**
- * A Data Lineage event — one operation that moved data from source
+ * A Data Lineage event -- one operation that moved data from source
  * assets to target assets.
  *
  * Events are immutable after create (no patch API). Identity is the

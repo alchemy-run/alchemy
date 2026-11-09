@@ -100,7 +100,7 @@ export interface InstancesLogicalViewLookup {
 }
 
 /**
- * A Cloud Bigtable logical view — a SQL SELECT over a table that can
+ * A Cloud Bigtable logical view -- a SQL SELECT over a table that can
  * be queried as a virtual table.
  *
  * The parent instance must already exist and the query cannot use

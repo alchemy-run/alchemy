@@ -103,7 +103,7 @@ export interface DBClusterEndpointLookup {
 }
 
 /**
- * A custom Aurora cluster endpoint — a DNS name that routes to a chosen
+ * A custom Aurora cluster endpoint -- a DNS name that routes to a chosen
  * subset of a cluster's instances, on top of the built-in writer and reader
  * endpoints of a `DBCluster`.
  *

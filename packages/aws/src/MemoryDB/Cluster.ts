@@ -193,7 +193,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An Amazon MemoryDB cluster — a durable, Redis/Valkey-compatible in-memory
+ * An Amazon MemoryDB cluster -- a durable, Redis/Valkey-compatible in-memory
  * database.
  *
  * Clusters take roughly 10-15 minutes to provision and are billed per node

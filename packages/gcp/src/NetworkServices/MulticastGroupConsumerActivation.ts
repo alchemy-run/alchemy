@@ -142,7 +142,7 @@ export interface MulticastGroupConsumerActivationLookup {
    */
   multicastGroupConsumerActivationId: string;
   /**
-   * Zone of the activation (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * Zone of the activation (`us-central1-a`, ...). `US-CENTRAL1-A` is
    * accepted and normalized to `us-central1-a`.
    */
   location?: string;

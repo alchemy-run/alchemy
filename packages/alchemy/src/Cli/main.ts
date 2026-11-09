@@ -208,7 +208,7 @@ const services = Layer.mergeAll(
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   Layer.provide(selectRenderer(), PlatformServices),
-  // Debug run log in the project's .alchemy/log — the console noise floor stays at
+  // Debug run log in the project's .alchemy/log -- the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
   Layer.provide(GlobalLogLive, PlatformServices),

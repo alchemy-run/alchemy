@@ -115,7 +115,7 @@ export interface DataDomainLookup {
    */
   dataDomainId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -126,7 +126,7 @@ export interface DataDomainLookup {
 }
 
 /**
- * A Dataplex DataDomain — a logical grouping of data resources for
+ * A Dataplex DataDomain -- a logical grouping of data resources for
  * governance, discovery, and management.
  *
  * Location, domain id, and parent domain are immutable. Display name,

@@ -181,7 +181,7 @@ export interface ClusterLookup {
 }
 
 /**
- * A Cloud Bigtable cluster — a resizable group of nodes in one zone
+ * A Cloud Bigtable cluster -- a resizable group of nodes in one zone
  * that serves every table in the parent instance.
  *
  * An instance always has at least one cluster (created with the

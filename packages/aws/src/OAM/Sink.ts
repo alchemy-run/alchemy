@@ -64,7 +64,7 @@ export type SinkLookup =
     };
 
 /**
- * A CloudWatch cross-account observability **sink** — the attachment point
+ * A CloudWatch cross-account observability **sink** -- the attachment point
  * in a monitoring account that source accounts link to in order to share
  * metrics, logs, traces, and Application Signals data.
  *

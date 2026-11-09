@@ -109,7 +109,7 @@ export interface ExtensionLookup {
 }
 
 /**
- * An AWS AppConfig extension — a set of actions AppConfig performs at
+ * An AWS AppConfig extension -- a set of actions AppConfig performs at
  * specific points of the configuration workflow (before a version is
  * created, before/while/after a deployment). Actions can invoke Lambda
  * functions, publish to SNS/SQS, or emit EventBridge events.

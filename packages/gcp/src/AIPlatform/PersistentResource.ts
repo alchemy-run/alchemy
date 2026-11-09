@@ -183,7 +183,7 @@ export interface PersistentResourceLookup {
 }
 
 /**
- * A Vertex AI Persistent Resource — dedicated node pools for custom
+ * A Vertex AI Persistent Resource -- dedicated node pools for custom
  * training and Ray-on-Vertex workloads.
  *
  * Changing `persistentResourceId`, `location`, `network`,

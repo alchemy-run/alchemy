@@ -214,7 +214,7 @@ export interface KxClusterLookup {
 }
 
 /**
- * A kdb cluster inside an Amazon FinSpace Managed kdb environment — the
+ * A kdb cluster inside an Amazon FinSpace Managed kdb environment -- the
  * compute that mounts kdb databases and serves q queries.
  *
  * :::caution

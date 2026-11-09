@@ -67,7 +67,7 @@ export interface ContactListLookup {
 }
 
 /**
- * An Amazon SES v2 contact list — a named audience of email contacts with
+ * An Amazon SES v2 contact list -- a named audience of email contacts with
  * subscription topics, used with SES's list-management and unsubscribe
  * handling.
  *

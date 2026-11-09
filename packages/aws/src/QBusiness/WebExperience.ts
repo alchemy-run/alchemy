@@ -121,7 +121,7 @@ export interface WebExperienceLookup {
 }
 
 /**
- * An Amazon Q Business web experience — the hosted chat UI end users open
+ * An Amazon Q Business web experience -- the hosted chat UI end users open
  * to converse with an application.
  *
  * ### Creating Web Experiences

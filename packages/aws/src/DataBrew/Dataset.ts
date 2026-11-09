@@ -176,7 +176,7 @@ export interface DatasetLookup {
 }
 
 /**
- * An AWS Glue DataBrew dataset — a pointer to source data (S3 file/prefix,
+ * An AWS Glue DataBrew dataset -- a pointer to source data (S3 file/prefix,
  * Glue Data Catalog table, or JDBC query) plus parsing options. The dataset
  * definition itself stores no data and is free; it is consumed by DataBrew
  * projects and jobs.

@@ -141,7 +141,7 @@ export interface SigningProfileLookup {
 }
 
 /**
- * An AWS Signer signing profile — a code-signing template (platform +
+ * An AWS Signer signing profile -- a code-signing template (platform +
  * signing material + signature validity) used to sign code, most commonly
  * as the trust anchor for Lambda code signing configs.
  *

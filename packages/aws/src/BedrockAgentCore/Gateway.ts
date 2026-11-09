@@ -110,7 +110,7 @@ export interface GatewayLookup {
 }
 
 /**
- * An Amazon Bedrock AgentCore Gateway — a managed MCP endpoint that turns
+ * An Amazon Bedrock AgentCore Gateway -- a managed MCP endpoint that turns
  * APIs and Lambda functions into agent-callable tools.
  *
  * A gateway fronts one or more targets (OpenAPI specs, Smithy models, Lambda

@@ -70,7 +70,7 @@ export interface DBSubnetGroupLookup {
 }
 
 /**
- * An Amazon Neptune DB subnet group — the set of VPC subnets a Neptune
+ * An Amazon Neptune DB subnet group -- the set of VPC subnets a Neptune
  * cluster and its instances are placed into. Neptune is VPC-only, so a
  * subnet group spanning at least two Availability Zones is required before a
  * cluster can be created.

@@ -151,7 +151,7 @@ export interface ServerLookup {
 }
 
 /**
- * An AWS Transfer Family server — a managed SFTP/FTPS/FTP/AS2 endpoint in
+ * An AWS Transfer Family server -- a managed SFTP/FTPS/FTP/AS2 endpoint in
  * front of S3 or EFS storage. A running server is billed hourly (plus data
  * transfer), so create it only when needed and destroy it promptly.
  * ### Creating a Server

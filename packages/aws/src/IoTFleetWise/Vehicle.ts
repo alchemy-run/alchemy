@@ -98,7 +98,7 @@ export interface VehicleLookup {
 }
 
 /**
- * An AWS IoT FleetWise vehicle — the digital twin of a physical vehicle,
+ * An AWS IoT FleetWise vehicle -- the digital twin of a physical vehicle,
  * created from an `ACTIVE` {@link ModelManifest} and
  * {@link DecoderManifest} pair and backed by an AWS IoT thing.
  * ### Creating a Vehicle

@@ -77,7 +77,7 @@ export interface NamedQueryLookup {
 }
 
 /**
- * An Amazon Athena named (saved) query — a reusable SQL statement stored
+ * An Amazon Athena named (saved) query -- a reusable SQL statement stored
  * against a Glue database inside a workgroup. Its identity is the
  * server-assigned `NamedQueryId`; the `name`, `description`, and `queryString`
  * are updatable in place, while changing `database` or `workGroup` replaces it.

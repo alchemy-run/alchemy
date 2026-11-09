@@ -247,7 +247,7 @@ export interface BackupPlanLookup {
    */
   backupPlanId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -259,7 +259,7 @@ export interface BackupPlanLookup {
 }
 
 /**
- * A Backup and DR backup plan — schedule and retention for a workload
+ * A Backup and DR backup plan -- schedule and retention for a workload
  * type, stored in a Backup Vault.
  *
  * Changing `backupPlanId`, `location`, `backupVault`, `resourceType`, or

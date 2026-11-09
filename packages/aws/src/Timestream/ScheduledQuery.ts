@@ -128,7 +128,7 @@ export interface ScheduledQueryLookup {
 }
 
 /**
- * An Amazon Timestream for LiveAnalytics scheduled query — a SQL query
+ * An Amazon Timestream for LiveAnalytics scheduled query -- a SQL query
  * Timestream runs on a cron/rate schedule, materializing results into a
  * target table and notifying an SNS topic after each run.
  *

@@ -111,7 +111,7 @@ export interface InstancesTablesSchemaBundleLookup {
 }
 
 /**
- * A Cloud Bigtable schema bundle — a named FileDescriptorSet used to
+ * A Cloud Bigtable schema bundle -- a named FileDescriptorSet used to
  * decode protobuf cell values.
  *
  * The parent instance and table must already exist. Changing

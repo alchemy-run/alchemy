@@ -109,7 +109,7 @@ export interface RoomLookup {
 }
 
 /**
- * An Amazon IVS Chat room — a virtual space where chat participants
+ * An Amazon IVS Chat room -- a virtual space where chat participants
  * exchange messages over WebSocket connections.
  *
  * Clients connect with chat tokens minted at runtime via

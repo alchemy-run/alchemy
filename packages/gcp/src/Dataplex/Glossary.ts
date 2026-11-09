@@ -108,7 +108,7 @@ export interface GlossaryLookup {
    */
   glossaryId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -120,7 +120,7 @@ export interface GlossaryLookup {
 }
 
 /**
- * A Dataplex Glossary — a collection of GlossaryCategories and
+ * A Dataplex Glossary -- a collection of GlossaryCategories and
  * GlossaryTerms.
  *
  * Changing `glossaryId` or `location` replaces the glossary. Description,

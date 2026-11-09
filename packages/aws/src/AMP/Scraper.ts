@@ -127,7 +127,7 @@ export interface ScraperLookup {
 }
 
 /**
- * An Amazon Managed Service for Prometheus scraper — a fully-managed,
+ * An Amazon Managed Service for Prometheus scraper -- a fully-managed,
  * agentless collector that pulls metrics from an Amazon EKS cluster (or a
  * VPC-based Prometheus-compatible source) and remote-writes them into an AMP
  * workspace.

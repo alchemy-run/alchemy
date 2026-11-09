@@ -310,7 +310,7 @@ export interface ProjectLookup {
 }
 
 /**
- * An AWS CodeBuild build project — a reusable definition of how to run a
+ * An AWS CodeBuild build project -- a reusable definition of how to run a
  * build: the source, the build container, the compute size, the IAM role,
  * and where artifacts land.
  *

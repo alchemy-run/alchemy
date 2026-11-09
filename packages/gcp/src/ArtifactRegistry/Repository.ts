@@ -71,7 +71,7 @@ export type RepositoryProps = {
   /**
    * The upstream a `REMOTE_REPOSITORY` proxies and caches, e.g.
    * `{ dockerRepository: { publicRepository: "DOCKER_HUB" } }` to pull
-   * Docker Hub images through Artifact Registry. Immutable — changing it
+   * Docker Hub images through Artifact Registry. Immutable -- changing it
    * replaces the repository.
    */
   remoteRepositoryConfig?: artifactregistry.RemoteRepositoryConfig;
@@ -160,7 +160,7 @@ export interface RepositoryLookup {
    */
   repositoryId: string;
   /**
-   * Artifact Registry location (`us-central1`, `us`, `europe`, …).
+   * Artifact Registry location (`us-central1`, `us`, `europe`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;

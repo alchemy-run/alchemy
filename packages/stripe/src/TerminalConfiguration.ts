@@ -387,7 +387,7 @@ export interface TerminalConfigurationLookup {
 }
 
 /**
- * A Stripe Terminal Configuration — splash screens, tipping, offline
+ * A Stripe Terminal Configuration -- splash screens, tipping, offline
  * mode, reboot window, cellular, and Wi-Fi for smart readers. Name and
  * nested settings update in place. Destroy hard-deletes the
  * configuration. The account default configuration is never adopted or

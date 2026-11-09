@@ -61,7 +61,7 @@ export interface KeyRingLookup {
    */
   keyRingId: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). `US-CENTRAL1` is
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -73,7 +73,7 @@ export interface KeyRingLookup {
 }
 
 /**
- * A Cloud KMS KeyRing — a location-scoped container for CryptoKeys.
+ * A Cloud KMS KeyRing -- a location-scoped container for CryptoKeys.
  *
  * Key rings have no labels and no update API. Name and location are
  * identity; Cloud KMS also has no delete API, so destroy removes the

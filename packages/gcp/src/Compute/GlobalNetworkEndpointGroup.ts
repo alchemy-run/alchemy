@@ -114,7 +114,7 @@ export type GlobalNetworkEndpointGroup = Resource<
  */
 export interface GlobalNetworkEndpointGroupLookup {
   /**
-   * NEG name (RFC1035, 1–63 characters).
+   * NEG name (RFC1035, 1-63 characters).
    */
   networkEndpointGroupName: string;
   /**

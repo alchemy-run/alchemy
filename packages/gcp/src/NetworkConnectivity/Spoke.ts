@@ -291,7 +291,7 @@ export interface SpokeLookup {
   /**
    * Location of the spoke. VPC and producer-VPC spokes must use `global`;
    * VPN, VLAN-attachment, router-appliance, and gateway spokes use a region
-   * (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -303,7 +303,7 @@ export interface SpokeLookup {
 }
 
 /**
- * A Network Connectivity Center spoke — one VPC, VPN tunnel set, VLAN
+ * A Network Connectivity Center spoke -- one VPC, VPN tunnel set, VLAN
  * attachment set, router-appliance set, producer VPC, or gateway
  * attached to a hub.
  *

@@ -1998,7 +1998,7 @@ export const ingestPackFrom = (
                 `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
               );
               if (!ends) {
-                yield* trace(`  → sequential fallback`);
+                yield* trace(`  \u2192 sequential fallback`);
                 const again = yield* sequential();
                 staged += yield* stageResult(again.bytes, again.base, again.r);
                 prevEnd = again.r.consumedTo;
@@ -4866,7 +4866,7 @@ export const GitRepoLive = GitRepo.make(
             return yield* PullExists.make({ number: duplicate.number });
           }
           const now = yield* Clock.currentTimeMillis;
-          // Allocate the number and insert the row in ONE transaction —
+          // Allocate the number and insert the row in ONE transaction --
           // the DO's input/output gates make the counter race-free.
           const number = yield* sql.transactionSync((raw) => {
             const seq = raw
@@ -5382,7 +5382,7 @@ export const GitRepoLive = GitRepo.make(
             Effect.catchCause((cause) =>
               Effect.gen(function* () {
                 yield* Effect.logError("repo alarm failed", cause);
-                // Best-effort retry — never let the alarm defect.
+                // Best-effort retry -- never let the alarm defect.
                 yield* armAlarmAt((yield* Clock.currentTimeMillis) + 30_000).pipe(Effect.ignore);
               }),
             ),

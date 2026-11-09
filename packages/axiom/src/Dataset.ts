@@ -102,7 +102,7 @@ export interface DatasetLookup {
 }
 
 /**
- * An Axiom dataset — the top-level container that stores events, logs,
+ * An Axiom dataset -- the top-level container that stores events, logs,
  * traces, or metrics. Pick a `kind` up-front: it determines schema and how
  * the data is shown in the UI, and **cannot be changed** after creation
  * (changing it triggers a replacement, which deletes the data).

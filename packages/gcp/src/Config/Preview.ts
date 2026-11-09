@@ -165,7 +165,7 @@ export interface PreviewLookup {
    */
   previewId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -177,7 +177,7 @@ export interface PreviewLookup {
 }
 
 /**
- * An Infrastructure Manager preview — the Terraform plan Infra Manager
+ * An Infrastructure Manager preview -- the Terraform plan Infra Manager
  * would apply to reach the desired blueprint (or to delete a
  * deployment).
  *

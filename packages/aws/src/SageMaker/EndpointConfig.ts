@@ -106,7 +106,7 @@ export interface EndpointConfigLookup {
 }
 
 /**
- * An Amazon SageMaker EndpointConfig — the deployment recipe that maps one
+ * An Amazon SageMaker EndpointConfig -- the deployment recipe that maps one
  * or more `Model`s to hosting resources (provisioned instances or serverless
  * capacity). Pure configuration: it costs nothing until an `Endpoint`
  * references it.

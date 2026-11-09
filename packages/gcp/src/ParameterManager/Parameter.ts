@@ -112,7 +112,7 @@ export interface ParameterLookup {
    */
   parameterId: string;
   /**
-   * Parameter Manager location (`global`, `us-central1`, …). `GLOBAL` is
+   * Parameter Manager location (`global`, `us-central1`, ...). `GLOBAL` is
    * accepted and normalized to `global`. Regional locations require
    * Parameter Manager regional access on the project.
    */
@@ -125,7 +125,7 @@ export interface ParameterLookup {
 }
 
 /**
- * A Parameter Manager parameter — metadata and encryption for versioned
+ * A Parameter Manager parameter -- metadata and encryption for versioned
  * payloads. Version data lives on {@link ParametersVersion}.
  *
  * Changing `parameterId`, `location`, or `format` replaces the parameter.

@@ -74,7 +74,7 @@ export interface ReferenceStoreLookup {
 }
 
 /**
- * An Amazon HealthOmics reference store — a container for reference genomes
+ * An Amazon HealthOmics reference store -- a container for reference genomes
  * that read sets are aligned against.
  *
  * A reference store name is auto-generated from the app, stage, and logical

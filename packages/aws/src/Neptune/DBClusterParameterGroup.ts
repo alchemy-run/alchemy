@@ -78,7 +78,7 @@ export interface DBClusterParameterGroupLookup {
 }
 
 /**
- * An Amazon Neptune DB cluster parameter group — a named set of engine
+ * An Amazon Neptune DB cluster parameter group -- a named set of engine
  * configuration parameters (query timeout, audit logging, ...) that can be
  * attached to one or more Neptune {@link DBCluster}s.
  * ### Creating a Parameter Group

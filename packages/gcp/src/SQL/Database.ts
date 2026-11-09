@@ -169,7 +169,7 @@ export type Database = Resource<
 export interface DatabaseLookup {
   /**
    * Database name inside the instance. Must start with a letter and contain
-   * only letters, numbers, and underscores (1–60 characters).
+   * only letters, numbers, and underscores (1-60 characters).
    */
   databaseName: string;
   /**

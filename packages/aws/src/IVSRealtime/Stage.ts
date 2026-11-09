@@ -105,7 +105,7 @@ export interface StageLookup {
 }
 
 /**
- * An Amazon IVS Real-Time stage — a virtual space where participants
+ * An Amazon IVS Real-Time stage -- a virtual space where participants
  * exchange audio and video in real time (sub-300ms latency).
  *
  * Participants join a stage with participant tokens minted at runtime via

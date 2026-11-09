@@ -111,7 +111,7 @@ export interface TagKeyLookup {
 }
 
 /**
- * A Resource Manager TagKey — a namespace for TagValues used to annotate
+ * A Resource Manager TagKey -- a namespace for TagValues used to annotate
  * Google Cloud resources.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

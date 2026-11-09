@@ -275,9 +275,9 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * **Example:** Connect to an existing Redis
  * ```typescript
  * const cache = Railway.Redis.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   serviceId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   serviceId: "c9d0e1f2-...",
  * });
  * ```
  *

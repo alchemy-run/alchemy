@@ -89,7 +89,7 @@ export interface TaskLookup {
 }
 
 /**
- * A DataSync task — the transfer definition binding a source location to a
+ * A DataSync task -- the transfer definition binding a source location to a
  * destination location, together with the filters, schedule, and transfer
  * options that govern each run.
  *

@@ -76,8 +76,8 @@ export interface CloudflareTelemetryLogsProps {
    */
   invocationLogs?: boolean;
   /**
-   * Head-based sampling rate for Workers Logs (`0`–`1`).
-   * Omitted unless set — Cloudflare's default applies.
+   * Head-based sampling rate for Workers Logs (`0`-`1`).
+   * Omitted unless set -- Cloudflare's default applies.
    */
   headSamplingRate?: number;
   /**

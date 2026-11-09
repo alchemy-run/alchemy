@@ -115,7 +115,7 @@ export interface AppsVersionLookup {
 }
 
 /**
- * A Customer Engagement Suite app version — an immutable snapshot of an
+ * A Customer Engagement Suite app version -- an immutable snapshot of an
  * app at a point in time.
  *
  * Versions have no labels field and no patch RPC. Alchemy stamps

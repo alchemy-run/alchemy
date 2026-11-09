@@ -1,6 +1,6 @@
 /**
  * Requests to an actor through the control plane's gateway, the way
- * RivetKit's client sends them, over the runtime's own `fetch` — so callers
+ * RivetKit's client sends them, over the runtime's own `fetch` -- so callers
  * (Workers, Lambdas, containers) need no RivetKit.
  *
  * @internal

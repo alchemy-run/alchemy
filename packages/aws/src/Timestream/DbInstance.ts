@@ -174,7 +174,7 @@ export type DbInstanceLookup =
     };
 
 /**
- * An Amazon Timestream for InfluxDB DB instance — a managed, single-tenant
+ * An Amazon Timestream for InfluxDB DB instance -- a managed, single-tenant
  * InfluxDB engine for time-series workloads.
  *
  * `DbInstance` owns the instance's lifecycle and its mutable configuration

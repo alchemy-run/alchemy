@@ -88,7 +88,7 @@ export interface EntitlementsFeatureLookup {
 }
 
 /**
- * A Stripe Entitlements Feature — a monetizable ability you attach to
+ * A Stripe Entitlements Feature -- a monetizable ability you attach to
  * Products. When a customer purchases a product with this feature, Stripe
  * creates an entitlement for them. `lookup_key` is unique among active
  * features and immutable (changing it replaces the feature). Name and

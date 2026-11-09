@@ -149,7 +149,7 @@ export interface EntryTypeLookup {
    */
   entryTypeId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -161,7 +161,7 @@ export interface EntryTypeLookup {
 }
 
 /**
- * A Dataplex Universal Catalog Entry Type — a template for creating
+ * A Dataplex Universal Catalog Entry Type -- a template for creating
  * Entries.
  *
  * Changing `entryTypeId`, `location`, or `authorization` replaces the

@@ -91,7 +91,7 @@ export interface VaultLookup {
 }
 
 /**
- * An Amazon S3 Glacier vault — a container for archives in the original
+ * An Amazon S3 Glacier vault -- a container for archives in the original
  * (vault-based) S3 Glacier service.
  *
  * Vault creation is idempotent and free; storage is billed per archive.

@@ -25,7 +25,7 @@ export interface NotifierLookup {
 }
 
 /**
- * An Axiom notifier — an alert destination (Slack, email, PagerDuty,
+ * An Axiom notifier -- an alert destination (Slack, email, PagerDuty,
  * Opsgenie, Discord, Microsoft Teams, generic webhook, or a fully custom
  * webhook with templated body/headers) that {@link Monitor monitors} target
  * via `notifierIds`. Exactly one channel under `properties` should be set.

@@ -165,7 +165,7 @@ export interface EnvironmentsKeystoresAliasLookup {
 }
 
 /**
- * An alias in an Apigee environment keystore — a certificate or
+ * An alias in an Apigee environment keystore -- a certificate or
  * key/certificate pair used for TLS.
  *
  * Aliases have no labels or description, so `list` enumerates every alias

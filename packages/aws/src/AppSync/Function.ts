@@ -85,7 +85,7 @@ export type AppSyncFunctionLookup =
     };
 
 /**
- * An AppSync pipeline function — a reusable step composed by `PIPELINE`
+ * An AppSync pipeline function -- a reusable step composed by `PIPELINE`
  * resolvers.
  * ### Creating Pipeline Functions
  * **Example:** JavaScript pipeline function over a Lambda data source

@@ -148,7 +148,7 @@ export interface ConfigurationSetLookup {
 }
 
 /**
- * An Amazon SES v2 configuration set — a named group of sending options
+ * An Amazon SES v2 configuration set -- a named group of sending options
  * (TLS policy, reputation metrics, suppression overrides) that you apply to
  * outbound email, either per-message or as an identity's default.
  *

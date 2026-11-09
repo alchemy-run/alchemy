@@ -101,7 +101,7 @@ export interface ProtectionGroupLookup {
 }
 
 /**
- * An AWS Shield Advanced Protection Group — a collective of protected
+ * An AWS Shield Advanced Protection Group -- a collective of protected
  * resources whose traffic Shield Advanced monitors as a unit, improving
  * detection accuracy and reducing false positives.
  *

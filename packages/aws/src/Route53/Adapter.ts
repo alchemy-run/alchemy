@@ -71,10 +71,10 @@ const aliasTargetOf = (target: DnsHostnameTarget) => ({
  * - `alias` -- `AWS.Route53.Record` `id` (a lone `A` alias or `CNAME`), or
  *   `id-A` / `id-AAAA` for a dual-stack alias; `id-Addresses`
  *   (`AWS.Route53.RecordList`) for an address target.
- * - `aliasSet` — `AWS.Route53.Records` `id`, plus `id-AAAA` for a
+ * - `aliasSet` -- `AWS.Route53.Records` `id`, plus `id-AAAA` for a
  *   dual-stack alias set. The `AAAA` set follows the `A` set's names
  *   (declared and bound) and zone, so bindings go to the `A` set only.
- * - `records` — `AWS.Route53.RecordList` `id`.
+ * - `records` -- `AWS.Route53.RecordList` `id`.
  *
  * `hostedZoneId` is always passed (even `undefined`), exactly as before.
  */

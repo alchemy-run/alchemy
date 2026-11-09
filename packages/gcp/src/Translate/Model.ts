@@ -93,13 +93,13 @@ export type Model = Resource<
  */
 export interface ModelLookup {
   /**
-   * Location of the model (`us-central1`, `europe-west1`, …). Custom AutoML
+   * Location of the model (`us-central1`, `europe-west1`, ...). Custom AutoML
    * Translation models are regional.
    */
   location?: string;
   /**
    * Server-assigned model id (the `{model}` segment of
-   * `projects/{project}/locations/{location}/models/{model}`, e.g. `NM…`)
+   * `projects/{project}/locations/{location}/models/{model}`, e.g. `NM...`)
    * of an existing model to manage. Omit to train a new model.
    */
   modelId: string;

@@ -316,7 +316,7 @@ export interface SearchInstanceLookup {
 }
 
 /**
- * A Cloudflare.AI. Search (formerly AutoRAG) instance — a fully managed
+ * A Cloudflare.AI. Search (formerly AutoRAG) instance -- a fully managed
  * retrieval-augmented generation pipeline over your own data.
  *
  * An instance continuously indexes a data source (an R2 bucket or a web

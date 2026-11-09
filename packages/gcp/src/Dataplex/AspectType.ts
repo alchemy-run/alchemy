@@ -130,7 +130,7 @@ export interface AspectTypeLookup {
    */
   aspectTypeId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -142,7 +142,7 @@ export interface AspectTypeLookup {
 }
 
 /**
- * A Dataplex AspectType — a template for Aspects on catalog Entries.
+ * A Dataplex AspectType -- a template for Aspects on catalog Entries.
  *
  * Location, aspect type id, data classification, and authorization are
  * immutable. Description, display name, labels, and the metadata template

@@ -139,7 +139,7 @@ export interface AppsToolsetLookup {
 }
 
 /**
- * A Customer Engagement Suite toolset — a dynamically managed group of
+ * A Customer Engagement Suite toolset -- a dynamically managed group of
  * tools defined by OpenAPI, MCP, or Integration Connectors.
  *
  * Toolsets have no labels field, and the description reaches the model,

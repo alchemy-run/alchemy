@@ -153,7 +153,7 @@ export interface DeploymentResourcePoolLookup {
 }
 
 /**
- * A Vertex AI DeploymentResourcePool — dedicated machines shared by
+ * A Vertex AI DeploymentResourcePool -- dedicated machines shared by
  * multiple DeployedModels.
  *
  * Deployment resource pools have no labels field. Generated ids are

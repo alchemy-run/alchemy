@@ -251,7 +251,7 @@ export interface EnvironmentLookup {
 }
 
 /**
- * An Amazon Managed Workflows for Apache Airflow (MWAA) environment — a fully
+ * An Amazon Managed Workflows for Apache Airflow (MWAA) environment -- a fully
  * managed Apache Airflow deployment that runs your DAGs.
  *
  * Environments take roughly 20-30 minutes to create and are billed hourly for

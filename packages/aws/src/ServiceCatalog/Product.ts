@@ -123,7 +123,7 @@ export interface ProductLookup {
 }
 
 /**
- * An AWS Service Catalog product — a CloudFormation-backed offering
+ * An AWS Service Catalog product -- a CloudFormation-backed offering
  * (or Terraform/external equivalent) with one or more provisioning
  * artifacts (versions) that principals can launch from a portfolio.
  *

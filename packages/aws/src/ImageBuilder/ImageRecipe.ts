@@ -142,7 +142,7 @@ export interface ImageRecipeLookup {
 }
 
 /**
- * An EC2 Image Builder image recipe — the blueprint that combines a parent
+ * An EC2 Image Builder image recipe -- the blueprint that combines a parent
  * image with an ordered list of components to produce a new AMI.
  *
  * Recipes are immutable versions: every property except `tags` replaces the

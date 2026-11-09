@@ -133,7 +133,7 @@ export type NetworkEndpointGroup = Resource<
  */
 export interface NetworkEndpointGroupLookup {
   /**
-   * Name of the network endpoint group. Must be 1–63 characters and comply
+   * Name of the network endpoint group. Must be 1-63 characters and comply
    * with RFC1035.
    */
   networkEndpointGroupName: string;

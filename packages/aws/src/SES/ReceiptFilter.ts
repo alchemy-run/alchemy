@@ -61,7 +61,7 @@ export interface ReceiptFilterLookup {
 }
 
 /**
- * An Amazon SES receipt IP address filter — an account-level allow/block rule
+ * An Amazon SES receipt IP address filter -- an account-level allow/block rule
  * for the source IP of inbound mail. Block filters take precedence over allow
  * filters.
  *

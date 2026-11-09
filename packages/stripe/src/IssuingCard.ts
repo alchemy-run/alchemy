@@ -231,7 +231,7 @@ export interface IssuingCardLookup {
 }
 
 /**
- * A Stripe Issuing Card — a virtual or physical card issued to a
+ * A Stripe Issuing Card -- a virtual or physical card issued to a
  * Cardholder. `cardholder`, `currency`, `type`, `secondLine`, and
  * custom expiration are immutable (changing them replaces the card).
  * Status, spending controls, personalization design, and metadata

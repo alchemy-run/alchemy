@@ -99,7 +99,7 @@ export interface PaymentMethodDomainLookup {
 }
 
 /**
- * A Stripe Payment Method Domain — a web domain registered so Stripe
+ * A Stripe Payment Method Domain -- a web domain registered so Stripe
  * Elements and Embedded Checkout can show domain-gated payment methods
  * (Apple Pay, Google Pay, Link, PayPal, Klarna, Amazon Pay). `enabled`
  * updates in place. `domainName` is create-only and changing it replaces

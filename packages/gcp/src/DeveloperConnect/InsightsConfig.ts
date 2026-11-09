@@ -149,7 +149,7 @@ export interface InsightsConfigLookup {
    */
   insightsConfigId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -161,7 +161,7 @@ export interface InsightsConfigLookup {
 }
 
 /**
- * A Developer Connect InsightsConfig — the SDLC event hub that ties an
+ * A Developer Connect InsightsConfig -- the SDLC event hub that ties an
  * App Hub application, runtime environments, and deployed artifacts
  * together.
  *

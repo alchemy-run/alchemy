@@ -72,7 +72,7 @@ export interface FleetLookup {
 }
 
 /**
- * An AWS IoT FleetWise fleet — a group of vehicles that campaigns can
+ * An AWS IoT FleetWise fleet -- a group of vehicles that campaigns can
  * target collectively.
  *
  * Fleets are free, provisioned near-instantly, and only carry a

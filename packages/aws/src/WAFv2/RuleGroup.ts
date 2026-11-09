@@ -118,7 +118,7 @@ export interface RuleGroupLookup {
 }
 
 /**
- * An AWS WAFv2 rule group — a reusable, capacity-bounded collection of rules
+ * An AWS WAFv2 rule group -- a reusable, capacity-bounded collection of rules
  * referenced from web ACLs via `RuleGroupReferenceStatement`.
  *
  * The `capacity` (web ACL capacity units, WCU) is fixed at creation;

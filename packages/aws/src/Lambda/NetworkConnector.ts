@@ -131,8 +131,8 @@ export type NetworkConnectorLookup =
     };
 
 /**
- * A Lambda network connector that gives Lambda compute resources — notably
- * {@link MicrovmImage} MicroVMs — a managed egress path into your VPC. The
+ * A Lambda network connector that gives Lambda compute resources -- notably
+ * {@link MicrovmImage} MicroVMs -- a managed egress path into your VPC. The
  * connector provisions elastic network interfaces (ENIs) in the subnets you
  * specify so workloads can reach private resources such as databases, caches,
  * and internal APIs.

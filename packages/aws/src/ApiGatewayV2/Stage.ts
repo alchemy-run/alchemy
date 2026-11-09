@@ -113,7 +113,7 @@ export interface ApiGatewayV2StageLookup {
 }
 
 /**
- * An API Gateway v2 Stage — the deployed, callable endpoint of an HTTP or
+ * An API Gateway v2 Stage -- the deployed, callable endpoint of an HTTP or
  * WebSocket API.
  * ### The $default auto-deploy stage
  * The canonical modern setup is a single `$default` stage with

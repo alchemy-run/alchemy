@@ -214,7 +214,7 @@ export interface PaymentLinkLookup {
 }
 
 /**
- * A Stripe Payment Link — a shareable URL that opens a hosted Checkout
+ * A Stripe Payment Link -- a shareable URL that opens a hosted Checkout
  * page. Requires at least one `lineItems` price. Quantity, metadata,
  * `active`, and most Checkout options update in place; changing the set
  * of prices replaces the link. Payment links cannot be deleted; destroy

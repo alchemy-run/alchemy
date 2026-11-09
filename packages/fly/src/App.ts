@@ -216,7 +216,7 @@ export interface AppBinding {
  * const site = Fly.App.lookup({ name: "my-site" });
  * const db = yield* Fly.Secret("DatabaseUrl", {
  *   app: site,
- *   value: Redacted.make("postgres://…"),
+ *   value: Redacted.make("postgres://..."),
  * });
  * ```
  *

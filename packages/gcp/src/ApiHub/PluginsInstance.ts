@@ -147,7 +147,7 @@ export interface PluginsInstanceLookup {
 }
 
 /**
- * An API Hub plugin instance — a configured running copy of a plugin.
+ * An API Hub plugin instance -- a configured running copy of a plugin.
  *
  * Plugin instances have no labels or description, so Alchemy stamps
  * ownership into the display name for `list` / nuke. Plugin, location,

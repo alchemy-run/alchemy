@@ -122,7 +122,7 @@ export interface PipeLookup {
 }
 
 /**
- * An Amazon EventBridge Pipe — point-to-point source→(filter)→(enrich)→target
+ * An Amazon EventBridge Pipe -- point-to-point source->(filter)->(enrich)->target
  * plumbing between AWS services without glue code.
  *
  * `Pipe` owns the lifecycle of an EventBridge Pipe. Reconcile waits (bounded)

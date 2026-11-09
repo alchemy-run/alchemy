@@ -2601,7 +2601,7 @@ const observeServiceConvergence = (input: {
     // alternates the tasks between the configured group and
     // `advancedConfiguration.alternateTargetGroupArn` while DescribeServices
     // keeps reporting the configured one, so a slot counts the targets of
-    // both groups — it converges wherever ECS put the tasks.
+    // both groups -- it converges wherever ECS put the tasks.
     const targetGroupSlots = [
       ...new Map(
         (service.loadBalancers ?? []).flatMap((loadBalancer) => {
@@ -3497,7 +3497,7 @@ export const ServiceProvider = () =>
               .createService({
                 ...mutableInput(news, task, network, securityGroups),
                 // With autoscaling, `desiredCount` is only the initial size
-                // (defaulting to `scaling.min`) — the scalable target owns it
+                // (defaulting to `scaling.min`) -- the scalable target owns it
                 // from then on.
                 desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
                 serviceName,
@@ -3514,7 +3514,7 @@ export const ServiceProvider = () =>
                 Effect.retry({
                   // ECS assumes `advancedConfiguration.roleArn` (blue/green) to
                   // validate the target groups. A role created in the same apply
-                  // may not have propagated through IAM yet — retry bounded.
+                  // may not have propagated through IAM yet -- retry bounded.
                   while: (e) => e._tag === "ServiceRoleNotAssumable",
                   schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
                 }),

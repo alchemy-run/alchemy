@@ -1,5 +1,5 @@
 /**
- * @alchemy.run/effect-cluster — Effect Cluster entities, with the database
+ * @alchemy.run/effect-cluster -- Effect Cluster entities, with the database
  * they coordinate through and the pool that hosts them on any cloud.
  */
 export * as Database from "./Database.ts";

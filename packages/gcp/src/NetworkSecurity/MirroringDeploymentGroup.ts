@@ -131,7 +131,7 @@ export interface MirroringDeploymentGroupLookup {
    */
   mirroringDeploymentGroupId: string;
   /**
-   * Location of the group. Deployment groups are global — always
+   * Location of the group. Deployment groups are global -- always
    * `"global"`. `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -143,7 +143,7 @@ export interface MirroringDeploymentGroupLookup {
 }
 
 /**
- * A Network Security Integration mirroring deployment group — the global
+ * A Network Security Integration mirroring deployment group -- the global
  * backend that aggregates zonal mirroring collectors.
  *
  * Changing `mirroringDeploymentGroupId`, `location`, or `network` replaces

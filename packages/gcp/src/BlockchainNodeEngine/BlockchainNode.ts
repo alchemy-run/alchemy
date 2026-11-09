@@ -233,7 +233,7 @@ export interface BlockchainNodeLookup {
    */
   blockchainNodeId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -245,7 +245,7 @@ export interface BlockchainNodeLookup {
 }
 
 /**
- * A Blockchain Node Engine node — a fully managed Ethereum execution
+ * A Blockchain Node Engine node -- a fully managed Ethereum execution
  * and consensus client.
  *
  * Changing `blockchainNodeId`, `location`, `blockchainType`,

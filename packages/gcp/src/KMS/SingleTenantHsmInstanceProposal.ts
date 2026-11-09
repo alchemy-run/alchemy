@@ -172,7 +172,7 @@ export interface SingleTenantHsmInstanceProposalLookup {
    */
   singleTenantHsmInstance: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `singleTenantHsmInstance` is a bare id. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
@@ -185,7 +185,7 @@ export interface SingleTenantHsmInstanceProposalLookup {
 }
 
 /**
- * A Cloud KMS SingleTenantHsmInstanceProposal — a quorum-gated operation
+ * A Cloud KMS SingleTenantHsmInstanceProposal -- a quorum-gated operation
  * on a single-tenant HSM instance (refresh, enable, disable, delete,
  * register 2FA keys, add/remove quorum members).
  *

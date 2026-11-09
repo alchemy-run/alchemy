@@ -70,7 +70,7 @@ export interface RelayLookup {
 }
 
 /**
- * An SES Mail Manager relay — a downstream SMTP destination that rule-set
+ * An SES Mail Manager relay -- a downstream SMTP destination that rule-set
  * `Relay` actions forward incoming email to (e.g. an on-prem Exchange
  * server or a third-party filter).
  *

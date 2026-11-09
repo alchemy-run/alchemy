@@ -164,7 +164,7 @@ export interface ServerTlsPolicyLookup {
    */
   serverTlsPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -176,7 +176,7 @@ export interface ServerTlsPolicyLookup {
 }
 
 /**
- * A Network Security ServerTlsPolicy — how a server authenticates
+ * A Network Security ServerTlsPolicy -- how a server authenticates
  * incoming requests. Attach it to a TargetHttpsProxy or EndpointPolicy;
  * the policy itself does not serve traffic.
  *

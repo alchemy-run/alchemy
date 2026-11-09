@@ -117,7 +117,7 @@ export interface DnsAuthorizationLookup {
    */
   dnsAuthorizationId: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …).
+   * Certificate Manager location (`global`, `us-central1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;

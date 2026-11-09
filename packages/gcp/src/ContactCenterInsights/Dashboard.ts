@@ -120,7 +120,7 @@ export interface DashboardLookup {
    */
   dashboardId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**

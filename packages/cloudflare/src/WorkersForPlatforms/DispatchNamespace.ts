@@ -76,7 +76,7 @@ export interface DispatchNamespaceLookup {
 }
 
 /**
- * A Workers for Platforms dispatch namespace — a container for customer
+ * A Workers for Platforms dispatch namespace -- a container for customer
  * ("user") Workers that a platform Worker dispatches to at runtime via a
  * dynamic-dispatch binding.
  *

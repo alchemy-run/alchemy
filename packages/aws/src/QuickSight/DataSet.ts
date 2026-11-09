@@ -114,7 +114,7 @@ export interface DataSetLookup {
 }
 
 /**
- * An Amazon QuickSight dataset — a prepared, queryable model built on top of
+ * An Amazon QuickSight dataset -- a prepared, queryable model built on top of
  * one or more data sources.
  *
  * QuickSight requires an active account subscription in the region. Without

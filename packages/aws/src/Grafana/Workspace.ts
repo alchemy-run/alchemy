@@ -99,7 +99,7 @@ export interface WorkspaceLookup {
 }
 
 /**
- * An Amazon Managed Grafana workspace — a fully-managed Grafana server for
+ * An Amazon Managed Grafana workspace -- a fully-managed Grafana server for
  * visualizing operational metrics, logs, and traces.
  *
  * Grafana workspaces require IAM Identity Center (AWS SSO) to be enabled in

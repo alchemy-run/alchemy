@@ -175,7 +175,7 @@ export interface CrawlerLookup {
 }
 
 /**
- * An AWS Glue crawler — connects to an S3 (or JDBC/DynamoDB/catalog) data
+ * An AWS Glue crawler -- connects to an S3 (or JDBC/DynamoDB/catalog) data
  * store, infers schemas, and populates the Glue Data Catalog with tables.
  * Runs are asynchronous: create the crawler, then invoke `startCrawler` (or
  * attach a schedule).

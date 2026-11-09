@@ -40,7 +40,7 @@ export interface DomainLookup {
 }
 
 /**
- * An Amazon SimpleDB domain — the container for SimpleDB items and
+ * An Amazon SimpleDB domain -- the container for SimpleDB items and
  * attributes, analogous to a table.
  *
  * SimpleDB is a legacy service (closed to accounts that never used it and

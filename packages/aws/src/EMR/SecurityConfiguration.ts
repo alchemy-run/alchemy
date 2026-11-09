@@ -48,7 +48,7 @@ export interface SecurityConfigurationLookup {
 }
 
 /**
- * An Amazon EMR security configuration — a reusable JSON document of
+ * An Amazon EMR security configuration -- a reusable JSON document of
  * encryption, authentication, and instance-metadata settings referenced by
  * name when launching a {@link Cluster}.
  *

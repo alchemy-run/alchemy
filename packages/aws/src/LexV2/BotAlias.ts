@@ -123,7 +123,7 @@ export type BotAliasLookup =
     };
 
 /**
- * An alias of an Amazon Lex V2 bot — a stable pointer to a numbered bot
+ * An alias of an Amazon Lex V2 bot -- a stable pointer to a numbered bot
  * version that runtime conversations (e.g. `RecognizeText`) target.
  *
  * ### Creating an Alias

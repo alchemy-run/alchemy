@@ -152,7 +152,7 @@ export interface ReportDefinitionLookup {
 }
 
 /**
- * An AWS Cost and Usage Report (CUR) definition — the most granular billing
+ * An AWS Cost and Usage Report (CUR) definition -- the most granular billing
  * data AWS offers, delivered as CSV or Parquet files to an S3 bucket you own.
  *
  * The CUR API is a global service hosted only in `us-east-1`; this resource

@@ -112,7 +112,7 @@ export interface AuthorizerTypeLookup {
 }
 
 /**
- * An API Gateway v2 Authorizer — controls access to HTTP/WebSocket API
+ * An API Gateway v2 Authorizer -- controls access to HTTP/WebSocket API
  * routes via JWT validation or a Lambda (`REQUEST`) authorizer.
  * ### JWT authorizers
  * The common HTTP API authorizer: API Gateway validates the caller's JWT

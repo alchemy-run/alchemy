@@ -100,7 +100,7 @@ export interface ConnectionLookup {
 }
 
 /**
- * An AWS Glue connection — stores the connection details (JDBC URL, VPC
+ * An AWS Glue connection -- stores the connection details (JDBC URL, VPC
  * networking, credentials) that crawlers and jobs use to reach a data store.
  * ### Creating Connections
  * **Example:** JDBC Connection

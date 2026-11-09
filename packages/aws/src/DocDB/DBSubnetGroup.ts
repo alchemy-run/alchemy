@@ -77,7 +77,7 @@ export interface DBSubnetGroupLookup {
 }
 
 /**
- * An Amazon DocumentDB subnet group — the set of VPC subnets a DocumentDB
+ * An Amazon DocumentDB subnet group -- the set of VPC subnets a DocumentDB
  * cluster and its instances are placed into. DocumentDB is VPC-only, so a
  * subnet group spanning at least two Availability Zones is required before a
  * cluster can be created.

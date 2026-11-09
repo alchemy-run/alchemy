@@ -32,7 +32,7 @@ export interface ServerPoolOptions extends PoolSettings {
  * Servers that each run every `Rivet.DurableObject` given this pool as a
  * `Hetzner.Service`. Nodes only connect out to the control plane, so a
  * firewall drops every inbound connection except SSH, which deploys them;
- * the pool works with any control plane it can reach —
+ * the pool works with any control plane it can reach --
  * `RivetHetzner.ServerControlPlane`, `RivetCloud.ControlPlane`, or one on another
  * cloud.
  *

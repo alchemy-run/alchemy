@@ -62,7 +62,7 @@ export interface DatasetGroupLookup {
 }
 
 /**
- * An Amazon Forecast dataset group — a domain-scoped container that groups the
+ * An Amazon Forecast dataset group -- a domain-scoped container that groups the
  * datasets used to train predictors. Creating the group is cheap; the
  * expensive training work lives in predictors and forecasts provisioned
  * separately.

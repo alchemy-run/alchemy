@@ -66,7 +66,7 @@ export interface ListLookup {
 }
 
 /**
- * An Amazon Fraud Detector list — a set of input values for a variable (an
+ * An Amazon Fraud Detector list -- a set of input values for a variable (an
  * allow-list or deny-list, e.g. known-fraud IP addresses) referenced from
  * detector rule expressions.
  *

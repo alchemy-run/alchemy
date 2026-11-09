@@ -114,7 +114,7 @@ export interface ImportJobLookup {
    */
   keyRing: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `keyRing` is a bare id. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
@@ -127,7 +127,7 @@ export interface ImportJobLookup {
 }
 
 /**
- * A Cloud KMS ImportJob — a wrapping-key job used to import pre-existing
+ * A Cloud KMS ImportJob -- a wrapping-key job used to import pre-existing
  * key material into a CryptoKeyVersion.
  *
  * Parent KeyRing, location, and id are identity (changing them replaces

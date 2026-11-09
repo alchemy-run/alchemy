@@ -69,7 +69,7 @@ export interface DeviceProfileLookup {
 }
 
 /**
- * An AWS IoT Core for LoRaWAN device profile — the hardware-level LoRaWAN
+ * An AWS IoT Core for LoRaWAN device profile -- the hardware-level LoRaWAN
  * parameters (MAC version, regional band, RX windows, device classes) shared
  * by devices of the same model.
  *

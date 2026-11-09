@@ -41,7 +41,7 @@ type RuntimeBindings = ReadonlyArray<{
 
 /** Attributes shared by `Modal.Function` and `Modal.Server`. */
 export interface RuntimeAttributes {
-  /** Function ID (`fu-…`). */
+  /** Function ID (`fu-...`). */
   functionId: string;
   /** Name of the function in its App. */
   name: string;
@@ -51,7 +51,7 @@ export interface RuntimeAttributes {
   appName: string | undefined;
   /** Environment of that App. */
   environment: string | undefined;
-  /** The image with the bundled program (`im-…`). */
+  /** The image with the bundled program (`im-...`). */
   imageId: string;
   /** The Modal Secret holding the program's env (bindings' credentials included). */
   secretId: string;
@@ -63,7 +63,7 @@ export interface RuntimeAttributes {
   command: string[];
   /** Content hash of the bundle, image and function definition. */
   hash: string;
-  /** The class (`cs-…`) of a function with RPC methods, which Modal runs as a class. */
+  /** The class (`cs-...`) of a function with RPC methods, which Modal runs as a class. */
   classId?: string | undefined;
 }
 

@@ -122,7 +122,7 @@ export interface MirroringDeploymentLookup {
 }
 
 /**
- * A Network Security Integration mirroring deployment — a zonal GENEVE
+ * A Network Security Integration mirroring deployment -- a zonal GENEVE
  * collector, typically an internal passthrough load balancer, that
  * belongs to a global mirroring deployment group.
  *

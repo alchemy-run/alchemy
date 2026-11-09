@@ -167,7 +167,7 @@ export interface AuthzExtensionLookup {
    */
   authzExtensionId: string;
   /**
-   * Location (`us-central1`, `global`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `global`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -179,7 +179,7 @@ export interface AuthzExtensionLookup {
 }
 
 /**
- * A Network Services AuthzExtension — forwards requests to a callout
+ * A Network Services AuthzExtension -- forwards requests to a callout
  * backend that makes an authorization decision for a load balancer.
  *
  * Changing `authzExtensionId`, `location`, or `loadBalancingScheme`

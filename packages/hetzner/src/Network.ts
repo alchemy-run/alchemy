@@ -153,7 +153,7 @@ export interface NetworkLookup {
 }
 
 /**
- * A Hetzner Cloud private Network — an isolated IPv4 range that Cloud
+ * A Hetzner Cloud private Network -- an isolated IPv4 range that Cloud
  * Servers and Load Balancers attach to. Subnets, routes, delete protection,
  * and labels are synced on the Network itself; `network_actions` are not
  * modeled as their own resources.
@@ -432,7 +432,7 @@ const syncSubnets = (
       vswitchId: subnet.vswitch_id ?? undefined,
     }));
     // A desired subnet without a range is satisfied by any observed one of
-    // the same type, zone and vSwitch that no ranged subnet claims —
+    // the same type, zone and vSwitch that no ranged subnet claims --
     // Hetzner picked its range when it was added.
     const unranged = (subnet: { type: string; networkZone: string; vswitchId?: number | null }) =>
       `${subnet.type}|${subnet.networkZone}|${subnet.vswitchId ?? ""}`;

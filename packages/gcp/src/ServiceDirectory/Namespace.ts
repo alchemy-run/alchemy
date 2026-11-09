@@ -92,7 +92,7 @@ export interface NamespaceLookup {
 }
 
 /**
- * A Service Directory namespace — a location-scoped container for
+ * A Service Directory namespace -- a location-scoped container for
  * services.
  *
  * Changing `namespaceId` or `location` replaces the namespace.

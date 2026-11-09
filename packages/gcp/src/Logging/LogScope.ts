@@ -105,7 +105,7 @@ export interface LogScopeLookup {
 }
 
 /**
- * A Cloud Logging log scope — a named collection of projects and log
+ * A Cloud Logging log scope -- a named collection of projects and log
  * views to query together.
  *
  * Log scopes exist only in the `global` location. They have no labels

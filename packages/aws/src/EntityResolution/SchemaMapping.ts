@@ -66,7 +66,7 @@ export interface SchemaMappingLookup {
 }
 
 /**
- * An AWS Entity Resolution schema mapping — the schema of an input customer
+ * An AWS Entity Resolution schema mapping -- the schema of an input customer
  * records table. It tells Entity Resolution the attribute type of each column
  * (name, email, phone, unique id, ...) and which columns rule-based matching
  * compares via `matchKey`.

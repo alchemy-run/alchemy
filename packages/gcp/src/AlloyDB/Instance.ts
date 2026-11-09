@@ -278,7 +278,7 @@ export interface InstanceLookup {
    */
   cluster: string;
   /**
-   * Region of the parent cluster (`us-central1`, …). Ignored when `cluster`
+   * Region of the parent cluster (`us-central1`, ...). Ignored when `cluster`
    * is a full resource name. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */

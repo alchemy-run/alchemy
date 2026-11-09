@@ -88,7 +88,7 @@ export interface DataSetLookup {
 }
 
 /**
- * An AWS Data Exchange data set — the top-level container that data providers
+ * An AWS Data Exchange data set -- the top-level container that data providers
  * publish revisions of data into. An owned data set holds revisions, each of
  * which holds assets (e.g. S3 snapshot files) that subscribers receive.
  *

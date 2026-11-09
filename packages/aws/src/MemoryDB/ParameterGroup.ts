@@ -80,7 +80,7 @@ export interface ParameterGroupLookup {
 }
 
 /**
- * A MemoryDB parameter group — a named collection of engine parameter
+ * A MemoryDB parameter group -- a named collection of engine parameter
  * overrides applied to every node of any {@link Cluster} that references it
  * via `parameterGroupName`.
  *

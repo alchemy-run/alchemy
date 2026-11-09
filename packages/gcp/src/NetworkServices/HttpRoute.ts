@@ -310,7 +310,7 @@ export interface HttpRouteLookup {
    */
   httpRouteId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -322,7 +322,7 @@ export interface HttpRouteLookup {
 }
 
 /**
- * A Network Services HttpRoute — how a Mesh or Gateway routes HTTP
+ * A Network Services HttpRoute -- how a Mesh or Gateway routes HTTP
  * traffic for a set of hostnames.
  *
  * Changing `httpRouteId` or `location` replaces the route. Hostnames,

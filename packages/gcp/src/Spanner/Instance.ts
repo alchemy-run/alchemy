@@ -181,7 +181,7 @@ export interface InstanceLookup {
   /**
    * Instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters).
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-64 characters).
    */
   instanceId: string;
   /**

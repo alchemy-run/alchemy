@@ -185,7 +185,7 @@ export interface RestorePlansRestoreLookup {
 }
 
 /**
- * A Backup for GKE restore — a request to restore a Backup into the
+ * A Backup for GKE restore -- a request to restore a Backup into the
  * target cluster of a RestorePlan.
  *
  * Changing `restoreId`, `restorePlan`, `location`, `backup`, `filter`,

@@ -173,7 +173,7 @@ export type SpaceLookup =
     };
 
 /**
- * An AWS re:Post Private space — a private, organization-scoped version of
+ * An AWS re:Post Private space -- a private, organization-scoped version of
  * AWS re:Post with curated Q&A, articles, and selected public content.
  *
  * re:Post Private is a paid feature (Basic or Standard tier) that requires

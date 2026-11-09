@@ -209,10 +209,10 @@ export const EnvironmentProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* boatName(id, news.name ?? output?.name, 64);
 
-          // Observe — by id once we have one (it survives renames), else by name.
+          // Observe -- by id once we have one (it survives renames), else by name.
           let environment = yield* findEnvironment({ environmentId: output?.environmentId, name });
 
-          // Ensure — a concurrent create of the same name is a race, not a failure.
+          // Ensure -- a concurrent create of the same name is a race, not a failure.
           if (environment === undefined) {
             yield* session.note(`Creating environment ${name}...`);
             const created = yield* boat
@@ -228,7 +228,7 @@ export const EnvironmentProvider = () =>
             }
           }
 
-          // Sync — each update mints a version, so send only what differs.
+          // Sync -- each update mints a version, so send only what differs.
           const desired = desiredOf(name, news, yield* envContentsOf(news.env));
           const delta: Partial<typeof desired> = {};
           if (environment.name !== desired.name) delta.name = desired.name;

@@ -55,7 +55,7 @@ export interface Authorize {
 }
 
 // TypeScript can't infer a generic call signature whose requirement is
-// `Exclude<R, …>` from `Effect.provide`, so runners assert their shape.
+// `Exclude<R, ...>` from `Effect.provide`, so runners assert their shape.
 const runnerOf = <Rm>(layer: Layer.Layer<Rm>) => ({
   run: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(layer)),
   stream: <A, E, R>(stream: Stream.Stream<A, E, R>) => stream.pipe(Stream.provide(layer)),

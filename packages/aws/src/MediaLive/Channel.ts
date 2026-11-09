@@ -158,7 +158,7 @@ export type ChannelLookup =
     };
 
 /**
- * An AWS Elemental MediaLive channel — the live encoder that reads from
+ * An AWS Elemental MediaLive channel -- the live encoder that reads from
  * attached inputs, transcodes per its encoder settings, and writes to output
  * destinations (HLS, RTMP, MediaPackage, ...).
  *

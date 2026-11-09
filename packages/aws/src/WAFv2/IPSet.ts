@@ -109,7 +109,7 @@ export interface IPSetLookup {
 }
 
 /**
- * An AWS WAFv2 IP set — a named collection of IP addresses and CIDR ranges
+ * An AWS WAFv2 IP set -- a named collection of IP addresses and CIDR ranges
  * referenced from web ACL and rule group rules via
  * `IPSetReferenceStatement`.
  *

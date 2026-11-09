@@ -110,7 +110,7 @@ export interface AnnotationStoreLookup {
 }
 
 /**
- * An Amazon HealthOmics annotation store — a container for genome annotation
+ * An Amazon HealthOmics annotation store -- a container for genome annotation
  * data (GFF, TSV, or VCF) aligned to a reference genome.
  *
  * An annotation store name is auto-generated from the app, stage, and logical

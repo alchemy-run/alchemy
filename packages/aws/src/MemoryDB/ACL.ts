@@ -74,7 +74,7 @@ export interface ACLLookup {
 }
 
 /**
- * A MemoryDB Access Control List (ACL) — a named collection of {@link User}s
+ * A MemoryDB Access Control List (ACL) -- a named collection of {@link User}s
  * that a cluster authenticates against. Attach an ACL to a
  * {@link Cluster} via `aclName`.
  *

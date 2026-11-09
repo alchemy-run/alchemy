@@ -63,7 +63,7 @@ export interface DedicatedIpPoolLookup {
 }
 
 /**
- * An Amazon SES v2 dedicated IP pool — a named group of dedicated IP addresses
+ * An Amazon SES v2 dedicated IP pool -- a named group of dedicated IP addresses
  * used to send email, so you can isolate the sending reputation of different
  * kinds of mail (e.g. marketing vs. transactional).
  *

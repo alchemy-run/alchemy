@@ -145,7 +145,7 @@ export interface BackupPlansBackupLookup {
 }
 
 /**
- * A Backup for GKE backup — a point-in-time capture of a cluster under
+ * A Backup for GKE backup -- a point-in-time capture of a cluster under
  * a BackupPlan.
  *
  * Changing `backupId`, `backupPlan`, or `location` replaces the backup.

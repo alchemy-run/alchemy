@@ -340,14 +340,14 @@ export const HostedZoneProvider = () =>
           ),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
-          // Adopting a different zone than the one tracked → replace.
+          // Adopting a different zone than the one tracked -> replace.
           if (
             news.hostedZoneId !== undefined &&
             normalizeId(news.hostedZoneId) !== normalizeId(output?.id ?? olds.hostedZoneId ?? "")
           ) {
             return { action: "replace" } as const;
           }
-          // Name change → replace, but only when the old name is known — a
+          // Name change -> replace, but only when the old name is known -- a
           // half-created state row can't round-trip an Output-valued `name`
           // (it deserializes as `undefined`), and an unknown old name must
           // fall through to the create/update recovery path.

@@ -135,7 +135,7 @@ export interface LbRouteExtensionLookup {
    */
   lbRouteExtensionId: string;
   /**
-   * Location (`us-central1`, `global`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `global`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -147,7 +147,7 @@ export interface LbRouteExtensionLookup {
 }
 
 /**
- * A Network Services LbRouteExtension — a Service Extension that
+ * A Network Services LbRouteExtension -- a Service Extension that
  * controls where an Application Load Balancer routes a given request.
  *
  * Changing `lbRouteExtensionId`, `location`, or `loadBalancingScheme`

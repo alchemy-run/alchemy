@@ -398,9 +398,9 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  * **Example:** Connect to an existing MySQL
  * ```typescript
  * const db = Railway.MySQL.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   serviceId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   serviceId: "c9d0e1f2-...",
  * });
  * const url = db.connectionUri;
  * ```

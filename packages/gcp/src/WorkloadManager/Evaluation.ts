@@ -188,7 +188,7 @@ export interface EvaluationLookup {
    */
   evaluationId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -200,7 +200,7 @@ export interface EvaluationLookup {
 }
 
 /**
- * A Workload Manager evaluation — a named set of best-practice rules
+ * A Workload Manager evaluation -- a named set of best-practice rules
  * validated against a scope of Cloud resources (SAP, SQL Server, or
  * custom).
  *

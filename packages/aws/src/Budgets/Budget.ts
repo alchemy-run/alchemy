@@ -209,7 +209,7 @@ export interface BudgetLookup {
 }
 
 /**
- * An AWS Budget — tracks cost or usage against a defined limit over a time
+ * An AWS Budget -- tracks cost or usage against a defined limit over a time
  * period and notifies subscribers when configured thresholds are crossed.
  *
  * Budgets are a global (account-level) resource; they are free and take

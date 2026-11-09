@@ -141,7 +141,7 @@ export interface ConnectionsGitRepositoryLinkLookup {
 }
 
 /**
- * A Developer Connect git repository link — associates a remote Git
+ * A Developer Connect git repository link -- associates a remote Git
  * repository with a {@link Connection} so webhooks and clone tokens
  * can be issued.
  *

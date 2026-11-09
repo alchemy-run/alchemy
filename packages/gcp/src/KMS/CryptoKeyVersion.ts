@@ -142,7 +142,7 @@ export interface CryptoKeyVersionLookup {
    */
   keyRing?: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `cryptoKey` is a bare id. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
@@ -162,7 +162,7 @@ export interface CryptoKeyVersionLookup {
 }
 
 /**
- * A Cloud KMS CryptoKeyVersion — one generation of key material under a
+ * A Cloud KMS CryptoKeyVersion -- one generation of key material under a
  * CryptoKey.
  *
  * Parent CryptoKey, KeyRing, location, and version id are identity

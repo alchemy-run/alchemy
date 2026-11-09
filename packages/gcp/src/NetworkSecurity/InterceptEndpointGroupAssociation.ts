@@ -120,7 +120,7 @@ export interface InterceptEndpointGroupAssociationLookup {
    */
   interceptEndpointGroupAssociationId: string;
   /**
-   * Location of the association. Associations are global — always
+   * Location of the association. Associations are global -- always
    * `"global"`. `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -132,7 +132,7 @@ export interface InterceptEndpointGroupAssociationLookup {
 }
 
 /**
- * A Network Security Integration intercept endpoint-group association —
+ * A Network Security Integration intercept endpoint-group association --
  * the link between a VPC and an intercept endpoint group.
  *
  * Creating an association does not enable intercept by itself; a firewall

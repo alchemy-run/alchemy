@@ -132,7 +132,7 @@ export interface InstancesDatabasesBackupScheduleLookup {
   /**
    * Backup schedule id (the `{schedule}` segment of
    * `.../databases/{database}/backupSchedules/{schedule}`). Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters).
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-60 characters).
    */
   backupScheduleId: string;
   /**

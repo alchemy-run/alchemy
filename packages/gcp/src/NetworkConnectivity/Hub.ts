@@ -138,7 +138,7 @@ export interface HubLookup {
 }
 
 /**
- * A Network Connectivity Center hub — the global attachment point for
+ * A Network Connectivity Center hub -- the global attachment point for
  * VPC, VPN, and interconnect spokes.
  *
  * Hubs live at `locations/global`. Changing `hubId` replaces the hub.

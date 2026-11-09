@@ -36,7 +36,7 @@ export interface DashboardLookup {
 }
 
 /**
- * An Axiom dashboard — a named, layout-driven collection of charts. Each
+ * An Axiom dashboard -- a named, layout-driven collection of charts. Each
  * dashboard takes a full document (`charts` + `layout` array of grid cells +
  * `timeWindow` + `refreshTime`) at version `schemaVersion: 2`.
  *

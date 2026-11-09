@@ -587,7 +587,7 @@ export interface DBInstanceLookup {
 }
 
 /**
- * An RDS database instance — either a standalone (non-Aurora) database or a
+ * An RDS database instance -- either a standalone (non-Aurora) database or a
  * member of an Aurora `DBCluster`.
  *
  * Exposes the full storage, backup, monitoring, performance-insights,
@@ -1681,7 +1681,7 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      // Storage optimization is online. A new instance routinely takes 10–15
+      // Storage optimization is online. A new instance routinely takes 10-15
       // minutes to become available, so provisioning has a twenty-minute budget.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
         return yield* observeReadiness(instanceId).pipe(

@@ -112,7 +112,7 @@ export interface SubscriberLookup {
 }
 
 /**
- * A Security Lake subscriber — a consumer (account or service) granted access
+ * A Security Lake subscriber -- a consumer (account or service) granted access
  * to data in the Security Lake data lake for specific log sources.
  *
  * ### Creating a Subscriber
@@ -231,7 +231,7 @@ export const SubscriberProvider = () =>
       return {
         lookup: Effect.fn(function* ({ subscriberId }) {
           // An account that never onboarded Security Lake rejects subscriber
-          // APIs with UnauthorizedException — that means "no subscriber".
+          // APIs with UnauthorizedException -- that means "no subscriber".
           const subscriber = yield* getById(subscriberId).pipe(
             Effect.catchTag("UnauthorizedException", () => Effect.undefined),
           );

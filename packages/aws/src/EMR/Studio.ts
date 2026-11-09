@@ -134,7 +134,7 @@ export interface StudioLookup {
 }
 
 /**
- * An Amazon EMR Studio — a web-based IDE for notebooks and interactive
+ * An Amazon EMR Studio -- a web-based IDE for notebooks and interactive
  * workloads that attaches to EMR clusters.
  *
  * A Studio itself is free; you pay for the clusters it attaches to. Each

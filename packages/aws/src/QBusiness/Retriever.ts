@@ -116,7 +116,7 @@ export type RetrieverLookup =
     };
 
 /**
- * An Amazon Q Business retriever — the query engine that fetches relevant
+ * An Amazon Q Business retriever -- the query engine that fetches relevant
  * passages from an index (native or Kendra) to ground chat responses.
  *
  * ### Creating Retrievers

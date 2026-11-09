@@ -110,10 +110,10 @@ const oneLine = (text: string) => text.replaceAll(/\s*\r?\n\s*/g, " ").trim();
 /** Share of the row a wrapped failure detail keeps when the label has to truncate. */
 const failureShare = 0.4;
 
-/** Cells a truncated label keeps beside a failure (`W…`). */
+/** Cells a truncated label keeps beside a failure (`W...`). */
 const labelMinWidth = 2;
 
-/** Narrowest failure column worth keeping beside the row (`· fail…`). */
+/** Narrowest failure column worth keeping beside the row (`· fail...`). */
 const detailMinColumn = 8;
 
 /** Width of the trailing cells, with the 1-cell gap between them. */

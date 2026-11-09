@@ -155,7 +155,7 @@ export interface DatabaseLookup {
   /**
    * Database id (the `{database}` segment of
    * `projects/{project}/instances/{instance}/databases/{database}`). Must
-   * match `^[a-z][-a-z0-9]*[a-z0-9]$` (2–30 characters).
+   * match `^[a-z][-a-z0-9]*[a-z0-9]$` (2-30 characters).
    */
   databaseId: string;
   /**

@@ -108,7 +108,7 @@ export interface DeploymentConfigLookup {
 }
 
 /**
- * A custom AWS CodeDeploy deployment configuration — the rules for how
+ * A custom AWS CodeDeploy deployment configuration -- the rules for how
  * traffic shifts during a deployment (canary/linear traffic routing for
  * `Lambda`/`ECS`, minimum-healthy-hosts and zonal rollout for `Server`).
  * Deployment configurations are immutable: any change replaces the

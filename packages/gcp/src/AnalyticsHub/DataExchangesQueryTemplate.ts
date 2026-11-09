@@ -154,7 +154,7 @@ export interface DataExchangesQueryTemplateLookup {
 }
 
 /**
- * An Analytics Hub query template — a shared table-valued function
+ * An Analytics Hub query template -- a shared table-valued function
  * defined by contributors in a data clean room.
  *
  * Parent exchange, location, template id, and display name are

@@ -156,7 +156,7 @@ export interface PriceLookup {
 }
 
 /**
- * A Stripe Price — the unit cost attached to a Product. Currency, amount,
+ * A Stripe Price -- the unit cost attached to a Product. Currency, amount,
  * product, and recurring interval are immutable (changing them replaces
  * the price). Nickname, metadata, lookup key, and `active` update in
  * place. Prices cannot be deleted; destroy deactivates them

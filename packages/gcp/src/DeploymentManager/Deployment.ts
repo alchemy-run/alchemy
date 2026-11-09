@@ -157,7 +157,7 @@ export interface DeploymentLookup {
 }
 
 /**
- * A Google Cloud Deployment Manager deployment — a configuration that
+ * A Google Cloud Deployment Manager deployment -- a configuration that
  * creates and manages a set of Google Cloud resources together.
  *
  * Changing `deploymentId` replaces the deployment. Description, labels,

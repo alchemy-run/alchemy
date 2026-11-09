@@ -136,7 +136,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An AWS CloudHSM cluster — a fleet of FIPS-validated, single-tenant
+ * An AWS CloudHSM cluster -- a fleet of FIPS-validated, single-tenant
  * hardware security modules (HSMs) inside your VPC.
  *
  * A fresh cluster provisions to the `UNINITIALIZED` state in a few minutes

@@ -102,7 +102,7 @@ export interface RegexPatternSetLookup {
 }
 
 /**
- * An AWS WAFv2 regex pattern set — a named collection of regular expressions
+ * An AWS WAFv2 regex pattern set -- a named collection of regular expressions
  * referenced from web ACL and rule group rules via
  * `RegexPatternSetReferenceStatement`.
  *

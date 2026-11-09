@@ -122,7 +122,7 @@ export interface CollectionsEnginesControlLookup {
 }
 
 /**
- * A Discovery Engine Control on a collection Engine — redirects,
+ * A Discovery Engine Control on a collection Engine -- redirects,
  * filters, synonyms, boosts, or promotions applied at serving time.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

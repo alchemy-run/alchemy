@@ -19,8 +19,8 @@ import {
  * *project's* install is always the one loaded.
  *
  * `build` (not `createBuilder`) is the entry point: the integration drives a
- * two-pass build — `vite build` for the `client` environment, then `vite
- * build` with `build.ssr` for the server environment — which is what
+ * two-pass build -- `vite build` for the `client` environment, then `vite
+ * build` with `build.ssr` for the server environment -- which is what
  * `react-router build` runs. React Router 8 always builds through the Vite
  * Environment API, so the server pass's overrides are declared on the `ssr`
  * environment as well (see {@link inlineServerBuildConfig}).

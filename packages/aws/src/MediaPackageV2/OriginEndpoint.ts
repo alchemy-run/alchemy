@@ -154,7 +154,7 @@ export interface OriginEndpointLookup {
 }
 
 /**
- * An AWS Elemental MediaPackage v2 origin endpoint — the output side of a
+ * An AWS Elemental MediaPackage v2 origin endpoint -- the output side of a
  * channel. The endpoint packages the channel's ingested content into HLS,
  * low-latency HLS, DASH, and/or MSS manifests and serves them to downstream
  * devices (players or CDNs) on the channel group's egress domain.

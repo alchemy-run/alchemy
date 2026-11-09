@@ -105,7 +105,7 @@ export interface TaxonomyLookup {
 }
 
 /**
- * A Data Catalog taxonomy — a hierarchy of policy tags used to classify
+ * A Data Catalog taxonomy -- a hierarchy of policy tags used to classify
  * data (for example PII vs financials).
  *
  * Taxonomy ids are assigned by Policy Tag Manager. Location is

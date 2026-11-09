@@ -33,7 +33,7 @@ export interface SecretProps {
 }
 
 export interface SecretAttributes {
-  /** E2B's secret id (`sec_…`). */
+  /** E2B's secret id (`sec_...`). */
   secretId: string;
   /** The secret's canonical (lowercased) name. */
   name: string;
@@ -174,7 +174,7 @@ export const SecretProvider = () =>
           // Observe
           let secret = yield* observeSecret(output?.secretId ?? name);
 
-          // Ensure — a Conflict is a peer creating the same name: read it back
+          // Ensure -- a Conflict is a peer creating the same name: read it back
           // and fall through to the sync, which writes our value.
           if (secret === undefined) {
             yield* session.note(`Creating secret ${name}...`);
@@ -193,7 +193,7 @@ export const SecretProvider = () =>
             olds = undefined;
           }
 
-          // Sync — values are write-only, so `olds` is the only signal that the
+          // Sync -- values are write-only, so `olds` is the only signal that the
           // stored value already matches. Without it (adoption, a lost write),
           // store ours. Metadata is observed.
           const valueChanged =

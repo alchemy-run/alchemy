@@ -73,7 +73,7 @@ export type TagValue = Resource<
 export interface TagValueLookup {
   /**
    * User-assigned short name, unique among TagValues of the same TagKey.
-   * 1–256 characters, beginning and ending with `[a-zA-Z0-9]`, with dashes,
+   * 1-256 characters, beginning and ending with `[a-zA-Z0-9]`, with dashes,
    * underscores, dots, and alphanumerics between.
    */
   shortName: string;
@@ -89,7 +89,7 @@ export interface TagValueLookup {
 }
 
 /**
- * A Cloud Resource Manager TagValue — a child of a TagKey used to group
+ * A Cloud Resource Manager TagValue -- a child of a TagKey used to group
  * resources for policy.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

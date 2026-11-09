@@ -309,7 +309,7 @@ export interface IssuingCardholderLookup {
 }
 
 /**
- * A Stripe Issuing Cardholder — an individual or company who can be
+ * A Stripe Issuing Cardholder -- an individual or company who can be
  * issued cards. Billing address, email, phone, preferred locales,
  * spending controls, status, and metadata update in place. Name and
  * type are immutable; changing them replaces the cardholder.

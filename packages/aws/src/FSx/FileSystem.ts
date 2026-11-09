@@ -107,7 +107,7 @@ export interface FileSystemLookup {
 }
 
 /**
- * An Amazon FSx file system — fully-managed shared storage for Lustre,
+ * An Amazon FSx file system -- fully-managed shared storage for Lustre,
  * Windows File Server, NetApp ONTAP, or OpenZFS.
  *
  * FSx file systems take several minutes to provision. The file system id,

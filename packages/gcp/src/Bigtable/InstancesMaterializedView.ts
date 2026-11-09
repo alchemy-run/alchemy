@@ -103,7 +103,7 @@ export interface InstancesMaterializedViewLookup {
 }
 
 /**
- * A Cloud Bigtable continuous materialized view — a SQL SELECT whose
+ * A Cloud Bigtable continuous materialized view -- a SQL SELECT whose
  * results are precomputed and kept current.
  *
  * The parent instance must already exist. The query must use `GROUP BY`

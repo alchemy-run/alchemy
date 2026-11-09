@@ -108,7 +108,7 @@ export type ThreatIntelSetLookup =
     };
 
 /**
- * A GuardDuty threat intelligence set — an S3-hosted list of known malicious
+ * A GuardDuty threat intelligence set -- an S3-hosted list of known malicious
  * IP addresses that GuardDuty generates findings for. The list file must
  * exist in S3 before activation; name, location, and activation are
  * updatable in place, while format changes replace the set.

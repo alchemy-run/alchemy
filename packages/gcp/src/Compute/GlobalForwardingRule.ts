@@ -202,7 +202,7 @@ export interface GlobalForwardingRuleLookup {
 }
 
 /**
- * A global Compute Engine forwarding rule — the frontend of a global
+ * A global Compute Engine forwarding rule -- the frontend of a global
  * load balancer. It binds an IP and port range to a target HTTP/HTTPS
  * proxy (or SSL/TCP/gRPC proxy, or a Private Service Connect bundle).
  *

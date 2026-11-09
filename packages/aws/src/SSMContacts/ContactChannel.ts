@@ -78,7 +78,7 @@ export interface ContactChannelLookup {
 }
 
 /**
- * An Incident Manager contact channel — the method (SMS, voice, or email)
+ * An Incident Manager contact channel -- the method (SMS, voice, or email)
  * that Incident Manager uses to engage a contact during an incident.
  *
  * ### Creating Contact Channels

@@ -143,7 +143,7 @@ export interface ConnectorLookup {
    */
   connectorId: string;
   /**
-   * Region of the connector (`us-central1`, …). `US-CENTRAL1` is accepted
+   * Region of the connector (`us-central1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;

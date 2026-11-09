@@ -74,7 +74,7 @@ export interface SubnetGroupLookup {
 }
 
 /**
- * A MemoryDB subnet group — the set of VPC subnets a MemoryDB cluster's nodes
+ * A MemoryDB subnet group -- the set of VPC subnets a MemoryDB cluster's nodes
  * are placed into.
  *
  * Subnet groups are free and provision instantly. A cluster references one by

@@ -137,7 +137,7 @@ export interface OrganizationsLocationsJobTriggerLookup {
    */
   organization?: string;
   /**
-   * Processing location (`us-central1`, `global`, `us`, …).
+   * Processing location (`us-central1`, `global`, `us`, ...).
    */
   location?: string;
   /**

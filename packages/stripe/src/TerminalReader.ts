@@ -106,7 +106,7 @@ export interface TerminalReaderLookup {
 }
 
 /**
- * A Stripe Terminal Reader — a physical or simulated card reader that
+ * A Stripe Terminal Reader -- a physical or simulated card reader that
  * accepts in-person payments. `registrationCode` and `location` are
  * create-only; changing `location` replaces the reader. `label` and
  * `metadata` update in place. Destroy deletes the reader.

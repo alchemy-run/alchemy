@@ -407,7 +407,7 @@ export type UserPoolLookup =
     };
 
 /**
- * An Amazon Cognito user pool — a managed user directory that handles
+ * An Amazon Cognito user pool -- a managed user directory that handles
  * sign-up, sign-in, and token issuance (OIDC-compliant JWTs) for your
  * application.
  * ### Creating a User Pool

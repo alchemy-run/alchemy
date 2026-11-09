@@ -1,5 +1,5 @@
 /**
- * @alchemy.run/rivet/Hetzner — run Rivet control planes and pools of
+ * @alchemy.run/rivet/Hetzner -- run Rivet control planes and pools of
  * Durable Object nodes on Hetzner Cloud. Requires `@alchemy.run/hetzner`.
  */
 export * from "./ServerControlPlane.ts";

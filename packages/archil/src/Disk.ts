@@ -112,7 +112,7 @@ export interface DiskProps {
 }
 
 export interface DiskAttributes {
-  /** Disk id (`dsk-…`). */
+  /** Disk id (`dsk-...`). */
   diskId: string;
   /** Disk name. */
   name: string;

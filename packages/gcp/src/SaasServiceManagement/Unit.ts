@@ -177,7 +177,7 @@ export interface UnitLookup {
    */
   unitId: string;
   /**
-   * Region of the unit (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the unit (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -189,7 +189,7 @@ export interface UnitLookup {
 }
 
 /**
- * An App Lifecycle Manager unit — one deployable instance of a UnitKind.
+ * An App Lifecycle Manager unit -- one deployable instance of a UnitKind.
  *
  * A unit is actuated by a blueprint engine (Terraform, Helm, ...) under
  * the hood. `unitId`, `location`, `unitKind`, `tenant`, and

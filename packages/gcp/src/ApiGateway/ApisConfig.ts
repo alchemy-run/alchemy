@@ -142,7 +142,7 @@ export interface ApisConfigLookup {
 }
 
 /**
- * An API Gateway API config — OpenAPI or gRPC settings for a managed
+ * An API Gateway API config -- OpenAPI or gRPC settings for a managed
  * API that Gateways serve.
  *
  * Parent API, config id, documents, gRPC definitions, and gateway

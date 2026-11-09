@@ -132,7 +132,7 @@ export interface IntegrationTypeLookup {
 }
 
 /**
- * An API Gateway v2 Integration — the backend target a Route forwards to.
+ * An API Gateway v2 Integration -- the backend target a Route forwards to.
  *
  * For HTTP APIs the common integration is `AWS_PROXY` with payload format
  * `2.0`, pointing directly at a Lambda function ARN. For WebSocket APIs the

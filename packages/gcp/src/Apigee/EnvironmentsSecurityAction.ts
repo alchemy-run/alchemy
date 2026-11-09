@@ -186,7 +186,7 @@ export interface EnvironmentsSecurityActionLookup {
 }
 
 /**
- * An environment-level Apigee SecurityAction — allow, deny, or flag
+ * An environment-level Apigee SecurityAction -- allow, deny, or flag
  * requests that match a condition.
  *
  * Security actions have no labels, so Alchemy stamps ownership into

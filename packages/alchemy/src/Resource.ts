@@ -178,7 +178,7 @@ export interface ResourceLike<
   /** @internal phantom */
   Providers: Providers;
   /**
-   * @internal phantom — the props {@link ResourceClass.lookup} takes to find
+   * @internal phantom -- the props {@link ResourceClass.lookup} takes to find
    * an unmanaged instance. `never` for resources that can't be looked up.
    */
   Lookup: Lookup;
@@ -236,8 +236,8 @@ export type Resource<
 
 /**
  * Accessor type for one attribute. Pure object attributes upgrade to
- * {@link Output.ObjectExpr} so nested access is typed —
- * `hyperpod.instanceGroups.workers` — while primitives, `Redacted` values
+ * {@link Output.ObjectExpr} so nested access is typed --
+ * `hyperpod.instanceGroups.workers` -- while primitives, `Redacted` values
  * (a leaf at runtime), unions with `undefined`, branded string unions
  * (`"a" | (string & {})`), and arrays
  * stay plain {@link Output.Output} (running them through `ToOutput` would

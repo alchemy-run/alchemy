@@ -2162,7 +2162,7 @@ const makePlan = <A>(
     // SCC membership of the graph Apply schedules. Apply uses it to decide
     // whether an update node must publish its prior attr early to break a
     // cycle, or can simply wait for upstreams like a DAG node (the common
-    // case). The edges are the ones each node still carries — exactly what
+    // case). The edges are the ones each node still carries -- exactly what
     // Apply's `waitForDeps` waits on. A declared reference to an upstream's
     // stable attribute resolves to its value during planning and orders
     // nothing, so it cannot close a cycle: two updating Workers that bind

@@ -143,7 +143,7 @@ export interface RealmLookup {
    */
   realmId: string;
   /**
-   * Location of the realm. Cloud Number Registry is global — `global` is
+   * Location of the realm. Cloud Number Registry is global -- `global` is
    * the only supported value.
    */
   location?: string;
@@ -155,7 +155,7 @@ export interface RealmLookup {
 }
 
 /**
- * A Cloud Number Registry realm — a routing domain of IP ranges that
+ * A Cloud Number Registry realm -- a routing domain of IP ranges that
  * must not overlap (unless one range is the parent of another). Custom
  * ranges can only be added to user-managed realms.
  *

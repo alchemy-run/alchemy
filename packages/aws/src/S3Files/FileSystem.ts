@@ -111,7 +111,7 @@ export interface FileSystemLookup {
 }
 
 /**
- * An Amazon S3 File System — POSIX-style file system access over an S3
+ * An Amazon S3 File System -- POSIX-style file system access over an S3
  * general purpose bucket (mountable from EC2/ECS via mount targets, with
  * application-scoped access via {@link AccessPoint}s).
  *

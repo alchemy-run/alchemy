@@ -290,7 +290,7 @@ export interface NodePoolLookup {
   nodePoolId: string;
   /**
    * Zone or region of the parent cluster (`us-central1-a`, `us-central1`,
-   * …). Ignored when `cluster` is a full resource name.
+   * ...). Ignored when `cluster` is a full resource name.
    */
   location?: string;
   /**

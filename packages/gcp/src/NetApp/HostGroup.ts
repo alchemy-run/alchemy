@@ -116,7 +116,7 @@ export interface HostGroupLookup {
    */
   hostGroupId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -128,7 +128,7 @@ export interface HostGroupLookup {
 }
 
 /**
- * A Cloud NetApp Volumes host group — a set of iSCSI initiators that can
+ * A Cloud NetApp Volumes host group -- a set of iSCSI initiators that can
  * mount a block volume.
  *
  * Changing `hostGroupId`, `location`, `type`, or `osType` replaces the

@@ -1,5 +1,5 @@
 /**
- * @alchemy.run/rivet — Durable Objects on Rivet 3 control planes, with
+ * @alchemy.run/rivet -- Durable Objects on Rivet 3 control planes, with
  * their nodes hosted on any cloud.
  */
 export * from "./Cluster.ts";

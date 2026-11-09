@@ -87,7 +87,7 @@ export interface BrowserCustomLookup {
 }
 
 /**
- * A custom Amazon Bedrock AgentCore Browser — a managed, isolated cloud
+ * A custom Amazon Bedrock AgentCore Browser -- a managed, isolated cloud
  * browser that agents drive to interact with websites.
  *
  * A custom browser controls the sandbox's network mode, execution role, and

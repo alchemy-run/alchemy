@@ -89,7 +89,7 @@ export interface WorkspaceLookup {
 }
 
 /**
- * An Amazon Managed Service for Prometheus (AMP) workspace — a logical,
+ * An Amazon Managed Service for Prometheus (AMP) workspace -- a logical,
  * fully-managed Prometheus-compatible metrics store. Metrics are ingested
  * via remote-write and queried through the workspace's Prometheus-compatible
  * endpoint.

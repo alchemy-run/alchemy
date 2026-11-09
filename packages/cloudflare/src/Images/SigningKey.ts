@@ -91,7 +91,7 @@ export const SigningKeyProvider = () =>
     stables: ["keyName", "accountId", "value"],
 
     diff: Effect.fn(function* ({ olds, news = {}, output }) {
-      // News may still contain unresolved plan-time expressions — defer to
+      // News may still contain unresolved plan-time expressions -- defer to
       // the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
       // The key name is its PUT path identifier -- it cannot be renamed.

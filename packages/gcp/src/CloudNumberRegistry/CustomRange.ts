@@ -139,7 +139,7 @@ export interface CustomRangeLookup {
    */
   customRangeId: string;
   /**
-   * Location of the range. Cloud Number Registry is global — `global` is
+   * Location of the range. Cloud Number Registry is global -- `global` is
    * the only supported value.
    */
   location?: string;

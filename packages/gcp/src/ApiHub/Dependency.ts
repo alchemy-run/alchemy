@@ -121,7 +121,7 @@ export interface DependencyLookup {
    */
   dependencyId: string;
   /**
-   * Location (`us-central1`, …).
+   * Location (`us-central1`, ...).
    */
   location?: string;
   /**

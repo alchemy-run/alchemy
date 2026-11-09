@@ -86,7 +86,7 @@ export interface PrivateDnsNamespaceLookup {
 }
 
 /**
- * An AWS Cloud Map private DNS namespace — the DNS-based service registry
+ * An AWS Cloud Map private DNS namespace -- the DNS-based service registry
  * that ECS Service Connect and `serviceRegistries` point at. Services
  * registered in the namespace are discoverable inside the associated VPC via
  * DNS (`{service}.{namespace}`) and from anywhere via the

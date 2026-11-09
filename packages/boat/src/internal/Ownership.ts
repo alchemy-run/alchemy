@@ -20,7 +20,7 @@ export type Labels = Readonly<Record<string, string | undefined>> | null | undef
 /** The prefix Alchemy's ownership labels share. */
 export const ALCHEMY_LABEL_PREFIX = "alchemy.";
 
-/** `alchemy::stack` → `alchemy.stack`. */
+/** `alchemy::stack` -> `alchemy.stack`. */
 export const toLabelKey = (key: string) =>
   key.startsWith(INTERNAL_PREFIX)
     ? `${ALCHEMY_LABEL_PREFIX}${key.slice(INTERNAL_PREFIX.length)}`

@@ -90,7 +90,7 @@ export interface UrlListLookup {
    */
   urlListId: string;
   /**
-   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

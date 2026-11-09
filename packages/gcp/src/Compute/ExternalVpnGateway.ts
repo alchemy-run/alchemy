@@ -131,7 +131,7 @@ export interface ExternalVpnGatewayLookup {
 }
 
 /**
- * A global Compute Engine external VPN gateway — the on-premises or
+ * A global Compute Engine external VPN gateway -- the on-premises or
  * other-cloud peer that an HA VPN gateway connects to.
  *
  * Labels are the only in-place update (`externalVpnGateways.setLabels`).

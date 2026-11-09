@@ -20,7 +20,7 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
  * hosts Durable Streams and agentOS. Its tasks join the control plane's
  * overlay network and publish no ports: callers reach every stream through
  * the control plane's gateway, with its token. Requires a `Rivet.Cluster`
- * on a Docker network — `RivetDocker.SwarmControlPlane`.
+ * on a Docker network -- `RivetDocker.SwarmControlPlane`.
  *
  * ### Running Rivet Services on Docker
  * **Example:** Services on the local swarm

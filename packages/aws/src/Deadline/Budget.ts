@@ -168,7 +168,7 @@ export type BudgetLookup =
     };
 
 /**
- * An AWS Deadline Cloud budget — tracks a queue's approximate render spend
+ * An AWS Deadline Cloud budget -- tracks a queue's approximate render spend
  * over a fixed window and stops scheduling when thresholds are crossed.
  *
  * ### Creating Budgets

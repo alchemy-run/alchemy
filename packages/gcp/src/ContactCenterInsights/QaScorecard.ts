@@ -99,7 +99,7 @@ export interface QaScorecardLookup {
    */
   qaScorecardId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;
@@ -111,7 +111,7 @@ export interface QaScorecardLookup {
 }
 
 /**
- * A Contact Center AI Insights QA scorecard — a collection of questions
+ * A Contact Center AI Insights QA scorecard -- a collection of questions
  * scored during analysis.
  *
  * Scorecards have no labels field -- Alchemy stamps ownership into the

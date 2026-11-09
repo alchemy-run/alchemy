@@ -23,7 +23,7 @@ export const DEFAULT_MOUNT_PATH = "/mnt/archil";
 
 /** A run-time mount of a disk named at call time (`MountDisk()`). */
 export interface MountAnyOptions extends Partial<DiskMountOptions> {
-  /** The disk: a `DiskHandle`, or its id (`dsk-…`) as a job received it. */
+  /** The disk: a `DiskHandle`, or its id (`dsk-...`) as a job received it. */
   readonly disk: DiskRef | string;
   /** A disk token for that disk, e.g. from `DiskHandle.createToken`. */
   readonly token: string | Redacted.Redacted<string>;
@@ -282,7 +282,7 @@ export interface MountAnyDiskOptions {
 /**
  * Mount an Archil disk where your program runs. `MountDisk(disk, options)`
  * returns a mount reference: the fields of a `mounts` entry (`disk`,
- * `path`, `mode`, …) plus `mount()`.
+ * `path`, `mode`, ...) plus `mount()`.
  *
  * - In an `Archil.Sandbox` program, the sandbox mounts the disk natively:
  *   the binding adds the entry to the sandbox's `mounts`, and `mount()`

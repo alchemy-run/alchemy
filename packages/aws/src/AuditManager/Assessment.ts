@@ -160,7 +160,7 @@ export interface AssessmentLookup {
 }
 
 /**
- * An AWS Audit Manager assessment — an active evidence-collection engagement
+ * An AWS Audit Manager assessment -- an active evidence-collection engagement
  * created from a framework, continuously gathering evidence for the controls
  * in scope.
  *

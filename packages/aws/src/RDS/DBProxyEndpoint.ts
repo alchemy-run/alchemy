@@ -108,7 +108,7 @@ export interface DBProxyEndpointLookup {
 }
 
 /**
- * An additional RDS Proxy endpoint — a second DNS name on an existing
+ * An additional RDS Proxy endpoint -- a second DNS name on an existing
  * `DBProxy`, typically read-only for reader traffic or placed in a
  * different VPC.
  *

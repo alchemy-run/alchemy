@@ -57,7 +57,7 @@ export interface DetectorLookup {
 }
 
 /**
- * An Amazon Fraud Detector detector — the container that binds an event type
+ * An Amazon Fraud Detector detector -- the container that binds an event type
  * to versioned rule sets and models used to evaluate fraud. Creating the
  * detector is cheap; the rules, models, and detector versions that produce
  * predictions are provisioned separately.

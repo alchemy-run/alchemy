@@ -212,7 +212,7 @@ export interface AuthzPolicyLookup {
    */
   authzPolicyId: string;
   /**
-   * Location (`us-central1`, `global`, …). Must match the targeted
+   * Location (`us-central1`, `global`, ...). Must match the targeted
    * forwarding rules.
    */
   location?: string;

@@ -57,7 +57,7 @@ export interface EmailTemplateLookup {
 }
 
 /**
- * An Amazon SES v2 email template — reusable subject/text/HTML content with
+ * An Amazon SES v2 email template -- reusable subject/text/HTML content with
  * `{{variable}}` personalization tags, rendered server-side when you send
  * templated email.
  * ### Creating Templates

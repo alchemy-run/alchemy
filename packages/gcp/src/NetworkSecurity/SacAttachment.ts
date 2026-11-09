@@ -116,7 +116,7 @@ export interface SacAttachmentLookup {
 }
 
 /**
- * A Secure Access Connect (SAC) attachment — binds an NCC Gateway to a
+ * A Secure Access Connect (SAC) attachment -- binds an NCC Gateway to a
  * SAC realm so SSE traffic can be processed.
  *
  * The realm must first be paired with the SSE partner's realm (Palo Alto

@@ -87,7 +87,7 @@ export interface ObjectLambdaAccessPointLookup {
 }
 
 /**
- * An S3 Object Lambda Access Point — intercepts S3 `GetObject` /
+ * An S3 Object Lambda Access Point -- intercepts S3 `GetObject` /
  * `HeadObject` / `ListObjects` requests through a supporting access point
  * and transforms responses with a Lambda function (redaction, resizing,
  * format conversion, ...).

@@ -68,7 +68,7 @@ export interface CustomVerificationEmailTemplateLookup {
 }
 
 /**
- * An Amazon SES v2 custom verification email template — the branded email SES
+ * An Amazon SES v2 custom verification email template -- the branded email SES
  * sends when you verify a new email-address identity via
  * `SendCustomVerificationEmail`.
  *

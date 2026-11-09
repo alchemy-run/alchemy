@@ -280,7 +280,7 @@ export const ImageProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const plan = yield* planImage(news);
           for (const warning of plan.warnings) yield* session.note(warning);
-          // Observe — a ready image from the same plan is kept; anything
+          // Observe -- a ready image from the same plan is kept; anything
           // else (missing, failed, interrupted) is requested again.
           if (output && output.hash === plan.hash) {
             const observed = yield* archil.getImage({ image_id: output.imageId }).pipe(

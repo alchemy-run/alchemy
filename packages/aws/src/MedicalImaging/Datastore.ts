@@ -78,7 +78,7 @@ export type DatastoreLookup =
     };
 
 /**
- * An AWS HealthImaging data store — a HIPAA-eligible store for DICOM P10
+ * An AWS HealthImaging data store -- a HIPAA-eligible store for DICOM P10
  * medical images with sub-second image-frame retrieval.
  *
  * Data stores provision asynchronously (CREATING -> ACTIVE, typically a few

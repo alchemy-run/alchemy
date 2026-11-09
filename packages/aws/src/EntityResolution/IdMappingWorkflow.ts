@@ -86,7 +86,7 @@ export interface IdMappingWorkflowLookup {
 }
 
 /**
- * An AWS Entity Resolution ID mapping workflow — a data-processing job
+ * An AWS Entity Resolution ID mapping workflow -- a data-processing job
  * definition that translates record identifiers between a `SOURCE` and a
  * `TARGET` ID namespace, using rule-based matching or a provider service.
  *

@@ -53,7 +53,7 @@ export interface ActivityLookup {
 }
 
 /**
- * An AWS Step Functions activity — a named endpoint that external workers
+ * An AWS Step Functions activity -- a named endpoint that external workers
  * poll for tasks (`GetActivityTask`) and complete with the `SendTask*`
  * callback operations.
  *

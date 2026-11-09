@@ -92,7 +92,7 @@ export interface RuleGroupLookup {
 }
 
 /**
- * An AWS Network Firewall rule group — a reusable collection of stateless
+ * An AWS Network Firewall rule group -- a reusable collection of stateless
  * or stateful network traffic inspection rules referenced by
  * {@link FirewallPolicy | firewall policies}.
  * ### Creating Rule Groups

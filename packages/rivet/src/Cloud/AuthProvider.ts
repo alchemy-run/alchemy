@@ -171,7 +171,7 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
           {
             value: "login" as const,
             label: "Sign in with the browser",
-            description: "recommended — refreshes itself",
+            description: "recommended \u2014 refreshes itself",
           },
           {
             value: "stored" as const,
@@ -228,7 +228,7 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
     /**
      * A session that is not about to expire: refreshed and saved when it is.
      * Refresh tokens rotate, so the caller must hold the profile's
-     * credentials lock — core takes it around `read` and `details`, and
+     * credentials lock -- core takes it around `read` and `details`, and
      * `login` takes it itself.
      */
     const freshSession = (

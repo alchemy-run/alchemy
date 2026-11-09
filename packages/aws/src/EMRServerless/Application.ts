@@ -136,7 +136,7 @@ export type ApplicationLookup =
     };
 
 /**
- * An Amazon EMR Serverless application — a serverless Spark or Hive
+ * An Amazon EMR Serverless application -- a serverless Spark or Hive
  * environment that automatically provisions and scales workers per job,
  * with no cluster to manage. An application in the `CREATED` or `STOPPED`
  * state costs nothing; billing only occurs for workers while the application

@@ -122,7 +122,7 @@ export interface VolumesSnapshotLookup {
 }
 
 /**
- * A Cloud NetApp Volumes snapshot — a point-in-time copy of a volume.
+ * A Cloud NetApp Volumes snapshot -- a point-in-time copy of a volume.
  *
  * Changing `snapshotId`, `volume`, or `location` replaces the snapshot.
  * Description and labels update in place.

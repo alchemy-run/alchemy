@@ -70,7 +70,7 @@ export interface PolicyStoreLookup {
 }
 
 /**
- * An Amazon Verified Permissions policy store — the container for Cedar
+ * An Amazon Verified Permissions policy store -- the container for Cedar
  * policies, policy templates, and a schema. Authorization requests
  * (`IsAuthorized`) are evaluated against all policies in a store.
  * ### Creating a Policy Store

@@ -182,7 +182,7 @@ export interface DeploymentGroupLookup {
 }
 
 /**
- * An AWS CodeDeploy deployment group — the set of target instances/functions
+ * An AWS CodeDeploy deployment group -- the set of target instances/functions
  * plus the deployment configuration for one {@link Application}. For the
  * `Lambda` compute platform a group ties a service role and a deployment
  * config (e.g. `CodeDeployDefault.LambdaAllAtOnce`) to an application.

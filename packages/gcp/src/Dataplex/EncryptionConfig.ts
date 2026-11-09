@@ -97,7 +97,7 @@ export interface EncryptionConfigLookup {
    */
   organizationId: string;
   /**
-   * Region (`us-central1`, …). Global is not supported.
+   * Region (`us-central1`, ...). Global is not supported.
    */
   location?: string;
   /**

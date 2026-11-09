@@ -102,7 +102,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An Amazon Aurora DSQL cluster — a serverless, distributed SQL database with
+ * An Amazon Aurora DSQL cluster -- a serverless, distributed SQL database with
  * active-active high availability and Postgres wire compatibility.
  *
  * Clusters are pay-per-use with no provisioned capacity, so they have

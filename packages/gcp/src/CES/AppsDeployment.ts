@@ -129,7 +129,7 @@ export interface AppsDeploymentLookup {
 }
 
 /**
- * A Customer Engagement Suite deployment — an immutable, queryable
+ * A Customer Engagement Suite deployment -- an immutable, queryable
  * channel binding of an app version.
  *
  * Deployments have no labels or description field -- Alchemy stamps

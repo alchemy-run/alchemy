@@ -226,7 +226,7 @@ export interface LakesTaskLookup {
 }
 
 /**
- * A Dataplex lake task — a Spark or notebook job scheduled against a lake.
+ * A Dataplex lake task -- a Spark or notebook job scheduled against a lake.
  *
  * Changing `lake`, `taskId`, `location`, or trigger type replaces the
  * task. Description, labels, execution spec, and Spark/notebook config

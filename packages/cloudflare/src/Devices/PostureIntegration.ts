@@ -138,7 +138,7 @@ export type DevicePostureIntegrationLookup =
     };
 
 /**
- * A Cloudflare Zero Trust **device posture integration** — a service-to-
+ * A Cloudflare Zero Trust **device posture integration** -- a service-to-
  * service connection to a third-party endpoint security provider
  * (CrowdStrike, Intune, Kolide, Workspace ONE, ...) whose signals power
  * `*_s2s` device posture rules.

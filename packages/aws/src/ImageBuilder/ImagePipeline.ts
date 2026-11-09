@@ -154,7 +154,7 @@ export interface ImagePipelineLookup {
 }
 
 /**
- * An EC2 Image Builder image pipeline — wires a recipe to an infrastructure
+ * An EC2 Image Builder image pipeline -- wires a recipe to an infrastructure
  * configuration (and optionally a distribution configuration) and automates
  * image builds on a schedule or on demand.
  *

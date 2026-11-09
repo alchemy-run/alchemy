@@ -201,7 +201,7 @@ export interface TargetGroupLookup {
 }
 
 /**
- * An Amazon VPC Lattice target group — the collection of compute targets
+ * An Amazon VPC Lattice target group -- the collection of compute targets
  * (IPs, EC2 instances, ALBs, or Lambda functions) that a lattice service's
  * listeners and rules forward traffic to.
  *

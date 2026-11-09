@@ -210,7 +210,7 @@ export interface ServiceLookup {
    */
   serviceId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -222,7 +222,7 @@ export interface ServiceLookup {
 }
 
 /**
- * A Dataproc Metastore service — a managed Hive metastore.
+ * A Dataproc Metastore service -- a managed Hive metastore.
  *
  * Changing `serviceId`, `location`, Hive `version`, `network`,
  * `databaseType`, `encryptionConfig`, `networkConfig`, or

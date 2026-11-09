@@ -139,7 +139,7 @@ export interface MirroringEndpointGroupLookup {
    */
   mirroringEndpointGroupId: string;
   /**
-   * Location of the group. Endpoint groups are global — always `"global"`.
+   * Location of the group. Endpoint groups are global -- always `"global"`.
    * `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -151,7 +151,7 @@ export interface MirroringEndpointGroupLookup {
 }
 
 /**
- * A Network Security Integration mirroring endpoint group — the consumer
+ * A Network Security Integration mirroring endpoint group -- the consumer
  * frontend for a mirroring deployment group.
  *
  * Changing `mirroringEndpointGroupId`, `location`, `type`, or

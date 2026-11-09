@@ -147,7 +147,7 @@ export interface TableLookup {
 }
 
 /**
- * An AWS Glue Data Catalog table — a schema (columns), storage location, and
+ * An AWS Glue Data Catalog table -- a schema (columns), storage location, and
  * SerDe over data in S3 (or another store). This is the unit Athena, Redshift
  * Spectrum, and EMR query; it is the analytics foundation of a Glue database.
  * ### Creating Tables

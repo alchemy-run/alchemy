@@ -63,7 +63,7 @@ export interface SubnetGroupLookup {
 }
 
 /**
- * A DAX subnet group — the set of VPC subnets a DAX cluster's nodes are
+ * A DAX subnet group -- the set of VPC subnets a DAX cluster's nodes are
  * placed into.
  *
  * Subnet groups are free and provision instantly. A {@link Cluster}

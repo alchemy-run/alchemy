@@ -70,7 +70,7 @@ export interface ProjectServiceLookup {
 }
 
 /**
- * Enables a Google Cloud API for a project — the GCP analog of a
+ * Enables a Google Cloud API for a project -- the GCP analog of a
  * Terraform `google_project_service`.
  *
  * Service Usage has no per-caller ownership marker, so an API that is

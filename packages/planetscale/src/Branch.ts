@@ -72,7 +72,7 @@ export interface BaseBranchProps {
    *
    * Adding a file is an in-place update. Editing or removing an
    * already-applied file replaces a non-production branch (re-forked from
-   * its parent) and fails on a current or desired production branch — add
+   * its parent) and fails on a current or desired production branch -- add
    * a forward migration instead. Renaming an applied file without changing
    * its contents keeps it applied and replaces nothing.
    *

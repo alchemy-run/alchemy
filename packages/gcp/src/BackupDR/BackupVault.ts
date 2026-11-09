@@ -154,7 +154,7 @@ export interface BackupVaultLookup {
    */
   backupVaultId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -166,7 +166,7 @@ export interface BackupVaultLookup {
 }
 
 /**
- * A Backup and DR backup vault — the storage location for backups created
+ * A Backup and DR backup vault -- the storage location for backups created
  * by Backup Plans.
  *
  * Changing `backupVaultId`, `location`, or `encryptionConfig` replaces

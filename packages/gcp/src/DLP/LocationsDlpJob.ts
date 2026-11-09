@@ -135,7 +135,7 @@ export interface LocationsDlpJobLookup {
    */
   jobId: string;
   /**
-   * Processing location (`global`, `us`, `europe-west1`, …). `us-central1`
+   * Processing location (`global`, `us`, `europe-west1`, ...). `us-central1`
    * is not a valid DLP job location.
    */
   location?: string;

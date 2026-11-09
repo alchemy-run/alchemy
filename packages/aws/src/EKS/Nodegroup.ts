@@ -155,7 +155,7 @@ export interface NodegroupLookup {
 }
 
 /**
- * An Amazon EKS managed node group — an EC2 Auto Scaling group of worker nodes
+ * An Amazon EKS managed node group -- an EC2 Auto Scaling group of worker nodes
  * managed by EKS for a cluster.
  *
  * Managed node groups provide the compute capacity a non-Auto-Mode EKS cluster

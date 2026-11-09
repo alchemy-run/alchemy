@@ -155,7 +155,7 @@ export interface DeliveryPipelineLookup {
    */
   deliveryPipelineId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -167,7 +167,7 @@ export interface DeliveryPipelineLookup {
 }
 
 /**
- * A Cloud Deploy delivery pipeline — the ordered stages a Skaffold
+ * A Cloud Deploy delivery pipeline -- the ordered stages a Skaffold
  * configuration progresses through.
  *
  * Changing `deliveryPipelineId` or `location` replaces the pipeline.

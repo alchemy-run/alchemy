@@ -105,7 +105,7 @@ export type GatewayLookup =
     };
 
 /**
- * An AWS IoT SiteWise gateway — the ingestion point that connects
+ * An AWS IoT SiteWise gateway -- the ingestion point that connects
  * on-premises industrial data sources (e.g. OPC UA servers) to IoT
  * SiteWise, hosted on an IoT Greengrass V2 core device or a Siemens
  * Industrial Edge device.

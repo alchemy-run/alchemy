@@ -133,7 +133,7 @@ export interface ReplicationInstanceLookup {
 }
 
 /**
- * A DMS replication instance — the managed compute that runs migration and
+ * A DMS replication instance -- the managed compute that runs migration and
  * replication tasks. Provisioning takes several minutes and the instance is
  * billed hourly while it exists, so create it only when a migration is
  * running and destroy it promptly.

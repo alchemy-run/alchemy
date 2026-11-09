@@ -82,7 +82,7 @@ export interface EndpointLookup {
 }
 
 /**
- * An Amazon SageMaker Endpoint — the live, invocable deployment of an
+ * An Amazon SageMaker Endpoint -- the live, invocable deployment of an
  * `EndpointConfig`. Provisioning takes minutes and **bills while the
  * endpoint exists** (serverless variants bill per request; instance variants
  * bill per instance-hour). Destroy endpoints promptly.

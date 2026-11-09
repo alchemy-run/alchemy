@@ -85,7 +85,7 @@ export interface ResponsePlanLookup {
 }
 
 /**
- * An Incident Manager response plan — the template that automates the initial
+ * An Incident Manager response plan -- the template that automates the initial
  * response to incidents by engaging contacts, starting chat-channel
  * collaboration, and running Automation runbooks.
  *

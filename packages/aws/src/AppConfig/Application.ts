@@ -57,7 +57,7 @@ export type ApplicationLookup =
     };
 
 /**
- * An AWS AppConfig application — the top-level container that groups the
+ * An AWS AppConfig application -- the top-level container that groups the
  * environments and configuration profiles for one application's configuration.
  *
  * ### Creating an Application

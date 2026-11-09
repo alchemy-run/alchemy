@@ -155,7 +155,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An Amazon DocumentDB elastic cluster — a MongoDB-compatible, sharded
+ * An Amazon DocumentDB elastic cluster -- a MongoDB-compatible, sharded
  * document database that scales workloads to millions of reads/writes per
  * second without managing instances.
  *

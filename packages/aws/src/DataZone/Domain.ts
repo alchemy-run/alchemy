@@ -113,7 +113,7 @@ export type DomainLookup =
     };
 
 /**
- * An Amazon DataZone domain — the top-level container for data-governance
+ * An Amazon DataZone domain -- the top-level container for data-governance
  * projects, environments, glossaries, and assets.
  *
  * `Domain` owns the domain lifecycle. Domain creation is asynchronous

@@ -318,7 +318,7 @@ export interface ConnectionLookup {
   connectionId: string;
   /**
    * BigQuery connection location (`us-central1`, `US`, `EU`,
-   * `aws-us-east-1`, …). Regional ids are lowercased; multi-regions `US` /
+   * `aws-us-east-1`, ...). Regional ids are lowercased; multi-regions `US` /
    * `EU` stay uppercase.
    */
   location?: string;

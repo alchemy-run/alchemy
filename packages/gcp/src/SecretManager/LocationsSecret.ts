@@ -133,7 +133,7 @@ export interface LocationsSecretLookup {
    */
   secretId: string;
   /**
-   * Secret Manager location (`us-central1`, `us-east1`, …). `US-CENTRAL1`
+   * Secret Manager location (`us-central1`, `us-east1`, ...). `US-CENTRAL1`
    * is accepted and normalized to `us-central1`. Regional secrets live only
    * in this location (use {@link Secret} for automatic/user-managed
    * replication).

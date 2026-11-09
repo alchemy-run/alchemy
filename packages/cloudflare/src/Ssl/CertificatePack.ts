@@ -36,7 +36,7 @@ export type CertificatePackValidationMethod = "txt" | "http" | "email";
 export type CertificatePackValidityDays = 14 | 30 | 90 | 365;
 
 /**
- * A Domain Control Validation record for a certificate pack — create the
+ * A Domain Control Validation record for a certificate pack -- create the
  * indicated TXT/CNAME record (or serve the HTTP token) to complete
  * validation.
  */
@@ -116,7 +116,7 @@ export interface CertificatePackAttributes {
   /** Validity period of the issued certificates, in days. */
   validityDays: number | undefined;
   /**
-   * Domain Control Validation records issued with the order — create these
+   * Domain Control Validation records issued with the order -- create these
    * TXT/CNAME records (or serve the HTTP tokens) to complete validation.
    * Cloudflare clears them once validation completes; the ones returned
    * with the order are kept.
@@ -148,7 +148,7 @@ export type CertificatePack = Resource<
  *
  * Issuance is asynchronous: the resource returns as soon as the order is
  * placed and does not wait for the certificates to be issued, because
- * validation may require you to create DNS records first — the records to
+ * validation may require you to create DNS records first -- the records to
  * create are exported as `validationRecords`.
  *
  * The pack's `certificateAuthority`, `hosts`, and `validityDays` are
@@ -451,8 +451,8 @@ const sameHosts = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean 
 /**
  * Keep the saved DCV records on a refreshed pack. Cloudflare clears them once
  * validation completes, and issues new ones at renewal; neither is
- * configuration, so drift must not report it. What an operator controls —
- * CA, validation method, validity, and the host set — stays live. `hosts`
+ * configuration, so drift must not report it. What an operator controls --
+ * CA, validation method, validity, and the host set -- stays live. `hosts`
  * keeps the saved order while the set is unchanged, since Cloudflare may
  * reorder it.
  */

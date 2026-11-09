@@ -109,7 +109,7 @@ export interface RegistryBookLookup {
    */
   registryBookId: string;
   /**
-   * Location of the registry book. Cloud Number Registry is global —
+   * Location of the registry book. Cloud Number Registry is global --
    * `global` is the only supported value.
    */
   location?: string;
@@ -121,7 +121,7 @@ export interface RegistryBookLookup {
 }
 
 /**
- * A Cloud Number Registry book — a container for IP address management
+ * A Cloud Number Registry book -- a container for IP address management
  * information. Creating an IPAM admin scope also creates a default book;
  * additional books organize discovered or user-managed realms.
  *

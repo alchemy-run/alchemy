@@ -62,7 +62,7 @@ export interface KeyspaceLookup {
 }
 
 /**
- * An Amazon Keyspaces (for Apache Cassandra) keyspace — the top-level
+ * An Amazon Keyspaces (for Apache Cassandra) keyspace -- the top-level
  * container for Cassandra tables.
  *
  * Keyspaces are serverless, free to create, and provisioned near-instantly,

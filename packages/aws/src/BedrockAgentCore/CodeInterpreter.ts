@@ -82,7 +82,7 @@ export interface CodeInterpreterLookup {
 }
 
 /**
- * A custom Amazon Bedrock AgentCore Code Interpreter — an isolated sandbox
+ * A custom Amazon Bedrock AgentCore Code Interpreter -- an isolated sandbox
  * where agents execute Python/JavaScript/TypeScript code.
  *
  * A custom interpreter controls the sandbox's network mode and execution

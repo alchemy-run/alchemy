@@ -197,7 +197,7 @@ export interface CustomTargetTypeLookup {
    */
   customTargetTypeId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -209,7 +209,7 @@ export interface CustomTargetTypeLookup {
 }
 
 /**
- * A Cloud Deploy custom target type — a reusable render/deploy
+ * A Cloud Deploy custom target type -- a reusable render/deploy
  * definition for deploying to systems besides the supported runtimes.
  *
  * Changing `customTargetTypeId` or `location` replaces the type.

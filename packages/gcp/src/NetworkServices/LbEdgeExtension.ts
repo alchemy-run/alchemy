@@ -194,7 +194,7 @@ export interface LbEdgeExtensionLookup {
    */
   lbEdgeExtensionId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -206,7 +206,7 @@ export interface LbEdgeExtensionLookup {
 }
 
 /**
- * A Network Services LbEdgeExtension — a Service Extension that
+ * A Network Services LbEdgeExtension -- a Service Extension that
  * rewrites request headers so an Application Load Balancer can change
  * backend selection and Cloud CDN cache keys.
  *

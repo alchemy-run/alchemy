@@ -202,7 +202,7 @@ export interface NotebookRuntimeTemplateLookup {
 }
 
 /**
- * A Vertex AI notebook runtime template — machine, disk, network, and
+ * A Vertex AI notebook runtime template -- machine, disk, network, and
  * software defaults used to create Colab Enterprise runtimes.
  *
  * Only `displayName` and `softwareConfig` update in place; changing

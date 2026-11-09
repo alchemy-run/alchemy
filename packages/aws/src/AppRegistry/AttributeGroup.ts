@@ -59,7 +59,7 @@ export interface AttributeGroupLookup {
 }
 
 /**
- * An AWS Service Catalog AppRegistry attribute group — a named container of
+ * An AWS Service Catalog AppRegistry attribute group -- a named container of
  * user-defined JSON metadata that can be associated with applications to
  * enrich them (owner, cost center, compliance posture, etc.).
  *

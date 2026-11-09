@@ -186,7 +186,7 @@ export interface AgentGatewayLookup {
    */
   agentGatewayId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;
@@ -198,7 +198,7 @@ export interface AgentGatewayLookup {
 }
 
 /**
- * A Network Services Agent Gateway — the proxy that governs access to
+ * A Network Services Agent Gateway -- the proxy that governs access to
  * agents, MCP servers, and tools.
  *
  * Changing `agentGatewayId` or `location` replaces the gateway.

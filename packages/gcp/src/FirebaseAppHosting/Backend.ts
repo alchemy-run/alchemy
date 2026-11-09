@@ -191,7 +191,7 @@ export interface BackendLookup {
    */
   backendId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -203,7 +203,7 @@ export interface BackendLookup {
 }
 
 /**
- * A Firebase App Hosting backend — the primary resource that provisions
+ * A Firebase App Hosting backend -- the primary resource that provisions
  * a Cloud Run service and default domain for a web app.
  *
  * Changing `backendId`, `location`, or `servingLocality` replaces the

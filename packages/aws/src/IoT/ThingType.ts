@@ -58,7 +58,7 @@ export interface ThingTypeLookup {
 }
 
 /**
- * An AWS IoT Thing Type — a reusable template describing a class of things.
+ * An AWS IoT Thing Type -- a reusable template describing a class of things.
  *
  * ### Creating a Thing Type
  * **Example:** Basic Thing Type

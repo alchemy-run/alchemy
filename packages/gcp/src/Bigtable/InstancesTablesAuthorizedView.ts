@@ -138,7 +138,7 @@ export interface InstancesTablesAuthorizedViewLookup {
 }
 
 /**
- * A Cloud Bigtable authorized view — a named subset of a table used for
+ * A Cloud Bigtable authorized view -- a named subset of a table used for
  * fine-grained IAM.
  *
  * The parent instance and table must already exist. Changing

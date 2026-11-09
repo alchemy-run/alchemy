@@ -117,7 +117,7 @@ export interface KxEnvironmentLookup {
 }
 
 /**
- * An Amazon FinSpace Managed kdb environment — the account-level container
+ * An Amazon FinSpace Managed kdb environment -- the account-level container
  * that kdb databases, clusters, users, volumes and scaling groups live in.
  *
  * :::caution

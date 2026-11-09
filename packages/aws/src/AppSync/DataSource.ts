@@ -127,7 +127,7 @@ export interface AppSyncDataSourceLookup {
 }
 
 /**
- * An AppSync data source — the target a resolver reads from or writes to.
+ * An AppSync data source -- the target a resolver reads from or writes to.
  *
  * For `AWS_LAMBDA` and `AMAZON_DYNAMODB` targets a least-privilege service
  * role is created automatically (unless an explicit `serviceRoleArn` is

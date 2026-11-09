@@ -37,7 +37,7 @@ export interface Annotations {
    * `snapshot` and `list`. Without it, and on every failure, live read
    * (`watch`, `events`) and command, the header is `private, no-store`.
    *
-   * `private, max-age=…` lets the caller's browser keep its own answer. Use
+   * `private, max-age=...` lets the caller's browser keep its own answer. Use
    * `public` only for an answer that is the same for every caller: a shared
    * cache does not know the Api's middleware read a session, so it hands one
    * caller's answer to the next.

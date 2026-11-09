@@ -299,9 +299,9 @@ const BucketResource = Resource<Bucket>("Railway.Bucket");
  * **Example:** Reference an existing bucket
  * ```typescript
  * const assets = Railway.Bucket.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   bucketId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   bucketId: "c9d0e1f2-...",
  * });
  * ```
  *

@@ -107,7 +107,7 @@ export interface SacRealmLookup {
    */
   sacRealmId: string;
   /**
-   * Location of the realm. Realms are global — always `"global"`. `GLOBAL`
+   * Location of the realm. Realms are global -- always `"global"`. `GLOBAL`
    * is accepted and normalized to `global`.
    */
   location?: string;
@@ -119,7 +119,7 @@ export interface SacRealmLookup {
 }
 
 /**
- * A Secure Access Connect (SAC) realm — the handshake between a Google
+ * A Secure Access Connect (SAC) realm -- the handshake between a Google
  * Cloud project and an SSE partner such as Palo Alto Prisma Access.
  *
  * The create API has no patch; changing `sacRealmId`, `location`,

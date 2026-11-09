@@ -128,7 +128,7 @@ export interface WebhookEndpointLookup {
 }
 
 /**
- * A Stripe webhook endpoint — the HTTPS destination Stripe POSTs
+ * A Stripe webhook endpoint -- the HTTPS destination Stripe POSTs
  * event payloads to. URL, enabled events, description, disabled, and
  * metadata update in place. The signing `secret` is returned only on
  * create and is stored as `Redacted`. Deleting the resource deletes

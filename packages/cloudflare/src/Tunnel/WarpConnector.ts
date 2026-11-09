@@ -75,7 +75,7 @@ export type WarpConnectorLookup =
     };
 
 /**
- * A Cloudflare WARP Connector tunnel — a software site-to-site connector
+ * A Cloudflare WARP Connector tunnel -- a software site-to-site connector
  * that extends a private network into Cloudflare Zero Trust without
  * running `cloudflared`.
  *

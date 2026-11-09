@@ -82,7 +82,7 @@ export interface ProjectLookup {
 }
 
 /**
- * An AWS Glue DataBrew project — the interactive workspace binding a dataset
+ * An AWS Glue DataBrew project -- the interactive workspace binding a dataset
  * to a recipe's working version. The project definition is free; costs only
  * accrue when an interactive session is started in the console.
  * ### Creating Projects

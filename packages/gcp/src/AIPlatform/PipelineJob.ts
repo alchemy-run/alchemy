@@ -152,7 +152,7 @@ export interface PipelineJobLookup {
 }
 
 /**
- * A Vertex AI PipelineJob — a compiled Kubeflow pipeline that runs
+ * A Vertex AI PipelineJob -- a compiled Kubeflow pipeline that runs
  * immediately on create.
  *
  * There is no update API. Changing identity (`pipelineJobId`, `location`)

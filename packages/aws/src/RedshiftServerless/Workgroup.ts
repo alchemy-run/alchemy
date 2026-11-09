@@ -127,7 +127,7 @@ export interface WorkgroupLookup {
 }
 
 /**
- * An Amazon Redshift Serverless workgroup — the compute half of a serverless
+ * An Amazon Redshift Serverless workgroup -- the compute half of a serverless
  * data warehouse.
  *
  * A workgroup provides on-demand compute (measured in RPUs) against a

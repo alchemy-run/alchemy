@@ -85,7 +85,7 @@ export interface DataCatalogLookup {
 }
 
 /**
- * An Amazon Athena data catalog — registers an external metadata source (a
+ * An Amazon Athena data catalog -- registers an external metadata source (a
  * federated Lambda connector, an external Hive metastore, or a cross-account
  * Glue Data Catalog) that Athena queries can reference as a `catalog`.
  *

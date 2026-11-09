@@ -273,7 +273,7 @@ export interface AutonomousDatabaseLookup {
    */
   autonomousDatabaseId: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east4`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

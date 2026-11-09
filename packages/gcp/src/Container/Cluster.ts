@@ -335,7 +335,7 @@ export interface ClusterLookup {
    */
   clusterId: string;
   /**
-   * Zone or region (`us-central1-a`, `us-central1`, …). Autopilot clusters
+   * Zone or region (`us-central1-a`, `us-central1`, ...). Autopilot clusters
    * must be regional. `US-CENTRAL1-A` is accepted and normalized to
    * `us-central1-a`.
    */

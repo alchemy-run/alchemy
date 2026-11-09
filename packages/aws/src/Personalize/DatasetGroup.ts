@@ -84,7 +84,7 @@ export interface DatasetGroupLookup {
 }
 
 /**
- * An Amazon Personalize dataset group — the top-level container that holds the
+ * An Amazon Personalize dataset group -- the top-level container that holds the
  * datasets, solutions, and campaigns for a single use case. Creating a dataset
  * group is cheap and fast; the expensive training work lives in solutions and
  * campaigns provisioned separately.

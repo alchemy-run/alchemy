@@ -86,7 +86,7 @@ export interface MatchingWorkflowLookup {
 }
 
 /**
- * An AWS Entity Resolution matching workflow — a data-processing job
+ * An AWS Entity Resolution matching workflow -- a data-processing job
  * definition that matches and deduplicates records across Glue table input
  * sources using rule-based or ML-powered matching, writing matched record
  * groups to S3.

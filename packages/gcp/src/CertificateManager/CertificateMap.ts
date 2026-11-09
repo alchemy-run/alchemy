@@ -129,7 +129,7 @@ export interface CertificateMapLookup {
 }
 
 /**
- * A Certificate Manager certificate map — a collection of certificate
+ * A Certificate Manager certificate map -- a collection of certificate
  * configurations selected by SNI for global external Application and
  * proxy Network Load Balancers.
  *

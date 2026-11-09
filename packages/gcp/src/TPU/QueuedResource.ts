@@ -183,7 +183,7 @@ export interface QueuedResourceLookup {
    */
   queuedResourceId: string;
   /**
-   * Zone (`us-central1-c`, …).
+   * Zone (`us-central1-c`, ...).
    */
   location?: string;
   /**

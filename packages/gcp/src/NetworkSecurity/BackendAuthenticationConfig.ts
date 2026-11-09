@@ -113,7 +113,7 @@ export interface BackendAuthenticationConfigLookup {
    */
   backendAuthenticationConfigId: string;
   /**
-   * Location (`global`, `us-central1`, …).
+   * Location (`global`, `us-central1`, ...).
    */
   location?: string;
   /**
@@ -124,7 +124,7 @@ export interface BackendAuthenticationConfigLookup {
 }
 
 /**
- * A Network Security BackendAuthenticationConfig — how a load balancer
+ * A Network Security BackendAuthenticationConfig -- how a load balancer
  * authenticates to backends (TrustConfig, public roots, optional mTLS
  * client certificate).
  *

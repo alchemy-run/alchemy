@@ -79,7 +79,7 @@ export interface CostCategoryLookup {
 }
 
 /**
- * A Cost Explorer cost category — rule-based groupings that map your AWS
+ * A Cost Explorer cost category -- rule-based groupings that map your AWS
  * costs into named values (e.g. team, environment, project) usable across
  * Cost Explorer, Budgets, and CUR reports.
  *

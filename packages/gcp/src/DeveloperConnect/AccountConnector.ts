@@ -197,7 +197,7 @@ export interface AccountConnectorLookup {
    */
   accountConnectorId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -209,8 +209,8 @@ export interface AccountConnectorLookup {
 }
 
 /**
- * A Developer Connect account connector — the OAuth configuration that
- * lets users connect their SCM accounts (GitHub, GitLab, Google, …) to
+ * A Developer Connect account connector -- the OAuth configuration that
+ * lets users connect their SCM accounts (GitHub, GitLab, Google, ...) to
  * Google Cloud.
  *
  * Changing `accountConnectorId`, `location`, `systemProviderId`, or

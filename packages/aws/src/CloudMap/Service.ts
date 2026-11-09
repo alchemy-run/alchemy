@@ -144,7 +144,7 @@ export interface ServiceLookup {
 }
 
 /**
- * An AWS Cloud Map service — a named entry in a namespace that instances
+ * An AWS Cloud Map service -- a named entry in a namespace that instances
  * register against. For DNS namespaces, Cloud Map creates the configured DNS
  * records per registered instance; every service is also queryable via the
  * `DiscoverInstances` API. This is what ECS `serviceRegistries[].registryArn`

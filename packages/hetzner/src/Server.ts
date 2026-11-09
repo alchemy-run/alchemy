@@ -261,7 +261,7 @@ export interface ServerLookup {
 }
 
 /**
- * A Hetzner Cloud Server — a virtual machine in a Location, created from
+ * A Hetzner Cloud Server -- a virtual machine in a Location, created from
  * a Server type and an Image. `serverType`, `image`, and `location` are
  * immutable (changing any of them replaces the Server). Name, labels,
  * delete protection, and (when set) Networks / Firewalls / Volumes /

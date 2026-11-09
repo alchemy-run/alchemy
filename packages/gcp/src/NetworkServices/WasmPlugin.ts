@@ -196,7 +196,7 @@ export interface WasmPluginLookup {
 }
 
 /**
- * A Network Services WasmPlugin — a Service Extensions plugin that
+ * A Network Services WasmPlugin -- a Service Extensions plugin that
  * runs a customer-provided Wasm module.
  *
  * Changing `wasmPluginId` or `location` replaces the plugin.

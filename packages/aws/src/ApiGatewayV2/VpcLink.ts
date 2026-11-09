@@ -72,7 +72,7 @@ export interface VpcLinkLookup {
 }
 
 /**
- * An API Gateway v2 VPC link — lets an HTTP API reach private resources
+ * An API Gateway v2 VPC link -- lets an HTTP API reach private resources
  * (ALB/NLB listeners, Cloud Map services) inside a VPC.
  *
  * Unlike the v1 VPC link (NLB-only, ~10 min provisioning), the v2 link is

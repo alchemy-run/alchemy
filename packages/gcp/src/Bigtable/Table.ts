@@ -140,7 +140,7 @@ export interface TableLookup {
 }
 
 /**
- * A Cloud Bigtable table — rows keyed by row key, grouped into column
+ * A Cloud Bigtable table -- rows keyed by row key, grouped into column
  * families.
  *
  * The parent instance must already exist. Changing `tableId`,

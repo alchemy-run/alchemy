@@ -39,7 +39,7 @@ export interface GraphLookup {
 }
 
 /**
- * A Detective behavior graph — the account/region singleton that enables Amazon
+ * A Detective behavior graph -- the account/region singleton that enables Amazon
  * Detective. An account can have at most one behavior graph per region, so this
  * resource is a capture-and-restore singleton: adopting a pre-existing graph
  * that Alchemy did not create requires `--adopt`.

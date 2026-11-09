@@ -114,7 +114,7 @@ export interface SharedflowLookup {
 }
 
 /**
- * An Apigee shared flow — a reusable sequence of policies that API
+ * An Apigee shared flow -- a reusable sequence of policies that API
  * proxies (or other shared flows) invoke with a FlowCallout.
  *
  * Shared flows have no labels field, so Alchemy stamps ownership into

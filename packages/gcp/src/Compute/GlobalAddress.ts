@@ -150,7 +150,7 @@ export interface GlobalAddressLookup {
 }
 
 /**
- * A global Compute Engine address — a reserved anycast IP for global
+ * A global Compute Engine address -- a reserved anycast IP for global
  * forwarding rules, or an internal range for VPC peering / Private
  * Service Connect.
  *

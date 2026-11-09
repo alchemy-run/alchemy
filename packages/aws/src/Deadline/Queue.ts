@@ -147,7 +147,7 @@ export type QueueLookup =
     };
 
 /**
- * An AWS Deadline Cloud queue — accepts render jobs within a farm and
+ * An AWS Deadline Cloud queue -- accepts render jobs within a farm and
  * schedules them onto associated fleets.
  *
  * ### Creating Queues

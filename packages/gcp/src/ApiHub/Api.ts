@@ -146,7 +146,7 @@ export interface ApiLookup {
    */
   apiId: string;
   /**
-   * Location (`us-central1`, …). Must match the ApiHub instance location.
+   * Location (`us-central1`, ...). Must match the ApiHub instance location.
    */
   location?: string;
   /**

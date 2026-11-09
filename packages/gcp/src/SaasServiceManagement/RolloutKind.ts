@@ -160,7 +160,7 @@ export interface RolloutKindLookup {
    */
   rolloutKindId: string;
   /**
-   * Region of the rollout kind (`us-central1`, …). `US-CENTRAL1` is
+   * Region of the rollout kind (`us-central1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -172,7 +172,7 @@ export interface RolloutKindLookup {
 }
 
 /**
- * An App Lifecycle Manager rollout kind — the policy a Rollout follows
+ * An App Lifecycle Manager rollout kind -- the policy a Rollout follows
  * when upgrading units of a UnitKind.
  *
  * `rolloutKindId`, `location`, and `unitKind` replace the rollout kind.

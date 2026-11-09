@@ -60,7 +60,7 @@ export interface ParameterGroupLookup {
 }
 
 /**
- * A DAX parameter group — a named set of DAX engine parameters (item and
+ * A DAX parameter group -- a named set of DAX engine parameters (item and
  * query cache TTLs) that can be attached to one or more DAX
  * {@link Cluster}s.
  *

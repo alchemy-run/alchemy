@@ -128,7 +128,7 @@ export interface TableLookup {
 }
 
 /**
- * An Amazon Timestream for LiveAnalytics table — a time-series store inside a
+ * An Amazon Timestream for LiveAnalytics table -- a time-series store inside a
  * {@link Database}.
  *
  * `Table` owns the table's lifecycle and its mutable configuration: memory and

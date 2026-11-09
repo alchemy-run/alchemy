@@ -82,7 +82,7 @@ export interface JobTemplateLookup {
 }
 
 /**
- * An AWS Elemental MediaConvert job template — a reusable, named transcode
+ * An AWS Elemental MediaConvert job template -- a reusable, named transcode
  * configuration (inputs, output groups, and job-level settings) that new jobs
  * are created from so callers only supply the input/output specifics.
  *

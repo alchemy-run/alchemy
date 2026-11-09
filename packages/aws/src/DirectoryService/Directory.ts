@@ -137,7 +137,7 @@ export type DirectoryLookup =
     };
 
 /**
- * An AWS Directory Service managed directory — either Simple AD (Samba) or
+ * An AWS Directory Service managed directory -- either Simple AD (Samba) or
  * AWS Managed Microsoft AD.
  *
  * Directories are VPC-only and require two subnets in different Availability

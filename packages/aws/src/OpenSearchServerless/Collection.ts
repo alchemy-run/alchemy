@@ -112,7 +112,7 @@ export interface CollectionLookup {
 }
 
 /**
- * An Amazon OpenSearch Serverless collection — a group of OpenSearch indexes
+ * An Amazon OpenSearch Serverless collection -- a group of OpenSearch indexes
  * that scales OpenSearch Compute Units (OCUs) automatically. A collection of
  * type `VECTORSEARCH` is the vector store required to back an Amazon Bedrock
  * Knowledge Base.

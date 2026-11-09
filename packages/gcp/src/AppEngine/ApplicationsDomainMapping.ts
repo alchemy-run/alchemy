@@ -129,7 +129,7 @@ export interface ApplicationsDomainMappingLookup {
    */
   applicationsId?: string;
   /**
-   * App Engine location (`us-central`, `us-east1`, …).
+   * App Engine location (`us-central`, `us-east1`, ...).
    */
   location?: string;
   /**

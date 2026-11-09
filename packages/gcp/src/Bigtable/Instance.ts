@@ -169,7 +169,7 @@ export interface InstanceLookup {
 }
 
 /**
- * A Cloud Bigtable instance — a container for clusters, tables, and app
+ * A Cloud Bigtable instance -- a container for clusters, tables, and app
  * profiles.
  *
  * Create requires at least one cluster. The default is a single 1-node

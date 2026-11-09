@@ -83,7 +83,7 @@ export interface DestinationLookup {
 }
 
 /**
- * An AWS IoT Core for LoRaWAN destination — the routing rule that delivers
+ * An AWS IoT Core for LoRaWAN destination -- the routing rule that delivers
  * uplink messages from wireless devices to an AWS IoT rule or MQTT topic.
  *
  * The destination name is its identity (changing it replaces the

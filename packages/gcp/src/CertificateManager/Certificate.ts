@@ -196,7 +196,7 @@ export interface CertificateLookup {
    */
   certificateId: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …).
+   * Certificate Manager location (`global`, `us-central1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`. `DEFAULT` /
    * `EDGE_CACHE` / `CLIENT_AUTH` / `ALL_REGIONS` certificates live in
    * `global`; omit or set a region for a regional certificate.
@@ -210,7 +210,7 @@ export interface CertificateLookup {
 }
 
 /**
- * A Certificate Manager TLS certificate — self-managed (uploaded PEM),
+ * A Certificate Manager TLS certificate -- self-managed (uploaded PEM),
  * Google-managed, or managed-identity.
  *
  * Changing `certificateId`, `location`, `scope`, certificate type,

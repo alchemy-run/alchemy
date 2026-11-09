@@ -206,7 +206,7 @@ export const CertificateProvider = () =>
       const account = accountOf(news.account);
       const keyAlgorithm = news.keyAlgorithm ?? "ES256";
       const now = yield* Clock.currentTimeMillis;
-      // Observe: the stored certificate is authoritative — nothing to do
+      // Observe: the stored certificate is authoritative -- nothing to do
       // while it covers the names and isn't due.
       if (
         output !== undefined &&

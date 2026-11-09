@@ -110,7 +110,7 @@ export interface VolumesSnapshotLookup {
 }
 
 /**
- * A Bare Metal Solution boot-volume snapshot — a point-in-time copy of a
+ * A Bare Metal Solution boot-volume snapshot -- a point-in-time copy of a
  * BMS boot volume.
  *
  * Snapshots have no labels field, so Alchemy stamps ownership into a

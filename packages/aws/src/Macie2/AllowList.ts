@@ -66,7 +66,7 @@ export interface AllowListLookup {
 }
 
 /**
- * An Amazon Macie allow list — text patterns or predefined words that Macie
+ * An Amazon Macie allow list -- text patterns or predefined words that Macie
  * ignores when it inspects S3 objects for sensitive data. Requires Macie to be
  * enabled for the account (see `Macie2.Session`). Name, description, and
  * criteria are all updatable in place; destroy deletes the list even if

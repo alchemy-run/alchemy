@@ -26,7 +26,7 @@ export interface MonitorLookup {
 }
 
 /**
- * An Axiom monitor — a scheduled APL/MPL query that evaluates on a fixed
+ * An Axiom monitor -- a scheduled APL/MPL query that evaluates on a fixed
  * cadence and fires alerts via {@link Notifier notifiers} when its
  * condition is met.
  *

@@ -144,7 +144,7 @@ export interface JobLookup {
 }
 
 /**
- * An AWS Glue job — a Spark (`glueetl`), Python shell (`pythonshell`), or
+ * An AWS Glue job -- a Spark (`glueetl`), Python shell (`pythonshell`), or
  * streaming ETL job definition (script in S3 + IAM role + arguments). The
  * definition lifecycle is instant and free; job *runs* are billed and are
  * started via `startJobRun`.

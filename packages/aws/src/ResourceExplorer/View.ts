@@ -78,7 +78,7 @@ export type ViewLookup =
     };
 
 /**
- * An AWS Resource Explorer view — a saved search lens with an optional
+ * An AWS Resource Explorer view -- a saved search lens with an optional
  * filter and a set of included properties that `Search` queries run
  * through.
  *

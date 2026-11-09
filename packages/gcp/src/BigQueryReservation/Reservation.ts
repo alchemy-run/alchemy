@@ -197,7 +197,7 @@ export interface ReservationLookup {
    */
   reservationId: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Multi-regions `US`
    * and `EU` stay uppercase; regional ids are lowercased (`US-CENTRAL1`
    * becomes `us-central1`).
    */
@@ -210,7 +210,7 @@ export interface ReservationLookup {
 }
 
 /**
- * A BigQuery slot reservation — a named pool of slots that assignments
+ * A BigQuery slot reservation -- a named pool of slots that assignments
  * can consume.
  *
  * Changing `reservationId`, `location`, `edition`, or

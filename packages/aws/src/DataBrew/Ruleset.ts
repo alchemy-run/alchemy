@@ -99,7 +99,7 @@ export interface RulesetLookup {
 }
 
 /**
- * An AWS Glue DataBrew ruleset — a set of data-quality rules bound to a
+ * An AWS Glue DataBrew ruleset -- a set of data-quality rules bound to a
  * dataset. Attach it to a profile job via `validationConfigurations` to
  * produce pass/fail validation results alongside the data profile.
  * ### Creating Rulesets

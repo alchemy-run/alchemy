@@ -146,7 +146,7 @@ export interface InterceptDeploymentGroupLookup {
 }
 
 /**
- * A global intercept deployment group — aggregates zonal intercept
+ * A global intercept deployment group -- aggregates zonal intercept
  * backends into a single intercept service that consumers attach via
  * an endpoint group.
  *

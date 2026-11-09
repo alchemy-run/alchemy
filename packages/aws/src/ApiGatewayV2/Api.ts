@@ -111,7 +111,7 @@ export type ApiLookup =
     };
 
 /**
- * An Amazon API Gateway v2 API — the root of an HTTP API or WebSocket API.
+ * An Amazon API Gateway v2 API -- the root of an HTTP API or WebSocket API.
  *
  * HTTP APIs are the modern, cheaper, faster front door for Lambda functions
  * (compared to REST v1). WebSocket APIs provide two-way real-time messaging

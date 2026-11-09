@@ -99,7 +99,7 @@ export type VirtualClusterLookup =
     };
 
 /**
- * An Amazon EMR on EKS virtual cluster — a registration of a Kubernetes
+ * An Amazon EMR on EKS virtual cluster -- a registration of a Kubernetes
  * namespace on an EKS cluster as an EMR job-submission target. Virtual
  * clusters consume no resources themselves (no cost while idle); jobs
  * submitted to the virtual cluster run as pods in the mapped namespace.

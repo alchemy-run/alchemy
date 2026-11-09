@@ -129,7 +129,7 @@ export interface DataProductLookup {
    */
   dataProductId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -140,7 +140,7 @@ export interface DataProductLookup {
 }
 
 /**
- * A Dataplex Data Product — a curated collection of data assets packaged
+ * A Dataplex Data Product -- a curated collection of data assets packaged
  * for a use case.
  *
  * Location and product id are immutable. Display name, description,

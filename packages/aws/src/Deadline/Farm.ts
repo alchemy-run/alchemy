@@ -106,7 +106,7 @@ export type FarmLookup =
     };
 
 /**
- * An AWS Deadline Cloud farm — the top-level container for render-farm
+ * An AWS Deadline Cloud farm -- the top-level container for render-farm
  * queues, fleets, storage profiles, and budgets.
  *
  * ### Creating Farms

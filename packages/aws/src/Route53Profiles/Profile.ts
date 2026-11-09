@@ -50,7 +50,7 @@ export interface ProfileLookup {
 }
 
 /**
- * An Amazon Route 53 Profile — a reusable container of DNS configuration
+ * An Amazon Route 53 Profile -- a reusable container of DNS configuration
  * (private hosted zones, Resolver rules, and DNS Firewall rule groups) that
  * can be associated with many VPCs at once.
  *

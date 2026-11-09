@@ -75,7 +75,7 @@ export interface VariableLookup {
 }
 
 /**
- * An Amazon Fraud Detector variable — a named input to fraud-detection models
+ * An Amazon Fraud Detector variable -- a named input to fraud-detection models
  * and rules, typed and sourced from event data or model scores. Variables are
  * cheap metadata objects.
  *

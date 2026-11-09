@@ -120,7 +120,7 @@ export type FlowLookup =
     };
 
 /**
- * An AWS Elemental MediaConnect flow — a reliable live-video transport
+ * An AWS Elemental MediaConnect flow -- a reliable live-video transport
  * between a source and one or more outputs.
  *
  * Creating a flow leaves it in `STANDBY`; a flow only ingests/egresses media

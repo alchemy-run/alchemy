@@ -86,7 +86,7 @@ export interface AdapterLookup {
 }
 
 /**
- * An Amazon Textract adapter — a container for custom, trained adapter
+ * An Amazon Textract adapter -- a container for custom, trained adapter
  * versions that enhance the pre-trained Queries feature for your specific
  * documents. The adapter itself is cheap metadata (name, feature types,
  * auto-update, tags); versions are trained separately with

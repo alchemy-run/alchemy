@@ -162,7 +162,7 @@ export interface AgentLookup {
 }
 
 /**
- * An Amazon Bedrock agent — a foundation model driven by natural-language
+ * An Amazon Bedrock agent -- a foundation model driven by natural-language
  * instructions that can orchestrate multi-step tasks.
  *
  * `Agent` owns the lifecycle of the agent's DRAFT version. An IAM execution

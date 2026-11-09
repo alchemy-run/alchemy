@@ -164,7 +164,7 @@ export interface ConnectClusterLookup {
    */
   connectClusterId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**

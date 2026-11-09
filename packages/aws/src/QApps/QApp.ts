@@ -131,7 +131,7 @@ export type QAppLookup =
     };
 
 /**
- * An Amazon Q App — a lightweight, purpose-built AI app defined as a flow of
+ * An Amazon Q App -- a lightweight, purpose-built AI app defined as a flow of
  * cards (text inputs, file uploads, LLM query cards, plugin cards) running
  * inside an Amazon Q Business application environment.
  *

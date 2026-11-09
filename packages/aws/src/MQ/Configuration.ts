@@ -96,7 +96,7 @@ export type ConfigurationLookup =
     };
 
 /**
- * An Amazon MQ broker configuration — a versioned document (ActiveMQ XML or
+ * An Amazon MQ broker configuration -- a versioned document (ActiveMQ XML or
  * RabbitMQ Cuttlefish) that a {@link Broker} can reference to control
  * engine-level settings. Each edit to `data` publishes a new immutable
  * revision; a broker pins a specific `{ id, revision }` pair.

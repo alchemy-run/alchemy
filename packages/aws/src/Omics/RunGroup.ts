@@ -76,7 +76,7 @@ export interface RunGroupLookup {
 }
 
 /**
- * An Amazon HealthOmics run group — a resource-limit envelope for workflow
+ * An Amazon HealthOmics run group -- a resource-limit envelope for workflow
  * runs. A run group caps the vCPUs, GPUs, concurrent runs, and per-run
  * duration for the workflow runs assigned to it.
  *

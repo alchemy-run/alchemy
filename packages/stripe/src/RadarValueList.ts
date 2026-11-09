@@ -111,8 +111,8 @@ export interface RadarValueListLookup {
 }
 
 /**
- * A Stripe Radar Value List — a named collection of values (emails, IPs,
- * card fingerprints, …) referenced from Radar rules. `alias` and
+ * A Stripe Radar Value List -- a named collection of values (emails, IPs,
+ * card fingerprints, ...) referenced from Radar rules. `alias` and
  * `itemType` are immutable and changing them replaces the list. Name and
  * metadata update in place. Destroy deletes the list and its items; a
  * list referenced by a Radar rule cannot be deleted.

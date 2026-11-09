@@ -148,7 +148,7 @@ export interface InstancesBackupLookup {
   /**
    * Backup id (the `{backup}` segment of
    * `projects/{project}/instances/{instance}/backups/{backup}`). Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters).
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-60 characters).
    */
   backupId: string;
   /**

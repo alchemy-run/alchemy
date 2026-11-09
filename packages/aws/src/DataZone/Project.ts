@@ -70,7 +70,7 @@ export type ProjectLookup =
     };
 
 /**
- * An Amazon DataZone project — the collaboration space within a domain where
+ * An Amazon DataZone project -- the collaboration space within a domain where
  * teams catalog, publish, and subscribe to data assets.
  *
  * The creating principal is automatically the project owner. DataZone

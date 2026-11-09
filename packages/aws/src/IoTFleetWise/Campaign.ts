@@ -318,7 +318,7 @@ export interface CampaignLookup {
 }
 
 /**
- * An AWS IoT FleetWise campaign — the orchestration of data-collection
+ * An AWS IoT FleetWise campaign -- the orchestration of data-collection
  * rules that the Edge Agent uses to decide which signals to collect from
  * a {@link Fleet} or {@link Vehicle} and where to deliver them.
  *

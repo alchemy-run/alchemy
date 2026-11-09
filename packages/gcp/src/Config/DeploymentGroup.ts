@@ -126,7 +126,7 @@ export interface DeploymentGroupLookup {
    */
   deploymentGroupId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -138,7 +138,7 @@ export interface DeploymentGroupLookup {
 }
 
 /**
- * An Infrastructure Manager deployment group — a DAG of deployment units
+ * An Infrastructure Manager deployment group -- a DAG of deployment units
  * provisioned together.
  *
  * Changing `deploymentGroupId` or `location` replaces the group. Units,

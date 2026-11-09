@@ -84,7 +84,7 @@ export interface AdminReservationLookup {
    */
   reservationId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Reservations are regional.
+   * Region (`us-central1`, `us-east1`, ...). Reservations are regional.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -96,7 +96,7 @@ export interface AdminReservationLookup {
 }
 
 /**
- * A Pub/Sub Lite throughput reservation — a regional pool of publish
+ * A Pub/Sub Lite throughput reservation -- a regional pool of publish
  * and subscribe capacity that topics can consume.
  *
  * Pub/Sub Lite reservations have no labels. Alchemy stamps

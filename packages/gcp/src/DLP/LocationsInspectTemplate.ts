@@ -107,7 +107,7 @@ export interface LocationsInspectTemplateLookup {
    */
   templateId: string;
   /**
-   * Processing location (`us-central1`, `global`, …).
+   * Processing location (`us-central1`, `global`, ...).
    */
   location?: string;
   /**

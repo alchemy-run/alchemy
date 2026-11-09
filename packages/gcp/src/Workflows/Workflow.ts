@@ -143,12 +143,12 @@ export interface WorkflowLookup {
   /**
    * Workflow id (the `{workflow}` segment of
    * `projects/{project}/locations/{location}/workflows/{workflow}`). Must
-   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1–64 characters, start
+   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1-64 characters, start
    * with a letter, end with a letter or number).
    */
   workflowId: string;
   /**
-   * Workflows location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Workflows location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -160,7 +160,7 @@ export interface WorkflowLookup {
 }
 
 /**
- * A Google Cloud Workflows workflow — YAML or JSON orchestration that
+ * A Google Cloud Workflows workflow -- YAML or JSON orchestration that
  * Workflows executes as a revisioned program.
  *
  * Changing `workflowId` or `location` replaces the workflow. Updating

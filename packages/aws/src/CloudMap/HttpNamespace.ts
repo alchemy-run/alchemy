@@ -69,7 +69,7 @@ export interface HttpNamespaceLookup {
 }
 
 /**
- * An AWS Cloud Map HTTP namespace — an API-only service registry. Instances
+ * An AWS Cloud Map HTTP namespace -- an API-only service registry. Instances
  * registered in an HTTP namespace are discoverable via the
  * `DiscoverInstances` API but not via DNS, so no VPC or hosted zone is
  * required.

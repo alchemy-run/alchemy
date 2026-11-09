@@ -118,7 +118,7 @@ export interface ExternalApiLookup {
    */
   externalApiId: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …).
+   * Location of the API Hub instance (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -129,7 +129,7 @@ export interface ExternalApiLookup {
 }
 
 /**
- * An API Hub External API — a third-party API modeled so it can be
+ * An API Hub External API -- a third-party API modeled so it can be
  * referenced from dependencies.
  *
  * External APIs have no labels, so Alchemy stamps ownership into the

@@ -149,7 +149,7 @@ export interface ReasoningEnginesMemoryLookup {
 }
 
 /**
- * A Vertex AI Reasoning Engine memory — scoped semantic knowledge used
+ * A Vertex AI Reasoning Engine memory -- scoped semantic knowledge used
  * by an Agent Engine Memory Bank.
  *
  * Memory has no labels, so Alchemy stamps ownership into the

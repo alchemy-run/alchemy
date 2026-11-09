@@ -95,7 +95,7 @@ export type MonitorGroupLookup =
     };
 
 /**
- * A Cloudflare Load Balancing monitor group — aggregates several
+ * A Cloudflare Load Balancing monitor group -- aggregates several
  * {@link Monitor}s into one health signal that a
  * {@link Pool} can reference via `monitorGroup` (mutually
  * exclusive with `monitor`).

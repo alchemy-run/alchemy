@@ -81,7 +81,7 @@ export interface DatasetLookup {
    */
   datasetId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;
@@ -93,7 +93,7 @@ export interface DatasetLookup {
 }
 
 /**
- * A Cloud Healthcare dataset — a container for DICOM, FHIR, HL7v2, and
+ * A Cloud Healthcare dataset -- a container for DICOM, FHIR, HL7v2, and
  * consent stores.
  *
  * Dataset create and delete are long-running operations. Location and

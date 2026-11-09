@@ -119,7 +119,7 @@ export interface DBInstanceLookup {
 }
 
 /**
- * An Amazon Neptune instance — a compute member of a Neptune
+ * An Amazon Neptune instance -- a compute member of a Neptune
  * {@link DBCluster}. Storage, backup, and endpoints are managed at the
  * cluster level; the instance contributes CPU/RAM and can serve as a writer
  * or reader. Provisioning takes several minutes.

@@ -79,7 +79,7 @@ export interface SchemaLookup {
 }
 
 /**
- * An event schema in an EventBridge Schema Registry — a versioned OpenAPI 3
+ * An event schema in an EventBridge Schema Registry -- a versioned OpenAPI 3
  * or JSONSchema Draft 4 document describing the structure of an event.
  * Updating the content publishes a new schema version; previous versions are
  * retained by the registry.

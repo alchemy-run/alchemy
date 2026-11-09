@@ -168,7 +168,7 @@ export interface DeploymentLookup {
    */
   deploymentId: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …). `US-CENTRAL1` is
+   * Location of the API Hub instance (`us-central1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -180,7 +180,7 @@ export interface DeploymentLookup {
 }
 
 /**
- * An API Hub deployment — a gateway, proxy, or other runtime that hosts
+ * An API Hub deployment -- a gateway, proxy, or other runtime that hosts
  * APIs. Deployments are root-level entities and exist independently of
  * any API.
  *

@@ -113,7 +113,7 @@ export interface LakeLookup {
    */
   lakeId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -125,7 +125,7 @@ export interface LakeLookup {
 }
 
 /**
- * A Dataplex lake — a regional container for zones, assets, and tasks.
+ * A Dataplex lake -- a regional container for zones, assets, and tasks.
  *
  * Changing `lakeId` or `location` replaces the lake. Display name,
  * description, labels, and metastore association update in place.

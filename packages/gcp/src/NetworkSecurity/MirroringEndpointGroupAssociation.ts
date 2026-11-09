@@ -118,7 +118,7 @@ export interface MirroringEndpointGroupAssociationLookup {
    */
   mirroringEndpointGroupAssociationId: string;
   /**
-   * Location of the association. Associations are global — always
+   * Location of the association. Associations are global -- always
    * `"global"`. `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -130,7 +130,7 @@ export interface MirroringEndpointGroupAssociationLookup {
 }
 
 /**
- * A Network Security Integration mirroring endpoint-group association —
+ * A Network Security Integration mirroring endpoint-group association --
  * the link between a VPC and a mirroring endpoint group.
  *
  * Creating an association does not enable mirroring by itself; a firewall

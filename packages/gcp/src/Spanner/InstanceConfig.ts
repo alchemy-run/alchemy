@@ -118,7 +118,7 @@ export interface InstanceConfigLookup {
   /**
    * Instance config id (the `{config}` segment of
    * `projects/{project}/instanceConfigs/{config}`). User-managed ids must
-   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2–64
+   * start with `custom-` and match `custom-[-a-z0-9]*[a-z0-9]` (2-64
    * characters).
    */
   instanceConfigId: string;

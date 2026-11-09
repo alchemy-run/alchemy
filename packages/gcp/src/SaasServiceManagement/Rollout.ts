@@ -172,7 +172,7 @@ export interface RolloutLookup {
    */
   rolloutId: string;
   /**
-   * Region of the rollout (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the rollout (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -184,7 +184,7 @@ export interface RolloutLookup {
 }
 
 /**
- * An App Lifecycle Manager rollout — one execution of a RolloutKind
+ * An App Lifecycle Manager rollout -- one execution of a RolloutKind
  * against a Release (or FlagRelease).
  *
  * `rolloutId`, `location`, `rolloutKind`, `release`, and `flagRelease`

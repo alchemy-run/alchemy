@@ -215,7 +215,7 @@ export interface SecurityProfileLookup {
 }
 
 /**
- * A Network Security SecurityProfile — the behavior for one ProfileType
+ * A Network Security SecurityProfile -- the behavior for one ProfileType
  * (threat prevention, URL filtering, custom mirroring, or custom
  * intercept).
  *

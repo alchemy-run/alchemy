@@ -24,7 +24,7 @@ import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
 import { present } from "./Present.ts";
 import { formatDeclaredPropertyYaml, matchYamlChange, matchYamlKey } from "./PropertyDiff.ts";
 
-// Shared with every other non-ink output path — notably it honors
+// Shared with every other non-ink output path -- notably it honors
 // FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
 const style = terminalStyle();
 const hex = (color: string) => style.hex(color);

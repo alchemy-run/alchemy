@@ -126,7 +126,7 @@ export interface InterceptEndpointGroupLookup {
    */
   interceptEndpointGroupId: string;
   /**
-   * Location of the group. Endpoint groups are global — always `"global"`.
+   * Location of the group. Endpoint groups are global -- always `"global"`.
    * `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -138,7 +138,7 @@ export interface InterceptEndpointGroupLookup {
 }
 
 /**
- * A Network Security Integration intercept endpoint group — the consumer
+ * A Network Security Integration intercept endpoint group -- the consumer
  * frontend for an intercept deployment group.
  *
  * Changing `interceptEndpointGroupId`, `location`, or

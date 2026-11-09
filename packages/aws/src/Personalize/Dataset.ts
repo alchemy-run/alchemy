@@ -88,8 +88,8 @@ export interface DatasetLookup {
 }
 
 /**
- * An Amazon Personalize dataset — a typed collection (Interactions, Items,
- * Users, …) inside a dataset group, backed by a schema. Creating the dataset
+ * An Amazon Personalize dataset -- a typed collection (Interactions, Items,
+ * Users, ...) inside a dataset group, backed by a schema. Creating the dataset
  * is a cheap metadata operation; bulk imports and training happen through
  * separate import jobs and solutions.
  *

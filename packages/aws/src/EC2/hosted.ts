@@ -461,7 +461,7 @@ cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
 set -uo pipefail
 export HOME=/root
 
-# Docker — install if missing, and start it.
+# Docker \u2014 install if missing, and start it.
 command -v docker >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y docker) \
     || (command -v yum >/dev/null 2>&1 && yum install -y docker) \
@@ -469,7 +469,7 @@ command -v docker >/dev/null 2>&1 || {
 }
 systemctl enable --now docker
 
-# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
+# AWS CLI \u2014 preinstalled on Amazon Linux 2023; install v2 otherwise.
 command -v aws >/dev/null 2>&1 || {
   command -v unzip >/dev/null 2>&1 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \

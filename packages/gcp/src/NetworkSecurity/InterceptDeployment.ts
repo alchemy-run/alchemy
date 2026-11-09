@@ -116,7 +116,7 @@ export interface InterceptDeploymentLookup {
    */
   interceptDeploymentId: string;
   /**
-   * Zone of the deployment (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * Zone of the deployment (`us-central1-a`, ...). `US-CENTRAL1-A` is
    * accepted and normalized to `us-central1-a`.
    */
   location?: string;
@@ -128,7 +128,7 @@ export interface InterceptDeploymentLookup {
 }
 
 /**
- * A zonal intercept deployment — a GENEVE backend (typically an
+ * A zonal intercept deployment -- a GENEVE backend (typically an
  * internal passthrough load balancer) that belongs to a global
  * InterceptDeploymentGroup.
  *

@@ -97,7 +97,7 @@ export type Tensorboard = Resource<
  */
 export interface TensorboardLookup {
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**

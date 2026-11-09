@@ -142,7 +142,7 @@ export interface AttributeLookup {
    */
   attributeId: string;
   /**
-   * Location (`us-central1`, …).
+   * Location (`us-central1`, ...).
    */
   location?: string;
   /**

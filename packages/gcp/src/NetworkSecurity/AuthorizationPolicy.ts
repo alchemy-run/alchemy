@@ -136,7 +136,7 @@ export interface AuthorizationPolicyLookup {
    */
   authorizationPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …).
+   * Location (`global`, `us-central1`, ...).
    */
   location?: string;
   /**

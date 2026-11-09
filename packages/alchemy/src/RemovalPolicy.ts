@@ -12,13 +12,13 @@ import * as Effect from "effect/Effect";
  *   `delete`.
  * - `"retain"` -- skip `provider.delete` entirely. The state row is still
  *   dropped: alchemy forgets the resource, the cloud object lives on.
- * - `"protect"` — refuse to plan the deletion at all. `plan`, `deploy` and
+ * - `"protect"` -- refuse to plan the deletion at all. `plan`, `deploy` and
  *   `destroy` fail with {@link ProtectedResource} before anything is applied
  *   when the plan would replace or delete the resource.
  *
  * The policy is a *decoration* on the declaration, applied with
  * {@link retain} / {@link destroy} / {@link protect}, and it is persisted on the resource's
- * state row. Because it isn't a prop, changing it produces no diff — the
+ * state row. Because it isn't a prop, changing it produces no diff -- the
  * resource plans as a `noop` and the deploy re-commits the row's policy in
  * place (see the noop branch of `Apply.ts`). So a policy change does take
  * effect from the very next deploy, even though the plan shows no changes.

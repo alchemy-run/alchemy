@@ -168,7 +168,7 @@ export interface GoogleApiSourceLookup {
    */
   googleApiSourceId: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`. One source
    * is allowed per project per region.
    */

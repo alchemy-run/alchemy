@@ -130,7 +130,7 @@ export interface StackLookup {
 }
 
 /**
- * An AWS CloudFormation stack — deploy an existing CloudFormation template
+ * An AWS CloudFormation stack -- deploy an existing CloudFormation template
  * from Alchemy as an interop/escape hatch.
  *
  * Create and update are asynchronous: the provider submits the template and

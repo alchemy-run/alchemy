@@ -112,7 +112,7 @@ export interface ServiceLookup {
 }
 
 /**
- * A Service Directory service — a named registration that holds
+ * A Service Directory service -- a named registration that holds
  * endpoints and client-facing annotations.
  *
  * Changing `serviceId`, `namespace`, or `location` replaces the service.

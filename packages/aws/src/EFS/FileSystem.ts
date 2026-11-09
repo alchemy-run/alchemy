@@ -146,7 +146,7 @@ export type FileSystemLookup =
     };
 
 /**
- * An Amazon EFS file system — serverless, elastic, shared POSIX storage.
+ * An Amazon EFS file system -- serverless, elastic, shared POSIX storage.
  *
  * The file system is created encrypted by default with a deterministic
  * creation token derived from the app, stage, and logical ID, so retried

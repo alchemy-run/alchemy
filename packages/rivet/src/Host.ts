@@ -11,7 +11,7 @@ import type { CargoBuild } from "./internal/RustProgram.ts";
 
 /**
  * What a pool Layer gives the Effect it is provided to: a way for an
- * external `Rivet.DurableObject` to run its program on the pool's nodes —
+ * external `Rivet.DurableObject` to run its program on the pool's nodes --
  * a RivetKit program (`main`), or a Rust crate (`crate`).
  */
 export class PoolHost extends Context.Service<

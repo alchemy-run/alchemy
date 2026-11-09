@@ -149,7 +149,7 @@ export interface AdminSubscriptionLookup {
 }
 
 /**
- * A Pub/Sub Lite subscription — a named consumer of a Lite topic.
+ * A Pub/Sub Lite subscription -- a named consumer of a Lite topic.
  *
  * Pub/Sub Lite subscriptions have no labels. Alchemy stamps
  * `alchemy-stack` / `alchemy-stage` / `alchemy-id` into the

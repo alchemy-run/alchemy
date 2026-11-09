@@ -145,7 +145,7 @@ export interface TrustConfigLookup {
    */
   trustConfigId: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …).
+   * Certificate Manager location (`global`, `us-central1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -157,7 +157,7 @@ export interface TrustConfigLookup {
 }
 
 /**
- * A Certificate Manager TrustConfig — the PKI used to validate client
+ * A Certificate Manager TrustConfig -- the PKI used to validate client
  * certificates in mutual TLS (load balancer or SPIFFE).
  *
  * Changing `trustConfigId` or `location` replaces the resource.

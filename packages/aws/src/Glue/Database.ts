@@ -83,7 +83,7 @@ export interface DatabaseLookup {
 }
 
 /**
- * An AWS Glue Data Catalog database — the top-level container for Glue tables
+ * An AWS Glue Data Catalog database -- the top-level container for Glue tables
  * that Athena, EMR, Redshift Spectrum, and Glue jobs query. Databases are free
  * and instant to create.
  * ### Creating Databases

@@ -188,8 +188,8 @@ const resolveEnvironmentProps = (
  * **Example:** Reference an existing environment
  * ```typescript
  * const staging = Railway.Environment.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
  * });
  * ```
  *

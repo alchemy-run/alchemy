@@ -114,7 +114,7 @@ export interface SemanticGovernancePolicyLookup {
    */
   semanticGovernancePolicyId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**

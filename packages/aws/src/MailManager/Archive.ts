@@ -77,7 +77,7 @@ export interface ArchiveLookup {
 }
 
 /**
- * An SES Mail Manager email archive — durable storage for emails captured
+ * An SES Mail Manager email archive -- durable storage for emails captured
  * by an `Archive` rule action, searchable and exportable for compliance.
  *
  * Deleting an archive puts it into `PENDING_DELETION` for 30 days before

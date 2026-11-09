@@ -26,7 +26,7 @@ export interface VirtualFieldLookup {
 }
 
 /**
- * An Axiom virtual field — a saved APL expression that appears as a derived
+ * An Axiom virtual field -- a saved APL expression that appears as a derived
  * column on a dataset at query time. Use these to standardise common
  * computations (status classes, latency buckets, parsed JSON paths) so
  * dashboards and monitors don't have to redefine them.

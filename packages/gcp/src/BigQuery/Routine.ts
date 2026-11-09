@@ -214,7 +214,7 @@ export interface RoutineLookup {
 }
 
 /**
- * A Google BigQuery routine — a user-defined function, table-valued
+ * A Google BigQuery routine -- a user-defined function, table-valued
  * function, aggregate function, or stored procedure.
  *
  * Routines have no labels; Alchemy stamps ownership into the description

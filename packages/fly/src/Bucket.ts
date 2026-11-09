@@ -574,7 +574,7 @@ const withTigrisKeys = <A, E>(
 
 /**
  * Signed HeadBucket. Tigris answers 404 for a name it has no bucket
- * under — even to the deleted bucket's own keys — and 403 for a bucket
+ * under -- even to the deleted bucket's own keys -- and 403 for a bucket
  * the keys don't own.
  */
 const tigrisHasBucket = (keys: TigrisKeys, bucketName: string) =>

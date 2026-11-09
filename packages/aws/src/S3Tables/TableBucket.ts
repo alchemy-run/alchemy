@@ -74,7 +74,7 @@ export type TableBucketLookup =
     };
 
 /**
- * An Amazon S3 Tables table bucket — a purpose-built bucket for storing
+ * An Amazon S3 Tables table bucket -- a purpose-built bucket for storing
  * fully-managed Apache Iceberg tables.
  *
  * A table bucket is regional and holds {@link Namespace}s, which in turn hold

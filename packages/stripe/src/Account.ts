@@ -284,7 +284,7 @@ export interface AccountLookup {
 }
 
 /**
- * A Stripe Connect connected account — a Standard, Express, or Custom
+ * A Stripe Connect connected account -- a Standard, Express, or Custom
  * account created by your platform on behalf of a user.
  *
  * Creating an account is only the first step of onboarding: Stripe

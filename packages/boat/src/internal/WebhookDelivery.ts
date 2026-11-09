@@ -1,5 +1,5 @@
 /**
- * INTERNAL — handles one delivery of Boat's webhook on a host: checks the
+ * INTERNAL -- handles one delivery of Boat's webhook on a host: checks the
  * signature, the timestamp and the payload, then scopes and dispatches it.
  */
 import * as boat from "@distilled.cloud/boat-dev/boat";

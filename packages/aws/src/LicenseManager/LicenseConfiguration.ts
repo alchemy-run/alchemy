@@ -100,7 +100,7 @@ export type LicenseConfigurationLookup =
     };
 
 /**
- * An AWS License Manager license configuration — an abstraction of a
+ * An AWS License Manager license configuration -- an abstraction of a
  * customer license agreement that License Manager can track and enforce.
  *
  * A license configuration specifies the licensing dimension (vCPUs,

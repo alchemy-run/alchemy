@@ -78,7 +78,7 @@ export interface MultiRegionEndpointLookup {
 }
 
 /**
- * An Amazon SES v2 multi-region endpoint (global endpoint) — a single sending
+ * An Amazon SES v2 multi-region endpoint (global endpoint) -- a single sending
  * endpoint that splits email traffic across a primary region (where the
  * endpoint is created) and one or more secondary regions, improving
  * resilience and deliverability.

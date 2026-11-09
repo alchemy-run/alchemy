@@ -105,7 +105,7 @@ export interface ProjectLookup {
 }
 
 /**
- * A Google Cloud project — the container for APIs, IAM, billing, and
+ * A Google Cloud project -- the container for APIs, IAM, billing, and
  * other resources.
  *
  * `projectId` is globally unique and immutable; changing it replaces

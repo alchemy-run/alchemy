@@ -170,7 +170,7 @@ export interface RepositoriesReleaseConfigLookup {
 }
 
 /**
- * A Dataform release configuration — compiles a Git commitish on a
+ * A Dataform release configuration -- compiles a Git commitish on a
  * schedule (or on demand) into a compilation result.
  *
  * Release configs have no labels field, so Alchemy stamps ownership

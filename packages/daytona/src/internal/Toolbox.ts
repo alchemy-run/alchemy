@@ -2,7 +2,7 @@ import { Credentials } from "@distilled.cloud/daytona/Credentials";
 import * as Effect from "effect/Effect";
 
 /**
- * Point toolbox operations (process, files, git, LSP, computer use, …) at
+ * Point toolbox operations (process, files, git, LSP, computer use, ...) at
  * one sandbox. Daytona addresses the toolbox by sandbox in the base URL,
  * not in the request, so the sandbox is client configuration: this
  * re-provides `Credentials` with `sandboxId` (and the sandbox's own proxy

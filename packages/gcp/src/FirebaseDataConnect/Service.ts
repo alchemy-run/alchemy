@@ -111,7 +111,7 @@ export interface ServiceLookup {
    */
   serviceId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -123,7 +123,7 @@ export interface ServiceLookup {
 }
 
 /**
- * A Firebase Data Connect service — the parent of a GraphQL schema and
+ * A Firebase Data Connect service -- the parent of a GraphQL schema and
  * connectors.
  *
  * Changing `serviceId` or `location` replaces the service. Display

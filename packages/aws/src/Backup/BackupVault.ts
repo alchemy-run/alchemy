@@ -72,7 +72,7 @@ export interface BackupVaultLookup {
 }
 
 /**
- * An AWS Backup vault — a logical container that stores and organizes
+ * An AWS Backup vault -- a logical container that stores and organizes
  * recovery points created by backup jobs.
  *
  * A vault name is auto-generated from the app, stage, and logical ID unless
@@ -169,7 +169,7 @@ export const BackupVaultProvider = () =>
           ),
         lookup: Effect.fn(function* ({ backupVaultName: name }) {
           // AWS Backup returns AccessDeniedException (with an empty message),
-          // not ResourceNotFoundException, when a vault does not exist — it
+          // not ResourceNotFoundException, when a vault does not exist -- it
           // hides existence behind a 403. Treat both as "absent".
           const found = yield* backup
             .describeBackupVault({ BackupVaultName: name })

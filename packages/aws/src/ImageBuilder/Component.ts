@@ -131,7 +131,7 @@ export interface ComponentLookup {
 }
 
 /**
- * An EC2 Image Builder component — a YAML document that defines the build,
+ * An EC2 Image Builder component -- a YAML document that defines the build,
  * validation, and test steps applied to an instance during image creation.
  *
  * Components are immutable versions: every property except `tags` replaces

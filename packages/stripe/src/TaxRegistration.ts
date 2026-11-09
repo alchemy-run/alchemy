@@ -351,7 +351,7 @@ export interface TaxRegistrationLookup {
 }
 
 /**
- * A Stripe Tax Registration — records that your business is registered to
+ * A Stripe Tax Registration -- records that your business is registered to
  * collect tax in a region so Stripe Tax can calculate and collect it.
  * Stripe does not register with tax authorities on your behalf.
  *

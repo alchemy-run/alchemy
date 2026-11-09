@@ -70,7 +70,7 @@ export interface LexiconLookup {
 }
 
 /**
- * An Amazon Polly pronunciation lexicon — a W3C PLS document stored in a
+ * An Amazon Polly pronunciation lexicon -- a W3C PLS document stored in a
  * region that customizes how `SynthesizeSpeech` pronounces specific words.
  * Identity is the region-scoped `lexiconName`; the PLS `content` is
  * updatable in place.

@@ -127,7 +127,7 @@ export interface AddressGroupLookup {
    */
   addressGroupId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -139,7 +139,7 @@ export interface AddressGroupLookup {
 }
 
 /**
- * A Network Security address group — a named collection of IP addresses
+ * A Network Security address group -- a named collection of IP addresses
  * or CIDR ranges used by firewall policies and Cloud Armor.
  *
  * Changing `addressGroupId`, `location`, `type`, `capacity`, or `purpose`

@@ -83,7 +83,7 @@ export interface KxDatabaseLookup {
 }
 
 /**
- * A kdb database inside an Amazon FinSpace Managed kdb environment — the
+ * A kdb database inside an Amazon FinSpace Managed kdb environment -- the
  * versioned, changeset-based store that kdb clusters mount and query.
  *
  * ### Creating kdb Databases

@@ -156,7 +156,7 @@ export interface PluginLookup {
    */
   pluginId: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …).
+   * Location of the API Hub instance (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -167,7 +167,7 @@ export interface PluginLookup {
 }
 
 /**
- * An API Hub plugin — a user-owned or system-owned connector that
+ * An API Hub plugin -- a user-owned or system-owned connector that
  * publishes API metadata into Hub.
  *
  * Plugins have no labels and no patch RPC, so Alchemy stamps ownership

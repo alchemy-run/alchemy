@@ -97,7 +97,7 @@ export interface WorkerdDurableObjectState {
    * given message is logged and cannot be caught in application code.
    *
    * By default an in-progress alarm retries after the reset. Pass
-   * `{ retryAlarm: false }` to stop it instead — for example an `alarm`
+   * `{ retryAlarm: false }` to stop it instead -- for example an `alarm`
    * handler that deletes storage so the constructor does not recreate it.
    */
   abort(

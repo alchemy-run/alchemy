@@ -380,7 +380,7 @@ export interface FunctionLookup {
    */
   functionId: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * Region (`us-central1`, `europe-west1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;

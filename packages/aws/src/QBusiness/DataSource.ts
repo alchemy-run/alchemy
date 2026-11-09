@@ -147,7 +147,7 @@ export type DataSourceLookup =
     };
 
 /**
- * An Amazon Q Business data source — a connector that syncs documents from
+ * An Amazon Q Business data source -- a connector that syncs documents from
  * a repository (S3 bucket, website, SharePoint, ...) into an index.
  *
  * ### Creating Data Sources

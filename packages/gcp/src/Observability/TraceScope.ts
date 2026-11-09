@@ -105,7 +105,7 @@ export interface TraceScopeLookup {
 }
 
 /**
- * A Cloud Observability trace scope — a named collection of projects
+ * A Cloud Observability trace scope -- a named collection of projects
  * whose traces are queried together in Trace Explorer.
  *
  * Trace scopes exist only in the `global` location. They have no labels

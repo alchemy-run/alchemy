@@ -26,7 +26,7 @@ export interface ServicePoolOptions extends PoolSettings {
  * Run a pool's nodes on Railway: a pool on the control plane, and a
  * Railway Service that runs every `Rivet.DurableObject` given this pool.
  * Nodes only connect out to the control plane, so the Service has no
- * public domain and works with any control plane it can reach —
+ * public domain and works with any control plane it can reach --
  * `RivetCloud.ControlPlane`, or one on another cloud.
  *
  * Every Durable Object given the same pool shares its nodes: declare the

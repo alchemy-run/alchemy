@@ -74,7 +74,7 @@ export interface ReplicationSubnetGroupLookup {
 }
 
 /**
- * A DMS replication subnet group — the set of VPC subnets a replication
+ * A DMS replication subnet group -- the set of VPC subnets a replication
  * instance can be launched into. Must cover at least two Availability Zones.
  * Free and fast to create.
  * ### Creating a Subnet Group

@@ -84,7 +84,7 @@ type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
 const workerStartedMessage = (elapsed: number, url: URL): string => {
   const style = terminalStyle();
   const duration = `${Math.round(elapsed)}ms`;
-  return `Started in ${style.hex(theme.color.success)(duration)} → ${style.hex(theme.color.info).underline(String(url))}`;
+  return `Started in ${style.hex(theme.color.success)(duration)} \u2192 ${style.hex(theme.color.info).underline(String(url))}`;
 };
 
 const workerUpdatedMessage = (elapsed: number): string => {
@@ -1119,7 +1119,7 @@ export const LocalWorkerProvider = () =>
                 Effect.gen(function* () {
                   if (exit._tag === "Success") {
                     const elapsed = (yield* Clock.currentTimeMillis) - start;
-                    // URL on first start only — vite-banner style; rebuild
+                    // URL on first start only -- vite-banner style; rebuild
                     // lines stay compact.
                     const message = Effect.log(
                       status === "update"

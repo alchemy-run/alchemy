@@ -62,7 +62,7 @@ export interface DetectorLookup {
 }
 
 /**
- * A GuardDuty detector — the account/region singleton that enables Amazon
+ * A GuardDuty detector -- the account/region singleton that enables Amazon
  * GuardDuty threat detection. Only one detector can exist per region, so this
  * resource is a capture-and-restore singleton: adopting a pre-existing detector
  * that Alchemy did not create requires `--adopt`.

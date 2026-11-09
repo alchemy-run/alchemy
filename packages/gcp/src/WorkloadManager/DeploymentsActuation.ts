@@ -114,7 +114,7 @@ export type DeploymentsActuation = Resource<
  */
 export interface DeploymentsActuationLookup {
   /**
-   * Actuation id (the `{actuation}` segment). The API has no patch —
+   * Actuation id (the `{actuation}` segment). The API has no patch --
    * actuations are existence-only.
    */
   actuationId: string;
@@ -136,7 +136,7 @@ export interface DeploymentsActuationLookup {
 }
 
 /**
- * A Workload Manager actuation — a bootstrap run of a Deployment that
+ * A Workload Manager actuation -- a bootstrap run of a Deployment that
  * applies Terraform/Ansible and records infrastructure output.
  *
  * Actuations have no labels, description, or patch API. Identity is

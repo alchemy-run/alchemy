@@ -67,7 +67,7 @@ export interface SignalingChannelLookup {
 }
 
 /**
- * An Amazon Kinesis Video Streams WebRTC signaling channel — the rendezvous
+ * An Amazon Kinesis Video Streams WebRTC signaling channel -- the rendezvous
  * point that WebRTC master and viewer peers use to exchange SDP offers,
  * answers, and ICE candidates.
  *

@@ -124,7 +124,7 @@ export interface MulticastConsumerAssociationLookup {
    */
   multicastConsumerAssociationId: string;
   /**
-   * Zone of the association (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * Zone of the association (`us-central1-a`, ...). `US-CENTRAL1-A` is
    * accepted and normalized to `us-central1-a`.
    */
   location?: string;

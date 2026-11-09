@@ -81,7 +81,7 @@ export interface IdNamespaceLookup {
 }
 
 /**
- * An AWS Entity Resolution ID namespace — a wrapper around an input dataset
+ * An AWS Entity Resolution ID namespace -- a wrapper around an input dataset
  * used by ID mapping workflows. A `SOURCE` namespace holds the records to be
  * translated; a `TARGET` namespace holds the dataset (and the rule-based
  * matching configuration) they are mapped onto.

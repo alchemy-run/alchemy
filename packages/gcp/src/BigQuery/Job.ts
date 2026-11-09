@@ -128,7 +128,7 @@ export interface JobLookup {
    */
   jobId: string;
   /**
-   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
+   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, ...).
    */
   location?: string;
   /**
@@ -139,7 +139,7 @@ export interface JobLookup {
 }
 
 /**
- * A Google BigQuery job — a one-shot query, load, copy, or extract.
+ * A Google BigQuery job -- a one-shot query, load, copy, or extract.
  *
  * Jobs are immutable after insert. Changing `jobId`, `location`, labels,
  * or the job configuration replaces the job. BigQuery job ids cannot be

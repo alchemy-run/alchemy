@@ -219,7 +219,7 @@ export interface InternalRangeLookup {
    */
   internalRangeId: string;
   /**
-   * Location of the range. Internal ranges are global — always `"global"`.
+   * Location of the range. Internal ranges are global -- always `"global"`.
    * `GLOBAL` is accepted and normalized to `global`.
    */
   location?: string;
@@ -231,7 +231,7 @@ export interface InternalRangeLookup {
 }
 
 /**
- * A Network Connectivity internal range — an IPAM reservation inside a
+ * A Network Connectivity internal range -- an IPAM reservation inside a
  * VPC, with usage and peering behavior.
  *
  * Ranges live at `locations/global`. `internalRangeId`, `location`,

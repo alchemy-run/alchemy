@@ -80,7 +80,7 @@ export interface DatabaseLookup {
 }
 
 /**
- * An Amazon Timestream for LiveAnalytics database — the top-level container for
+ * An Amazon Timestream for LiveAnalytics database -- the top-level container for
  * time-series {@link Table}s.
  *
  * `Database` owns the database's lifecycle and its mutable configuration: the

@@ -99,7 +99,7 @@ export interface DatasetLookup {
 }
 
 /**
- * An Amazon Forecast dataset — a typed, domain-scoped collection of
+ * An Amazon Forecast dataset -- a typed, domain-scoped collection of
  * time-series (or metadata) records described by a schema. Creating the
  * dataset is a cheap metadata operation; bulk imports and training happen
  * through separate import jobs and predictors.

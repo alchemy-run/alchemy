@@ -143,7 +143,7 @@ export interface DataExchangeLookup {
    */
   dataExchangeId: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …).
+   * BigQuery location (`us-central1`, `US`, `EU`, ...).
    */
   location?: string;
   /**
@@ -154,7 +154,7 @@ export interface DataExchangeLookup {
 }
 
 /**
- * A BigQuery Analytics Hub data exchange — a container for listings
+ * A BigQuery Analytics Hub data exchange -- a container for listings
  * that share datasets or Pub/Sub topics with subscribers.
  *
  * Location and id are immutable. Display name, description,

@@ -144,7 +144,7 @@ export interface InstancesInstancePartitionLookup {
   /**
    * Instance partition id (the `{partition}` segment of
    * `.../instancePartitions/{partition}`). Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters).
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-64 characters).
    */
   instancePartitionId: string;
   /**

@@ -89,7 +89,7 @@ export type AdaptiveMtDataset = Resource<
  */
 export interface AdaptiveMtDatasetLookup {
   /**
-   * Location of the dataset (`us-central1`, `europe-west1`, …). Adaptive MT
+   * Location of the dataset (`us-central1`, `europe-west1`, ...). Adaptive MT
    * is regional.
    */
   location?: string;

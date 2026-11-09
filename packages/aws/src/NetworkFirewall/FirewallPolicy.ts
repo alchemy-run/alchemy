@@ -66,7 +66,7 @@ export interface FirewallPolicyLookup {
 }
 
 /**
- * An AWS Network Firewall policy — defines a firewall's traffic inspection
+ * An AWS Network Firewall policy -- defines a firewall's traffic inspection
  * behavior as a collection of stateless and stateful
  * {@link RuleGroup | rule group} references plus default actions. One policy
  * can be shared by multiple {@link Firewall | firewalls}.

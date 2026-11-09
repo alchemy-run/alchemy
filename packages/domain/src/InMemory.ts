@@ -276,11 +276,11 @@ export const make = (
     enqueueWork(
       deliveries.map((delivery) => ({
         run: deliver(delivery),
-        label: `${delivery.target.kind} ${delivery.target.name} ← ${delivery.tag} (${delivery.source}#${delivery.seq})`,
+        label: `${delivery.target.kind} ${delivery.target.name} \u2190 ${delivery.tag} (${delivery.source}#${delivery.seq})`,
         // Only policies write; views and projections keep their queue order.
         lane:
           delivery.target.kind === "policy"
-            ? `${delivery.source}→${delivery.target.name}`
+            ? `${delivery.source}\u2192${delivery.target.name}`
             : undefined,
       })),
     );
@@ -338,7 +338,7 @@ export const make = (
             const turn = Deferred.makeUnsafe<void>();
             pending.push({
               run: Deferred.succeed(turn, undefined).pipe(Effect.asVoid),
-              label: `saga ${key} → ${activity}`,
+              label: `saga ${key} \u2192 ${activity}`,
               lane: `saga:${key}`,
             });
             return Deferred.await(turn).pipe(waiting);

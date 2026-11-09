@@ -141,7 +141,7 @@ export interface BillingMeterLookup {
 }
 
 /**
- * A Stripe Billing Meter — how usage events are aggregated over a billing
+ * A Stripe Billing Meter -- how usage events are aggregated over a billing
  * period for usage-based prices. `eventName`, `defaultAggregation`,
  * `customerMapping`, `eventTimeWindow`, and `valueSettings` are immutable.
  * Changing `eventName` replaces the meter. Display name updates in place;

@@ -209,9 +209,9 @@ export type MigrationHistoryChange =
 
 /**
  * Classify the migration half of a provider `diff`:
- * - `none` — hashes and bookkeeping table are unchanged
- * - `pending` — new files and/or a table rename; apply in place
- * - `rewritten` — an already-applied file was edited or removed (a rename
+ * - `none` -- hashes and bookkeeping table are unchanged
+ * - `pending` -- new files and/or a table rename; apply in place
+ * - `rewritten` -- an already-applied file was edited or removed (a rename
  *   with unchanged contents is neither)
  */
 export const classifyMigrationHistory = (options: {

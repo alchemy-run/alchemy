@@ -91,7 +91,7 @@ export interface CustomerLookup {
 }
 
 /**
- * A Stripe Customer — the billing identity invoices, subscriptions, and
+ * A Stripe Customer -- the billing identity invoices, subscriptions, and
  * Checkout sessions attach to. Email, name, description, phone, and
  * metadata are updated in place. Deleting a customer is permanent and
  * immediately cancels any active subscriptions.

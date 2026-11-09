@@ -272,7 +272,7 @@ export interface BackupPlanLookup {
    */
   backupPlanId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. Must match the source cluster region.
    */
   location?: string;
@@ -284,7 +284,7 @@ export interface BackupPlanLookup {
 }
 
 /**
- * A Backup for GKE backup plan — the configuration and schedule for a
+ * A Backup for GKE backup plan -- the configuration and schedule for a
  * line of cluster backups.
  *
  * Changing `backupPlanId`, `location`, or `cluster` replaces the plan.

@@ -51,7 +51,7 @@ export const withAuthTokens = <E, R>(
  *
  * @example
  * ```ts
- * Effect.provide(Modal.fromToken({ tokenId: "ak-…", tokenSecret: "as-…" }))
+ * Effect.provide(Modal.fromToken({ tokenId: "ak-...", tokenSecret: "as-..." }))
  * ```
  */
 export const fromToken = (input: {

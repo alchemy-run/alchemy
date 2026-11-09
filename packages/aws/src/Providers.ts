@@ -1411,7 +1411,7 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function -- a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
-          // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
+          // Requires the alchemy floci fork >= 2.4.0-alchemy.1, which serves
           // the Web Function API (web functions, revisions, endpoints).
           flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
           flociDual(Lambda.WebFunctionEndpoint, () => Lambda.WebFunctionEndpointProvider()),

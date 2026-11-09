@@ -123,7 +123,7 @@ export interface FirewallEndpointLookup {
    */
   firewallEndpointId: string;
   /**
-   * Zone of the endpoint (`us-central1-a`, …). `US-CENTRAL1-A` is accepted
+   * Zone of the endpoint (`us-central1-a`, ...). `US-CENTRAL1-A` is accepted
    * and normalized to `us-central1-a`.
    */
   location?: string;

@@ -27,7 +27,7 @@ export interface MachinePoolOptions extends PoolSettings {
  * host every class given this pool, on the database's private
  * network. Runners talk to each other and the database over the network;
  * the Service serves their gateway at `https://{name}.fly.dev` to callers
- * anywhere. Requires a database on a Fly network — `ClusterFly.Database`.
+ * anywhere. Requires a database on a Fly network -- `ClusterFly.Database`.
  *
  * ### Running on Fly
  * **Example:** Two runners in Ashburn

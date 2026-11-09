@@ -79,7 +79,7 @@ export interface PublicDnsNamespaceLookup {
 }
 
 /**
- * An AWS Cloud Map public DNS namespace — a service registry backed by a
+ * An AWS Cloud Map public DNS namespace -- a service registry backed by a
  * Route 53 **public** hosted zone, so registered instances are discoverable
  * on the public internet via DNS as well as via the `DiscoverInstances` API.
  *

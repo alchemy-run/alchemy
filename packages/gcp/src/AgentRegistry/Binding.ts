@@ -138,7 +138,7 @@ export interface BindingLookup {
    */
   bindingId: string;
   /**
-   * Location of the binding (`us-central1`, `global`, …). Multi-region `us`
+   * Location of the binding (`us-central1`, `global`, ...). Multi-region `us`
    * and `eu` are not supported.
    */
   location?: string;

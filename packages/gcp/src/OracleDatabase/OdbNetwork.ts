@@ -106,7 +106,7 @@ export interface OdbNetworkLookup {
    */
   odbNetworkId: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east4`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -118,7 +118,7 @@ export interface OdbNetworkLookup {
 }
 
 /**
- * An Oracle Database@Google Cloud ODB Network — the private network that
+ * An Oracle Database@Google Cloud ODB Network -- the private network that
  * connects a VPC to Oracle Database resources in a region.
  *
  * Changing `odbNetworkId`, `location`, `network`, or `gcpOracleZone`

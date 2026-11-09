@@ -101,7 +101,7 @@ export interface ServiceLookup {
 }
 
 /**
- * An Amazon VPC Lattice service — an independently deployable unit of software
+ * An Amazon VPC Lattice service -- an independently deployable unit of software
  * (running on Lambda, ECS, EC2, or elsewhere) that is made discoverable through
  * a service network. Cheap control-plane resource.
  *

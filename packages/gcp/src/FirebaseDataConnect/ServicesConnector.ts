@@ -160,7 +160,7 @@ export interface ServicesConnectorLookup {
 }
 
 /**
- * A Firebase Data Connect connector — a set of GraphQL queries and
+ * A Firebase Data Connect connector -- a set of GraphQL queries and
  * mutations compiled against the service's active schema.
  *
  * Changing `connectorId`, `service`, or `location` replaces the

@@ -143,7 +143,7 @@ export type BackendsDomain = Resource<
  */
 export interface BackendsDomainLookup {
   /**
-   * Domain id — a valid domain name (for example `www.example.com`).
+   * Domain id -- a valid domain name (for example `www.example.com`).
    */
   domainId: string;
   /**

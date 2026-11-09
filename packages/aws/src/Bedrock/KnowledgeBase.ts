@@ -93,7 +93,7 @@ export interface KnowledgeBaseLookup {
 }
 
 /**
- * An Amazon Bedrock knowledge base — a managed RAG index that embeds source
+ * An Amazon Bedrock knowledge base -- a managed RAG index that embeds source
  * documents into a vector store for retrieval.
  *
  * `KnowledgeBase` owns the index configuration; attach one or more

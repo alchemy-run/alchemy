@@ -137,7 +137,7 @@ export interface VolumeLookup {
 }
 
 /**
- * A Hetzner Cloud Volume — a network block device that can be attached to
+ * A Hetzner Cloud Volume -- a network block device that can be attached to
  * a Server in the same Location. Unattached Volumes are valid; pass
  * `server` to attach at create time.
  *

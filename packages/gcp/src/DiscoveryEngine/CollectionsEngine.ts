@@ -158,7 +158,7 @@ export interface CollectionsEngineLookup {
    */
   engineId: string;
   /**
-   * Location (`global`, `us`, `eu`, …).
+   * Location (`global`, `us`, `eu`, ...).
    */
   location?: string;
   /**
@@ -173,7 +173,7 @@ export interface CollectionsEngineLookup {
 }
 
 /**
- * A Discovery Engine Engine under a collection — serves Search,
+ * A Discovery Engine Engine under a collection -- serves Search,
  * Recommendation, or Chat from one or more DataStores.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a

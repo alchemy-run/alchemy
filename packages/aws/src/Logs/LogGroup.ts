@@ -79,7 +79,7 @@ export interface LogGroupLookup {
 }
 
 /**
- * A CloudWatch Logs log group — the container for log streams and the unit
+ * A CloudWatch Logs log group -- the container for log streams and the unit
  * that retention, encryption, metric filters, and subscriptions attach to.
  * ### Creating Log Groups
  * **Example:** ECS Task Log Group

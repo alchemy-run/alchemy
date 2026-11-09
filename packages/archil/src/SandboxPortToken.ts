@@ -104,7 +104,7 @@ export const SandboxPortTokenProvider = () =>
             );
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          // Observe — a live token we minted is kept; tokens can't be updated.
+          // Observe -- a live token we minted is kept; tokens can't be updated.
           if (output) {
             const live = yield* archil
               .getSandboxPortToken({ sid: output.sandboxId, token_id: output.tokenId })

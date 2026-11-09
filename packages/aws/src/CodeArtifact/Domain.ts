@@ -60,7 +60,7 @@ export interface DomainLookup {
 }
 
 /**
- * An AWS CodeArtifact domain — the top-level container that groups a set of
+ * An AWS CodeArtifact domain -- the top-level container that groups a set of
  * package repositories and provides a single point for encryption, ownership
  * and cross-account access control.
  *

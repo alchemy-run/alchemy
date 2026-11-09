@@ -113,7 +113,7 @@ export interface WorkGroupLookup {
 }
 
 /**
- * An Amazon Athena workgroup — an isolation boundary for queries that pins the
+ * An Amazon Athena workgroup -- an isolation boundary for queries that pins the
  * S3 result-output location, result encryption, a bytes-scanned cutoff, and
  * whether that configuration is enforced over per-query client settings.
  *

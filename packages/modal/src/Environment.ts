@@ -81,7 +81,7 @@ export interface EnvironmentProps {
 }
 
 export interface EnvironmentAttributes {
-  /** Environment ID (`en-…`). */
+  /** Environment ID (`en-...`). */
   environmentId: string;
   /** Environment name. */
   name: string;

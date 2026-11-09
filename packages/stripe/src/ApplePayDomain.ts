@@ -54,7 +54,7 @@ export interface ApplePayDomainLookup {
 }
 
 /**
- * A Stripe Apple Pay Domain — a hostname registered so Apple Pay can be
+ * A Stripe Apple Pay Domain -- a hostname registered so Apple Pay can be
  * offered on that origin. Existence-only: there is nothing to update in
  * place; changing `domainName` replaces the registration. Destroy deletes
  * it.

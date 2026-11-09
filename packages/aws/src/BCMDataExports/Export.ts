@@ -151,7 +151,7 @@ export interface ExportLookup {
 }
 
 /**
- * An AWS Billing and Cost Management data export (Data Exports / CUR 2.0) —
+ * An AWS Billing and Cost Management data export (Data Exports / CUR 2.0) --
  * delivers billing and cost management data selected by an SQL query to an
  * S3 bucket on a refresh cadence.
  *

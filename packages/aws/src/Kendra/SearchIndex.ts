@@ -158,7 +158,7 @@ export type IndexLookup =
     };
 
 /**
- * An Amazon Kendra index — a machine-learning powered enterprise search
+ * An Amazon Kendra index -- a machine-learning powered enterprise search
  * index that data sources (S3, SharePoint, databases, ...) sync documents
  * into and that applications query with natural language.
  *

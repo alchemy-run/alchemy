@@ -74,7 +74,7 @@ export interface InputSecurityGroupLookup {
 }
 
 /**
- * An AWS Elemental MediaLive input security group — an IP allowlist that
+ * An AWS Elemental MediaLive input security group -- an IP allowlist that
  * gates which source networks may push content to attached PUSH inputs
  * (RTMP_PUSH, RTP_PUSH, UDP_PUSH).
  *

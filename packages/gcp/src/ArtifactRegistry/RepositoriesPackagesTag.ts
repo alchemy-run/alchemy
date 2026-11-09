@@ -117,7 +117,7 @@ export interface RepositoriesPackagesTagLookup {
 }
 
 /**
- * An Artifact Registry package tag — an alternate name for a version.
+ * An Artifact Registry package tag -- an alternate name for a version.
  *
  * Tags have no labels field. `list` / nuke find tags whose parent
  * repository carries Alchemy labels. Changing `repository`, `packageId`,

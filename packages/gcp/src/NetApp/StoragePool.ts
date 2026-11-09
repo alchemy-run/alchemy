@@ -229,7 +229,7 @@ export interface StoragePoolLookup {
    */
   storagePoolId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -241,7 +241,7 @@ export interface StoragePoolLookup {
 }
 
 /**
- * A Cloud NetApp Volumes storage pool — billed capacity that hosts
+ * A Cloud NetApp Volumes storage pool -- billed capacity that hosts
  * volumes at a service level.
  *
  * Changing `storagePoolId`, `location`, `network`, `serviceLevel`,

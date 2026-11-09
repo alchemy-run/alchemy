@@ -120,7 +120,7 @@ export interface CurationLookup {
    */
   curationId: string;
   /**
-   * Location (`us-central1`, …).
+   * Location (`us-central1`, ...).
    */
   location?: string;
   /**

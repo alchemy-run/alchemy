@@ -122,7 +122,7 @@ export interface InfrastructureConfigurationLookup {
 }
 
 /**
- * An EC2 Image Builder infrastructure configuration — the environment
+ * An EC2 Image Builder infrastructure configuration -- the environment
  * (instance profile, instance types, network, logging) in which images are
  * built and tested.
  * ### Creating an Infrastructure Configuration

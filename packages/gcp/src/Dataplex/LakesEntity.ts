@@ -209,7 +209,7 @@ export interface LakesEntityLookup {
 }
 
 /**
- * A Dataplex metadata entity — a table or fileset registered in a zone.
+ * A Dataplex metadata entity -- a table or fileset registered in a zone.
  *
  * Entities have no labels field: `read` reports an entity it finds
  * without prior state as unowned (adopt it with `--adopt`), and `list`

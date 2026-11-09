@@ -150,7 +150,7 @@ export interface EndpointLookup {
 }
 
 /**
- * A Service Directory endpoint — an address/port registration on a
+ * A Service Directory endpoint -- an address/port registration on a
  * service. The parent service must already exist.
  *
  * Changing `endpointId`, `service`, `namespace`, `location`, or

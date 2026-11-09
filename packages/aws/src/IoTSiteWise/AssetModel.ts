@@ -116,7 +116,7 @@ export type AssetModelLookup =
     };
 
 /**
- * An AWS IoT SiteWise asset model — a standardized definition of
+ * An AWS IoT SiteWise asset model -- a standardized definition of
  * properties (attributes, measurements, transforms, metrics) and
  * hierarchies from which industrial assets are created.
  *

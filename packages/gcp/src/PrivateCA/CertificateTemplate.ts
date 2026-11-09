@@ -234,7 +234,7 @@ export interface CertificateTemplateLookup {
    */
   certificateTemplateId: string;
   /**
-   * Location of the template (`us-central1`, …). `US-CENTRAL1` is accepted
+   * Location of the template (`us-central1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;
@@ -246,7 +246,7 @@ export interface CertificateTemplateLookup {
 }
 
 /**
- * A Certificate Authority Service certificate template — reusable issuance
+ * A Certificate Authority Service certificate template -- reusable issuance
  * policy (identity constraints, X.509 defaults, and allowed extensions)
  * applied when issuing certificates from a CaPool.
  *

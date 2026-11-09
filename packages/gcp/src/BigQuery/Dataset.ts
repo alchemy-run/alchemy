@@ -182,7 +182,7 @@ export interface DatasetLookup {
 }
 
 /**
- * A Google BigQuery dataset — a container for tables, views, and routines.
+ * A Google BigQuery dataset -- a container for tables, views, and routines.
  *
  * Changing `datasetId` or `location` replaces the dataset. Labels,
  * description, expiration, collation, encryption, and access update in

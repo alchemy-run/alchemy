@@ -134,7 +134,7 @@ export interface ComputeQuotaLookup {
 }
 
 /**
- * A SageMaker HyperPod compute allocation (task governance) — reserves
+ * A SageMaker HyperPod compute allocation (task governance) -- reserves
  * instance capacity on an EKS-orchestrated HyperPod cluster for a team,
  * with fair-share weights and borrow/lend rules for idle compute.
  * ### Creating Compute Allocations

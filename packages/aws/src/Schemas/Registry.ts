@@ -67,7 +67,7 @@ export interface RegistryLookup {
 }
 
 /**
- * An EventBridge Schema Registry — a named collection of event schemas.
+ * An EventBridge Schema Registry -- a named collection of event schemas.
  * Custom registries hold your own OpenAPI 3 / JSONSchema Draft 4 schema
  * documents; AWS also maintains the built-in `aws.events` and
  * `discovered-schemas` registries.

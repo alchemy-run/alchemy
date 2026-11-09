@@ -101,7 +101,7 @@ export type ContactLookup =
     };
 
 /**
- * An Incident Manager contact — a person Incident Manager engages during an
+ * An Incident Manager contact -- a person Incident Manager engages during an
  * incident, an escalation plan that engages contacts in phases, or an
  * on-call schedule backed by rotations.
  *

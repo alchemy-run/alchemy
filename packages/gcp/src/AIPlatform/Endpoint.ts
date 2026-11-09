@@ -199,7 +199,7 @@ export interface EndpointLookup {
    */
   endpointId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …).
+   * Region (`us-central1`, `us-east1`, ...).
    */
   location?: string;
   /**

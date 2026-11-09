@@ -94,7 +94,7 @@ export interface ClusterParameterGroupLookup {
 }
 
 /**
- * An Amazon Redshift cluster parameter group — a named set of database
+ * An Amazon Redshift cluster parameter group -- a named set of database
  * parameters applied to provisioned Redshift clusters.
  *
  * Parameter groups are free and provision instantly. A {@link Cluster}

@@ -165,7 +165,7 @@ export interface KeyLookup {
 }
 
 /**
- * An AWS Payment Cryptography key — a managed cryptographic key with TR-31
+ * An AWS Payment Cryptography key -- a managed cryptographic key with TR-31
  * attributes (algorithm, class, usage, modes of use) used for data
  * encryption, MAC generation/verification, and other payment-domain
  * cryptographic operations.

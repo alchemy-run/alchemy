@@ -101,7 +101,7 @@ export interface ConfigurationProfileLookup {
 }
 
 /**
- * An AWS AppConfig configuration profile — describes where the configuration
+ * An AWS AppConfig configuration profile -- describes where the configuration
  * data lives (the AppConfig hosted store, S3, SSM, Secrets Manager, or
  * CodePipeline) and how to validate it.
  *

@@ -56,7 +56,7 @@ export interface ApplicationLookup {
 }
 
 /**
- * An AWS CodeDeploy application — a logical container that groups the
+ * An AWS CodeDeploy application -- a logical container that groups the
  * deployment groups and revisions for a single deployable unit on a given
  * compute platform (EC2/on-prem `Server`, `Lambda`, or `ECS`).
  *

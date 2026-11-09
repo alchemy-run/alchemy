@@ -139,7 +139,7 @@ export type DataSourceLookup =
     };
 
 /**
- * An Amazon Kendra data source — a connector that syncs documents from a
+ * An Amazon Kendra data source -- a connector that syncs documents from a
  * repository (S3 bucket, SharePoint, website, ...) into a Kendra index.
  *
  * ### Creating Data Sources

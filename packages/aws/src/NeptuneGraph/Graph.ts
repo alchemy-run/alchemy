@@ -119,7 +119,7 @@ export type GraphLookup =
     };
 
 /**
- * An Amazon Neptune Analytics graph — a serverless, memory-optimized graph
+ * An Amazon Neptune Analytics graph -- a serverless, memory-optimized graph
  * that serves openCypher queries over an IAM-authenticated HTTPS endpoint.
  * Unlike classic Neptune, a graph with `publicConnectivity: true` needs no
  * VPC plumbing at all. Provisioning takes several minutes and the graph

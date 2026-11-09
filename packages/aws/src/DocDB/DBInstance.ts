@@ -141,7 +141,7 @@ export interface DBInstanceLookup {
 }
 
 /**
- * An Amazon DocumentDB instance — a compute member of a DocumentDB
+ * An Amazon DocumentDB instance -- a compute member of a DocumentDB
  * {@link DBCluster}. Storage, backup, and endpoints are managed at the cluster
  * level; the instance contributes CPU/RAM and can serve as a writer or reader.
  * Provisioning takes several minutes.

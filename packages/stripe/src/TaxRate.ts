@@ -145,7 +145,7 @@ export interface TaxRateLookup {
 }
 
 /**
- * A Stripe Tax Rate — a percent tax applied to invoices, subscriptions,
+ * A Stripe Tax Rate -- a percent tax applied to invoices, subscriptions,
  * and Checkout Sessions. `percentage` and `inclusive` are immutable and
  * changing them replaces the tax rate. Display name, active, description,
  * jurisdiction fields, and metadata update in place.

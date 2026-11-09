@@ -128,7 +128,7 @@ export interface DataStoreLookup {
    */
   dataStoreId: string;
   /**
-   * Location (`global`, `us`, `eu`, …).
+   * Location (`global`, `us`, `eu`, ...).
    */
   location?: string;
   /**
@@ -139,7 +139,7 @@ export interface DataStoreLookup {
 }
 
 /**
- * A Discovery Engine DataStore — a container for Documents.
+ * A Discovery Engine DataStore -- a container for Documents.
  *
  * Without labels, ownership rests on the deterministic id: `read` reports a
  * resource it finds without prior state as unowned (adopt it with `--adopt`).

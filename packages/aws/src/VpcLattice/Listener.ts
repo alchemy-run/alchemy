@@ -117,7 +117,7 @@ export type ListenerLookup =
     };
 
 /**
- * An Amazon VPC Lattice listener — the process on a lattice service that
+ * An Amazon VPC Lattice listener -- the process on a lattice service that
  * checks for connection requests on a protocol/port and routes them via its
  * default action and rules.
  *

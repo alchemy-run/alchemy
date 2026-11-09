@@ -80,7 +80,7 @@ export interface EnvironmentsResourcefileLookup {
   fileId: string;
   /**
    * Resource file type (`js`, `java`, `properties`, `py`, `xsl`, `wsdl`,
-   * `xsd`, …).
+   * `xsd`, ...).
    */
   fileType?: string;
   /**
@@ -94,7 +94,7 @@ export interface EnvironmentsResourcefileLookup {
 }
 
 /**
- * An environment-scoped Apigee resource file (JavaScript, Java, XSL, …).
+ * An environment-scoped Apigee resource file (JavaScript, Java, XSL, ...).
  *
  * Resource files have no labels. `list` enumerates files in Apigee
  * environments mapped to this GCP project. Type and name are identity;

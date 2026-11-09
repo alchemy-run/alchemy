@@ -179,7 +179,7 @@ export interface NotebookExecutionJobLookup {
 }
 
 /**
- * A Vertex AI notebook execution job — runs an ipynb once against a
+ * A Vertex AI notebook execution job -- runs an ipynb once against a
  * runtime template or custom environment.
  *
  * There is no update API. Changing identity (`notebookExecutionJobId`,

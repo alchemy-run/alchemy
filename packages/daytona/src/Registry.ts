@@ -38,7 +38,7 @@ export interface RegistryAttributes {
   username: string;
   /** Project or namespace. */
   project: string;
-  /** `organization`, `internal`, … */
+  /** `organization`, `internal`, ... */
   registryType: string;
 }
 
@@ -151,7 +151,7 @@ export const RegistryProvider = () =>
         if (current === undefined) {
           return toAttributes(yield* registries.createRegistry(desired));
         }
-        // Sync — the password can't be read back, so every reconcile
+        // Sync -- the password can't be read back, so every reconcile
         // writes the full registry (updateRegistry is a PATCH of all fields).
         return toAttributes(yield* registries.updateRegistry({ id: current.id, ...desired }));
       }),

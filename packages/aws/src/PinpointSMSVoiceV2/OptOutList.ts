@@ -57,7 +57,7 @@ export interface OptOutListLookup {
 }
 
 /**
- * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) opt-out list — a
+ * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) opt-out list -- a
  * list of destination phone numbers that opted out of receiving your SMS
  * or voice messages.
  *

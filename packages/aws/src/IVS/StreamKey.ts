@@ -61,7 +61,7 @@ export type StreamKeyLookup =
     };
 
 /**
- * An Amazon IVS stream key — the secret credential broadcast software
+ * An Amazon IVS stream key -- the secret credential broadcast software
  * uses to authenticate against a channel's ingest endpoint.
  *
  * IVS allows at most one stream key per channel, and `CreateChannel`

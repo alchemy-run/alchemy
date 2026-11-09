@@ -257,7 +257,7 @@ export interface JobLookup {
 }
 
 /**
- * An AWS Glue DataBrew job definition — either a `PROFILE` job that analyzes
+ * An AWS Glue DataBrew job definition -- either a `PROFILE` job that analyzes
  * a dataset and writes a data-quality profile to S3, or a `RECIPE` job that
  * applies a published recipe's transformations and writes the result to S3.
  * The definition is free and instant; job *runs* are billed per node-hour

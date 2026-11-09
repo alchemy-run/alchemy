@@ -72,7 +72,7 @@ export type EmailContactLookup =
     };
 
 /**
- * An AWS User Notifications Contacts **email contact** — an email address
+ * An AWS User Notifications Contacts **email contact** -- an email address
  * that can be attached to a notification configuration as a delivery
  * channel.
  *

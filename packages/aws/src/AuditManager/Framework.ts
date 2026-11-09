@@ -104,7 +104,7 @@ export interface FrameworkLookup {
 }
 
 /**
- * A custom assessment framework in AWS Audit Manager — a named collection
+ * A custom assessment framework in AWS Audit Manager -- a named collection
  * of control sets that assessments are created from.
  *
  * :::note

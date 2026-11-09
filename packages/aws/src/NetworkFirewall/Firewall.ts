@@ -97,7 +97,7 @@ export interface FirewallLookup {
 }
 
 /**
- * An AWS Network Firewall firewall — provisions managed firewall endpoints
+ * An AWS Network Firewall firewall -- provisions managed firewall endpoints
  * into your VPC subnets and inspects traffic according to an associated
  * {@link FirewallPolicy}.
  *

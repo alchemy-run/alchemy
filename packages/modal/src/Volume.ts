@@ -44,7 +44,7 @@ export interface VolumeProps {
 }
 
 export interface VolumeAttributes {
-  /** Volume ID (`vo-…`). */
+  /** Volume ID (`vo-...`). */
   volumeId: string;
   /** Volume name. */
   name: string;

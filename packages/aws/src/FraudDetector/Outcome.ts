@@ -50,7 +50,7 @@ export interface OutcomeLookup {
 }
 
 /**
- * An Amazon Fraud Detector outcome — the result a rule produces when it matches
+ * An Amazon Fraud Detector outcome -- the result a rule produces when it matches
  * (e.g. `approve`, `review`, `block`). Detector rules reference outcomes; they
  * are cheap metadata objects.
  *

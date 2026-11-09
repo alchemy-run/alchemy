@@ -9,37 +9,10 @@
 //
 // `pnpm lint --fix` rewrites without changing values: inside string, template
 // and regex literals a character becomes a `\u` escape, and in JSX text or
-// attributes an HTML entity. Elsewhere (comments, in practice) typographic
-// punctuation becomes its ASCII form and anything else becomes `U+XXXX`.
-// Identifiers and tagged templates are reported without a fix, since escaping
-// them changes behavior.
-
-// oxlint doesn't export its plugin types, so these cover what the rule uses.
-interface Node {
-  readonly type: string;
-  readonly range: readonly [number, number];
-  readonly parent?: Node;
-  readonly name?: string;
-  readonly quasi?: Node & { readonly quasis: ReadonlyArray<Node> };
-}
-
-interface Fixer {
-  replaceTextRange(range: readonly [number, number], text: string): unknown;
-}
-
-interface Context {
-  readonly sourceCode: { readonly text: string };
-  report(descriptor: {
-    readonly loc: { readonly start: Position; readonly end: Position };
-    readonly message: string;
-    readonly fix?: (fixer: Fixer) => unknown;
-  }): void;
-}
-
-interface Position {
-  readonly line: number;
-  readonly column: number;
-}
+// attributes an HTML entity. In comments typographic punctuation becomes its
+// ASCII form and anything else becomes `U+XXXX`. Anywhere else (identifiers,
+// tagged templates) is reported without a fix, since escaping changes behavior.
+import { definePlugin, defineRule } from "@oxlint/plugins";
 
 // eslint-disable-next-line no-control-regex
 const NON_LATIN1 = /[^\x00-\xff]/;
@@ -117,9 +90,9 @@ const ASCII: Record<string, string> = {
   "﻿": "",
 };
 
-type Kind = "escape" | "entity" | "unsafe";
+type Kind = "string" | "jsx" | "comment";
 
-interface Range {
+interface FixableRange {
   readonly start: number;
   readonly end: number;
   readonly kind: Kind;
@@ -131,90 +104,85 @@ const escape = (c: string): string =>
     .map((u) => `\\u${u.toString(16).padStart(4, "0")}`)
     .join("");
 
-const entity = (c: string): string => `&#x${c.codePointAt(0)!.toString(16).toUpperCase()};`;
-
 const codePoint = (c: string): string =>
   `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`;
 
-const position = (code: string, index: number): Position => {
-  const before = code.slice(0, index);
-  const line = before.split("\n").length;
-  return { line, column: index - (before.lastIndexOf("\n") + 1) };
-};
+const MESSAGE = "is not Latin-1, so V8 stores this whole module at two bytes per character";
 
-const latin1 = {
+const latin1 = defineRule({
   meta: {
     type: "problem",
     fixable: "code",
-    docs: { description: "Keep package source Latin-1 so V8 stores it at one byte per character" },
+    docs: { description: "Keep source Latin-1 so V8 stores it at one byte per character" },
+    schema: [],
   },
-  create(context: Context) {
-    const code = context.sourceCode.text;
-    if (!NON_LATIN1.test(code)) return {};
+  create(context) {
+    const source = context.sourceCode;
+    const text = source.text;
+    if (!source.hasBOM && !NON_LATIN1.test(text)) return {};
 
-    const ranges: Array<Range> = [];
-    const add = (node: Node, kind: Kind) =>
-      ranges.push({ start: node.range[0], end: node.range[1], kind });
-    // A TS identifier's range also covers its type annotation.
-    const addName = (node: Node) =>
-      ranges.push({
-        start: node.range[0],
-        end: node.range[0] + (node.name ?? "").length,
-        kind: "unsafe",
-      });
+    const ranges: Array<FixableRange> = source
+      .getAllComments()
+      .map((comment) => ({ start: comment.range[0], end: comment.range[1], kind: "comment" }));
+    const add = (range: readonly [number, number], kind: Kind) =>
+      ranges.push({ start: range[0], end: range[1], kind });
 
     return {
       // JSX attribute strings don't process `\` escapes.
-      Literal: (node: Node) =>
-        add(node, node.parent?.type === "JSXAttribute" ? "entity" : "escape"),
+      Literal: (node) => add(node.range, node.parent.type === "JSXAttribute" ? "jsx" : "string"),
       // A tag reads `strings.raw`, where an escape is no longer the same value.
-      TemplateElement: (node: Node) =>
-        add(node, node.parent?.parent?.type === "TaggedTemplateExpression" ? "unsafe" : "escape"),
-      JSXText: (node: Node) => add(node, "entity"),
-      Identifier: addName,
-      PrivateIdentifier: addName,
-      JSXIdentifier: addName,
+      TemplateElement: (node) => {
+        if (node.parent.parent?.type !== "TaggedTemplateExpression") add(node.range, "string");
+      },
+      JSXText: (node) => add(node.range, "jsx"),
       "Program:exit": () => {
-        for (const match of code.matchAll(NON_LATIN1_ALL)) {
-          const i = match.index;
+        if (source.hasBOM) {
+          context.report({
+            loc: { line: 1, column: 0 },
+            message: `U+FEFF (byte order mark) ${MESSAGE}`,
+            fix: (fixer) => fixer.replaceTextRange([-1, 0], ""),
+          });
+        }
+        ranges.sort((a, b) => a.start - b.start);
+        let r = 0;
+        for (const match of text.matchAll(NON_LATIN1_ALL)) {
+          const start = match.index;
           const c = match[0];
-          // Literals don't nest, so the last range starting at or before `i` is the one.
-          let range: Range | undefined;
-          for (const candidate of ranges) {
-            if (candidate.start <= i && i < candidate.end) range = candidate;
-          }
-          const loc = { start: position(code, i), end: position(code, i + c.length) };
-          const message = `${codePoint(c)} is not Latin-1, so V8 stores this whole module at two bytes per character`;
-          if (range?.kind === "unsafe") {
-            context.report({
-              loc,
-              message: `${message}. Rewrite it by hand: escaping it here changes behavior.`,
-            });
-            continue;
-          }
-          let text: string;
-          if (range?.kind === "escape") text = escape(c);
-          else if (range?.kind === "entity") text = entity(c);
-          else {
-            text = ASCII[c] ?? codePoint(c);
-            // `*​/` spells `*/` inside a block comment without closing it; a
-            // soft hyphen (Latin-1, and invisible) does the same job.
-            if ((code.charAt(i - 1) + text + code.charAt(i + c.length)).includes("*/")) {
-              text = "­";
+          const end = start + c.length;
+          while (r < ranges.length && ranges[r]!.end <= start) r++;
+          const range = ranges[r];
+          const kind = range && range.start <= start && end <= range.end ? range.kind : undefined;
+
+          let replacement: string | undefined;
+          if (kind === "string") replacement = escape(c);
+          else if (kind === "jsx")
+            replacement = `&#x${c.codePointAt(0)!.toString(16).toUpperCase()};`;
+          else if (kind === "comment") {
+            replacement = ASCII[c] ?? codePoint(c);
+            // `*​/` spells `*/` inside a block comment without closing it;
+            // a soft hyphen (Latin-1, and invisible) does the same job.
+            if ((text.charAt(start - 1) + replacement + text.charAt(end)).includes("*/")) {
+              replacement = "­";
             }
           }
+
           context.report({
-            loc,
-            message,
-            fix: (fixer) => fixer.replaceTextRange([i, i + c.length], text),
+            loc: { start: source.getLocFromIndex(start), end: source.getLocFromIndex(end) },
+            message:
+              replacement === undefined
+                ? `${codePoint(c)} ${MESSAGE}. Rewrite it by hand: escaping it here changes behavior.`
+                : `${codePoint(c)} ${MESSAGE}`,
+            ...(replacement === undefined
+              ? {}
+              : { fix: (fixer) => fixer.replaceTextRange([start, end], replacement) }),
           });
         }
       },
     };
   },
-};
+});
 
-export default {
+export default definePlugin({
   meta: { name: "alchemy" },
   rules: { latin1 },
-};
+});

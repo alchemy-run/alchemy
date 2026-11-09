@@ -192,7 +192,7 @@ const FLY_ATTRIBUTE_MAPPING = {
   "attribute.fly_app": "assertion.app_name",
 };
 
-/** `arn:aws:iam::123:role/path/name` → `arn:aws:sts::123:assumed-role/name`. */
+/** `arn:aws:iam::123:role/path/name` -> `arn:aws:sts::123:assumed-role/name`. */
 const assumedRoleArn = (roleArn: string) => {
   const [, partition, , , account, resource] = roleArn.split(":");
   const name = resource?.split("/").pop();

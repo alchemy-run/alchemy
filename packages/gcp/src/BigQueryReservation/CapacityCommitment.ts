@@ -148,7 +148,7 @@ export interface CapacityCommitmentLookup {
    */
   capacityCommitmentId: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Multi-regions `US`
    * and `EU` stay uppercase; regional ids are lowercased.
    */
   location?: string;
@@ -160,7 +160,7 @@ export interface CapacityCommitmentLookup {
 }
 
 /**
- * A BigQuery capacity commitment — purchased slot capacity with a
+ * A BigQuery capacity commitment -- purchased slot capacity with a
  * committed period of usage.
  *
  * Commitments have no labels, so Alchemy stamps ownership into the

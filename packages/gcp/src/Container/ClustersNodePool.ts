@@ -291,7 +291,7 @@ export interface ClustersNodePoolLookup {
    */
   nodePoolId: string;
   /**
-   * Compute Engine zone of the parent cluster (`us-central1-a`, …). Ignored
+   * Compute Engine zone of the parent cluster (`us-central1-a`, ...). Ignored
    * when `cluster` is a full resource name. The legacy zonal API only
    * accepts zones, not regions.
    */

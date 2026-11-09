@@ -151,7 +151,7 @@ export interface EndpointGroupLookup {
 }
 
 /**
- * A Global Accelerator endpoint group — the set of regional endpoints
+ * A Global Accelerator endpoint group -- the set of regional endpoints
  * (ALBs, NLBs, EC2 instances, or Elastic IPs) that a listener routes
  * traffic to in one AWS Region, with traffic-dial and health-check
  * configuration.

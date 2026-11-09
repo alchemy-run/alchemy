@@ -14,7 +14,7 @@ export const makeRpcToken = Effect.sync(() => {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 });
 
-/** `base` with `token` as its path: `http://127.0.0.1:1234` → `http://127.0.0.1:1234/<token>`. */
+/** `base` with `token` as its path: `http://127.0.0.1:1234` -> `http://127.0.0.1:1234/<token>`. */
 export const withRpcToken = (base: string, token: string): string => {
   const url = new URL(base);
   url.pathname = `/${token}`;
@@ -42,7 +42,7 @@ const constantTimeEqual = (left: string, right: string): boolean => {
 
 /**
  * The rest of `pathname` after the `/<token>` prefix (`""` for the root,
- * `"/parent"`, …), or `undefined` when the request does not carry the token.
+ * `"/parent"`, ...), or `undefined` when the request does not carry the token.
  */
 export const matchRpcToken = (pathname: string, token: string): string | undefined => {
   const prefix = `/${token}`;
