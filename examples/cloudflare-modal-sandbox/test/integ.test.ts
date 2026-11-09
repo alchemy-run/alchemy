@@ -17,7 +17,10 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-const user = `user-${Test.defaultStage()}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+// The binding prefixes the volume's name with this stack and stage's owner
+// digest, so a constant user is already unique per stage. Deriving it from the
+// stage pushed `home-<user>` past Modal's 64-character name limit in worktrees.
+const user = "tester";
 
 const run = (url: string, command: string) =>
   Test.executeWhenReady(
