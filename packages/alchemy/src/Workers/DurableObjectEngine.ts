@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS workflow_progress (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   seq INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS workflow_ran (id INTEGER PRIMARY KEY CHECK (id = 1));
 `;
 
 interface ExecutionRow {
@@ -429,6 +430,9 @@ const executionObject = <State>(
       const run: Effect.Effect<void> = Effect.gen(function* () {
         const row = yield* readExecution;
         if (row === undefined || row.result !== null) return;
+        // A duplicate start reads this to tell a run that suspended from an
+        // execution whose first run was never scheduled.
+        yield* query("INSERT OR IGNORE INTO workflow_ran (id) VALUES (1)");
         const { workflow, execute } = registration;
         const payload = yield* Schema.decodeEffect(payloadCodec(workflow))(
           JSON.parse(row.payload),
@@ -474,16 +478,31 @@ const executionObject = <State>(
         start: (executionId: string, payload: string, parent: string) =>
           reportDefects(
             Effect.gen(function* () {
-              const existing = yield* readExecution;
-              if (existing === undefined) {
-                yield* query(
-                  "INSERT INTO workflow_execution (id, execution_id, payload, parent) VALUES (1, ?, ?, ?)",
-                  executionId,
-                  payload,
-                  parent === "null" ? null : parent,
-                );
-                yield* wake();
-              }
+              // The execution and its first run commit together: a start that
+              // fails leaves neither, and its retry creates both.
+              yield* transaction(
+                Effect.gen(function* () {
+                  const existing = yield* readExecution;
+                  if (existing === undefined) {
+                    yield* query(
+                      "INSERT INTO workflow_execution (id, execution_id, payload, parent) VALUES (1, ?, ?, ?)",
+                      executionId,
+                      payload,
+                      parent === "null" ? null : parent,
+                    );
+                    return yield* wake();
+                  }
+                  // An earlier engine committed the execution before
+                  // scheduling its first run, so a failed schedule stranded
+                  // it. Schedule that run now; a run that is pending, has
+                  // ever run, or has finished is left alone.
+                  if (existing.result !== null) return;
+                  const ran = yield* query("SELECT 1 FROM workflow_ran");
+                  if (ran.length > 0) return;
+                  const pending = yield* runs.getStatus(RUN).pipe(Effect.orDie);
+                  if (pending === undefined) yield* wake();
+                }),
+              );
               return yield* result;
             }),
           ),
@@ -501,7 +520,9 @@ const executionObject = <State>(
         // fails the workflow and runs its compensations.
         interrupt: () =>
           reportDefects(
-            query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake())),
+            transaction(
+              query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake())),
+            ),
           ),
         // Stop without running compensations.
         interruptUnsafe: () =>
