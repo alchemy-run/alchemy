@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -220,18 +221,42 @@ export const RuntimeLive = Layer.effect(
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
         /**
-         * Reports an event to the host. A callback that throws is logged, never
-         * allowed to end crash recovery.
+         * Reports an event to the host. Events are side effects: recovery
+         * never waits for the callback, and a callback that throws or
+         * rejects is logged instead of ending crash recovery.
          */
-        const emit = (event: WorkerdEvent) =>
-          Effect.try(() => worker.onEvent?.(event)).pipe(
-            Effect.catch((error) =>
-              Effect.logWarning(
-                `The onEvent callback for "${worker.name}" threw on ${event.type}.`,
-                error.cause,
-              ),
-            ),
+        const emit = (event: WorkerdEvent) => {
+          const failed = (cause: unknown) =>
+            Effect.logWarning(
+              `The onEvent callback for "${worker.name}" failed on ${event.type}.`,
+              cause,
+            );
+          return Effect.try(() => {
+            const result = worker.onEvent?.(event);
+            // Handle a rejection in the same tick the promise is returned:
+            // Node reports one nobody has handled by then as unhandled.
+            return Predicate.isPromiseLike(result)
+              ? Promise.resolve(result).then(
+                  () => undefined,
+                  (cause: unknown) => ({ cause }),
+                )
+              : undefined;
+          }).pipe(
+            Effect.matchEffect({
+              onFailure: (error) => failed(error.cause),
+              onSuccess: (settled) =>
+                settled === undefined
+                  ? Effect.void
+                  : Effect.promise(() => settled).pipe(
+                      Effect.flatMap((rejected) =>
+                        rejected === undefined ? Effect.void : failed(rejected.cause),
+                      ),
+                      Effect.forkScoped,
+                      Effect.asVoid,
+                    ),
+            }),
           );
+        };
         // The PID of the process being started, reported with `Started` once
         // its plugins are up too.
         let pid = 0;

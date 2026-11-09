@@ -1,4 +1,5 @@
 import { assert, expect, layer } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Queue from "effect/Queue";
@@ -56,6 +57,11 @@ const recordEvents = Effect.gen(function* () {
       (event): event is Extract<WorkerdEvent, { type: "workerd.process.started" }> =>
         event.type === "workerd.process.started" && event.generation > 0,
     ).pipe(Effect.map((event) => event.generation)),
+    /** Waits for recovery to give up. */
+    stopped: next(
+      (event): event is Extract<WorkerdEvent, { type: "workerd.recovery.stopped" }> =>
+        event.type === "workerd.recovery.stopped",
+    ),
     /** Waits for the next replacement to be scheduled. */
     scheduled: next(
       (event): event is Extract<WorkerdEvent, { type: "workerd.restart.scheduled" }> =>
@@ -221,7 +227,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         }
         // The fourth crash exhausts the rolling restart budget.
         yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
-        yield* Effect.sleep(1_500);
+        yield* recorder.stopped;
         expect(started).toBe(4);
         expect(active).toBe(0);
         // Each generation is its own process, and each exit reports the
@@ -351,8 +357,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         });
         expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
         yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
-        // The first backoff is 250ms; leave room for the exit to land.
-        yield* Effect.sleep(1_500);
+        yield* recorder.stopped;
 
         const [pid] = recorder.pids();
         expect(calls).toBe(2);
@@ -437,35 +442,92 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
   );
 
   it.effect(
-    "keeps recovering when the onEvent callback throws",
+    "closing the runtime while a replacement starts reports no failed restart",
     () =>
       Effect.gen(function* () {
         vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
-        const runtime = yield* Runtime.Runtime;
-        const recorder = yield* recordEvents;
-        const url = yield* runtime.start({
-          name: "throwing-callback",
-          compatibilityDate: "2026-03-10",
-          compatibilityFlags: [],
-          bindings: [],
-          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
-          onEvent: (event) => {
-            recorder.onEvent(event);
-            throw new Error(`host failed on ${event.type}`);
-          },
+        const workerd = yield* Workerd.Workerd;
+        const serve = workerd.serve;
+        const replacing = yield* Deferred.make<void>();
+        const killed = SystemError.make({
+          subtag: "WorkerdStart",
+          message: "killed while starting",
         });
-        yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
-        expect(yield* recorder.restarted).toBe(1);
-        expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
-        expect(recorder.events.map((event) => event.type)).toEqual<Array<WorkerdEvent["type"]>>([
-          "workerd.process.started",
-          "workerd.process.exited",
-          "workerd.restart.scheduled",
-          "workerd.process.started",
+        let calls = 0;
+        // The replacement is still starting when the runtime closes. Like a
+        // real workerd killed mid-start, it fails once its scope closes.
+        vi.spyOn(workerd, "serve").mockImplementation((...args) =>
+          ++calls === 1
+            ? serve(...args)
+            : Effect.gen(function* () {
+                const closed = yield* Deferred.make<void>();
+                yield* Effect.addFinalizer(() => Deferred.succeed(closed, undefined));
+                yield* Deferred.succeed(replacing, undefined);
+                yield* Deferred.await(closed);
+                return yield* Effect.fail(killed);
+              }),
+        );
+        const recorder = yield* recordEvents;
+        yield* Effect.gen(function* () {
+          const url = yield* startClosing(recorder);
+          yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+          yield* Deferred.await(replacing).pipe(Effect.timeout(10_000));
+        }).pipe(Effect.scoped);
+        // Give a wrongly reported failure time to arrive.
+        yield* Effect.sleep(500);
+        expect(calls).toBe(2);
+        const [pid] = recorder.pids();
+        expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+          { type: "workerd.process.started", pid, generation: 0 },
+          { type: "workerd.process.exited", pid },
+          { type: "workerd.restart.scheduled", attempt: 1, delayMs: 250 },
         ]);
       }),
     { timeout: 30_000 },
   );
+
+  // Events are side effects: recovery neither stops for a failing callback
+  // nor waits for a pending one. Vitest fails the run on an unhandled
+  // rejection, so the rejecting case also proves it is caught.
+  const callbacks = {
+    throws: (event: WorkerdEvent) => {
+      throw new Error(`host failed on ${event.type}`);
+    },
+    rejects: (event: WorkerdEvent) => Promise.reject(new Error(`host failed on ${event.type}`)),
+    "never settles": () => new Promise<void>(() => {}),
+  };
+  for (const [behavior, callback] of Object.entries(callbacks)) {
+    it.effect(
+      `keeps recovering when the onEvent callback ${behavior}`,
+      () =>
+        Effect.gen(function* () {
+          vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+          const runtime = yield* Runtime.Runtime;
+          const recorder = yield* recordEvents;
+          const url = yield* runtime.start({
+            name: "failing-callback",
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+            onEvent: (event) => {
+              recorder.onEvent(event);
+              return callback(event);
+            },
+          });
+          yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+          expect(yield* recorder.restarted).toBe(1);
+          expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
+          expect(recorder.events.map((event) => event.type)).toEqual<Array<WorkerdEvent["type"]>>([
+            "workerd.process.started",
+            "workerd.process.exited",
+            "workerd.restart.scheduled",
+            "workerd.process.started",
+          ]);
+        }),
+      { timeout: 30_000 },
+    );
+  }
 });
 
 // Replacement processes reach Durable Object proxies through registry updates,

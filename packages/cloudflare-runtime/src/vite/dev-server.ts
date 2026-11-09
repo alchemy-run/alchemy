@@ -216,7 +216,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       // Reconnect first: a user callback that throws must not leave the
       // module runner on the dead process.
       if (event.type === "workerd.process.started" && event.generation > 0) onRestart?.();
-      options.worker?.onEvent?.(event);
+      return options.worker?.onEvent?.(event);
     },
     modules: yield* Effect.promise(() =>
       makeWorkerModules(exportTypes, {

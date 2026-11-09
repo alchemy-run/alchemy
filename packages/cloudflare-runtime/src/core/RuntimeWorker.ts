@@ -155,8 +155,11 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * with backoff between attempts. A failed replacement stops recovery.
    * Closing the runtime's scope kills the process and cancels a pending
    * replacement without reporting an exit.
+   *
+   * Recovery never waits for the callback. One that throws or returns a
+   * rejected promise is logged, and recovery continues.
    */
-  readonly onEvent?: (event: WorkerdEvent) => void;
+  readonly onEvent?: (event: WorkerdEvent) => void | PromiseLike<void>;
   /**
    * Runs once, after bindings are prepared and container images are built or
    * pulled, immediately before the first `workerd` process is spawned. A
