@@ -138,8 +138,12 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
     width: 100%;
     font-family: var(--alc-font-mono);
   }
+  /* A box is a column: its head, then its contents growing to fill it, so a
+     box stretched to its row's height has no empty space at the bottom. */
   .alc-tree__box {
     flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     border: 1.5px solid var(--alc-accent-40);
     border-radius: 10px;
     padding: 0.5rem 0.625rem 0.625rem;
@@ -205,15 +209,20 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
     gap: 0.25rem 0.5rem;
     margin-bottom: 0.5rem;
   }
+  .alc-tree__box > .alc-tree__kids,
+  .alc-tree__box > .alc-tree__split {
+    flex: 1 1 auto;
+  }
   .alc-tree__kids {
     display: flex;
     flex-wrap: wrap;
     align-items: stretch;
     gap: 0.625rem;
   }
+  /* Leaves stretch to their row's height, so boxes side by side end flush. */
   .alc-tree__leaf {
     flex: 1 1 auto;
-    align-self: flex-start;
+    align-self: stretch;
     min-width: 6.5rem;
     display: flex;
     flex-direction: column;
@@ -245,7 +254,8 @@ const icon = node?.icon ? diagramIcon(node.icon) : undefined;
   }
   .alc-tree__specs {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto auto;
+    justify-content: center;
     gap: 0.25rem 0.75rem;
     margin: 0.5rem 0 0;
     padding-top: 0.5rem;
