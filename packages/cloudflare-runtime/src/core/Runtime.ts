@@ -219,6 +219,10 @@ export const RuntimeLive = Layer.effect(
           ...config.sockets,
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        const emit = worker.onEvent ?? (() => {});
+        // The PID of the process being started, reported with `Started` once
+        // its plugins are up too.
+        let pid = 0;
         /**
          * Serves the Worker. `pinned` reuses the ports of a previous process,
          * so a replacement is reachable through the same URL, proxy target
@@ -269,6 +273,9 @@ export const RuntimeLive = Layer.effect(
               bin: worker.workerd?.path,
               env: worker.workerd?.env,
               onOutput: worker.logging?.onOutput,
+              onStarted: (started) => {
+                pid = started;
+              },
               onExit: (exit) => {
                 Queue.offerUnsafe(exits, exit);
               },
@@ -285,6 +292,8 @@ export const RuntimeLive = Layer.effect(
             ),
           );
         const ports = yield* startProcess();
+        let generation = 0;
+        emit({ type: "workerd.process.started", pid, generation });
         // A process that dies after startup (V8 aborting on heap exhaustion
         // is the common case) is replaced on the same ports. Without this
         // every request fails until the whole dev session is restarted.
@@ -292,6 +301,7 @@ export const RuntimeLive = Layer.effect(
           let restartTimes: Array<number> = [];
           while (true) {
             const exit = yield* Queue.take(exits);
+            emit({ type: "workerd.process.exited", exit });
             // Release the old process, output listeners and plugin tasks before
             // starting another generation. Closing also detaches this child
             // scope from the parent, so repeated crashes do not retain it.
@@ -302,10 +312,13 @@ export const RuntimeLive = Layer.effect(
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
               );
+              emit({ type: "workerd.recovery.stopped", reason: "restart-limit" });
               return;
             }
             restartTimes.push(now);
-            yield* Effect.sleep(250 * 2 ** (restartTimes.length - 1));
+            const delayMs = 250 * 2 ** (restartTimes.length - 1);
+            emit({ type: "workerd.restart.scheduled", attempt: restartTimes.length, delayMs });
+            yield* Effect.sleep(delayMs);
             yield* Effect.logWarning(
               `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
             );
@@ -315,9 +328,14 @@ export const RuntimeLive = Layer.effect(
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
               );
+              emit({
+                type: "workerd.recovery.stopped",
+                reason: "restart-failed",
+                error: restarted.failure,
+              });
               return;
             }
-            worker.onRestart?.(exit);
+            emit({ type: "workerd.process.started", pid, generation: ++generation });
           }
         }).pipe(Effect.forkScoped);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);

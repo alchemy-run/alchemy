@@ -109,6 +109,12 @@ export interface Ports {
    * Note that this is best-effort; the caller should include retry logic to handle race conditions.
    */
   readonly reserve: (port: number) => Effect.Effect<void>;
+  /**
+   * Drops this process's reservation of a port once its holder has closed
+   * its listeners, so a restart in the same process can take the port
+   * again right away instead of waiting out the reservation.
+   */
+  readonly release: (port: number) => Effect.Effect<void>;
 }
 
 const HOSTS: Set<string> = new Set([
@@ -325,5 +331,9 @@ export const make = (options: PortsOptions) =>
               ),
         ),
       reserve,
+      release: (port) =>
+        Effect.sync(() => globalReservations.delete(port)).pipe(
+          Effect.andThen(Cache.invalidate(cache, port)),
+        ),
     } as Ports;
   });

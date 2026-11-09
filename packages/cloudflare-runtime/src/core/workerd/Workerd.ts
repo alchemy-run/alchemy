@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
 import type { Config } from "./Config.ts";
@@ -22,13 +23,16 @@ export interface WorkerdPorts {
 export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
 
 /** How a workerd process ended after it had finished starting. */
-export interface WorkerdExit {
-  readonly exitCode: number | null;
+export const WorkerdExit = Schema.Struct({
+  /** The process ID of the workerd process that exited. */
+  pid: Schema.Number,
+  exitCode: Schema.NullOr(Schema.Number),
   /** A signal name, or a number when Bun reports one it can't name. */
-  readonly signal: NodeJS.Signals | number | null;
+  signal: Schema.NullOr(Schema.Union([Schema.String, Schema.Number])),
   /** The last output workerd wrote to stderr before it exited. */
-  readonly stderr: string;
-}
+  stderr: Schema.String,
+});
+export type WorkerdExit = typeof WorkerdExit.Type;
 
 export interface ServeOptions {
   /**
@@ -44,6 +48,10 @@ export interface ServeOptions {
    * closes and the process is killed on purpose.
    */
   readonly onExit?: (exit: WorkerdExit) => void;
+  /**
+   * Called once the process is listening on its sockets, with its process ID.
+   */
+  readonly onStarted?: (pid: number) => void;
   /**
    * Path to the workerd binary to run instead of the one from the `workerd`
    * package. Takes precedence over {@link PATH_ENV}.
@@ -90,6 +98,8 @@ type ControlMessage =
     };
 
 interface ProcessHandle {
+  /** The OS process ID. */
+  readonly pid: number;
   /** Writes the config to the process's stdin. This can be omitted if the config is passed as an argument to the process. */
   readonly configure?: () => Effect.Effect<void, SystemError>;
   /** Waits for the process to listen on the given number of sockets. */
@@ -213,6 +223,7 @@ const make = (
           (typeof args?.["inspector-addr"] !== "undefined" ? 1 : 0);
         const control = yield* Effect.raceAllFirst([handle.control(count), handle.error()]);
         yield* handle.pipe(options?.onOutput);
+        options?.onStarted?.(handle.pid);
         const onExit = options?.onExit;
         if (onExit) {
           // The scope's finalizers run in reverse order, so this fiber is
@@ -316,6 +327,7 @@ const makeBun = () =>
           process.stderr.write(chunk);
         });
         return {
+          pid: child.pid,
           control: (count) =>
             Effect.callback<Array<ControlMessage>, SystemError>((resume, signal) => {
               if (!child.stdio[3]) {
@@ -367,6 +379,7 @@ const makeBun = () =>
               // stderr chunk (the fatal message) a moment to land in the tail.
               await Promise.race([stderr.done, new Promise((resolve) => setTimeout(resolve, 500))]);
               return {
+                pid: child.pid,
                 exitCode: child.exitCode,
                 signal: child.signalCode,
                 stderr: stderr.tail(),
@@ -427,6 +440,8 @@ const makeNode = () =>
         }),
       ),
       Effect.map((child) => ({
+        // Set once the `spawn` event fired, which the tap above waited for.
+        pid: child.pid!,
         configure: () =>
           Effect.callback((resume) => {
             const onError = (
@@ -535,6 +550,8 @@ const makeNode = () =>
             const onClose = (exitCode: number | null, signal: NodeJS.Signals | null) => {
               resume(
                 Effect.succeed({
+                  // Set once the `spawn` event fired, which `serve` waited for.
+                  pid: child.pid!,
                   exitCode,
                   signal,
                   stderr: stderrTail.read(),

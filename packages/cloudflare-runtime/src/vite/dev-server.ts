@@ -49,7 +49,7 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   server: vite.ViteDevServer,
   context: Context.Context<RuntimeServices.RuntimeServices>,
   exportTypes: ExportTypes,
-  /** See `RuntimeWorker.onRestart`. */
+  /** Called when a replacement `workerd` process serves again; see `RuntimeWorker.onEvent`. */
   onRestart?: () => void,
 ) => {
   const scope = Scope.makeUnsafe();
@@ -212,7 +212,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
       options.worker?.publicUrl && server.config.server.https
         ? options.worker.publicUrl.replace(/^http:/, "https:")
         : options.worker?.publicUrl,
-    onRestart,
+    onEvent: (event) => {
+      options.worker?.onEvent?.(event);
+      if (event.type === "workerd.process.started" && event.generation > 0) onRestart?.();
+    },
     modules: yield* Effect.promise(() =>
       makeWorkerModules(exportTypes, {
         ...entryEnvironment,

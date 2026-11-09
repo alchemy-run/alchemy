@@ -1,16 +1,65 @@
-import { expect, layer } from "@effect/vitest";
+import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { afterEach, vi } from "vitest";
 import { WebSocket } from "ws";
 import * as DurableObjectNamespace from "../bindings/DurableObjectNamespace.ts";
 import * as Service from "../bindings/Service.ts";
 import * as Runtime from "../Runtime.ts";
+import { SystemError } from "../RuntimeError.shared.ts";
+import { WorkerdEvent } from "../RuntimeWorker.ts";
 import * as Workerd from "../workerd/Workerd.ts";
 import { localRuntimeLayer, makeLocalRuntimeLayer } from "./helpers/runtime.ts";
+
+/** A {@link WorkerdEvent} with an exit reduced to the fields a test can predict. */
+type ObservedEvent =
+  | Exclude<WorkerdEvent, { readonly type: "workerd.process.exited" }>
+  | { readonly type: "workerd.process.exited"; readonly pid: number };
+
+const WorkerdEventJson = Schema.toCodecJson(WorkerdEvent);
+
+/** Sends each event through JSON text and back, as a host logging them would. */
+const roundTrip = (events: ReadonlyArray<WorkerdEvent>) =>
+  events.map((event) =>
+    Schema.decodeUnknownSync(WorkerdEventJson)(
+      JSON.parse(JSON.stringify(Schema.encodeSync(WorkerdEventJson)(event))),
+    ),
+  );
+
+/**
+ * Records every lifecycle event of a worker, and queues each replacement
+ * that serves again so a test can wait for it.
+ */
+const recordEvents = Effect.gen(function* () {
+  const events: Array<WorkerdEvent> = [];
+  const restarts = yield* Queue.unbounded<number>();
+  const onEvent = (event: WorkerdEvent) => {
+    events.push(event);
+    if (event.type === "workerd.process.started" && event.generation > 0) {
+      Queue.offerUnsafe(restarts, event.generation);
+    }
+  };
+  return {
+    onEvent,
+    events,
+    /** Waits for the next replacement to serve. */
+    restarted: Queue.take(restarts).pipe(Effect.timeout(10_000)),
+    exits: () =>
+      events.flatMap((event) => (event.type === "workerd.process.exited" ? [event.exit] : [])),
+    pids: () =>
+      events.flatMap((event) => (event.type === "workerd.process.started" ? [event.pid] : [])),
+    observed: () =>
+      events.map((event): ObservedEvent =>
+        event.type === "workerd.process.exited"
+          ? { type: "workerd.process.exited", pid: event.exit.pid }
+          : event,
+      ),
+  };
+});
 
 /**
  * `/crash` exhausts the isolate's heap. With a small `--max-old-space-size`
@@ -131,18 +180,14 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
             return ports;
           }),
         );
-        const exits: Array<Workerd.WorkerdExit> = [];
-        const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        const recorder = yield* recordEvents;
         const url = yield* runtime.start({
           name: "restarting",
           compatibilityDate: "2026-03-10",
           compatibilityFlags: [],
           bindings: [],
           modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
-          onRestart: (exit) => {
-            exits.push(exit);
-            Queue.offerUnsafe(restarts, exit);
-          },
+          onEvent: recorder.onEvent,
         });
         expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
 
@@ -155,10 +200,10 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
             }),
           );
           expect(answer).toBe("hello");
-          // The replacement can serve HTTP before its restart callback runs.
-          yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
-          expect(exits).toHaveLength(crash);
-          expect(exits[crash - 1].stderr).toContain("JavaScript heap out of memory");
+          // The replacement can serve HTTP before its Started event arrives.
+          expect(yield* recorder.restarted).toBe(crash);
+          expect(recorder.exits()).toHaveLength(crash);
+          expect(recorder.exits()[crash - 1].stderr).toContain("JavaScript heap out of memory");
           expect(active).toBe(1);
         }
         // The fourth crash exhausts the rolling restart budget.
@@ -166,7 +211,25 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         yield* Effect.sleep(1_500);
         expect(started).toBe(4);
         expect(active).toBe(0);
-        expect(exits).toHaveLength(3);
+        // Each generation is its own process, and each exit reports the
+        // process that served before it.
+        const [first, second, third, fourth] = recorder.pids();
+        expect(new Set([first, second, third, fourth]).size).toBe(4);
+        expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+          { type: "workerd.process.started", pid: first, generation: 0 },
+          { type: "workerd.process.exited", pid: first },
+          { type: "workerd.restart.scheduled", attempt: 1, delayMs: 250 },
+          { type: "workerd.process.started", pid: second, generation: 1 },
+          { type: "workerd.process.exited", pid: second },
+          { type: "workerd.restart.scheduled", attempt: 2, delayMs: 500 },
+          { type: "workerd.process.started", pid: third, generation: 2 },
+          { type: "workerd.process.exited", pid: third },
+          { type: "workerd.restart.scheduled", attempt: 3, delayMs: 1_000 },
+          { type: "workerd.process.started", pid: fourth, generation: 3 },
+          { type: "workerd.process.exited", pid: fourth },
+          { type: "workerd.recovery.stopped", reason: "restart-limit" },
+        ]);
+        expect(roundTrip(recorder.events)).toEqual(recorder.events);
         expect(yield* fetchText(new URL("/hello", url)).pipe(Effect.exit)).toMatchObject({
           _tag: "Failure",
         });
@@ -246,6 +309,54 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
     { timeout: 60_000 },
   );
 
+  it.effect(
+    "stops recovery and reports why when a replacement fails to start",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const runtime = yield* Runtime.Runtime;
+        const workerd = yield* Workerd.Workerd;
+        const serve = workerd.serve;
+        const failure = SystemError.make({
+          subtag: "WorkerdStart",
+          message: "replacement refused to start",
+        });
+        let calls = 0;
+        vi.spyOn(workerd, "serve").mockImplementation((...args) =>
+          ++calls === 1 ? serve(...args) : Effect.fail(failure),
+        );
+        const recorder = yield* recordEvents;
+        const url = yield* runtime.start({
+          name: "failing-replacement",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+          onEvent: recorder.onEvent,
+        });
+        expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
+        yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+        // The first backoff is 250ms; leave room for the exit to land.
+        yield* Effect.sleep(1_500);
+
+        const [pid] = recorder.pids();
+        expect(calls).toBe(2);
+        expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+          { type: "workerd.process.started", pid, generation: 0 },
+          { type: "workerd.process.exited", pid },
+          { type: "workerd.restart.scheduled", attempt: 1, delayMs: 250 },
+          { type: "workerd.recovery.stopped", reason: "restart-failed", error: failure },
+        ]);
+        // The failure survives JSON as the same typed error.
+        const decoded = roundTrip(recorder.events);
+        expect(decoded).toEqual(recorder.events);
+        const stopped = decoded.at(-1);
+        assert(stopped?.type === "workerd.recovery.stopped");
+        expect(stopped.error).toBeInstanceOf(SystemError);
+      }),
+    { timeout: 30_000 },
+  );
+
   for (const crashBeforeClose of [false, true]) {
     it.effect(
       `does not restart after scope closure (crash: ${crashBeforeClose})`,
@@ -254,7 +365,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
           const workerd = yield* Workerd.Workerd;
           const serve = vi.spyOn(workerd, "serve");
-          const exits: Array<Workerd.WorkerdExit> = [];
+          const recorder = yield* recordEvents;
           yield* Effect.gen(function* () {
             const runtime = yield* Runtime.Runtime;
             const url = yield* runtime.start({
@@ -269,9 +380,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
                   content: CRASHING_SCRIPT,
                 },
               ],
-              onRestart: (exit) => {
-                exits.push(exit);
-              },
+              onEvent: recorder.onEvent,
             });
             expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
             if (crashBeforeClose) {
@@ -281,7 +390,11 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           // Give a wrongly reported exit time to arrive.
           yield* Effect.sleep(1_000);
           expect(serve).toHaveBeenCalledTimes(1);
-          expect(exits).toHaveLength(0);
+          // Closing on purpose reports neither an exit nor a replacement.
+          const [pid] = recorder.pids();
+          expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+            { type: "workerd.process.started", pid, generation: 0 },
+          ]);
         }),
       { timeout: 30_000 },
     );
@@ -303,7 +416,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
           Effect.gen(function* () {
             vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
             const runtime = yield* Runtime.Runtime;
-            const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
+            const recorder = yield* recordEvents;
             const owner = yield* runtime.start({
               name: "restart-durable-object-owner",
               compatibilityDate: "2026-03-10",
@@ -315,9 +428,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
               durableObjectNamespaces: [
                 { className: "Pinger", sql: false, uniqueKey: "restart-durable-object" },
               ],
-              onRestart: (exit) => {
-                Queue.offerUnsafe(restarts, exit);
-              },
+              onEvent: recorder.onEvent,
             });
             const consumer = yield* runtime.start({
               name: "restart-durable-object-consumer",
@@ -354,7 +465,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
 
             // The replacement listens on the same debug port.
             yield* fetchText(new URL("/crash", owner)).pipe(Effect.ignore);
-            yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
+            yield* recorder.restarted;
             yield* expectAnswer("/rpc", "rpc ok");
             yield* expectAnswer("/fetch", "fetch ok");
           }),
@@ -367,7 +478,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
           Effect.gen(function* () {
             vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
             const runtime = yield* Runtime.Runtime;
-            const restarts = yield* Queue.unbounded<Workerd.WorkerdExit>();
+            const recorder = yield* recordEvents;
             const owner = yield* runtime.start({
               name: "restart-websocket-owner",
               compatibilityDate: "2026-03-10",
@@ -379,9 +490,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
               durableObjectNamespaces: [
                 { className: "Pinger", sql: false, uniqueKey: "restart-websocket" },
               ],
-              onRestart: (exit) => {
-                Queue.offerUnsafe(restarts, exit);
-              },
+              onEvent: recorder.onEvent,
             });
             const consumer = yield* runtime.start({
               name: "restart-websocket-consumer",
@@ -414,7 +523,7 @@ for (const fileSystemSupportsWatcher of watcherModes) {
             // The owner's crash ends the socket; a new one reaches the replacement.
             yield* fetchText(new URL("/crash", owner)).pipe(Effect.ignore);
             yield* closed(socket);
-            yield* Queue.take(restarts).pipe(Effect.timeout(10_000));
+            yield* recorder.restarted;
             const replacement = yield* openSocket(new URL("/ws", consumer)).pipe(
               Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 10 }),
             );
