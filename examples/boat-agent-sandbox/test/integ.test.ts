@@ -21,22 +21,28 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const { executeWhenReady } = Test;
 const user = `user-${Test.defaultStage()}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
+const run = (url: string, command: string) =>
+  executeWhenReady(
+    HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText(command)),
+  ).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { stdout: string; exitCode: number }),
+  );
+
 test(
-  "runs code in a one-shot sandbox",
+  "starts each sandbox from the Golden snapshot",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const res = yield* executeWhenReady(
-      HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText("console.log(6 * 7)")),
-    );
-    expect(res.status).toBe(200);
-    const body = (yield* res.json) as { stdout: string; exitCode: number };
-    expect(body).toMatchObject({ stdout: "42\n", exitCode: 0 });
+    const repo = yield* run(url, "node -p \"require('./package.json').name\"");
+    expect(repo).toMatchObject({ stdout: "@sindresorhus/is\n", exitCode: 0 });
+    const pnpm = yield* run(url, "pnpm --version");
+    expect(pnpm.exitCode).toBe(0);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "keeps a user's files in their sandbox across requests",
+  "keeps a user's changes in their own sandbox",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const put = yield* executeWhenReady(
@@ -44,15 +50,18 @@ test(
         HttpClientRequest.bodyText("hello"),
       ),
     );
-    const first = (yield* put.json) as { sandboxId: string; files: string[]; content: string };
+    const first = (yield* put.json) as { sandboxId: string; content: string };
     expect(first.content).toBe("hello");
 
     const get = yield* HttpClient.execute(
       HttpClientRequest.get(`${url}/users/${user}/files/notes.md`),
     );
-    const second = (yield* get.json) as { sandboxId: string; files: string[]; content: string };
+    const second = (yield* get.json) as { sandboxId: string; content: string };
     expect(second.sandboxId).toBe(first.sandboxId);
-    expect(second.files).toContain("notes.md");
+
+    // A fresh sandbox from Golden doesn't have the user's change.
+    const fresh = yield* run(url, "test -f notes.md && echo yes || echo no");
+    expect(fresh.stdout).toBe("no\n");
 
     // The user's sandbox was created at runtime: delete it through the API.
     const removed = yield* HttpClient.execute(HttpClientRequest.delete(`${url}/users/${user}`));

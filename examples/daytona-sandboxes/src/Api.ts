@@ -4,90 +4,71 @@ import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { Base } from "./Images.ts";
+import { Warm } from "./Images.ts";
 
-const RunRequest = Schema.Struct({ command: Schema.String });
+const REPO = "/home/daytona/repo";
 
+/**
+ * Starts sandboxes from the Warm snapshot while it runs: a fresh one per
+ * `/run`, deleted when the request ends, and one per user that stops when
+ * they're idle and starts again with their changes.
+ */
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // Sandboxes start from Base; the Worker's key can only create and delete sandboxes.
-    const sandboxes = yield* Daytona.CreateSandbox(Base);
-    // One volume per user, named user-<id>.
-    const volumes = yield* Daytona.CreateVolume({ prefix: "user-" });
+    const sandboxes = yield* Daytona.CreateSandbox(Warm);
+
+    /** Runs a command in the repository, in a fresh sandbox deleted when the request ends. */
+    const run = Effect.fn("run")(function* (command: string) {
+      const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
+        sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
+      );
+      return yield* sandbox.exec(command, { cwd: REPO });
+    });
+
+    /** The user's sandbox: found by name and started, or created from Warm. */
+    const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
+      const existing = yield* sandboxes.get(`dev-${user}`);
+      if (existing === undefined) {
+        return yield* sandboxes.create({
+          name: `dev-${user}`,
+          labels: { user },
+          autoStopInterval: 15,
+        });
+      }
+      yield* existing.startSandbox();
+      return existing;
+    });
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://worker");
-        const user = url.pathname.match(/^\/users\/([a-z0-9-]+)\/sandbox$/)?.[1];
+        const url = new URL(request.url, "http://api");
 
-        // POST /run — run a command in a fresh sandbox, then delete it.
         if (request.method === "POST" && url.pathname === "/run") {
-          const { command } = yield* Schema.decodeUnknownEffect(RunRequest)(yield* request.json);
-          const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
-            sandboxes.delete(s.sandboxId).pipe(Effect.ignore),
-          );
-          const result = yield* sandbox.exec(command);
-          return yield* HttpServerResponse.json(result);
+          return yield* HttpServerResponse.json(yield* run(yield* request.text));
         }
 
-        // PUT /users/:user/sandbox — the user's sandbox, with their volume as home.
-        if (request.method === "PUT" && user) {
-          const home = yield* volumes.getOrCreate({ name: `user-${user}` });
-          const existing = yield* sandboxes.get(`dev-${user}`);
-          const sandbox =
-            existing ??
-            (yield* sandboxes.create({
-              name: `dev-${user}`,
-              labels: { user },
-              mounts: [{ volume: home, path: "/home/daytona/work" }],
-              autoStopInterval: 15,
-            }));
-          if (existing) yield* sandbox.startSandbox();
-          // Volumes are backed by object storage: write a new file per visit
-          // rather than appending to one.
-          yield* sandbox.exec(
-            "mkdir -p /home/daytona/work/visits && date > /home/daytona/work/visits/$(date +%s%N)",
-          );
-          const visits = yield* sandbox.exec("ls /home/daytona/work/visits | wc -l");
-          return yield* HttpServerResponse.json({
-            sandboxId: sandbox.sandboxId,
-            visits: Number(visits.result.trim()),
-          });
-        }
-
-        // DELETE /users/:user — remove the user: their sandbox and their volume.
-        const removed = url.pathname.match(/^\/users\/([a-z0-9-]+)$/)?.[1];
-        if (request.method === "DELETE" && removed) {
-          yield* sandboxes.delete(`dev-${removed}`);
-          const home = yield* volumes.get(`user-${removed}`);
-          if (home === undefined) return HttpServerResponse.empty({ status: 204 });
-          // Daytona releases the volume about a minute after its sandbox goes.
-          return yield* volumes.delete(home.volumeId).pipe(
-            Effect.as(HttpServerResponse.empty({ status: 204 })),
-            Effect.catchTag("VolumeInUse", () =>
-              Effect.succeed(
-                HttpServerResponse.text("the volume is still in use; retry", {
-                  status: 409,
-                  headers: { "retry-after": "15" },
-                }),
-              ),
-            ),
-          );
-        }
-
-        // DELETE /users/:user/sandbox — delete the sandbox; the volume keeps the files.
-        if (request.method === "DELETE" && user) {
+        const user = /^\/users\/([a-z0-9-]+)$/.exec(url.pathname)?.[1];
+        if (request.method === "DELETE" && user !== undefined) {
           yield* sandboxes.delete(`dev-${user}`);
           return HttpServerResponse.empty({ status: 204 });
+        }
+
+        const match = /^\/users\/([a-z0-9-]+)\/files\/(.+)$/.exec(url.pathname);
+        if (match !== null) {
+          const [, owner, file] = match as unknown as [string, string, string];
+          const sandbox = yield* userSandbox(owner);
+          if (request.method === "PUT") {
+            yield* sandbox.files.write(`${REPO}/${file}`, yield* request.text);
+          }
+          const content = yield* sandbox.files.readText(`${REPO}/${file}`);
+          return yield* HttpServerResponse.json({ sandboxId: sandbox.sandboxId, content });
         }
 
         return HttpServerResponse.text("not found", { status: 404 });
       }).pipe(Effect.scoped, Effect.orDie),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Daytona.CreateSandboxHttp, Daytona.CreateVolumeHttp))),
+  }).pipe(Effect.provide(Daytona.CreateSandboxHttp)),
 ) {}

@@ -138,6 +138,66 @@ export const conformance = (engine: Engine) => {
   );
 
   test(
+    "starting again with a different payload keeps the first",
+    Effect.gen(function* () {
+      const id = yield* freshId("first");
+      const first = yield* start("Greet", id, "?name=sam");
+      yield* start("Greet", id, "?name=someone-else");
+      expect(yield* awaitResult(first.status)).toEqual({ _tag: "Completed", result: "hello sam" });
+      expect(yield* journal(id)).toEqual(["greet", "log"]);
+    }),
+    { tags, timeout },
+  );
+
+  test(
+    "starting a finished execution again changes nothing",
+    Effect.gen(function* () {
+      const id = yield* freshId("finished");
+      const run = yield* start("Greet", id);
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "hello world" });
+      yield* start("Greet", id);
+      expect(yield* run.status).toEqual({ _tag: "Completed", result: "hello world" });
+      expect(yield* journal(id)).toEqual(["greet", "log"]);
+    }),
+    { tags, timeout },
+  );
+
+  test(
+    "starting a waiting execution again keeps it waiting",
+    Effect.gen(function* () {
+      const id = yield* freshId("waiting");
+      const run = yield* start("Approve", id);
+      yield* awaitJournal(id, 1);
+      yield* start("Approve", id);
+      expect(yield* run.status).toEqual({ _tag: "Running" });
+      yield* run.approve("agent");
+      expect(yield* awaitResult(run.status)).toEqual({
+        _tag: "Completed",
+        result: "approved by agent",
+      });
+      expect(yield* journal(id)).toEqual(["requested", "approved:agent"]);
+    }),
+    { tags, timeout },
+  );
+
+  test(
+    "starting a sleeping execution again neither wakes it early nor late",
+    Effect.gen(function* () {
+      const id = yield* freshId("sleeping");
+      const started = yield* Clock.currentTimeMillis;
+      const run = yield* start("Nap", id, "?seconds=4");
+      yield* awaitJournal(id, 1);
+      yield* start("Nap", id, "?seconds=4");
+      expect(yield* awaitResult(run.status)).toEqual({ _tag: "Completed", result: "rested" });
+      const elapsed = (yield* Clock.currentTimeMillis) - started;
+      expect(elapsed).toBeGreaterThanOrEqual(4_000);
+      expect(elapsed).toBeLessThan(engine.napsWithinMillis);
+      expect(yield* journal(id)).toEqual(["before", "after"]);
+    }),
+    { tags, timeout },
+  );
+
+  test(
     "a run that was never started reads as not started",
     Effect.gen(function* () {
       const id = yield* freshId("never");
