@@ -38,6 +38,28 @@ Pick **Browser sign-in** for most setups. It works with every way you can sign i
 
 Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying creates keys for your hosts, which takes `account.admin`, so give it the `admin` preset.
 
+## Bill an organization
+
+If you belong to an organization, your account has more than one wallet, and Boat bills the active one. Set the profile's **organization** to choose: an org id (`team_…`), its name, or `personal`. Alchemy sends it on every call, and the hosts it deploys send it too.
+
+A Stack can pick its own:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "App",
+  { providers: Boat.providers({ org: "team_abc" }) },
+  Effect.gen(function* () {
+    yield* Boat.Sandbox("DevBox", { type: "small" });
+  }),
+);
+```
+
+Environments work differently. Without an organization, a `Boat.Environment` is one of your personal environments, even when your active wallet is an organization's. With one, it is that organization's shared environment: every member can read it, and only owners and admins can change it.
+
 ## Give production its own profile
 
 A [stage](/environments/stages) decides what you deploy. The profile decides where. Give production its own Boat account, and its own profile:
@@ -80,7 +102,7 @@ When `BOAT_API_KEY` is set, Alchemy uses it instead of the profile:
 
 <PackageManagers script={`BOAT_API_KEY=boat_... {run} alchemy deploy --stage prod`} />
 
-Give the key the `admin` preset if the Stack has bindings: they create keys. `BOAT_API_BASE_URL` overrides Boat's API URL. See [CI](/environments/ci).
+Give the key the `admin` preset if the Stack has bindings: they create keys. `BOAT_ORG` picks the organization, and `BOAT_API_BASE_URL` overrides Boat's API URL. See [CI](/environments/ci).
 
 ## Your plan caps how many sandboxes start
 

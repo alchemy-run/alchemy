@@ -4,14 +4,16 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as boat from "@distilled.cloud/boat-dev/boat";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { TEST_ORG } from "./fixtures/org.ts";
 
 const { test } = Test.make({ providers: Boat.providers() });
+const team = Test.make({ providers: Boat.providers({ org: TEST_ORG }) });
 
 const tags = ["provider:boat", "provider:boat:environment", "live"];
 
-const observe = (environmentId: string) =>
+const observe = (environmentId: string, org?: string) =>
   boat
-    .listEnvironments({})
+    .listEnvironments(org ? { org } : {})
     .pipe(
       Effect.map((r) => r.environments.find((environment) => environment.id === environmentId)),
     );
@@ -68,6 +70,46 @@ test.provider(
 
       yield* stack.destroy();
       expect(yield* observe(environment.environmentId)).toBeUndefined();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+team.test.provider(
+  "with an org, the environment is the org's shared one and its sandboxes bill the org",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const Shared = Boat.Environment("Shared", { env: { SCOPE: "team" } });
+        const box = yield* Boat.Sandbox("OnShared", {
+          type: "small",
+          autoStop: "10 minutes",
+          environment: Shared,
+        });
+        return { environment: yield* Shared, box };
+      });
+
+      const { environment, box } = yield* stack.deploy(program);
+      // `/environments` routes ignore `X-Boat-Org`: only the `org` query
+      // reaches the org's environments, and without it the personal ones.
+      expect((yield* observe(environment.environmentId, TEST_ORG))?.name).toBe(environment.name);
+      expect(yield* observe(environment.environmentId)).toBeUndefined();
+
+      const sandbox = yield* boat.getSandbox({ sandboxId: box.sandboxId });
+      expect(sandbox.sandbox.team?.name.toLowerCase()).toBe(TEST_ORG.toLowerCase());
+      const vars = yield* boat.executeSandboxCommand({
+        sandboxId: box.sandboxId,
+        command: 'echo "$SCOPE"',
+      });
+      expect("stdout" in vars ? vars.stdout : undefined).toBe("team\n");
+
+      // Read finds it again in the org, so an unchanged redeploy plans nothing.
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.Shared.action).toBe("noop");
+
+      yield* stack.destroy();
+      expect(yield* observe(environment.environmentId, TEST_ORG)).toBeUndefined();
     }),
   { tags, timeout: 180_000 },
 );

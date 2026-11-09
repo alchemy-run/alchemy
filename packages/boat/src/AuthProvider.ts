@@ -15,6 +15,7 @@ import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env"
 import {
   collectFieldValues,
   storedSecret,
+  storedValueText,
   validateFieldValues,
   type StoredValues,
 } from "alchemy/Auth/StoredAuthProvider";
@@ -45,6 +46,10 @@ export const BOAT_AUTH_PROVIDER_NAME = "Boat";
  * - `stored`: you paste a key created with `boat api-keys create` or on the
  *   dashboard.
  *
+ * Either may set `org`: the organization (wallet) every call bills, an org
+ * id (`team_…`), an org name, or `personal`. Without it Boat uses the
+ * account's active wallet.
+ *
  * A revoked key fails with Boat's `unauthorized` error; run
  * `alchemy profile edit --reconfigure Boat` to sign in again.
  */
@@ -57,10 +62,12 @@ export const BoatAuthConfigSchema = Schema.Union([
     /** Epoch millis the key expires at, when Boat says. */
     expires: Schema.optional(Schema.Number),
     account: Schema.optional(Schema.String),
+    org: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     method: Schema.Literal("stored"),
     apiKey: Schema.String,
+    org: Schema.optional(Schema.String),
   }),
 ]);
 export type BoatAuthConfig = typeof BoatAuthConfigSchema.Type;
@@ -71,8 +78,18 @@ export interface BoatResolvedCredentials {
   type: "apiKey";
   apiKey: Redacted.Redacted<string>;
   apiBaseUrl: string;
+  /** The organization (wallet) calls bill, sent as `X-Boat-Org`. */
+  org?: string;
   source: { type: BoatAuthConfig["method"] | "env"; details?: string };
 }
+
+const orgField: ConfigureField = {
+  name: "org",
+  label: "Boat organization",
+  description:
+    "The org (wallet) to bill: an org id (team_…), an org name, or `personal`. Leave blank for your active wallet.",
+  optional: true,
+};
 
 const keyFields: ReadonlyArray<ConfigureField> = [
   {
@@ -82,11 +99,19 @@ const keyFields: ReadonlyArray<ConfigureField> = [
     secret: true,
     validate: (value) => (value.trim().startsWith("boat_") ? undefined : "Expected a boat_… key"),
   },
+  orgField,
 ];
+
+/** A set org, trimmed; blank means the active wallet. */
+const orgOf = (value: string | undefined) => {
+  const org = value?.trim();
+  return org ? { org } : {};
+};
 
 const storedConfig = (values: StoredValues): BoatAuthConfig => ({
   method: "stored",
   apiKey: Redacted.value(storedSecret(values.apiKey) ?? Redacted.make("")).trim(),
+  ...orgOf(storedValueText(values.org)),
 });
 
 const loginFailed = (cause: { readonly message: string }) =>
@@ -116,7 +141,7 @@ const expiryOf = (now: number, expiresIn: number | undefined) =>
  * open the claim page, where the user signs in with any method and types the
  * code, then poll until Boat issues a key.
  */
-const browserLogin = (initialEmail?: string) =>
+const browserLogin = (initialEmail?: string, initialOrg?: string) =>
   Effect.gen(function* () {
     const email = (yield* Interaction.text({
       message: "Email of your Boat account",
@@ -175,6 +200,11 @@ const browserLogin = (initialEmail?: string) =>
     const key = yield* signIn(registered, 1);
     const account = yield* accountOf(key.apiKey);
     yield* Interaction.success(`Boat: signed in as ${account ?? email}.`);
+    const org = yield* Interaction.text({
+      message: orgField.label,
+      description: orgField.description,
+      ...(initialOrg ? { initialValue: initialOrg } : {}),
+    }).pipe(mapPromptCancellation);
     const now = yield* Clock.currentTimeMillis;
     return {
       method: "browser" as const,
@@ -185,6 +215,7 @@ const browserLogin = (initialEmail?: string) =>
         : {}),
       ...expiryOf(now, key.expiresIn),
       ...(account ? { account } : {}),
+      ...orgOf(org),
     } satisfies BrowserConfig;
   });
 
@@ -231,6 +262,7 @@ const readEnvironment = Effect.gen(function* () {
     type: "apiKey" as const,
     apiKey: Redacted.make(Redacted.value(apiKey).trim()),
     apiBaseUrl: (yield* getEnv("BOAT_API_BASE_URL")) ?? DEFAULT_API_BASE_URL,
+    ...orgOf(yield* getEnv("BOAT_ORG")),
     source: { type: "env" as const, details: "BOAT_API_KEY" },
   } satisfies BoatResolvedCredentials;
 });
@@ -239,6 +271,7 @@ const resolve = (config: BoatAuthConfig): BoatResolvedCredentials => ({
   type: "apiKey",
   apiKey: Redacted.make(config.apiKey),
   apiBaseUrl: DEFAULT_API_BASE_URL,
+  ...orgOf(config.org),
   source: {
     type: config.method,
     details: config.method === "browser" ? (config.account ?? config.email) : undefined,
@@ -317,7 +350,7 @@ export const BoatAuth = AuthProviderLayer<BoatAuthConfig, BoatResolvedCredential
     // sign-in; a pasted key stays as it is.
     const login = (_profileName: string, config: BoatAuthConfig) =>
       config.method === "browser"
-        ? browserLogin(config.email).pipe(
+        ? browserLogin(config.email, config.org).pipe(
             Effect.mapError((e) =>
               e._tag === "AuthError"
                 ? e
@@ -333,6 +366,7 @@ export const BoatAuth = AuthProviderLayer<BoatAuthConfig, BoatResolvedCredential
             ? [{ key: "account", value: config.account ?? config.email }]
             : []),
           { key: "apiKey", value: displayRedacted(Redacted.make(config.apiKey)) },
+          ...(config.org ? [{ key: "org", value: config.org }] : []),
           { key: "source", value: config.method },
         ],
       });
@@ -370,6 +404,12 @@ export const BoatAuth = AuthProviderLayer<BoatAuthConfig, BoatResolvedCredential
           name: "BOAT_API_BASE_URL",
           required: false,
           description: `Boat API URL override. Defaults to ${DEFAULT_API_BASE_URL}.`,
+        },
+        {
+          name: "BOAT_ORG",
+          required: false,
+          description:
+            "Boat organization (wallet) to bill: an org id (`team_…`), an org name, or `personal`. Defaults to the account's active wallet.",
         },
       ],
     };

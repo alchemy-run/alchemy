@@ -1,4 +1,5 @@
 import * as boat from "@distilled.cloud/boat-dev/boat";
+import { Credentials } from "@distilled.cloud/boat-dev/Credentials";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -156,7 +157,20 @@ const secretFilesOf = (files: EnvironmentProps["secretFiles"]) =>
     contents: reveal(file.contents),
   }));
 
-const listEnvironments = boat.listEnvironments({}).pipe(Effect.map((r) => r.environments));
+/**
+ * The credentials' org, as the `org` query `/environments` routes read.
+ * They ignore `X-Boat-Org`, so the default org the protocol sends on every
+ * other call has to be passed here explicitly.
+ */
+const org = Effect.gen(function* () {
+  const { org } = yield* yield* Credentials;
+  return org ? { org } : {};
+});
+
+const listEnvironments = Effect.gen(function* () {
+  const { environments } = yield* boat.listEnvironments(yield* org);
+  return environments;
+});
 
 const findEnvironment = Effect.fn(function* (match: { environmentId?: string; name: string }) {
   const environments = yield* listEnvironments;
@@ -216,7 +230,7 @@ export const EnvironmentProvider = () =>
           if (environment === undefined) {
             yield* session.note(`Creating environment ${name}...`);
             const created = yield* boat
-              .createEnvironment({ name })
+              .createEnvironment({ name, ...(yield* org) })
               .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
             environment =
               created?.environments.find((candidate) => candidate.name === name) ??
@@ -258,6 +272,7 @@ export const EnvironmentProvider = () =>
             yield* session.note(`Updating environment ${name}...`);
             const updated = yield* boat.updateEnvironment({
               environmentId: environment.id,
+              ...(yield* org),
               ...delta,
               ...(makeDefault ? { isDefault: true } : {}),
             });
@@ -268,7 +283,7 @@ export const EnvironmentProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* boat
-            .deleteEnvironment({ environmentId: output.environmentId })
+            .deleteEnvironment({ environmentId: output.environmentId, ...(yield* org) })
             .pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         list: Effect.fn(function* () {

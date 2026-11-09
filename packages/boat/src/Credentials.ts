@@ -13,15 +13,21 @@ export {
 
 /**
  * Build Boat `Credentials` that resolve through the Alchemy AuthProvider:
- * `BOAT_API_KEY` when set, otherwise the selected profile. Resolution is
+ * `BOAT_API_KEY` (+ `BOAT_ORG`) when set, otherwise the selected profile,
+ * whose `org` every call sends as `X-Boat-Org`; `options.org` overrides
+ * it. Resolution is
  * deferred until the first API call, so building the provider layers never
  * needs a profile.
  */
-export const fromAuthProvider = () =>
+export const fromAuthProvider = (options?: { readonly org?: string }) =>
   Layer.effect(
     Credentials,
-    lazyCredentials<BoatResolvedCredentials, ConfigError>()(BOAT_AUTH_PROVIDER_NAME, (creds) => ({
-      apiKey: creds.apiKey,
-      apiBaseUrl: creds.apiBaseUrl,
-    })),
+    lazyCredentials<BoatResolvedCredentials, ConfigError>()(BOAT_AUTH_PROVIDER_NAME, (creds) => {
+      const org = options?.org ?? creds.org;
+      return {
+        apiKey: creds.apiKey,
+        apiBaseUrl: creds.apiBaseUrl,
+        ...(org ? { org } : {}),
+      };
+    }),
   );
