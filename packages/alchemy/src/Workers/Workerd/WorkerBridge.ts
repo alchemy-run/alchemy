@@ -21,12 +21,13 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import {
   isRpcRequest,
   RPC_REQUEST_METHOD,
+  rpcParentOf,
   RpcUnsupportedVersion,
   SUPPORTED_RPC_VERSIONS,
-  withRpcParent,
 } from "../../Rpc.ts";
 import {
   getWorkerExport,
@@ -116,12 +117,20 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
             new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
           );
         }
+        // The caller's span parents the method outright: any span the
+        // event already has is this callee's own, not one derived from it.
+        const parent = rpcParentOf(envelope.meta);
         return this.event(
           (built) =>
             [
-              dispatchRpcMethod(built.shape(), envelope.method, envelope.args).pipe(
-                withRpcParent(envelope.meta),
-              ),
+              Option.match(parent, {
+                onNone: () => dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                onSome: (span) =>
+                  Effect.withParentSpan(
+                    dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                    span,
+                  ),
+              }),
               Context.empty(),
             ] as const,
           handleRpcExit,
