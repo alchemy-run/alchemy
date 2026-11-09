@@ -537,10 +537,37 @@ export const RPC_PROTOCOL_HEADER = "x-alchemy-rpc";
 export const RPC_ACCEPT_HEADER = "x-alchemy-rpc-accept";
 
 /**
- * A call's metadata: lowercase string keys, string values, carried as headers
- * over HTTP. Unknown keys are ignored by every callee.
+ * A call's metadata: lowercase string keys, string values. Unknown keys are
+ * ignored by every callee. Over HTTP each entry travels as its own
+ * {@link RPC_META_HEADER_PREFIX} header, never a standard one: a proxy on the
+ * path (an ingress that traces requests) may rewrite `traceparent`, but
+ * leaves these alone.
  */
 export type RpcMeta = Readonly<Record<string, string>>;
+
+/** Prefix of the request headers that carry a call's {@link RpcMeta} over HTTP. */
+export const RPC_META_HEADER_PREFIX = "x-alchemy-meta-";
+
+/** The request headers carrying `meta`. */
+export const rpcMetaHeaders = (meta: RpcMeta): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta))
+    headers[`${RPC_META_HEADER_PREFIX}${key}`] = value;
+  return headers;
+};
+
+/** The {@link RpcMeta} a request's headers carry. */
+export const rpcMetaFromHeaders = (
+  headers: Readonly<Record<string, string | undefined>>,
+): RpcMeta => {
+  const meta: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (value !== undefined && name.toLowerCase().startsWith(RPC_META_HEADER_PREFIX)) {
+      meta[name.toLowerCase().slice(RPC_META_HEADER_PREFIX.length)] = value;
+    }
+  }
+  return meta;
+};
 
 /** One call on a transport without headers (Cloudflare native RPC). */
 export interface RpcRequest {
@@ -588,33 +615,52 @@ export const rpcParentOf = (meta: RpcMeta): Option.Option<Tracer.ExternalSpan> =
     : HttpTraceContext.w3c(Headers.fromRecordUnsafe({ traceparent: meta.traceparent }));
 
 /**
- * Run a call's effect as a child of the caller's span from `meta`, unless the
- * callee already has a span of its own (its HTTP server opened one from the
- * same header).
+ * The parent a call's method runs under. A call's own metadata names the
+ * caller's span outright. Without it, a bare `traceparent` header (an older
+ * caller, or plain HTTP) applies only when the callee has no span of its own:
+ * its HTTP server may already have opened one from that same header.
  */
+export interface RpcParent {
+  readonly span: Tracer.ExternalSpan;
+  /** Parent even under a span the callee already has. */
+  readonly force: boolean;
+}
+
+/** The {@link RpcParent} of a call that carries `meta`, falling back to a bare `traceparent`. */
+export const rpcParentFrom = (meta: RpcMeta, traceparent?: string): Option.Option<RpcParent> => {
+  const own = rpcParentOf(meta);
+  if (Option.isSome(own)) return Option.some({ span: own.value, force: true });
+  return Option.map(rpcParentOf(traceparent === undefined ? {} : { traceparent }), (span) => ({
+    span,
+    force: false,
+  }));
+};
+
+/** Run a call's effect under its {@link RpcParent}. */
 export const withRpcParent =
-  (meta: RpcMeta) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.flatMap(Effect.currentParentSpan.pipe(Effect.option), (current) => {
-      if (Option.isSome(current)) return effect;
-      const parent = rpcParentOf(meta);
-      return Option.isSome(parent) ? Effect.withParentSpan(effect, parent.value) : effect;
-    });
+  (parent: Option.Option<RpcParent>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    if (Option.isNone(parent)) return effect;
+    const { span, force } = parent.value;
+    if (force) return Effect.withParentSpan(effect, span);
+    return Effect.flatMap(Effect.currentParentSpan.pipe(Effect.option), (current) =>
+      Option.isSome(current) ? effect : Effect.withParentSpan(effect, span),
+    );
+  };
 
 /** {@link withRpcParent} for a streamed result. */
 export const withRpcParentStream =
-  (meta: RpcMeta) =>
+  (parent: Option.Option<RpcParent>) =>
   <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> => {
-    const parent = rpcParentOf(meta);
-    return Option.isSome(parent)
-      ? Stream.unwrap(
-          Effect.map(Effect.currentParentSpan.pipe(Effect.option), (current) =>
-            Option.isSome(current)
-              ? stream
-              : stream.pipe(Stream.provideService(Tracer.ParentSpan, parent.value)),
-          ),
-        )
-      : stream;
+    if (Option.isNone(parent)) return stream;
+    const { span, force } = parent.value;
+    const parented = stream.pipe(Stream.provideService(Tracer.ParentSpan, span));
+    if (force) return parented;
+    return Stream.unwrap(
+      Effect.map(Effect.currentParentSpan.pipe(Effect.option), (current) =>
+        Option.isSome(current) ? stream : parented,
+      ),
+    );
   };
 
 /**
@@ -793,7 +839,7 @@ export const makeFetchRpcStub = <Shape>(options: {
               `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
             ).pipe(
               HttpClientRequest.setHeaders({
-                ...meta,
+                ...rpcMetaHeaders(meta),
                 [RPC_PROTOCOL_HEADER]: String(RPC_PROTOCOL_VERSION),
               }),
               body,
@@ -912,8 +958,7 @@ export const serveRpc = <Req = never>(
       });
     }
     const args = argsResult.success as unknown[];
-    const meta: Record<string, string> = {};
-    if (headers.traceparent !== undefined) meta.traceparent = headers.traceparent;
+    const parent = rpcParentFrom(rpcMetaFromHeaders(headers), headers.traceparent);
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);
 
@@ -924,8 +969,8 @@ export const serveRpc = <Req = never>(
     const streamResponse = (stream: Stream.Stream<unknown, unknown, unknown>) =>
       HttpServerResponse.stream(
         (cbor
-          ? encodeRpcResponseStreamCbor(stream.pipe(withRpcParentStream(meta)))
-          : encodeRpcResponseStream(stream.pipe(withRpcParentStream(meta)))) as Stream.Stream<
+          ? encodeRpcResponseStreamCbor(stream.pipe(withRpcParentStream(parent)))
+          : encodeRpcResponseStream(stream.pipe(withRpcParentStream(parent)))) as Stream.Stream<
           Uint8Array,
           never
         >,
@@ -965,7 +1010,7 @@ export const serveRpc = <Req = never>(
     }
 
     const result = yield* Effect.result(
-      (invoked as Effect.Effect<unknown, unknown>).pipe(withRpcParent(meta)),
+      (invoked as Effect.Effect<unknown, unknown>).pipe(withRpcParent(parent)),
     );
     if (Result.isSuccess(result)) {
       // The resolved value may itself be a `Stream` (e.g. a forwarded nested

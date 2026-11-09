@@ -26,6 +26,12 @@ export const RPC_ERROR_TAG = "~alchemy/rpc/error";
 /** Same as `alchemy/Rpc.RPC_PROTOCOL_HEADER`. */
 export const RPC_PROTOCOL_HEADER = "x-alchemy-rpc";
 
+/**
+ * The call's own trace context, as `alchemy/Rpc.rpcMetaHeaders` sends it:
+ * proxies may rewrite `traceparent`, but leave this header alone.
+ */
+export const RPC_TRACEPARENT_HEADER = "x-alchemy-meta-traceparent";
+
 /** The protocol versions this runtime speaks; `alchemy/Rpc.SUPPORTED_RPC_VERSIONS`. */
 export const RPC_PROTOCOL_VERSION = 1;
 
@@ -40,19 +46,30 @@ export const currentTraceparent: Effect.Effect<string | undefined> = Effect.gen(
 
 const TRACEPARENT = /^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/;
 
-/** Run `effect` as a child of the caller's span a `traceparent` names. */
-export const withTraceparent =
-  (traceparent: string | undefined) =>
+/**
+ * Run `effect` as a child of the caller's span. The call's own header names it
+ * outright; a bare `traceparent` (an older caller) applies only without a span
+ * of the callee's own.
+ */
+export const withCallerSpan =
+  (own: string | undefined, bare: string | undefined) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
-    const match = traceparent === undefined ? null : TRACEPARENT.exec(traceparent.trim());
-    if (match === null) return effect;
-    const parent = Tracer.externalSpan({
-      traceId: match[1]!,
-      spanId: match[2]!,
-      sampled: (Number.parseInt(match[3]!, 16) & 1) === 1,
-    });
+    const parse = (value: string | undefined) => {
+      const match = value === undefined ? null : TRACEPARENT.exec(value.trim());
+      return match === null
+        ? undefined
+        : Tracer.externalSpan({
+            traceId: match[1]!,
+            spanId: match[2]!,
+            sampled: (Number.parseInt(match[3]!, 16) & 1) === 1,
+          });
+    };
+    const forced = parse(own);
+    if (forced !== undefined) return Effect.withParentSpan(effect, forced);
+    const fallback = parse(bare);
+    if (fallback === undefined) return effect;
     return Effect.flatMap(Effect.currentParentSpan.pipe(Effect.option), (current) =>
-      Option.isSome(current) ? effect : Effect.withParentSpan(effect, parent),
+      Option.isSome(current) ? effect : Effect.withParentSpan(effect, fallback),
     );
   };
 

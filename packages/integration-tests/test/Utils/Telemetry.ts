@@ -187,12 +187,24 @@ export const waitForRpcLink = Effect.fn(function* (collectorUrl: string, tag: st
       times: 20,
     }),
   );
-  const caller = spans.find((s) => s.name === `rpc-caller:${tag}`);
+  // A caller that retried (a cold callee answered 503) has one span per
+  // attempt; the callee's span belongs to the attempt that reached it.
+  const callers = spans.filter((s) => s.name === `rpc-caller:${tag}`);
   const callee = spans.find((s) => s.name === `rpc-callee:${tag}`);
-  return {
-    found: caller !== undefined && callee !== undefined,
-    sameTrace: caller !== undefined && callee?.traceId === caller.traceId,
-    belowCaller:
-      caller !== undefined && callee !== undefined && descendsFrom(spans, callee, caller),
+  const linked = {
+    found: callers.length > 0 && callee !== undefined,
+    sameTrace: callee !== undefined && callers.some((c) => c.traceId === callee.traceId),
+    belowCaller: callee !== undefined && callers.some((c) => descendsFrom(spans, callee, c)),
   };
+  if (!linked.belowCaller) {
+    // Shown when the assertion fails: the spans compared and the callee's parent.
+    yield* Effect.logWarning(
+      `rpc spans not linked: ${JSON.stringify({
+        callers,
+        callee,
+        parent: spans.find((s) => s.spanId === callee?.parentSpanId),
+      })}`,
+    );
+  }
+  return linked;
 });

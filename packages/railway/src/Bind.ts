@@ -13,6 +13,7 @@ import {
   RPC_PROTOCOL_HEADER,
   RPC_PROTOCOL_VERSION,
   RPC_TOKEN_HEADER,
+  RPC_TRACEPARENT_HEADER,
   rpcEnvKeys,
 } from "./rpc-token.ts";
 
@@ -84,7 +85,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
                     "content-type": "application/json",
                     [RPC_TOKEN_HEADER]: token,
                     [RPC_PROTOCOL_HEADER]: String(RPC_PROTOCOL_VERSION),
-                    ...(traceparent === undefined ? {} : { traceparent }),
+                    ...(traceparent === undefined ? {} : { [RPC_TRACEPARENT_HEADER]: traceparent }),
                   },
                   body: JSON.stringify(args),
                   signal: AbortSignal.timeout(25_000),

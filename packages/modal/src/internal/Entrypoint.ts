@@ -13,7 +13,7 @@
  *   arguments as a JSON array and the caller's key (the
  *   `__alchemy_rpc_key__` keyword argument) as `x-alchemy-rpc-key`, and the
  *   call's protocol metadata (the `__alchemy_rpc_meta__` keyword argument:
- *   the caller's `traceparent`) as request headers, and
+ *   the caller's `traceparent`) as `x-alchemy-meta-<key>` headers, and
  *   returns the JSON result (a value, or an
  *   error envelope the caller fails with). A streamed result is read to its
  *   end and returned as its list of values;
@@ -140,7 +140,6 @@ def _post(path, body, headers=None):
 
 
 _META_HEADER = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-_RESERVED_HEADERS = {"content-type", "content-length", "host", "x-alchemy-rpc-key"}
 
 
 def _rpc(name):
@@ -154,14 +153,9 @@ def _rpc(name):
         body = json.dumps(list(args), default=_json_default).encode()
         headers = {"x-alchemy-rpc-key": key} if isinstance(key, str) else {}
         if isinstance(meta, dict):
-            for header, value in meta.items():
-                if (
-                    isinstance(header, str)
-                    and isinstance(value, str)
-                    and _META_HEADER.match(header)
-                    and header not in _RESERVED_HEADERS
-                ):
-                    headers[header] = value
+            for key_name, value in meta.items():
+                if isinstance(key_name, str) and isinstance(value, str) and _META_HEADER.match(key_name):
+                    headers["x-alchemy-meta-" + key_name] = value
         response, data = _post("/__rpc__/" + name, body, headers)
         if response.status >= 400:
             raise RuntimeError(f"RPC method {name} returned {response.status}: {data.decode(errors='replace')}")

@@ -496,18 +496,54 @@ describe("Rpc protocol", { tags: ["unit", "local"] }, () => {
     ),
   );
 
-  it.effect("the callee runs the method in the caller's trace, under the span the call names", () =>
+  it.effect("the callee runs the method as a child of the caller's span", () =>
     withRecordedRpc(methods, (stub, sent) =>
       Effect.gen(function* () {
         const caller = yield* Effect.currentSpan;
         const seen = (yield* stub.parent()) as { traceId: string; spanId: string };
-        // Effect's HttpClient opens a client span under the caller and names
-        // it in `traceparent`; the method's parent is that span.
-        const [, traceId, spanId] = sent[0]!.headers.get("traceparent")!.split("-");
-        expect(traceId).toBe(caller.traceId);
-        expect(seen).toEqual({ traceId: caller.traceId, spanId });
+        expect(seen).toEqual({ traceId: caller.traceId, spanId: caller.spanId });
+        // The call's own header, which proxies leave alone.
+        expect(sent[0]!.headers.get("x-alchemy-meta-traceparent")).toBe(
+          `00-${caller.traceId}-${caller.spanId}-01`,
+        );
       }).pipe(Effect.withSpan("caller")),
     ),
+  );
+
+  it.effect("a proxy rewriting traceparent doesn't move the parent", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/parent",
+        body: "[]",
+        headers: {
+          "content-type": "application/json",
+          "x-alchemy-rpc": "1",
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+          "x-alchemy-meta-traceparent": "00-33333333333333333333333333333333-4444444444444444-01",
+        },
+      });
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        traceId: "33333333333333333333333333333333",
+        spanId: "4444444444444444",
+      });
+    }),
+  );
+
+  it.effect("a caller that predates the protocol is parented by its bare traceparent", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/parent",
+        body: "[]",
+        headers: {
+          "content-type": "application/json",
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+        },
+      });
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        traceId: "11111111111111111111111111111111",
+        spanId: "2222222222222222",
+      });
+    }),
   );
 
   it.effect("a caller that predates the protocol still gets a JSON answer", () =>

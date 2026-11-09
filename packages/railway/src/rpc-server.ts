@@ -12,7 +12,8 @@ import {
   RPC_PROTOCOL_VERSION,
   RPC_TOKEN_ENV,
   RPC_TOKEN_HEADER,
-  withTraceparent,
+  RPC_TRACEPARENT_HEADER,
+  withCallerSpan,
 } from "./rpc-token.ts";
 
 const header = (headers: Record<string, string | undefined>, name: string): string =>
@@ -129,7 +130,10 @@ export const serveRailwayRpc = <Req = never>(
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
     const result = yield* Effect.result(
       (invoked as Effect.Effect<unknown, unknown>).pipe(
-        withTraceparent(header(headers, "traceparent") || undefined),
+        withCallerSpan(
+          header(headers, RPC_TRACEPARENT_HEADER) || undefined,
+          header(headers, "traceparent") || undefined,
+        ),
       ),
     );
     if (Result.isSuccess(result)) {

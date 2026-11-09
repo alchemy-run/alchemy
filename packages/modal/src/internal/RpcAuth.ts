@@ -29,7 +29,7 @@ export const RPC_KEY_KWARG = "__alchemy_rpc_key__";
 /**
  * Keyword argument a Function's RPC call carries its protocol metadata in
  * (`alchemy/Rpc.RpcMeta`: the caller's `traceparent`); the entrypoint forwards
- * each entry as a request header.
+ * each entry as an `x-alchemy-meta-<key>` header, as an HTTP caller sends it.
  */
 export const RPC_META_KWARG = "__alchemy_rpc_meta__";
 
