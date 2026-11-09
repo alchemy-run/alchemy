@@ -1596,8 +1596,8 @@ export const providers = () =>
           Textract.AdapterProvider(),
           flociDual(Transfer.Server, () => Transfer.ServerProvider()),
           flociDual(Transfer.User, () => Transfer.UserProvider()),
-          Translate.ParallelDataProvider(),
-          Translate.TerminologyProvider(),
+          flociDual(Translate.ParallelData, () => Translate.ParallelDataProvider()),
+          flociDual(Translate.Terminology, () => Translate.TerminologyProvider()),
           flociDual(VerifiedPermissions.IdentitySource, () =>
             VerifiedPermissions.IdentitySourceProvider(),
           ),

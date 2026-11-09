@@ -1,0 +1,18 @@
+{
+  "translate": {
+    "Hello, world!": {
+      "TranslateText": {
+        "TranslatedText": "¡Hola, mundo!",
+        "SourceLanguageCode": "en",
+        "TargetLanguageCode": "es"
+      }
+    },
+    "Good morning, friend.": {
+      "TranslateText": {
+        "TranslatedText": "Buenos días, amigo.",
+        "SourceLanguageCode": "en",
+        "TargetLanguageCode": "es"
+      }
+    }
+  }
+}

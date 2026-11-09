@@ -14,8 +14,17 @@ import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
+/**
+ * Where the container reads the AI services' canned answers. Floci's
+ * Translate, Comprehend, Textract and Rekognition run no models; they answer
+ * a request whose text has an entry in this file (`scripts/floci-ai-mocks.json`,
+ * copied in at start) and echo the input otherwise.
+ */
+const AI_MOCK_CONFIG = "/tmp/alchemy-ai-mocks.json";
+
 /** Emulator settings the suites assume, mirroring a real AWS account. */
 export const flociTestEnv: Readonly<Record<string, string>> = {
+  AI_MOCK_CONFIG,
   // Real S3 evaluates IAM; the denied-read suites assert that behavior.
   FLOCI_SERVICES_S3_ENFORCE_AUTH: "true",
   // Every real AWS account has a primary contact.
@@ -70,9 +79,19 @@ export const startFlociForTests = Effect.fn(function* (label: string, image?: st
   }
   // `managed: true` means the container was just started, so the emulator's
   // state is new; a reused one reports `managed: false`.
-  return yield* Floci.ensureFloci({
+  const instance = yield* Floci.ensureFloci({
     port: Floci.DEFAULT_FLOCI_PORT,
     image,
     env: { ...flociTestEnv },
   });
+  // Floci re-reads the file when it changes, so copying it into a running
+  // container takes effect at once.
+  const mocks = new URL("./floci-ai-mocks.json", import.meta.url).pathname;
+  yield* spawner.exitCode(
+    ChildProcess.make("docker", ["cp", mocks, `${name}:${AI_MOCK_CONFIG}`], {
+      stdin: "ignore",
+      stdout: "ignore",
+    }),
+  );
+  return instance;
 });
