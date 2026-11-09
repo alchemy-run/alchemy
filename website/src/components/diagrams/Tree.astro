@@ -233,8 +233,16 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
         const holds = el.contains(a) || el.contains(b);
         // A container the arrow starts or ends inside: its border may be
         // crossed, but not the text of its heading.
-        if (holds && el !== a && el !== b)
-          return [...el.querySelectorAll(":scope > .alc-tree__head > *")].map(rect);
+        if (holds && el !== a && el !== b) {
+          // The heading's words as one block, with room to spare.
+          const words = [...el.querySelectorAll(":scope > .alc-tree__head > *")].map(rect);
+          if (words.length === 0) return [];
+          const pad = 6;
+          return [{
+            l: Math.min(...words.map((w) => w.l)) - pad, r: Math.max(...words.map((w) => w.r)) + pad,
+            t: Math.min(...words.map((w) => w.t)), b: Math.max(...words.map((w) => w.b)),
+          }];
+        }
         return [rect(el)];
       });
 
@@ -304,7 +312,11 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
       pts.slice(1).some(([x2, y2], i) => {
         const [x1, y1] = pts[i]!;
         return lines.some(([[u1, v1], [u2, v2]]) => {
-          if ((y1 === y2) === (v1 === v2)) return false;
+          if ((y1 === y2) === (v1 === v2)) {
+            // Running along the same line counts too.
+            const [p1, p2, q1, q2, c, d] = y1 === y2 ? [x1, x2, u1, u2, y1, v1] : [y1, y2, v1, v2, x1, u1];
+            return Math.abs(c - d) < 3 && Math.min(Math.max(p1, p2), Math.max(q1, q2)) - Math.max(Math.min(p1, p2), Math.min(q1, q2)) > 2;
+          }
           const [hx1, hx2, hy, vx, vy1, vy2] = y1 === y2 ? [x1, x2, y1, u1, v1, v2] : [u1, u2, v1, x1, y1, y2];
           return vx > Math.min(hx1, hx2) + 1 && vx < Math.max(hx1, hx2) - 1 && hy > Math.min(vy1, vy2) + 1 && hy < Math.max(vy1, vy2) - 1;
         });
@@ -320,7 +332,10 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
     // another clear route exists, whichever was listed first.
     for (let pass = 0; pass < 3; pass++)
       for (const p of plans) {
-        const others = plans.filter((q) => q !== p).flatMap((q) => segsOf(q.route));
+        // Arrows from one box, or into one box, may share a trunk.
+        const others = plans
+          .filter((q) => q !== p && q.link.from !== p.link.from && q.link.to !== p.link.to)
+          .flatMap((q) => segsOf(q.route));
         p.route = p.open.find((c) => !cuts(c.pts, others)) ?? p.route;
       }
     const drawn = plans.map(({ link, a, b, route, blocked }) => {
@@ -329,6 +344,8 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
       path.setAttribute("class", link.dashed ? "alc-tree__link alc-tree__link--dashed" : "alc-tree__link");
       path.setAttribute("marker-end", `url(#alc-tree-tip-${id})`);
       if (blocked) path.dataset.blocked = "true";
+      path.dataset.from = link.from;
+      path.dataset.to = link.to;
       svg.append(path);
       return { link, route, a, b };
     });
@@ -357,8 +374,9 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
     const labelled = new Set<string>();
     for (const { link, route, b } of drawn) {
       if (!link.label) continue;
-      // Several arrows into one box with the same label share one label.
-      const key = `${link.to}\u0000${link.label}`;
+      // Arrows that end on the same stub with the same label share one label.
+      const end = route.pts[route.pts.length - 1]!;
+      const key = `${end[0]},${end[1]}\u0000${link.label}`;
       if (labelled.has(key)) continue;
       labelled.add(key);
       const w = link.label.length * 6.3, h = 11;
@@ -372,13 +390,14 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
       }
       for (const [[x1, y1], [x2, y2]] of ordered) {
         if (y1 === y2) {
-          const cuts = boxes.filter((q) => y1 > q.t && y1 < q.b).flatMap((q) => [q.l, q.r]);
+          // Cut where any box near enough to touch the label begins or ends.
+          const cuts = boxes.filter((q) => y1 - h - 8 < q.b && y1 + h + 8 > q.t).flatMap((q) => [q.l, q.r]);
           for (const [lo, hi] of pieces(Math.min(x1, x2), Math.max(x1, x2), cuts)) {
             spots.push({ x: (lo + hi) / 2, y: y1 - 6, anchor: "middle" });
             spots.push({ x: (lo + hi) / 2, y: y1 + 14, anchor: "middle" });
           }
         } else {
-          const cuts = boxes.filter((q) => x1 > q.l && x1 < q.r).flatMap((q) => [q.t, q.b]);
+          const cuts = boxes.filter((q) => x1 - w - 10 < q.r && x1 + w + 10 > q.l).flatMap((q) => [q.t, q.b]);
           for (const [lo, hi] of pieces(Math.min(y1, y2), Math.max(y1, y2), cuts)) {
             spots.push({ x: x1 + 7, y: (lo + hi) / 2 + 4, anchor: "start" });
             spots.push({ x: x1 - 7, y: (lo + hi) / 2 + 4, anchor: "end" });

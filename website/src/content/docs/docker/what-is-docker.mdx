@@ -12,13 +12,23 @@ Take one small setup: Postgres in a container, with its data on a volume, reacha
 
 <Tree
   nodes={[
-    { id: "engine", label: "dockerd", type: "engine · local or ssh://vps", icon: "brand:docker" },
+    {
+      id: "engine", label: "dockerd", type: "engine · local or ssh://vps", icon: "brand:docker", colGap: 3, gutter: true,
+      areas: ["vol net net", "vol pgImage apiImage"],
+      phoneAreas: ["net net", "pgImage apiImage", "vol vol"],
+    },
+    { id: "net", label: "app-network", type: "network", parent: "engine", dashed: true, icon: "network", areas: ["pg api"], phoneAreas: ["pg api"], colGap: 3 },
+    { id: "pg", label: "postgres", type: "container", parent: "net", tone: "accent", icon: "container" },
+    { id: "api", label: "api", type: "container", parent: "net", icon: "container" },
     { id: "pgImage", label: "postgres:18", type: "image", parent: "engine", icon: "package" },
     { id: "apiImage", label: "api", type: "image · built", parent: "engine", icon: "package" },
     { id: "vol", label: "postgres-data", type: "volume", parent: "engine", icon: "hard-drive" },
-    { id: "net", label: "app-network", type: "network", parent: "engine", wide: true, dashed: true, icon: "network" },
-    { id: "pg", label: "postgres", type: "container", parent: "net", tone: "accent", icon: "container", specs: [["runs", "postgres:18"], ["mounts", "postgres-data"]] },
-    { id: "api", label: "api", type: "container", parent: "net", icon: "container", specs: [["runs", "api"], ["calls", "postgres:5432"]] },
+  ]}
+  links={[
+    { from: "api", to: "pg", label: ":5432" },
+    { from: "pg", to: "pgImage", label: "runs" },
+    { from: "api", to: "apiImage", label: "runs" },
+    { from: "pg", to: "vol", label: "mounts" },
   ]}
   caption="A context points Alchemy at an engine, on your machine or a server over SSH. The engine holds images, containers, networks and volumes. Containers run from images, reach each other by name on a shared network, and keep their data on volumes."
 />

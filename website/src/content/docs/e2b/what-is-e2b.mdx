@@ -11,12 +11,21 @@ Take one small app: an `Agent` template with Node.js and git, and a `Warm` snaps
 
 <Tree
   nodes={[
-    { id: "team", label: "acme", type: "team", icon: "brand:e2b" },
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:e2b", colGap: 4.5,
+      areas: ["agent warm sandbox", "github home sandbox"],
+      phoneAreas: ["agent github", "warm home", "sandbox sandbox"],
+    },
     { id: "agent", label: "Agent", type: "template", parent: "team", icon: "package" },
-    { id: "warm", label: "Warm", type: "snapshot of Agent", parent: "team", icon: "camera" },
-    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", wide: true, tone: "accent", icon: "box", specs: [["boots", "Warm"], ["/home/user", "home-42"]] },
-    { id: "home", label: "home-42", type: "volume", parent: "team", side: true, icon: "hard-drive" },
-    { id: "github", label: "GitHubToken", type: "secret", parent: "team", side: true, icon: "key-round" },
+    { id: "warm", label: "Warm", type: "snapshot", parent: "team", icon: "camera" },
+    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", tone: "accent", icon: "box" },
+    { id: "github", label: "GitHubToken", type: "secret", parent: "team", icon: "key-round" },
+    { id: "home", label: "home-42", type: "volume", parent: "team", icon: "hard-drive" },
+  ]}
+  links={[
+    { from: "agent", to: "warm", label: "snapshot" },
+    { from: "warm", to: "sandbox", label: "boots" },
+    { from: "home", to: "sandbox", label: "/home/user" },
   ]}
   caption="Everything belongs to the team acme. The sandbox boots from the Warm snapshot of the Agent template, with the home-42 volume mounted at /home/user. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
 />

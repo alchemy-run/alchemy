@@ -13,12 +13,20 @@ Take one small app: a Worker gives each user a sandbox, booted from the `Base` s
 
 <Tree
   nodes={[
-    { id: "org", label: "acme", type: "organization", icon: "brand:daytona" },
-    { id: "region", label: "us", type: "region", parent: "org", dashed: true, icon: "map-pin" },
-    { id: "sam", label: "user-sam", type: "sandbox", parent: "region", tone: "accent", icon: "box", specs: [["from", "Base"], ["mounts", "home-sam"]] },
-    { id: "ana", label: "user-ana", type: "sandbox", parent: "region", icon: "box", specs: [["from", "Base"]] },
-    { id: "base", label: "Base", type: "snapshot", parent: "org", side: true, icon: "camera" },
-    { id: "home", label: "home-sam", type: "volume", parent: "org", side: true, icon: "hard-drive" },
+    {
+      id: "org", label: "acme", type: "organization", icon: "brand:daytona", colGap: 3, gutter: true,
+      areas: ["base region home"],
+    },
+    { id: "base", label: "Base", type: "snapshot", parent: "org", icon: "camera" },
+    { id: "region", label: "us", type: "region", parent: "org", dashed: true, icon: "map-pin", areas: ["sam", "ana"], phoneAreas: ["sam ana"] },
+    { id: "sam", label: "user-sam", type: "sandbox", parent: "region", tone: "accent", icon: "box" },
+    { id: "ana", label: "user-ana", type: "sandbox", parent: "region", icon: "box" },
+    { id: "home", label: "home-sam", type: "volume", parent: "org", icon: "hard-drive" },
+  ]}
+  links={[
+    { from: "base", to: "sam", label: "from" },
+    { from: "base", to: "ana", label: "from" },
+    { from: "sam", to: "home", label: "mounts" },
   ]}
   caption="The organization holds its snapshots and volumes, and runs its sandboxes in a region. Each sandbox starts from a snapshot and can mount a volume. A Worker outside Daytona creates and drives the sandboxes through Daytona's API with its own key."
 />
