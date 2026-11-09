@@ -13,13 +13,17 @@ Take one small app: an API service with a Postgres database and a Volume, in one
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace", icon: "brand:railway" },
-    { id: "project", label: "Site", type: "project", parent: "ws", wide: true, dashed: true, icon: "folder" },
-    { id: "prod", label: "production", type: "environment", parent: "project", dashed: true, icon: "layers" },
-    { id: "api", label: "Api", type: "service · public URL", parent: "prod", tone: "accent", icon: "server", specs: [["reaches", "Postgres, privately"]] },
+    { id: "project", label: "Site", type: "project", parent: "ws", dashed: true, icon: "folder" },
+    { id: "prod", label: "production", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api pg"], colGap: 4 },
+    { id: "api", label: "Api", type: "service · public URL", parent: "prod", tone: "accent", icon: "server" },
     { id: "pg", label: "Postgres", type: "service · volume", parent: "prod", icon: "database" },
-    { id: "staging", label: "staging", type: "environment", parent: "project", dashed: true, icon: "layers" },
-    { id: "api2", label: "Api", type: "service", parent: "staging", icon: "server", specs: [["reaches", "Postgres, privately"]] },
+    { id: "staging", label: "staging", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api2 pg2"], colGap: 4 },
+    { id: "api2", label: "Api", type: "service", parent: "staging", icon: "server" },
     { id: "pg2", label: "Postgres", type: "service · volume", parent: "staging", icon: "database" },
+  ]}
+  links={[
+    { from: "api", to: "pg", label: "privately" },
+    { from: "api2", to: "pg2", label: "privately" },
   ]}
   caption="A workspace holds projects, and an API token deploys into one workspace. Each environment is a full copy of the project's services, with its own variables, data and private network."
 />

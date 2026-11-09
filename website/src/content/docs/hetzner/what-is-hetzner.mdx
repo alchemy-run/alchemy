@@ -12,13 +12,22 @@ Take one small app: an API running on a Server, keeping its data on a Volume, be
 
 <Tree
   nodes={[
-    { id: "project", label: "my-app", type: "project", icon: "brand:hetzner" },
-    { id: "fw", label: "Web", type: "firewall", parent: "project", side: true, icon: "shield", specs: [["applies to", "Box"]] },
-    { id: "zone", label: "example.com", type: "DNS zone", parent: "project", side: true, dashed: true, icon: "globe" },
-    { id: "record", label: "api", type: "A record", parent: "zone", icon: "link", specs: [["points at", "Box"]] },
-    { id: "location", label: "nbg1", type: "location · Nuremberg", parent: "project", dashed: true, icon: "map-pin" },
-    { id: "server", label: "Box", type: "server · cx22", parent: "location", wide: true, tone: "accent", icon: "server", specs: [["attached", "Data"]] },
+    {
+      id: "project", label: "my-app", type: "project", icon: "brand:hetzner", colGap: 4, gutter: true,
+      areas: ["fw location zone"],
+      phoneAreas: ["fw zone", "location location"],
+    },
+    { id: "fw", label: "Web", type: "firewall", parent: "project", icon: "shield" },
+    { id: "location", label: "nbg1", type: "location · Nuremberg", parent: "project", dashed: true, icon: "map-pin", areas: ["server", "vol"] },
+    { id: "server", label: "Box", type: "server · cx22", parent: "location", tone: "accent", icon: "server" },
     { id: "vol", label: "Data", type: "volume", parent: "location", icon: "hard-drive" },
+    { id: "zone", label: "example.com", type: "DNS zone", parent: "project", dashed: true, icon: "globe" },
+    { id: "record", label: "api", type: "A record", parent: "zone", icon: "link" },
+  ]}
+  links={[
+    { from: "fw", to: "server", label: "applies" },
+    { from: "record", to: "server", label: "points at" },
+    { from: "vol", to: "server", label: "attached" },
   ]}
   caption="An API token reaches one project. A server and its volumes sit in one location. Firewalls and DNS zones belong to the project and apply anywhere in it."
 />

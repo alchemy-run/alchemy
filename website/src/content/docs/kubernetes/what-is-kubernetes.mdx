@@ -13,12 +13,20 @@ Take one small app: a web server with two replicas behind a Service, and a night
 <Tree
   nodes={[
     { id: "cluster", label: "cluster", type: "control plane + nodes", icon: "brand:kubernetes" },
-    { id: "api", label: "API server", type: "stores what you apply", parent: "cluster", wide: true, tone: "accent", icon: "server" },
-    { id: "ns", label: "app", type: "namespace", parent: "cluster", wide: true, dashed: true, icon: "folder" },
-    { id: "deploy", label: "web", type: "Deployment", parent: "ns", icon: "layers", specs: [["creates", "Pods × 2"]] },
+    { id: "api", label: "API server", type: "stores what you apply", parent: "cluster", tone: "accent", icon: "server" },
+    {
+      id: "ns", label: "app", type: "namespace", parent: "cluster", dashed: true, icon: "folder", colGap: 3.5,
+      areas: ["deploy pods svc", "cron cron cron"],
+      phoneAreas: ["deploy svc", "pods pods", "cron cron"],
+    },
+    { id: "deploy", label: "web", type: "Deployment", parent: "ns", icon: "layers" },
     { id: "pods", label: "web-…", type: "Pods × 2", parent: "ns", icon: "boxes" },
-    { id: "svc", label: "web", type: "Service", parent: "ns", icon: "network", specs: [["selects", "web Pods"]] },
+    { id: "svc", label: "web", type: "Service", parent: "ns", icon: "network" },
     { id: "cron", label: "nightly", type: "CronJob", parent: "ns", icon: "clock", specs: [["on schedule", "Job · Pod"]] },
+  ]}
+  links={[
+    { from: "deploy", to: "pods", label: "creates" },
+    { from: "svc", to: "pods", label: "selects" },
   ]}
   caption="Alchemy applies objects to the API server, which stores them, and the cluster keeps running what they describe. Objects live in a namespace, and Pods run on the cluster's nodes."
 />

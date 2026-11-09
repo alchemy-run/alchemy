@@ -15,15 +15,21 @@ Take one small app: an upload service with a database, a bucket and a Function, 
 <Tree
   nodes={[
     { id: "org", label: "acme", type: "organization", icon: "brand:neon" },
-    { id: "project", label: "app-db", type: "project · aws-us-east-1", parent: "org", wide: true, dashed: true, icon: "folder" },
-    { id: "main", label: "main", type: "branch", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "project", label: "app-db", type: "project · aws-us-east-1", parent: "org", dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch", parent: "project", dashed: true, icon: "git-branch", areas: ["compute fn bucket"], phoneAreas: ["fn fn", "compute bucket"], colGap: 3.5 },
+    { id: "fn", label: "Api", type: "Function", parent: "main", tone: "accent", icon: "square-function" },
     { id: "compute", label: "compute", type: "Postgres · autoscales", parent: "main", icon: "database" },
-    { id: "fn", label: "Api", type: "Function", parent: "main", tone: "accent", icon: "square-function", specs: [["SQL", "compute"], ["S3 API", "Uploads"]] },
     { id: "bucket", label: "Uploads", type: "Bucket", parent: "main", icon: "archive" },
-    { id: "pr", label: "pr-42", type: "branch · copy of main", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "pr", label: "pr-42", type: "branch · copy of main", parent: "project", dashed: true, icon: "git-branch", areas: ["compute2 fn2 bucket2"], phoneAreas: ["fn2 fn2", "compute2 bucket2"], colGap: 3.5 },
+    { id: "fn2", label: "Api", type: "Function", parent: "pr", icon: "square-function" },
     { id: "compute2", label: "compute", type: "suspends when idle", parent: "pr", icon: "database" },
-    { id: "fn2", label: "Api", type: "Function", parent: "pr", icon: "square-function", specs: [["SQL", "compute"], ["S3 API", "Uploads"]] },
     { id: "bucket2", label: "Uploads", type: "Bucket", parent: "pr", icon: "archive" },
+  ]}
+  links={[
+    { from: "fn", to: "compute", label: "SQL" },
+    { from: "fn", to: "bucket", label: "S3 API" },
+    { from: "fn2", to: "compute2", label: "SQL" },
+    { from: "fn2", to: "bucket2", label: "S3 API" },
   ]}
   caption="A project is one Postgres deployment in one region. Each branch has its own compute, Functions and Buckets, and a new branch starts as a copy of its parent."
 />

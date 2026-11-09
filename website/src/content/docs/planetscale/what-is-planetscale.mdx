@@ -13,13 +13,14 @@ Take one small app: a Postgres database with a production branch, a branch per p
 <Tree
   nodes={[
     { id: "org", label: "acme", type: "organization", icon: "brand:planetscale" },
-    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", wide: true, dashed: true, icon: "database" },
-    { id: "main", label: "main", type: "branch · production", parent: "db", dashed: true, icon: "git-branch" },
+    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", dashed: true, icon: "database" },
+    { id: "main", label: "main", type: "branch · production", parent: "db", dashed: true, icon: "git-branch", areas: ["primary replicas"], colGap: 3.5 },
     { id: "primary", label: "primary", type: "read · write", parent: "main", tone: "accent", icon: "server", specs: [["role", "prod stage"]] },
-    { id: "replicas", label: "replicas", type: "read-only", parent: "main", icon: "copy", specs: [["from", "primary"]] },
+    { id: "replicas", label: "replicas", type: "read-only", parent: "main", icon: "copy" },
     { id: "pr", label: "pr-42", type: "branch · development", parent: "db", dashed: true, icon: "git-branch" },
     { id: "dev", label: "primary", type: "development size", parent: "pr", icon: "server", specs: [["role", "pr-42 stage"]] },
   ]}
+  links={[{ from: "primary", to: "replicas", label: "copies" }]}
   caption="An organization holds databases, each in one region. A database holds branches, and each branch is its own cluster: production with replicas, development as one small node. Each stage connects through a role on its branch."
 />
 

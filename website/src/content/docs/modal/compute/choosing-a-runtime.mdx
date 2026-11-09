@@ -157,10 +157,20 @@ A Worker creates a sandbox per user and calls a GPU Function, and both read mode
 
 <Tree
   nodes={[
-    { id: "env", label: "Agents", type: "environment", icon: "brand:modal" },
-    { id: "weights", label: "Weights", type: "Volume", parent: "env", wide: true, tone: "accent", icon: "hard-drive" },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box", specs: [["mounts", "Weights"], ["Api", "creates it"]] },
-    { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function", specs: [["mounts", "Weights"], ["Api", "calls embed()"]] },
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    { id: "env", label: "Agents", type: "environment", icon: "brand:modal", areas: ["sbx weights", "embed weights"], phoneAreas: ["sbx embed", "weights weights"], colGap: 3.5 },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box" },
+    { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "env", tone: "accent", icon: "hard-drive" },
+  ]}
+  areas={["api env"]}
+  colGap={3.5}
+  gutter
+  links={[
+    { from: "api", to: "sbx", label: "creates" },
+    { from: "api", to: "embed", label: "calls" },
+    { from: "sbx", to: "weights", label: "mounts" },
+    { from: "embed", to: "weights", label: "mounts" },
   ]}
   caption="The Worker, Api, runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
 />

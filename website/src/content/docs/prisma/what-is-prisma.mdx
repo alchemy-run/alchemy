@@ -13,13 +13,17 @@ Take one small app: an API on Compute with a Postgres database, and a branch per
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace", icon: "brand:prisma" },
-    { id: "project", label: "app", type: "project · us-east-1", parent: "ws", wide: true, dashed: true, icon: "folder" },
-    { id: "main", label: "main", type: "branch · production", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "project", label: "app", type: "project · us-east-1", parent: "ws", dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch · production", parent: "project", dashed: true, icon: "git-branch", areas: ["app db"], colGap: 5.5 },
+    { id: "app", label: "api", type: "Compute app", parent: "main", tone: "accent", icon: "server" },
     { id: "db", label: "db", type: "Prisma Postgres", parent: "main", icon: "database" },
-    { id: "app", label: "api", type: "Compute app", parent: "main", tone: "accent", icon: "server", specs: [["DATABASE_URL", "db"]] },
-    { id: "pr", label: "pr-42", type: "branch · preview", parent: "project", dashed: true, icon: "git-branch" },
+    { id: "pr", label: "pr-42", type: "branch · preview", parent: "project", dashed: true, icon: "git-branch", areas: ["app2 db2"], colGap: 5.5 },
+    { id: "app2", label: "api", type: "Compute app", parent: "pr", icon: "server" },
     { id: "db2", label: "db", type: "Prisma Postgres", parent: "pr", icon: "database" },
-    { id: "app2", label: "api", type: "Compute app", parent: "pr", icon: "server", specs: [["DATABASE_URL", "db"]] },
+  ]}
+  links={[
+    { from: "app", to: "db", label: "DATABASE_URL" },
+    { from: "app2", to: "db2", label: "DATABASE_URL" },
   ]}
   caption="A workspace holds projects, and a service token deploys into one workspace. Each branch of a project groups a database and the apps that use it. The first branch is production, the rest are previews."
 />

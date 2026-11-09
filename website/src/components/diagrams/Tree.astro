@@ -473,9 +473,11 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
     min-width: 0;
   }
   /* A placed leaf's name and type stay on one line; the columns size to them. */
-  .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__label,
-  .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__type {
-    white-space: nowrap;
+  @media (min-width: 40.0625rem) {
+    .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__label,
+    .alc-tree__kids--grid > .alc-tree__leaf > .alc-tree__type {
+      white-space: nowrap;
+    }
   }
   @media (max-width: 40rem) {
     .alc-tree__kids.alc-tree__kids--grid {

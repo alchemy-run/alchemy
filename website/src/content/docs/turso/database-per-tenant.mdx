@@ -23,12 +23,15 @@ Your own Turso API token stays on your machine.
 
 <Tree
   nodes={[
+    { id: "w", label: "Api", type: "Worker", specs: [["API token", "create, delete"], ["DB token", "SQL on every one"]] },
     { id: "g", label: "Tenants", type: "group" },
     { id: "a", label: "acme", type: "database", parent: "g", tone: "accent" },
     { id: "b", label: "globex", type: "database", parent: "g", tone: "accent" },
     { id: "c", label: "initech", type: "created at sign-up", parent: "g", tone: "muted" },
-    { id: "w", label: "Api", type: "Worker", parent: "g", side: true, specs: [["API token", "create, delete in Tenants"], ["DB token", "SQL on every database"]] },
   ]}
+  areas={["w g"]}
+  colGap={3}
+  links={[{ from: "w", to: "g" }]}
   caption="Each customer gets a database of its own in the Tenants group. The Worker creates and deletes them with an API token limited to the group, and queries them with one database token."
 />
 

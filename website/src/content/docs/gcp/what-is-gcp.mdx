@@ -11,13 +11,23 @@ Take one small app: a Cloud Run service that stores links in Firestore and publi
 
 <Tree
   nodes={[
-    { id: "project", label: "my-app-prod", type: "project", icon: "brand:gcp" },
-    { id: "sa", label: "alch-api-…", type: "service account", parent: "project", side: true, icon: "id-card" },
-    { id: "topic", label: "Events", type: "Pub/Sub topic", parent: "project", side: true, icon: "radio-tower" },
-    { id: "region", label: "us-central1", type: "region", parent: "project", dashed: true, icon: "map-pin" },
-    { id: "api", label: "Api", type: "Cloud Run service", parent: "region", wide: true, tone: "accent", icon: "server", specs: [["runs as", "alch-api-…"], ["datastore.user", "Links"], ["pubsub.publisher", "Events"]] },
+    {
+      id: "project", label: "my-app-prod", type: "project", icon: "brand:gcp", colGap: 4, gutter: true,
+      areas: ["sa region topic"],
+      phoneAreas: ["sa sa", "region region", "topic topic"],
+    },
+    { id: "sa", label: "alch-api-…", type: "service account", parent: "project", icon: "id-card" },
+    { id: "region", label: "us-central1", type: "region", parent: "project", dashed: true, icon: "map-pin", areas: ["api", "db", "worker"] },
+    { id: "api", label: "Api", type: "Cloud Run service", parent: "region", tone: "accent", icon: "server" },
     { id: "db", label: "Links", type: "Firestore database", parent: "region", icon: "database" },
-    { id: "worker", label: "Worker", type: "Cloud Run worker pool", parent: "region", icon: "cog", specs: [["pulls", "Events"]] },
+    { id: "worker", label: "Worker", type: "Cloud Run worker pool", parent: "region", icon: "cog" },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", parent: "project", icon: "radio-tower" },
+  ]}
+  links={[
+    { from: "api", to: "sa", label: "runs as" },
+    { from: "api", to: "db", label: "writes" },
+    { from: "api", to: "topic", label: "publishes" },
+    { from: "worker", to: "topic", label: "pulls" },
   ]}
   caption="Service accounts and Pub/Sub topics belong to the project and work in every region. The service, the database and the worker live in one region. Api runs as its service account, which holds a role on Links and Events; Worker pulls the messages Api publishes."
 />

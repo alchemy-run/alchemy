@@ -14,14 +14,22 @@ Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm
 <Tree
   nodes={[
     { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
-    { id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder" },
-    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window" },
+    {
+      id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 4.5,
+      areas: ["home coder", "openai inference"],
+      phoneAreas: ["home openai", "coder coder", "inference inference"],
+    },
+    { id: "home", label: "home-sam", type: "Volume", parent: "env", icon: "hard-drive" },
+    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", icon: "key-round" },
+    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window", areas: ["sbx warm"], phoneAreas: ["sbx warm"], colGap: 3 },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
     { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box", specs: [["image", "Warm"], ["mount", "/home/user"]] },
     { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
     { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
-    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true, icon: "hard-drive" },
-    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true, icon: "key-round" },
+  ]}
+  links={[
+    { from: "warm", to: "sbx", label: "boots" },
+    { from: "home", to: "sbx", label: "/home/user" },
   ]}
   caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. The Volume and the Secret belong to the environment, so any app in it can use them."
 />
