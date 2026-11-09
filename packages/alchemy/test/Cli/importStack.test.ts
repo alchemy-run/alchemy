@@ -181,7 +181,7 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
       /^Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
     );
     expect(failures[1]).toMatch(
-      /^Could not load auth providers from '.+missing\.run\.ts': \w+.*Cannot find (package|module) 'alchemy-test-missing-package'/,
+      /^Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
     );
   });
 

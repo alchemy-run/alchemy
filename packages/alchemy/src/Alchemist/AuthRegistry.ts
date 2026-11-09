@@ -78,19 +78,29 @@ const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
 );
 
-const describeFailure = (error: unknown): string => {
+/**
+ * Renders an error's `cause` chain on one line. Duck-typed rather than
+ * `instanceof Error`: Bun's `ResolveMessage` and `BuildMessage`, which a
+ * failed import throws, are not `Error` instances.
+ */
+const describeCauseChain = (error: unknown): string => {
   const reasons: string[] = [];
-  for (let current = error, depth = 0; current != null && depth < 8; depth++) {
-    if (!(current instanceof Error)) {
+  let current = error;
+  for (let depth = 0; current != null && depth < 8; depth++) {
+    if (!Predicate.hasProperty(current, "message") || typeof current.message !== "string") {
       reasons.push(typeof current === "string" ? current : Formatter.format(current));
       break;
     }
+    const name =
+      Predicate.hasProperty(current, "name") && typeof current.name === "string"
+        ? current.name
+        : "Error";
     const code =
       Predicate.hasProperty(current, "code") && typeof current.code === "string"
         ? ` [${current.code}]`
         : "";
-    reasons.push(`${current.name}${code}: ${current.message}`);
-    current = current.cause;
+    reasons.push(`${name}${code}: ${current.message}`);
+    current = Predicate.hasProperty(current, "cause") ? current.cause : undefined;
   }
   return reasons.join("; caused by ");
 };
@@ -138,7 +148,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
             ? Effect.void
             : Effect.fail(
                 AuthError.make({
-                  message: `Could not load auth providers from '${options.main}': ${cause.pipe(Cause.squash, describeFailure)}`,
+                  message: `Could not load auth providers from '${options.main}': ${cause.pipe(Cause.squash, describeCauseChain)}`,
                   cause,
                 }),
               );
