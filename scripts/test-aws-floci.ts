@@ -134,12 +134,7 @@ const flociFixedValues: Record<string, string> = {
  * (registered without `flociDual` in Providers.ts). This runner points every
  * AWS client at the emulator, so they cannot reach the AWS service they test.
  */
-const liveOnlySuites = new Set([
-  // Floci does not emulate Lambda Web Functions.
-  "Lambda/WebFunction.test.ts",
-  "Lambda/WebFunctionEndpoint.test.ts",
-  "Lambda/WebFunctionPermission.test.ts",
-]);
+const liveOnlySuites = new Set<string>([]);
 
 /** alchemy-test flags whose next argument is their value. */
 const flagsWithValue = new Set([

@@ -149,6 +149,17 @@ if (first.cursor) {
 }
 ```
 
+To read past one page, stream it. `entries` follows each cursor to the last page and yields every entry in order; `pages` yields the pages themselves. Both fetch a page only when the stream needs it, so `Stream.take` stops early:
+
+```typescript
+const latest = yield* bank.AccountLedger.entries({ account: accountId }, { take: 100 }).pipe(
+  Stream.take(10),
+  Stream.runCollect,
+);
+```
+
+`after` starts the stream mid-way, and `atLeast` waits before the first page.
+
 The cursor means nothing to the framework: the store chooses it. Page on the store's sort key (keyset paging), so a row written between two pages is neither skipped nor repeated. The bank's ledger sorts by time, then id:
 
 ```typescript title="packages/server/src/Ledger/D1LedgerStore.ts"

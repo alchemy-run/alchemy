@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -20,7 +21,7 @@ import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
-import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
+import type { BindingHooks, RuntimeWorker, WorkerdEvent } from "./RuntimeWorker.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
@@ -219,6 +220,34 @@ export const RuntimeLive = Layer.effect(
           ...config.sockets,
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        // Logs a failed callback outside any fiber, so a callback that never
+        // settles holds nothing open.
+        const services = yield* Effect.context<never>();
+        /**
+         * Reports an event to the host. Events are side effects: recovery
+         * never waits for the callback, and a callback that throws or
+         * rejects is logged instead of ending crash recovery.
+         */
+        const emit = (event: WorkerdEvent) => {
+          const failed = (cause: unknown) =>
+            Effect.logWarning(
+              `The onEvent callback for "${worker.name}" failed on ${event.type}.`,
+              cause,
+            );
+          return Effect.try(() => {
+            const result = worker.onEvent?.(event);
+            // Handle a rejection in the same tick the promise is returned:
+            // Node reports one nobody has handled by then as unhandled.
+            if (Predicate.isPromiseLike(result)) {
+              Promise.resolve(result).then(undefined, (cause: unknown) => {
+                Effect.runForkWith(services)(failed(cause));
+              });
+            }
+          }).pipe(Effect.catch((error) => failed(error.cause)));
+        };
+        // The PID of the process being started, reported with `Started` once
+        // its plugins are up too.
+        let pid = 0;
         /**
          * Serves the Worker. `pinned` reuses the ports of a previous process,
          * so a replacement is reachable through the same URL, proxy target
@@ -269,13 +298,21 @@ export const RuntimeLive = Layer.effect(
               bin: worker.workerd?.path,
               env: worker.workerd?.env,
               onOutput: worker.logging?.onOutput,
+              onStarted: (started) => {
+                pid = started;
+              },
               onExit: (exit) => {
                 Queue.offerUnsafe(exits, exit);
               },
             },
           );
         const parentScope = yield* Effect.scope;
-        let processScope = yield* Scope.fork(parentScope);
+        // Every process generation lives in this scope, forked before the
+        // recovery fiber below. Closing the runtime then interrupts recovery
+        // before it kills a replacement that is still starting, which would
+        // otherwise report as a failed restart.
+        const generations = yield* Scope.fork(parentScope);
+        let processScope = yield* Scope.fork(generations);
         const startProcess = (pinned?: Workerd.WorkerdPorts) =>
           serveWorker(pinned).pipe(
             Effect.tap((ports) => context.start(ports)),
@@ -285,6 +322,8 @@ export const RuntimeLive = Layer.effect(
             ),
           );
         const ports = yield* startProcess();
+        let generation = 0;
+        yield* emit({ type: "workerd.process.started", pid, generation });
         // A process that dies after startup (V8 aborting on heap exhaustion
         // is the common case) is replaced on the same ports. Without this
         // every request fails until the whole dev session is restarted.
@@ -292,6 +331,7 @@ export const RuntimeLive = Layer.effect(
           let restartTimes: Array<number> = [];
           while (true) {
             const exit = yield* Queue.take(exits);
+            yield* emit({ type: "workerd.process.exited", exit });
             // Release the old process, output listeners and plugin tasks before
             // starting another generation. Closing also detaches this child
             // scope from the parent, so repeated crashes do not retain it.
@@ -302,22 +342,34 @@ export const RuntimeLive = Layer.effect(
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
               );
+              yield* emit({ type: "workerd.recovery.stopped", reason: "restart-limit" });
               return;
             }
             restartTimes.push(now);
-            yield* Effect.sleep(250 * 2 ** (restartTimes.length - 1));
+            const delayMs = 250 * 2 ** (restartTimes.length - 1);
+            yield* emit({
+              type: "workerd.restart.scheduled",
+              attempt: restartTimes.length,
+              delayMs,
+            });
+            yield* Effect.sleep(delayMs);
             yield* Effect.logWarning(
               `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
             );
-            processScope = yield* Scope.fork(parentScope);
+            processScope = yield* Scope.fork(generations);
             const restarted = yield* startProcess(ports).pipe(Effect.result);
             if (Result.isFailure(restarted)) {
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
               );
+              yield* emit({
+                type: "workerd.recovery.stopped",
+                reason: "restart-failed",
+                error: restarted.failure,
+              });
               return;
             }
-            worker.onRestart?.(exit);
+            yield* emit({ type: "workerd.process.started", pid, generation: ++generation });
           }
         }).pipe(Effect.forkScoped);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);

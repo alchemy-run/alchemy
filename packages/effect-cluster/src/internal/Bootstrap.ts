@@ -44,11 +44,11 @@ import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
+import { RunnerHost } from "../Host.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
-import { RunnerHost } from "./RunnerHost.ts";
 
 const env = (name: string) => process.env[name];
 

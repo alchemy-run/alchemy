@@ -109,6 +109,13 @@ export interface Ports {
    * Note that this is best-effort; the caller should include retry logic to handle race conditions.
    */
   readonly reserve: (port: number) => Effect.Effect<void>;
+  /**
+   * Drops this allocator's reservation of a port once its holder has closed
+   * its listeners, so a restart in the same process can take the port
+   * again right away instead of waiting out the reservation. A reservation
+   * another allocator holds is left alone.
+   */
+  readonly release: (port: number) => Effect.Effect<void>;
 }
 
 const HOSTS: Set<string> = new Set([
@@ -157,9 +164,13 @@ const RESERVATION_TTL_MS = 30_000;
 const WAIT_FOR_INTERVAL = "250 millis";
 const WAIT_FOR_ATTEMPTS = 12;
 const globalSearchLock = Semaphore.makeUnsafe(1);
-const globalReservations = new Map<number, number>();
+/** One reservation; its identity tells the allocator that made it apart. */
+interface Reservation {
+  readonly expiry: number;
+}
+const globalReservations = new Map<number, Reservation>();
 const isReserved = (port: number) => {
-  const expiry = globalReservations.get(port);
+  const expiry = globalReservations.get(port)?.expiry;
   if (expiry === undefined) return false;
   if (expiry <= Date.now()) {
     globalReservations.delete(port);
@@ -246,12 +257,17 @@ export const make = (options: PortsOptions) =>
       },
     );
     const reserveLocal = (port: number) => Cache.set(cache, port, false);
+    // The reservations this allocator made, so `release` never drops one
+    // another allocator made (e.g. after this one's expired).
+    const owned = new Map<number, Reservation>();
     const reserve = (port: number) =>
       Effect.sync(() => {
         // Expiry is checked against `Date.now()` in the sync `isReserved`:
         // the process-wide map must use one real clock, not the fiber's.
         // oxlint-disable-next-line effecttsgo/global-date-in-effect -- shares a real-time map with sync code
-        globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
+        const reservation = { expiry: Date.now() + RESERVATION_TTL_MS };
+        globalReservations.set(port, reservation);
+        owned.set(port, reservation);
       }).pipe(Effect.andThen(reserveLocal(port)));
     // Serializes the search loop so that concurrent lookups for the same
     // starting port each reserve a distinct port. Without this, concurrent
@@ -325,5 +341,13 @@ export const make = (options: PortsOptions) =>
               ),
         ),
       reserve,
+      release: (port) =>
+        Effect.sync(() => {
+          const reservation = owned.get(port);
+          owned.delete(port);
+          if (reservation !== undefined && globalReservations.get(port) === reservation) {
+            globalReservations.delete(port);
+          }
+        }).pipe(Effect.andThen(Cache.invalidate(cache, port))),
     } as Ports;
   });

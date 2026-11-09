@@ -126,11 +126,16 @@ export { DomainNameResource as DomainName };
 const redactedValue = (value: Redacted.Redacted<string> | undefined) =>
   value === undefined ? undefined : Redacted.value(value);
 
-const retryDomainNameMutation = Effect.retry({
-  while: (e: any) => e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
-  schedule: Schedule.spaced("1 second"),
-  times: 8,
-});
+const retryDomainNameMutation = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
 
 /**
  * The settings `read` and `reconcile` both report, so a converged domain

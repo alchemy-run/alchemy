@@ -1,16 +1,13 @@
 # Archil Sandbox
 
-Two programs, each in its own `Archil.Sandbox`:
+Set up a sandbox at deploy time, and fork it while the app runs.
 
-- `src/Api.ts`: an Effect program that stores files on an `Archil.Disk`
-  through `Archil.ReadWriteDisk` (`PUT /:key`, `GET /:key`).
-- `src/hello.ts`: an async program, a plain `fetch(request, env)` handler
-  typed with `Archil.InferEnv`.
+- `src/Golden.ts`: an `Archil.Sandbox` whose `run` commands clone repositories onto its disk at deploy.
+- `src/Api.ts`: a program in its own `Archil.Sandbox`, bound to `Archil.CreateSandbox(Golden)`. `POST /run` runs a command in a fresh fork, deleted when the request ends. `/users/:user/...` gives each user a fork of their own.
 
 ```sh
 alchemy profile edit --profile default --add Archil
 bun run deploy
-curl -X PUT --data "hi" "$URL/hello.txt"
-curl "$URL/hello.txt"
+curl -X POST --data "ls" "$URL/run"
 bun run destroy
 ```

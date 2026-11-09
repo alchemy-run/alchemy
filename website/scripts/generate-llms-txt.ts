@@ -577,6 +577,7 @@ const SECTIONS: Section[] = [
         "e2b/tutorial/part-3",
         "e2b/tutorial/part-4",
         "e2b/tutorial/part-5",
+        "e2b/tutorial/part-6",
         "e2b/api-keys",
         "e2b/network-and-secrets",
         "e2b/templates",
@@ -613,10 +614,6 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/compute" },
   },
   {
-    heading: "Archil — Frontend",
-    pages: { directory: "archil/frontend" },
-  },
-  {
     heading: "Archil — Storage",
     pages: { directory: "archil/storage" },
   },
@@ -634,6 +631,7 @@ const SECTIONS: Section[] = [
         "boat/tutorial/part-3",
         "boat/tutorial/part-4",
         "boat/tutorial/part-5",
+        "boat/tutorial/part-6",
         "boat/account-and-keys",
         "boat/security/credentials",
         "boat/security/environments",

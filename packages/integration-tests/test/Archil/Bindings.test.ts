@@ -262,6 +262,66 @@ describe("BranchDisk", () => {
   );
 });
 
+/**
+ * Many requests create one name at once. Archil fails every create but the
+ * first (409 `conflict` on branches, `sandbox_name_conflict` on sandboxes),
+ * and each binding has to converge on the object the winner made.
+ */
+const race = <A>(path: string) =>
+  Effect.gen(function* () {
+    // Warm the Worker with a retried call, then race without retries: a
+    // retry would find the winner's object and hide a create that failed.
+    yield* call("/delete-disk?name=warm-up");
+    const { url } = yield* stack;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return yield* Effect.all(
+      Array.from({ length: 6 }, () =>
+        client.get(`${url}${path}`).pipe(Effect.flatMap((r) => r.json as Effect.Effect<A, any>)),
+      ),
+      { concurrency: "unbounded" },
+    );
+  });
+
+describe("concurrent creates", () => {
+  test(
+    "BranchDisk: concurrent creates of one branch all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ branch: Archil.BranchAttributes }>("/branch?name=session-race");
+      expect(new Set(all.map((b) => b.branch.filesystemId)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateDisk: concurrent creates of one disk all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ id: string }>("/create-disk?name=race-1");
+      yield* call("/delete-disk?name=race-1");
+      expect(new Set(all.map((d) => d.id)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+  test(
+    "CreateSandbox: concurrent creates of one sandbox all return it",
+    Effect.gen(function* () {
+      const all = yield* race<{ id: string }>("/create-sandbox?name=race-1");
+      yield* call("/delete-sandbox?name=race-1");
+      expect(new Set(all.map((x) => x.id)).size).toBe(1);
+    }),
+    { tags, timeout: 180_000 },
+  );
+});
+
+describe("CreateSandbox on a paused sandbox", () => {
+  test(
+    "exec resumes a paused sandbox and runs",
+    Effect.gen(function* () {
+      const body = yield* json<{ paused: string; stdout: string }>("/paused?name=paused-1");
+      expect(body).toEqual({ paused: "paused", stdout: "awake" });
+    }),
+    { tags, timeout: 240_000 },
+  );
+});
+
 describe("CreateImage", () => {
   test(
     "an image builds at run time",

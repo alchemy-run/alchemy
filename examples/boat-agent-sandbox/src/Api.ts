@@ -1,41 +1,35 @@
-// src/Api.ts
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Golden } from "./Golden.ts";
 
 /**
- * Runs untrusted code in Boat sandboxes: a fresh sandbox per `/run`, and a
- * long-lived sandbox per user that stops when they're done and resumes with
- * their files when they come back.
+ * Starts sandboxes from the Golden snapshot while it runs: a fresh one per
+ * `/run`, deleted when the request ends, and one per user that keeps their
+ * changes and resumes when they come back.
  */
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const sandboxes = yield* Boat.CreateSandbox();
+    const sandboxes = yield* Boat.CreateSandbox(Golden);
 
-    /** Runs a script in a fresh sandbox that is deleted when the request ends. */
-    const run = Effect.fn("run")(function* (code: string) {
+    /** Runs a command in the repository, in a fresh sandbox deleted when the request ends. */
+    const run = Effect.fn("run")(function* (command: string) {
       const sandbox = yield* Effect.acquireRelease(
-        sandboxes.create({ type: "small", noEnv: true, autoStop: "5 minutes" }),
+        sandboxes.create({ noEnv: true, autoStop: "5 minutes" }),
         (sandbox) => Effect.ignore(sandbox.delete()),
       );
-      yield* sandbox.files.write("main.mjs", code);
-      return yield* sandbox.exec("node main.mjs", { timeout: "1 minute" });
+      return yield* sandbox.exec(command, { cwd: "/home/user/repo", timeout: "1 minute" });
     });
 
-    /** The user's sandbox: found by label and resumed, or created. */
+    /** The user's sandbox: found by label and resumed, or started from Golden. */
     const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
       const [existing] = yield* sandboxes.list({ labels: { user } });
       if (existing === undefined) {
-        return yield* sandboxes.create({
-          type: "small",
-          noEnv: true,
-          autoStop: "10 minutes",
-          labels: { user },
-        });
+        return yield* sandboxes.create({ noEnv: true, autoStop: "10 minutes", labels: { user } });
       }
       const sandbox = yield* sandboxes.connect(existing.id);
       yield* sandbox.resume({ autoStop: "10 minutes" });
@@ -48,8 +42,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         const url = new URL(request.url, "http://api");
 
         if (request.method === "POST" && url.pathname === "/run") {
-          const code = yield* request.text;
-          const result = yield* run(code).pipe(Effect.scoped);
+          const result = yield* run(yield* request.text).pipe(Effect.scoped);
           return yield* HttpServerResponse.json(result);
         }
 
@@ -65,15 +58,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
           const [, owner, file] = match as unknown as [string, string, string];
           const sandbox = yield* userSandbox(owner);
           if (request.method === "PUT") {
-            yield* sandbox.files.write(`work/${file}`, yield* request.text);
+            yield* sandbox.files.write(`repo/${file}`, yield* request.text);
           }
-          const listing = yield* sandbox.files.list("work");
-          const content = yield* sandbox.files.readText(`work/${file}`);
-          return yield* HttpServerResponse.json({
-            sandboxId: sandbox.sandboxId,
-            files: listing.map((entry) => entry.path.split("/").pop()),
-            content,
-          });
+          const content = yield* sandbox.files.readText(`repo/${file}`);
+          return yield* HttpServerResponse.json({ sandboxId: sandbox.sandboxId, content });
         }
 
         if (url.pathname === "/") return HttpServerResponse.text("ok");

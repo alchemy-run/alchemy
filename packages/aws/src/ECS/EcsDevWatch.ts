@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * INTERNAL — shared change-trigger and task-restart machinery for the floci
  * ECS dev providers ([FlociTaskProvider](./FlociTaskProvider.ts),
