@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@alchemy.run/test";
-import { eq, sql } from "drizzle-orm";
+import { eq, SQL, sql } from "drizzle-orm";
 import { integer, pgTable, QueryBuilder } from "drizzle-orm/pg-core";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -265,76 +265,99 @@ describe("proxyChain", { tags: ["unit", "local"], timeout: 5000 }, () => {
       }),
     );
 
+    it.effect("walks only objects `descend` accepts", () =>
+      Effect.gen(function* () {
+        const root = { x: 5, put: (v: unknown) => Effect.succeed(v) };
+        const plain = proxyChain(Effect.succeed(root));
+        const x = plain.x;
+        const arg = { n: x };
+        const out = (yield* plain.put(arg)) as typeof arg;
+        expect(out).toBe(arg);
+        expect(out.n).toBe(x);
+
+        const db = proxyChain(Effect.succeed(root), { descend: descendDrizzle });
+        expect(yield* db.put({ n: db.x })).toEqual({ n: 5 });
+      }),
+    );
+
+    it.effect("keeps the prototype of a walked object it copies", () =>
+      Effect.gen(function* () {
+        const db = proxyChain(Effect.succeed({ x: 5, put: (v: SQL) => Effect.succeed(v) }), {
+          descend: descendDrizzle,
+        });
+        const chunk = sql`count(${db.x})`;
+        const out = yield* db.put(chunk);
+        expect(out).not.toBe(chunk);
+        expect(out).toBeInstanceOf(SQL);
+        expect(out.queryChunks).toContain(5);
+      }),
+    );
+
+    it.effect("leaves binary data and other classes alone", () =>
+      Effect.gen(function* () {
+        class Box {
+          #v = 1;
+          constructor(readonly inner: unknown) {}
+          get v() {
+            return this.#v;
+          }
+        }
+        const db = proxyChain(Effect.succeed({ x: 5, put: (v: unknown) => Effect.succeed(v) }), {
+          descend: descendDrizzle,
+        });
+        const bytes = new Uint8Array(1_000_000);
+        expect(yield* db.put(bytes)).toBe(bytes);
+        const box = new Box(db.x);
+        const out = (yield* db.put(box)) as Box;
+        expect(out).toBe(box);
+        expect(out.v).toBe(1);
+      }),
+    );
+
+    it.effect("survives an array that contains itself", () =>
+      Effect.gen(function* () {
+        const db = proxyChain(Effect.succeed({ put: (v: unknown) => Effect.succeed(v) }), {
+          descend: descendDrizzle,
+        });
+        const cyclic: unknown[] = [];
+        cyclic.push(cyclic);
+        expect(yield* db.put(cyclic)).toBe(cyclic);
+      }),
+    );
+
     it.effect("resolves a CTE column nested in a drizzle aggregate and join", () =>
       Effect.gen(function* () {
         const rows = pgTable("repro_rows", {
           id: integer("id"),
           parent: integer("parent"),
         });
-        const concrete = new QueryBuilder();
-        const concreteCte = concrete.$with("c").as(concrete.select().from(rows));
-        const expected = concrete
-          .with(concreteCte)
-          .select({
-            id: rows.id,
-            n: sql`count(${concreteCte.id})`.mapWith(Number),
-          })
-          .from(rows)
-          .leftJoin(concreteCte, eq(concreteCte.parent, rows.id))
-          .groupBy(rows.id)
-          .toSQL();
+        const query = <Q extends QueryBuilder>(qb: Q) => {
+          const cte = qb.$with("c").as(qb.select().from(rows));
+          return qb
+            .with(cte)
+            .select({ id: rows.id, n: sql`count(${cte.id})`.mapWith(Number) })
+            .from(rows)
+            .leftJoin(cte, eq(cte.parent, rows.id))
+            .groupBy(rows.id);
+        };
+        const expected = query(new QueryBuilder()).toSQL();
 
-        const qb = new QueryBuilder();
-        const db = proxyChain(Effect.succeed(deferredQueryBuilder(qb)));
-        const cte = db.$with("c").as(db.select().from(rows));
-        const actual = yield* db
-          .with(cte)
-          .select({
-            id: rows.id,
-            n: sql`count(${cte.id})`.mapWith(Number),
-          })
-          .from(rows)
-          .leftJoin(cte, eq(cte.parent, rows.id))
-          .groupBy(rows.id);
-
-        expect(actual).toEqual(expected);
+        // A QueryBuilder whose `done(query)` ends the chain as an Effect, so
+        // the whole query is built from deferred proxies and replayed.
+        const root = Object.assign(new QueryBuilder(), {
+          done: (q: { toSQL(): unknown }) => Effect.sync(() => q.toSQL()),
+        });
+        const db = proxyChain(Effect.succeed(root), { descend: descendDrizzle });
+        expect(yield* db.done(query(db))).toEqual(expected);
       }),
     );
   });
 });
 
-/**
- * `groupBy` is the yield point. Drizzle's query builder is synchronous;
- * `proxyChain` only replays when the chain ends in an Effect, so the
- * terminal step returns the SQL the real builder would have produced.
- */
-const deferredQueryBuilder = (qb: QueryBuilder) => ({
-  $with: qb.$with.bind(qb),
-  select: qb.select.bind(qb),
-  with(...queries: Parameters<QueryBuilder["with"]>) {
-    const selected = qb.with(...queries);
-    return {
-      select(fields: Parameters<typeof selected.select>[0]) {
-        const built = selected.select(fields);
-        return {
-          from(source: Parameters<typeof built.from>[0]) {
-            const query = built.from(source);
-            return {
-              leftJoin(
-                table: Parameters<typeof query.leftJoin>[0],
-                on: Parameters<typeof query.leftJoin>[1],
-              ) {
-                const joined = query.leftJoin(table, on);
-                return {
-                  groupBy(...columns: Parameters<typeof joined.groupBy>) {
-                    return Effect.succeed(joined.groupBy(...columns).toSQL());
-                  },
-                };
-              },
-            };
-          },
-        };
-      },
-    };
-  },
-});
+/** Mirrors `descendDrizzle` in `@alchemy.run/drizzle`. */
+const descendDrizzle = (value: object): boolean => {
+  const proto = Object.getPrototypeOf(value);
+  if (proto === null || proto === Object.prototype) return true;
+  const ctor = proto.constructor;
+  return typeof ctor === "function" && Symbol.for("drizzle:entityKind") in ctor;
+};

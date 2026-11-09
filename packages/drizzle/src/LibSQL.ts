@@ -10,6 +10,7 @@ import type { EffectLibsqlDatabase } from "drizzle-orm/effect-libsql";
 import type { EffectDrizzleSQLiteConfig } from "drizzle-orm/sqlite-core/effect/utils";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { descendDrizzle } from "./internal.ts";
 
 /**
  * Open a Drizzle database over a libSQL database (e.g. Turso) using the
@@ -70,5 +71,7 @@ export const LibSQL = <TRelations extends AnyRelations = EmptyRelations, E = nev
       }),
     ),
     (db) =>
-      proxyChain<EffectLibsqlDatabase<TRelations> & { $client: LibsqlClient.LibsqlClient }>(db),
+      proxyChain<EffectLibsqlDatabase<TRelations> & { $client: LibsqlClient.LibsqlClient }>(db, {
+        descend: descendDrizzle,
+      }),
   );

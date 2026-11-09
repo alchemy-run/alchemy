@@ -11,6 +11,7 @@ import type { EffectDrizzleMySqlConfig } from "drizzle-orm/mysql-core/effect/uti
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
+import { descendDrizzle } from "./internal.ts";
 
 /**
  * Open a Drizzle/MySQL database from a connection URL using the
@@ -82,5 +83,6 @@ export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = neve
           any,
           any
         >,
+        { descend: descendDrizzle },
       ),
   );

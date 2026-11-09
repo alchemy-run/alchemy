@@ -7,6 +7,7 @@ import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { descendDrizzle } from "./internal.ts";
 
 /**
  * Open a Drizzle database over a Cloudflare D1 binding using the
@@ -73,5 +74,6 @@ export const D1 = <TRelations extends AnyRelations = EmptyRelations, E = never, 
           any,
           any
         >,
+        { descend: descendDrizzle },
       ),
   );
