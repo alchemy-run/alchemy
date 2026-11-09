@@ -16,10 +16,10 @@ Take one small app: an API on Compute with a Postgres database, and a branch per
     { id: "project", label: "app", type: "project · us-east-1", parent: "ws", dashed: true, icon: "folder" },
     { id: "main", label: "main", type: "branch · production", parent: "project", dashed: true, icon: "git-branch", areas: ["app db"], colGap: 5.5 },
     { id: "app", label: "api", type: "Compute app", parent: "main", tone: "accent", icon: "server" },
-    { id: "db", label: "db", type: "Prisma Postgres", parent: "main", icon: "database" },
+    { id: "db", label: "db", type: "Prisma Postgres", parent: "main", icon: "brand:postgresql" },
     { id: "pr", label: "pr-42", type: "branch · preview", parent: "project", dashed: true, icon: "git-branch", areas: ["app2 db2"], colGap: 5.5 },
     { id: "app2", label: "api", type: "Compute app", parent: "pr", icon: "server" },
-    { id: "db2", label: "db", type: "Prisma Postgres", parent: "pr", icon: "database" },
+    { id: "db2", label: "db", type: "Prisma Postgres", parent: "pr", icon: "brand:postgresql" },
   ]}
   links={[
     { from: "app", to: "db", label: "DATABASE_URL" },

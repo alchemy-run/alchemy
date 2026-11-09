@@ -19,7 +19,7 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
     { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "circle-user-round" },
     { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
     { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "circle-user-round" },
-    { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true, icon: "globe" },
+    { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true, icon: "server" },
     { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true, icon: "brand:postgresql", specs: [["shard locks", "300"], ["messages", "persisted"]] },
   ]}
   caption="Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."

@@ -16,10 +16,10 @@ Take one small app: an API service with a Postgres database and a Volume, in one
     { id: "project", label: "Site", type: "project", parent: "ws", dashed: true, icon: "folder" },
     { id: "prod", label: "production", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api pg"], colGap: 4 },
     { id: "api", label: "Api", type: "service · public URL", parent: "prod", tone: "accent", icon: "server" },
-    { id: "pg", label: "Postgres", type: "service · volume", parent: "prod", icon: "database" },
+    { id: "pg", label: "Postgres", type: "service · volume", parent: "prod", icon: "brand:postgresql" },
     { id: "staging", label: "staging", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api2 pg2"], colGap: 4 },
     { id: "api2", label: "Api", type: "service", parent: "staging", icon: "server" },
-    { id: "pg2", label: "Postgres", type: "service · volume", parent: "staging", icon: "database" },
+    { id: "pg2", label: "Postgres", type: "service · volume", parent: "staging", icon: "brand:postgresql" },
   ]}
   links={[
     { from: "api", to: "pg", label: "privately" },

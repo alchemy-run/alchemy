@@ -13,7 +13,7 @@ Take one small app: a Postgres database with a production branch, a branch per p
 <Tree
   nodes={[
     { id: "org", label: "acme", type: "organization", icon: "brand:planetscale" },
-    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", dashed: true, icon: "database" },
+    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", dashed: true, icon: "brand:postgresql" },
     { id: "main", label: "main", type: "branch · production", parent: "db", dashed: true, icon: "git-branch", areas: ["primary replicas"], colGap: 3.5 },
     { id: "primary", label: "primary", type: "read · write", parent: "main", tone: "accent", icon: "server", specs: [["role", "prod stage"]] },
     { id: "replicas", label: "replicas", type: "read-only", parent: "main", icon: "copy" },
