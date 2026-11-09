@@ -57,7 +57,9 @@ const internalNetwork = yield* Docker.Network("InternalNetwork", {
 });
 ```
 
-Docker assigns a subnet and gateway if none are provided. Network creation options are immutable; changing them replaces the network, and Docker will refuse to remove it while containers are attached. `internal` restricts traffic through that network, not through a container's other network connections. See [local services](https://alchemy.run/docker/local-services) for driver options and IPv6-only configuration.
+Docker assigns a subnet and gateway if none are provided. Explicit subnets and ranges use canonical CIDR prefixes (for example, `10.50.0.0/24`); IPv6 subnets require `enableIPv6: true`. The `alchemy::*` label prefix is reserved for ownership.
+
+Network creation options are immutable; changing them replaces the network, and Docker will refuse to remove it while containers are attached. Replacement is not transactional. `internal` restricts traffic through that network, not through a container's other network connections. To reference a network managed by Compose or another tool without changing it, use `Docker.Network.lookup`. See [local services](https://alchemy.run/docker/local-services) for driver options, dual-stack examples, and lifecycle details.
 
 ## Learn more
 

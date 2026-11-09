@@ -1,4 +1,4 @@
-import { Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -62,7 +62,7 @@ export interface NetworkProps {
   driverOpts?: Record<string, string>;
   /** Explicit IPAM configuration. Docker allocates missing subnet/gateway values. */
   ipam?: NetworkIpam;
-  /** Network labels. */
+  /** User labels. The `alchemy::*` prefix is reserved for resource ownership. */
   labels?: Record<string, string>;
   /**
    * The engine the network is created on: a Docker context name, a
@@ -167,6 +167,8 @@ export interface NetworkLookup {
  * and compares IPv6 addresses by their network value rather than text.
  * Invalid options fail with `InvalidNetworkOptions`, whose `path` identifies
  * the rejected field (for example, `ipam.config[0].gateway`).
+ * Labels beginning with `alchemy::` are reserved for resource ownership and
+ * cannot be overridden by user-supplied labels.
  *
  * ### IPv6-only networks
  * **Example:** Disable IPv4 address allocation
@@ -174,6 +176,20 @@ export interface NetworkLookup {
  * const network = yield* Docker.Network("ipv6-only", {
  *   enableIPv4: false,
  *   enableIPv6: true,
+ * });
+ * ```
+ *
+ * ### Dual-stack networks
+ * **Example:** Allocate addresses from both families on a bridge network
+ * ```typescript
+ * const network = yield* Docker.Network("dual-stack", {
+ *   enableIPv6: true,
+ *   ipam: {
+ *     config: [
+ *       { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
+ *       { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
+ *     ],
+ *   },
  * });
  * ```
  *
@@ -217,6 +233,9 @@ export interface NetworkLookup {
  * Network creation settings are immutable. Changing them replaces the network.
  * Docker refuses to delete a network while it has attached endpoints; Alchemy
  * does not forcibly disconnect unrelated containers to complete replacement.
+ * A managed network deleted outside Alchemy is recreated on the next deploy.
+ * If another network takes over its name, Alchemy refuses to claim it: the
+ * recorded Docker ID must still match, even if the network's settings do.
  * Replacement is not transactional: a custom network or IPAM driver may reject
  * a configuration after Docker has already removed the old network. Alchemy
  * validates known IPAM constraints ahead of time, but the network driver
@@ -251,7 +270,9 @@ export const NetworkProvider = () =>
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
           const attrs = toNetworkAttributes(info);
-          if (output) return attrs;
+          // A different network may have taken over the same name after the
+          // managed network was removed out of band. Never silently adopt it.
+          if (output) return output.id === attrs.id ? attrs : Unowned(attrs);
           // Without prior state, only adopt a network that carries our branding;
           // anything else is foreign and gated behind `--adopt`.
           const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
@@ -287,6 +308,26 @@ export const NetworkProvider = () =>
           ) {
             return { action: "replace", deleteFirst: true };
           }
+          // The persisted attributes do not prove that the same physical
+          // network still exists. Another actor can delete it and reuse the
+          // name, so check the Docker ID even when props have not changed.
+          const current = yield* docker.network
+            .inspect(output.name, dockerEngineContextName(olds?.context))
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          if (current && current.Id !== output.id) {
+            return yield* new OwnedBySomeoneElse({
+              message:
+                `Network '${output.name}' was replaced outside Alchemy: ` +
+                `expected Docker ID ${output.id}, found ${current.Id}. ` +
+                "Choose a different name or explicitly resolve the ownership conflict.",
+              resourceType: "Docker.Network",
+              logicalId: id,
+              physicalName: output.name,
+            });
+          }
+          // Reconcile can recreate a missing network. An update avoids
+          // deleting a generation that has already disappeared.
+          if (!current) return { action: "update" };
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
           const context = dockerEngineContextName(news?.context);
@@ -301,7 +342,7 @@ export const NetworkProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const { stdout: createdId } = yield* docker.network.create({
             ...args,
-            label: { ...internalTags, ...args.label },
+            label: { ...args.label, ...internalTags },
             context,
           });
           return toNetworkAttributes(yield* docker.network.inspect(createdId, context));
@@ -360,6 +401,13 @@ const sameIpAddress = (left: string, right: string) => {
 const validateNetworkOptions = (props: NetworkProps | undefined) => {
   if (props?.enableIPv4 === false && props.enableIPv6 !== true) {
     return invalidNetworkOption("enableIPv4", "disabling IPv4 requires enableIPv6=true");
+  }
+  const reservedLabel = Object.keys(props?.labels ?? {}).find((key) => key.startsWith("alchemy::"));
+  if (reservedLabel !== undefined) {
+    return invalidNetworkOption(
+      `labels[${JSON.stringify(reservedLabel)}]`,
+      "the alchemy:: label prefix is reserved for resource ownership",
+    );
   }
   for (const [path, entries] of [
     ["driverOpts", props?.driverOpts],

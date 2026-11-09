@@ -442,6 +442,14 @@ describe(
             path: "ipam.config[1].subnet",
           },
           { props: { driverOpts: { "": "invalid" } }, path: 'driverOpts[""]' },
+          {
+            props: { labels: { "alchemy::id": "another-resource" } },
+            path: 'labels["alchemy::id"]',
+          },
+          {
+            props: { labels: { "alchemy::custom": "not-user-owned" } },
+            path: 'labels["alchemy::custom"]',
+          },
           { props: { ipam: { driver: "" } }, path: "ipam.driver" },
           { props: { ipam: { options: { "": "invalid" } } }, path: 'ipam.options[""]' },
           {
@@ -559,6 +567,33 @@ describe(
         }),
     );
 
+    test.provider("rejects ownership label overrides without replacing a network", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = "alchemy-test-network-preserve-ownership";
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const original = yield* stack.deploy(
+          Docker.Network("preserve-ownership", { name, labels: { environment: "test" } }),
+        );
+        const invalid = Docker.Network("preserve-ownership", {
+          name,
+          labels: { "alchemy::id": "spoofed-resource", environment: "production" },
+        });
+        const planned = yield* stack
+          .plan(invalid)
+          .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+        expect(planned).toBeInstanceOf(Docker.InvalidNetworkOptions);
+        expect(planned).toMatchObject({ path: 'labels["alchemy::id"]' });
+        const deployed = yield* stack
+          .deploy(invalid)
+          .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+        expect(deployed).toBeInstanceOf(Docker.InvalidNetworkOptions);
+        expect(deployed).toMatchObject({ path: 'labels["alchemy::id"]' });
+        expect((yield* docker.network.inspect(original.id)).Labels?.environment).toBe("test");
+      }),
+    );
+
     test.provider("refuses a pre-existing network unless explicitly adopted", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
@@ -624,6 +659,56 @@ describe(
           expect((yield* docker.network.inspect(adopted.id)).Internal).toBe(true);
           expect(adopted.id).not.toBe(original.stdout);
         }),
+    );
+
+    test.provider("recreates a managed network removed outside Alchemy", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = "alchemy-test-network-out-of-band-deletion";
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Network("recover-deleted-network", { name });
+        const original = yield* stack.deploy(resource);
+        yield* docker.network.remove(original.id);
+        expect((yield* stack.plan(resource)).resources["recover-deleted-network"]?.action).toBe(
+          "update",
+        );
+        const recovered = yield* stack.deploy(resource);
+        expect(recovered.id).not.toBe(original.id);
+        expect((yield* docker.network.inspect(recovered.id)).Name).toBe(name);
+        expect((yield* stack.plan(resource)).resources["recover-deleted-network"]?.action).toBe(
+          "noop",
+        );
+      }),
+    );
+
+    test.provider("does not adopt a foreign network replacing a previously managed name", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = "alchemy-test-network-foreign-replacement";
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Network("ownership-replacement", { name });
+        const original = yield* stack.deploy(resource);
+        yield* docker.network.remove(original.id);
+        const foreign = yield* docker.network.create({ name, driver: "bridge" });
+        yield* Effect.addFinalizer(() => docker.network.remove(foreign.stdout).pipe(Effect.ignore));
+        const planned = yield* stack
+          .plan(resource)
+          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+        expect(planned).toBeInstanceOf(OwnedBySomeoneElse);
+        const deployed = yield* stack
+          .deploy(resource)
+          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+        expect(deployed).toBeInstanceOf(OwnedBySomeoneElse);
+        // A changed immutable option takes the delete-first replacement path.
+        // It must also reject the foreign owner before any destructive work.
+        const replacement = yield* stack
+          .deploy(Docker.Network("ownership-replacement", { name, internal: true }))
+          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+        expect(replacement).toBeInstanceOf(OwnedBySomeoneElse);
+        expect((yield* docker.network.inspect(foreign.stdout)).Id).toBe(foreign.stdout);
+      }),
     );
 
     test.provider("replaces a network when its labels change", (stack) =>
