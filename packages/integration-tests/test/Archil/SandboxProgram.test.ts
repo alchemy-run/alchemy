@@ -25,7 +25,6 @@ const collectorWorker = () =>
   Cloudflare.Worker("OtelCollector", {
     main: pathe.resolve(import.meta.dirname, "fixtures/program/otel-collector-worker.ts"),
     env: { SINK: Cloudflare.DurableObject<OtelSink>("OtelSink") },
-    compatibility: { date: "2024-09-23" },
   });
 
 const getText = (url: string) =>
