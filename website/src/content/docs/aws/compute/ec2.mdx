@@ -108,3 +108,22 @@ Pass `keyName: key.keyName` in the instance's props. The private key comes back 
 An instance is as reachable as its subnet and security groups make it. In a public subnet with `associatePublicIpAddress`, it has an internet address. In a private subnet, only things inside the VPC can reach it, and it reaches out through a NAT gateway.
 
 Open only the ports you serve, to only the sources that need them. See [VPC & networking](/aws/networking).
+
+## Host Nitro Sandboxes
+
+An instance can run [Nitro Sandboxes](/aws/compute/nitro-sandboxes): lightweight VMs that the Nitro hypervisor isolates from the instance and from each other, so one machine can host many workloads you don't trust. Sandboxes use the same switch as Nitro Enclaves, set at launch:
+
+```typescript title="alchemy.run.ts"
+const host = yield* AWS.EC2.Instance("SandboxHost", {
+  imageId: AWS.EC2.amazonLinux2023(),
+  instanceType: "m6i.xlarge",
+  subnetId: network.privateSubnetIds[0],
+  enclaveOptions: { enabled: true },
+});
+```
+
+The instance type must support Nitro Enclaves: most current families do, except their smallest size. The setting can't change on a running instance, so changing it replaces the instance.
+
+Alchemy launches the host. Starting sandboxes on it is up to you: run a virtual machine monitor on the instance, Firecracker being the one AWS supports, and launch each sandbox from a guest image with its vCPUs, memory and devices. See [Launch a Nitro Sandbox](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html#nitro-sandboxes-launch).
+
+To have sandboxes started for you, one per container, run them on [ECS](/aws/compute/ecs#isolate-each-task-in-its-own-vm) or [EKS](/aws/compute/eks#run-each-pod-in-its-own-vm) instead.
