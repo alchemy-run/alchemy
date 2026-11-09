@@ -86,8 +86,14 @@ type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
 
 /**
  * What a lifecycle operation may fail with. Providers fail with tagged
- * errors (distilled's typed errors, `Data.TaggedError`s), so callers can
- * narrow with `Effect.catchTag` or read `message` directly.
+ * errors (distilled's typed errors, `Data.TaggedError`s), so `_tag` and
+ * `message` are always readable.
+ *
+ * The union is open: `_tag` is `string`, not the provider's own tags. The
+ * compiler does not know which tags a provider can fail with, so
+ * `Effect.catchTag` accepts any tag, does not narrow the handler's error, and
+ * leaves `ProviderError` in the error channel. Match on `_tag`, or on the
+ * error class with `instanceof`, at runtime.
  */
 export type ProviderError = { readonly _tag: string; readonly message?: string };
 
