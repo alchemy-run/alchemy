@@ -38,7 +38,7 @@ if (paths[0] === "--all") {
       (f) => /\.mdx?$/.test(f) && fs.readFileSync(path.join(docs, f), "utf8").includes("<Tree"),
     )
     .map((f) => f.replace(/\.mdx?$/, "").replace(/\/index$/, ""))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 }
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(chrome ? { executablePath: chrome } : {});
@@ -103,17 +103,17 @@ for (const [wname, w] of Object.entries(widths)) {
           a.bottom > b.top + 1;
         const inside = (a, b) =>
           a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom;
-        const labels = [...fig.querySelectorAll(".alc-tree__link-label")].map((t) => [
-          t.textContent,
-          t.getBoundingClientRect(),
-        ]);
+        const labels = [...fig.querySelectorAll(".alc-tree__link-label")].map((t) => ({
+          name: t.textContent ?? "",
+          L: t.getBoundingClientRect(),
+        }));
         const solids = [...fig.querySelectorAll("[data-node]")];
         const texts = [
           ...fig.querySelectorAll(
             ".alc-tree__label, .alc-tree__type, .alc-tree__icon, .alc-tree__scope",
           ),
         ];
-        for (const [name, L] of labels) {
+        for (const { name, L } of labels) {
           for (const el of solids) {
             const R = el.getBoundingClientRect();
             if (hit(L, R) && !inside(L, R))
@@ -122,7 +122,7 @@ for (const [wname, w] of Object.entries(widths)) {
           for (const el of texts)
             if (hit(L, el.getBoundingClientRect()))
               out.push(`fig ${i}: label "${name}" over text "${el.textContent}"`);
-          for (const [n2, L2] of labels)
+          for (const { name: n2, L: L2 } of labels)
             if (L2 !== L && hit(L, L2)) out.push(`fig ${i}: labels "${name}" and "${n2}" overlap`);
           for (const p of fig.querySelectorAll(".alc-tree__link")) {
             // a label must not sit across a line
@@ -249,8 +249,7 @@ for (const [wname, w] of Object.entries(widths)) {
           }
           // Wasted room on the left: a container's children all start well inside it.
           for (const k of fig.querySelectorAll(".alc-tree__kids:not(.alc-tree__kids--gutter)")) {
-            const kr = k.getBoundingClientRect(),
-              cs = getComputedStyle(k);
+            const cs = getComputedStyle(k);
             if (parseFloat(cs.paddingLeft) > 2)
               out.push(
                 `fig ${i}: ${Math.round(parseFloat(cs.paddingLeft))}px of padding with no arrow in it`,
@@ -267,7 +266,7 @@ for (const [wname, w] of Object.entries(widths)) {
       });
       return { out, n: figs.length };
     });
-    for (const o of [...new Set(res.out)]) problems.push(`${wname} ${p}: ${o}`);
+    for (const o of new Set(res.out)) problems.push(`${wname} ${p}: ${o}`);
     const figs = await page.$$("figure.alc-fig:has(.alc-tree)");
     for (let i = 0; i < figs.length; i++)
       await figs[i].screenshot({ path: `${out}/${wname}-${p.replaceAll("/", "_")}-${i}.png` });

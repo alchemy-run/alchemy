@@ -451,7 +451,9 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
       new ResizeObserver(() => draw(tree)).observe(tree);
     }
   };
-  document.fonts?.ready.then(start, start) ?? start();
+  // Wait for fonts, so boxes have their final size before the first draw.
+  if (document.fonts) void document.fonts.ready.then(start, start);
+  else start();
 </script>
 
 <style>
