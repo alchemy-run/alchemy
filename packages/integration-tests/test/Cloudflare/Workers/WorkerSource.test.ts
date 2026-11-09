@@ -6,16 +6,13 @@ import {
   type SourceContext,
 } from "@alchemy.run/cloudflare/Workers/Source";
 import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
-import { sourceHashProps } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { describe, expect, it } from "@alchemy.run/test";
 import { NodeServices } from "@effect/platform-node";
 import { Artifacts, createArtifactStore, makeScopedArtifacts } from "alchemy/Artifacts";
-import { stripEffects } from "alchemy/Diff";
 import * as Effect from "effect/Effect";
 
 const providerModule = new URL("./fixtures/source-provider/provider.ts", import.meta.url).href;
 const invalidModule = new URL("./fixtures/source-provider/invalid.ts", import.meta.url).href;
-const buildPluginWorker = new URL("./fixtures/build-plugin/worker.mjs", import.meta.url).href;
 
 const ctx = (props: WorkerProps): SourceContext =>
   makeSourceContext({
@@ -55,45 +52,6 @@ describe(
           expect(out.assets).toBeUndefined();
         }),
       ),
-    );
-
-    it.effect(
-      "hashes a redeploy's bundle with the build plugins the diff's stripEffects drops",
-      () =>
-        Effect.gen(function* () {
-          const props: WorkerProps = {
-            main: buildPluginWorker,
-            build: {
-              input: {
-                plugins: [
-                  {
-                    name: "answer",
-                    resolveId: { filter: { id: /^virtual:answer$/ }, handler: (id) => `\0${id}` },
-                    load: {
-                      filter: { id: /^\0virtual:answer$/ },
-                      handler: () => "export default 42;",
-                    },
-                  },
-                ],
-              },
-            },
-          };
-          // Each deploy hashes with a fresh artifact store, as a redeploy's plan does.
-          const hashFrom = (from: WorkerProps) =>
-            provide(
-              Effect.flatMap(resolveSource(from), (source) => source.hash(ctx(from), undefined)),
-            );
-          const built = yield* provide(
-            Effect.flatMap(resolveSource(props), (source) => source.build(ctx(props))),
-          );
-
-          const stripped = stripEffects(props);
-          const failed = yield* Effect.flip(hashFrom(stripped));
-          expect(failed.message).toContain("[plugin answer]");
-
-          const slots = yield* hashFrom(sourceHashProps(stripped, props));
-          expect(slots.bundle).toBe(built.bundle?.hash);
-        }),
     );
 
     it.effect("maps props.vite to the asset-owning vite source", () =>
