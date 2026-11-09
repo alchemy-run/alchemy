@@ -152,16 +152,21 @@ export class BucketProjectMismatchError extends Data.TaggedError("BucketProjectM
   message: string;
 }> {}
 
+export class PrismaBucketLogicalIdTaken extends Data.TaggedError("PrismaBucketLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (
   logicalId: string,
   branchId: string | null | undefined,
   projectId: string,
   cause: unknown,
 ) =>
-  new Error(
-    `Prisma bucket logical ID '${logicalId}' is already used by another bucket on ${branchId ? `branch '${branchId}'` : "the project's default branch"} in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other bucket.`,
-    { cause },
-  );
+  new PrismaBucketLogicalIdTaken({
+    message: `Prisma bucket logical ID '${logicalId}' is already used by another bucket on ${branchId ? `branch '${branchId}'` : "the project's default branch"} in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other bucket.`,
+    cause,
+  });
 
 const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
   bucketId: bucket.id,
