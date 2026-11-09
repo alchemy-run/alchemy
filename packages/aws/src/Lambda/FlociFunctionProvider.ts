@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * The `alchemy dev` provider for `AWS.Lambda.Function`: deploys the function
  * into the floci emulator and hot-swaps its code on file change.

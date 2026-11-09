@@ -1,5 +1,6 @@
 import { expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import { onEvent } from "@/Events.ts";
@@ -44,13 +45,15 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
+class ProviderUnavailable extends Data.TaggedError("ProviderUnavailable")<{ message: string }> {}
+
 it.effect(
   "reports scan totals and settles failed providers",
   () =>
     Effect.gen(function* () {
       const events: string[] = [];
       const provider: ProviderService = {
-        list: () => Effect.fail(new Error("unavailable")),
+        list: () => Effect.fail(new ProviderUnavailable({ message: "unavailable" })),
         reconcile: () => Effect.succeed({}),
         delete: () => Effect.void,
       };
