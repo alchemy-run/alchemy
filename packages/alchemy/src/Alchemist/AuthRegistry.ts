@@ -78,28 +78,45 @@ const isMissingProviderConfig = Schema.is(
   Schema.Struct({ _tag: Schema.Literals(["MissingProviderConfig"]) }),
 );
 
+/** `Name [code]: message` for an error-shaped value, or `undefined`. */
+const describeError = (error: unknown): string | undefined => {
+  if (!Predicate.hasProperty(error, "message") || typeof error.message !== "string") {
+    return undefined;
+  }
+  const name =
+    Predicate.hasProperty(error, "name") && typeof error.name === "string" ? error.name : "Error";
+  const code =
+    Predicate.hasProperty(error, "code") && typeof error.code === "string"
+      ? ` [${error.code}]`
+      : "";
+  return error.message === "" ? `${name}${code}` : `${name}${code}: ${error.message}`;
+};
+
+const describeValue = (value: unknown): string =>
+  describeError(value) ?? (typeof value === "string" ? value : Formatter.format(value));
+
 /**
- * Renders an error's `cause` chain on one line. Duck-typed rather than
- * `instanceof Error`: Bun's `ResolveMessage` and `BuildMessage`, which a
- * failed import throws, are not `Error` instances.
+ * Renders an error's `cause` chain on one line, with an `AggregateError`'s
+ * members in parentheses. Duck-typed rather than `instanceof Error`: Bun's
+ * `ResolveMessage` and `BuildMessage`, which a failed import throws, are not
+ * `Error` instances.
  */
 const describeCauseChain = (error: unknown): string => {
   const reasons: string[] = [];
   let current = error;
   for (let depth = 0; current != null && depth < 8; depth++) {
-    if (!Predicate.hasProperty(current, "message") || typeof current.message !== "string") {
-      reasons.push(typeof current === "string" ? current : Formatter.format(current));
+    const described = describeError(current);
+    if (described === undefined) {
+      reasons.push(describeValue(current));
       break;
     }
-    const name =
-      Predicate.hasProperty(current, "name") && typeof current.name === "string"
-        ? current.name
-        : "Error";
-    const code =
-      Predicate.hasProperty(current, "code") && typeof current.code === "string"
-        ? ` [${current.code}]`
-        : "";
-    reasons.push(`${name}${code}: ${current.message}`);
+    const members =
+      Predicate.hasProperty(current, "errors") && Array.isArray(current.errors)
+        ? current.errors
+        : [];
+    reasons.push(
+      members.length > 0 ? `${described} (${members.map(describeValue).join(", ")})` : described,
+    );
     current = Predicate.hasProperty(current, "cause") ? current.cause : undefined;
   }
   return reasons.join("; caused by ");

@@ -165,9 +165,14 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
           throwing,
           'throw new Error("stack failed", { cause: Object.assign(new Error("disk full"), { code: "ENOSPC" }) });\n',
         );
+        const aggregate = path.join(dir, "aggregate.run.ts");
+        yield* fs.writeFileString(
+          aggregate,
+          'throw new TypeError("fetch failed", { cause: new AggregateError([Object.assign(new Error("connect ECONNREFUSED ::1:5432"), { code: "ECONNREFUSED" }), new Error("connect ECONNREFUSED 127.0.0.1:5432")]) });\n',
+        );
         const missing = path.join(dir, "missing.run.ts");
         yield* fs.writeFileString(missing, 'import "alchemy-test-missing-package";\n');
-        return yield* Effect.forEach([throwing, missing], (main) =>
+        return yield* Effect.forEach([throwing, aggregate, missing], (main) =>
           collectAuthProviders({ main, envFile: Option.none<string>(), profile: "default" }).pipe(
             Effect.flip,
             Effect.map((error) => error.message),
@@ -181,6 +186,9 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
       /^Could not load auth providers from '.+throwing\.run\.ts': Error: stack failed; caused by Error \[ENOSPC\]: disk full$/,
     );
     expect(failures[1]).toMatch(
+      /^Could not load auth providers from '.+aggregate\.run\.ts': TypeError: fetch failed; caused by AggregateError \(Error \[ECONNREFUSED\]: connect ECONNREFUSED ::1:5432, Error: connect ECONNREFUSED 127\.0\.0\.1:5432\)$/,
+    );
+    expect(failures[2]).toMatch(
       /^Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
     );
   });
