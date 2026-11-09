@@ -31,7 +31,11 @@ export class CborDecodeError extends Data.TaggedError("CborDecodeError")<{
   readonly message: string;
 }> {}
 
-const isTagged = <Tag extends string>(value: unknown, tag: Tag): value is { readonly _tag: Tag } =>
+/** Whether `value` is the tagged error `T`, matched by its `_tag`. */
+const isTagged = <T extends { readonly _tag: string }>(
+  value: unknown,
+  tag: T["_tag"],
+): value is T =>
   typeof value === "object" && value !== null && "_tag" in value && value._tag === tag;
 
 /** The media type of a CBOR body. */
@@ -94,7 +98,7 @@ class Writer {
   }
 
   /** A major type with its argument in the fewest bytes. */
-  head(major: number, argument: number | bigint) {
+  head(major: number, argument: number | bigint): void {
     const m = major << 5;
     if (typeof argument === "bigint") {
       if (argument <= 0xffff_ffffn) return this.head(major, Number(argument));
@@ -307,8 +311,10 @@ export const encodeUnsafe = (value: unknown): Uint8Array => {
 export const encode = (value: unknown): Effect.Effect<Uint8Array, CborEncodeError> =>
   Effect.try({
     try: () => encodeUnsafe(value),
-    catch: (cause) =>
-      isTagged(cause, "CborEncodeError") ? cause : new CborEncodeError({ message: String(cause) }),
+    catch: (cause): CborEncodeError =>
+      isTagged<CborEncodeError>(cause, "CborEncodeError")
+        ? cause
+        : new CborEncodeError({ message: String(cause) }),
   });
 
 // ---------------------------------------------------------------------------
@@ -614,8 +620,10 @@ export const decodeUnsafe = (bytes: Uint8Array): unknown => {
 export const decode = (bytes: Uint8Array): Effect.Effect<unknown, CborDecodeError> =>
   Effect.try({
     try: () => decodeUnsafe(bytes),
-    catch: (cause) =>
-      isTagged(cause, "CborDecodeError") ? cause : new CborDecodeError({ message: String(cause) }),
+    catch: (cause): CborDecodeError =>
+      isTagged<CborDecodeError>(cause, "CborDecodeError")
+        ? cause
+        : new CborDecodeError({ message: String(cause) }),
   });
 
 /**
@@ -625,7 +633,7 @@ export const decode = (bytes: Uint8Array): Effect.Effect<unknown, CborDecodeErro
  * `end` throws {@link CborDecodeError} when the input stopped mid-value.
  */
 export const makeSequenceDecoder = () => {
-  let buffer = new Uint8Array(0);
+  let buffer: Uint8Array = new Uint8Array(0);
   return {
     push(chunk: Uint8Array): ReadonlyArray<unknown> {
       if (buffer.length === 0) {
