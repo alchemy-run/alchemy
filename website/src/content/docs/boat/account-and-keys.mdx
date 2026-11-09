@@ -42,7 +42,7 @@ Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying c
 
 An organization has its own plan, its own wallet and its own shared environments. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments you manage are its shared ones.
 
-When you sign in, Alchemy lists the organizations your account belongs to and asks which one to work in. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
+When you sign in, Alchemy picks your organization; it asks only when your account belongs to more than one. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
 
 You can also follow your **active wallet**, the one `boat org switch` picks. Sandboxes then bill whatever it is when they are created, and environments stay personal, so most teams pin the organization.
 

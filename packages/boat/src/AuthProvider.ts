@@ -49,8 +49,9 @@ export const BOAT_AUTH_PROVIDER_NAME = "Boat";
  * Either may pin `org`, the organization Alchemy works in, the way the
  * dashboard's organization select or `boat --org` do: every call bills it
  * (`X-Boat-Org`), and `Boat.Environment` manages its shared environments.
- * Sign-in offers the organizations the account belongs to and stores the
- * id (`team_…`), which survives renames, with `orgName` for display.
+ * Sign-in picks the account's organization (asking only when it belongs
+ * to several) and stores its id (`team_…`), which survives renames, with
+ * `orgName` for display.
  * Without it, sandboxes bill the account's active wallet (`boat org
  * switch`) and environments are personal.
  *
@@ -124,8 +125,9 @@ const storedConfig = (values: StoredValues): BoatAuthConfig => ({
 const ACTIVE_WALLET = "";
 
 /**
- * Asks which organization to work in, from the ones the key's account
- * belongs to. An account with no organization isn't asked.
+ * The organization to work in. An account in no organization works
+ * personally and one in exactly one works in it, without a question;
+ * only an account in several is asked to pick.
  */
 const chooseOrg = Effect.fn(function* (apiKey: Redacted.Redacted<string>, current?: string) {
   const { orgs } = yield* boat.listOrganizations({}).pipe(
@@ -136,6 +138,11 @@ const chooseOrg = Effect.fn(function* (apiKey: Redacted.Redacted<string>, curren
   );
   const teams = orgs.filter((org) => org.type === "org");
   if (teams.length === 0) return {};
+  if (teams.length === 1) {
+    const [team] = teams;
+    yield* Interaction.info(`Boat: working in ${team!.name}.`);
+    return { org: team!.id, orgName: team!.name };
+  }
   const active = orgs.find((org) => org.active);
   const org = yield* Interaction.select({
     message: "Boat organization to work in",
