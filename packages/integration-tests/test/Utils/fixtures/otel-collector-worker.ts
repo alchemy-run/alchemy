@@ -2,7 +2,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 
-// Minimal OTLP "collector" fixture for Archil/SandboxProgram.test.ts. OTLP/HTTP JSON
+// Minimal OTLP "collector" for the deployed-runtime telemetry cases (Utils/Telemetry.ts). OTLP/HTTP JSON
 // posts to /v1/{traces,logs,metrics} are appended to a Durable Object so
 // the test can read everything back from any isolate via GET /collected.
 export class OtelSink extends DurableObject {
