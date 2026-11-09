@@ -117,11 +117,21 @@ One account runs all three at once. A Worker creates a sandbox per task from a s
 
 <Tree
   nodes={[
-    { id: "account", label: "acme", type: "account", icon: "brand:boat" },
-    { id: "golden", label: "Golden", type: "snapshot", parent: "account", side: true, icon: "camera" },
-    { id: "task", label: "task-42", type: "sandbox per task", parent: "account", icon: "box", specs: [["from", "Golden"], ["Api", "creates it"]] },
-    { id: "box", label: "DevBox", type: "dev box", parent: "account", icon: "box", specs: [["Api", "runs commands"]] },
-    { id: "search", label: "Search", type: "program", parent: "account", tone: "accent", icon: "file-code", specs: [["Api", "calls its URL"]] },
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["task golden", "box golden", "search golden"], colGap: 3, gutter: true },
+    { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
+    { id: "task", label: "task-42", type: "sandbox per task", parent: "account", icon: "box" },
+    { id: "box", label: "DevBox", type: "dev box", parent: "account", icon: "box" },
+    { id: "search", label: "Search", type: "program", parent: "account", tone: "accent", icon: "file-code" },
+  ]}
+  areas={["api account"]}
+  colGap={3.5}
+  gutter
+  links={[
+    { from: "api", to: "task", label: "creates" },
+    { from: "api", to: "box", label: "exec" },
+    { from: "api", to: "search", label: "calls" },
+    { from: "golden", to: "task", label: "from" },
   ]}
   caption="A Worker, Api, outside Boat creates task sandboxes from Golden, runs commands in DevBox, and calls the Search program at its URL. Each binding gets its own key."
 />

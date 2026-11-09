@@ -69,21 +69,32 @@ interface Props {
    * the gaps around boxes after layout, so they follow the phone layout too.
    */
   links?: Link[];
+  /**
+   * Where the top-level boxes sit, like a container's `areas`: the platform
+   * beside something outside it that calls in, such as your Worker.
+   */
+  areas?: string[];
+  phoneAreas?: string[];
+  colGap?: number;
+  gutter?: boolean;
   caption?: string;
   /** Internal: the node this (recursive) instance renders. */
   at?: string;
+  /** Internal: this top-level node is placed by the Tree's `areas`. */
+  placed?: boolean;
 }
 
-const { nodes, scopes = [], links = [], caption, at } = Astro.props as Props;
+const props = Astro.props as Props;
+const { nodes, scopes = [], links = [], caption, at, placed } = props;
 const kids = (id: string) => nodes.filter((n) => n.parent === id);
 const scopeOf = (id: string) => scopes.filter((s) => s.on === id);
 const roots = nodes.filter((n) => !n.parent);
 const node = at ? nodes.find((n) => n.id === at)! : undefined;
 const icon = node?.icon ? diagramIcon(node.icon) : undefined;
 const parentNode = node?.parent ? nodes.find((n) => n.id === node.parent) : undefined;
-const area = parentNode?.areas || parentNode?.phoneAreas ? `grid-area: ${node!.id}` : undefined;
+const area = placed || parentNode?.areas || parentNode?.phoneAreas ? `grid-area: ${node!.id}` : undefined;
 const rows = (a: string[]) => a.map((r) => `"${r}"`).join(" ");
-const gridStyle = (n: TreeNode) =>
+const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
   [
     n.areas && `--areas: ${rows(n.areas)}`,
     n.phoneAreas && `--phone-areas: ${rows(n.phoneAreas)}`,
@@ -172,7 +183,21 @@ const gridStyle = (n: TreeNode) =>
     <figure class="alc-fig not-content" data-nosnippet role="img" aria-label={caption ?? "Tree"}>
       <div class="alc-fig__panel">
       <div class="alc-tree" data-links={links.length > 0 ? JSON.stringify(links) : undefined}>
-        {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)}
+        {props.areas || props.phoneAreas ? (
+          <div
+            class:list={[
+              "alc-tree__kids",
+              props.areas && "alc-tree__kids--grid",
+              props.phoneAreas && "alc-tree__kids--phone-grid",
+              props.gutter && "alc-tree__kids--gutter",
+            ]}
+            style={gridStyle(props)}
+          >
+            {roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} placed />)}
+          </div>
+        ) : (
+          roots.map((r) => <Astro.self nodes={nodes} scopes={scopes} at={r.id} />)
+        )}
       </div>
       </div>
       {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
@@ -227,7 +252,7 @@ const gridStyle = (n: TreeNode) =>
       const out: { pts: Pt[]; kind: string }[] = [];
       const ox0 = Math.max(a.l, b.l), ox1 = Math.min(a.r, b.r);
       const oy0 = Math.max(a.t, b.t), oy1 = Math.min(a.b, b.b);
-      const fractions = [0.5, 0.3, 0.7, 0.15, 0.85];
+      const fractions = [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9];
       if (ox1 - ox0 > 12 && (b.t >= a.b || b.b <= a.t))
         for (const f of fractions) {
           const x = Math.round(ox0 + (ox1 - ox0) * f);
@@ -253,9 +278,9 @@ const gridStyle = (n: TreeNode) =>
         out.push({ kind: "hv", pts: [[x0, ac[1]], [bc[0], ac[1]], [bc[0], y1]] });
       }
       // Around everything, through the gutter on the left.
-      const g = Math.min(a.l, b.l) - 10;
+      const g = Math.min(a.l, b.l) - 20;
       const ay = Math.min(a.b - 14, a.t + 16);
-      const by = b.t + Math.min(16, (b.b - b.t) / 2);
+      const by = b.t >= a.t ? b.t + Math.min(16, (b.b - b.t) / 2) : b.b - Math.min(16, (b.b - b.t) / 2);
       out.push({ kind: "gutter", pts: [[a.l, ay], [g, ay], [g, by], [b.l, by]] });
       return out;
     };
@@ -268,51 +293,110 @@ const gridStyle = (n: TreeNode) =>
       tree.append(svg);
     }
     const id = (tree.dataset.linksId ??= Math.random().toString(36).slice(2, 8));
-    svg.innerHTML = `<defs><marker id="alc-tree-tip-${id}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="alc-tree__tip" /></marker></defs>`;
+    svg.innerHTML = `<defs><marker id="alc-tree-tip-${id}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="alc-tree__tip" /></marker></defs>`;
     svg.setAttribute("width", String(origin.width));
     svg.setAttribute("height", String(origin.height));
 
-    for (const link of links) {
+    // Route every link first, then place labels where they clear everything.
+    type Route = { pts: Pt[]; kind: string };
+    const segsOf = (r: Route) => r.pts.slice(1).map((p, i) => [r.pts[i]!, p] as [Pt, Pt]);
+    const cuts = (pts: Pt[], lines: [Pt, Pt][]) =>
+      pts.slice(1).some(([x2, y2], i) => {
+        const [x1, y1] = pts[i]!;
+        return lines.some(([[u1, v1], [u2, v2]]) => {
+          if ((y1 === y2) === (v1 === v2)) return false;
+          const [hx1, hx2, hy, vx, vy1, vy2] = y1 === y2 ? [x1, x2, y1, u1, v1, v2] : [u1, u2, v1, x1, y1, y2];
+          return vx > Math.min(hx1, hx2) + 1 && vx < Math.max(hx1, hx2) - 1 && hy > Math.min(vy1, vy2) + 1 && hy < Math.max(vy1, vy2) - 1;
+        });
+      });
+    const plans = links.flatMap((link) => {
       const a = node(link.from), b = node(link.to);
-      if (!a || !b) continue;
-      const obs = obstaclesFor(a, b);
+      if (!a || !b) return [];
       const candidates = routes(rect(a), rect(b));
-      const chosen = candidates.find((c) => !crosses(c.pts, obs));
-      const route = chosen ?? candidates[0]!;
+      const open = candidates.filter((c) => !crosses(c.pts, obstaclesFor(a, b)));
+      return [{ link, a, b, candidates, open, route: open[0] ?? candidates[0]!, blocked: open.length === 0 }];
+    });
+    // Re-route each arrow against all the others, so no two cross where
+    // another clear route exists, whichever was listed first.
+    for (let pass = 0; pass < 3; pass++)
+      for (const p of plans) {
+        const others = plans.filter((q) => q !== p).flatMap((q) => segsOf(q.route));
+        p.route = p.open.find((c) => !cuts(c.pts, others)) ?? p.route;
+      }
+    const drawn = plans.map(({ link, a, b, route, blocked }) => {
       const path = document.createElementNS(NS, "path");
       path.setAttribute("d", route.pts.map(([x, y], i) => `${i ? "L" : "M"} ${x} ${y}`).join(" "));
       path.setAttribute("class", link.dashed ? "alc-tree__link alc-tree__link--dashed" : "alc-tree__link");
       path.setAttribute("marker-end", `url(#alc-tree-tip-${id})`);
-      if (!chosen) path.dataset.blocked = "true";
+      if (blocked) path.dataset.blocked = "true";
       svg.append(path);
+      return { link, route, a, b };
+    });
+
+    const boxes = all.map(rect);
+    const texts = [...tree.querySelectorAll(".alc-tree__label, .alc-tree__type, .alc-tree__icon, .alc-tree__scope, .alc-tree__specs")].map(rect);
+    const segments = drawn.flatMap(({ route }) => route.pts.slice(1).map((p, i) => [route.pts[i]!, p] as [Pt, Pt]));
+    const placed: R[] = [];
+    const meet = (p: R, q: R) => p.l < q.r && p.r > q.l && p.t < q.b && p.b > q.t;
+    const within = (p: R, q: R) => p.l >= q.l && p.r <= q.r && p.t >= q.t && p.b <= q.b;
+    const clear = (L: R) =>
+      L.l >= 0 && L.r <= origin.width &&
+      boxes.every((q) => !meet(L, q) || within(L, q)) &&
+      texts.every((q) => !meet(L, q)) &&
+      placed.every((q) => !meet(L, q)) &&
+      segments.every(([[x1, y1], [x2, y2]]) =>
+        y1 === y2
+          ? !(y1 > L.t - 1 && y1 < L.b + 1 && Math.max(x1, x2) > L.l && Math.min(x1, x2) < L.r)
+          : !(x1 > L.l - 1 && x1 < L.r + 1 && Math.max(y1, y2) > L.t && Math.min(y1, y2) < L.b));
+    // Split a run of a line at every border that crosses it, widest piece first.
+    const pieces = (lo: number, hi: number, cuts: number[]) => {
+      const xs = [lo, ...cuts.filter((c) => c > lo + 1 && c < hi - 1).sort((m, n) => m - n), hi];
+      return xs.slice(1).map((x, i) => [xs[i]!, x] as [number, number]).sort((m, n) => n[1] - n[0] - (m[1] - m[0]));
+    };
+
+    const labelled = new Set<string>();
+    for (const { link, route, b } of drawn) {
       if (!link.label) continue;
+      // Several arrows into one box with the same label share one label.
+      const key = `${link.to}\u0000${link.label}`;
+      if (labelled.has(key)) continue;
+      labelled.add(key);
+      const w = link.label.length * 6.3, h = 11;
+      const spots: { x: number; y: number; anchor: string }[] = [];
+      const segs = route.pts.slice(1).map((p, i) => [route.pts[i]!, p] as [Pt, Pt]);
+      const ordered = [segs[segs.length - 1]!, ...segs.slice(0, -1).sort((m, n) =>
+        Math.hypot(n[1][0] - n[0][0], n[1][1] - n[0][1]) - Math.hypot(m[1][0] - m[0][0], m[1][1] - m[0][1]))];
+      if (route.kind === "gutter") {
+        const tb = rect(b);
+        spots.push({ x: tb.l + 4, y: tb.t - 5, anchor: "start" });
+      }
+      for (const [[x1, y1], [x2, y2]] of ordered) {
+        if (y1 === y2) {
+          const cuts = boxes.filter((q) => y1 > q.t && y1 < q.b).flatMap((q) => [q.l, q.r]);
+          for (const [lo, hi] of pieces(Math.min(x1, x2), Math.max(x1, x2), cuts)) {
+            spots.push({ x: (lo + hi) / 2, y: y1 - 6, anchor: "middle" });
+            spots.push({ x: (lo + hi) / 2, y: y1 + 14, anchor: "middle" });
+          }
+        } else {
+          const cuts = boxes.filter((q) => x1 > q.l && x1 < q.r).flatMap((q) => [q.t, q.b]);
+          for (const [lo, hi] of pieces(Math.min(y1, y2), Math.max(y1, y2), cuts)) {
+            spots.push({ x: x1 + 7, y: (lo + hi) / 2 + 4, anchor: "start" });
+            spots.push({ x: x1 - 7, y: (lo + hi) / 2 + 4, anchor: "end" });
+          }
+        }
+      }
+      const box = (s: { x: number; y: number; anchor: string }): R => {
+        const l = s.anchor === "middle" ? s.x - w / 2 : s.anchor === "end" ? s.x - w : s.x;
+        return { l, r: l + w, t: s.y - h + 2, b: s.y + 2 };
+      };
+      const spot = spots.find((s) => clear(box(s))) ?? spots[0]!;
+      placed.push(box(spot));
       const text = document.createElementNS(NS, "text");
       text.setAttribute("class", "alc-tree__link-label");
       text.textContent = link.label;
-      const pts = route.pts;
-      const [x1, y1] = pts[pts.length - 2]!, [x2, y2] = pts[pts.length - 1]!;
-      if (route.kind === "gutter") {
-        // Just above where the arrow enters, beside the gutter.
-        const tb = rect(b);
-        text.setAttribute("x", String(tb.l + 4));
-        text.setAttribute("y", String(tb.t - 5));
-      } else if (y1 === y2) {
-        // Centred on the part of the line that is outside every border it
-        // crosses, so the label never sits on one.
-        const lo = Math.min(x1, x2), hi = Math.max(x1, x2);
-        const edges = all
-          .filter((el) => el.contains(a) !== el.contains(b))
-          .flatMap((el) => [rect(el).l, rect(el).r])
-          .filter((x) => x > lo && x < hi);
-        const left = x2 > x1 ? Math.max(lo, ...edges) : lo;
-        const right = x2 > x1 ? hi : Math.min(hi, ...edges);
-        text.setAttribute("x", String((left + right) / 2));
-        text.setAttribute("y", String(y1 - 6));
-        text.setAttribute("text-anchor", "middle");
-      } else {
-        text.setAttribute("x", String(x1 + 7));
-        text.setAttribute("y", String((y1 + y2) / 2 + 4));
-      }
+      text.setAttribute("x", String(spot.x));
+      text.setAttribute("y", String(spot.y));
+      text.setAttribute("text-anchor", spot.anchor);
       svg.append(text);
     }
   };
@@ -386,11 +470,12 @@ const gridStyle = (n: TreeNode) =>
     .alc-tree__kids.alc-tree__kids--phone-grid {
       display: grid;
       grid-template-areas: var(--phone-areas);
-      column-gap: 0.625rem;
+      grid-auto-columns: minmax(0, 1fr);
+      column-gap: min(var(--col-gap, 0.625rem), 2.5rem);
       row-gap: 1.5rem;
     }
     .alc-tree__kids--gutter {
-      padding-left: 1.25rem;
+      padding-left: 2rem;
     }
   }
   /* A box is a column: its head, then its contents growing to fill it, so a

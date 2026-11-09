@@ -12,12 +12,27 @@ Take one setup: a Worker sending its traces and logs to Axiom, with a monitor th
 
 <Tree
   nodes={[
-    { id: "org", label: "acme", type: "organization", icon: "brand:axiom" },
+    { id: "worker", label: "Worker", type: "ingest token", icon: "square-function" },
+    {
+      id: "org", label: "acme", type: "organization", icon: "brand:axiom", colGap: 3,
+      areas: ["traces dash", "logs monitor", "logs slack"],
+      phoneAreas: ["slack slack", "dash monitor", "traces logs"],
+    },
     { id: "traces", label: "app-traces", type: "dataset", parent: "org", tone: "accent", icon: "database" },
     { id: "logs", label: "app-logs", type: "dataset", parent: "org", tone: "accent", icon: "database" },
-    { id: "dash", label: "app", type: "dashboard", parent: "org", icon: "layout-dashboard", specs: [["APL on", "app-traces"]] },
-    { id: "monitor", label: "panics", type: "monitor", parent: "org", icon: "bell", specs: [["APL on", "app-logs"], ["notifies", "ops-slack"]] },
+    { id: "dash", label: "app", type: "dashboard", parent: "org", icon: "layout-dashboard" },
+    { id: "monitor", label: "panics", type: "monitor", parent: "org", icon: "bell" },
     { id: "slack", label: "ops-slack", type: "notifier", parent: "org", icon: "send" },
+  ]}
+  areas={["worker org"]}
+  phoneAreas={["org", "worker"]}
+  colGap={3}
+  links={[
+    { from: "worker", to: "traces", label: "sends" },
+    { from: "worker", to: "logs", label: "sends" },
+    { from: "dash", to: "traces", label: "APL" },
+    { from: "monitor", to: "logs", label: "APL" },
+    { from: "monitor", to: "slack", label: "alerts" },
   ]}
   caption="Everything lives in an organization. A Worker with an ingest token sends its traces and logs to datasets. Dashboards and monitors query them with APL, and a monitor alerts you through a notifier."
 />

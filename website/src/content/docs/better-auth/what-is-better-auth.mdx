@@ -12,13 +12,21 @@ Take one small app: a Worker with email and password sign-in, GitHub sign-in, an
 
 <Tree
   nodes={[
-    { id: "app", label: "Api", type: "your Worker or Lambda", icon: "brand:betterauth" },
-    { id: "routes", label: "/api/auth/*", type: "auth routes", parent: "app", tone: "accent", icon: "log-in", specs: [["sign in", "writes user, session"]] },
-    { id: "mw", label: "middleware", type: "current user", parent: "app", icon: "shield-check", specs: [["each request", "reads the session"]] },
+    { id: "app", label: "Api", type: "your Worker or Lambda", icon: "brand:betterauth", areas: ["routes", "mw", "api"], phoneAreas: ["routes routes", "mw api"], colGap: 2.5 },
+    { id: "routes", label: "/api/auth/*", type: "auth routes", parent: "app", tone: "accent", icon: "log-in" },
+    { id: "mw", label: "middleware", type: "current user", parent: "app", icon: "shield-check" },
     { id: "api", label: "/api/notes", type: "your handler", parent: "app", icon: "file-code" },
-    { id: "db", label: "AuthDb", type: "your database", icon: "database" },
+    { id: "db", label: "AuthDb", type: "your database", icon: "database", areas: ["user", "session"], phoneAreas: ["user session"] },
     { id: "user", label: "user", type: "table", parent: "db", icon: "table" },
     { id: "session", label: "session", type: "table", parent: "db", icon: "table" },
+  ]}
+  areas={["app db"]}
+  colGap={4}
+  gutter
+  links={[
+    { from: "routes", to: "db", label: "writes" },
+    { from: "mw", to: "db", label: "reads" },
+    { from: "mw", to: "api", label: "then" },
   ]}
   caption="Better Auth runs inside your app and keeps its tables in your database. Signing in from the browser writes a session cookie, and every later request's middleware reads the session back before your handler runs."
 />

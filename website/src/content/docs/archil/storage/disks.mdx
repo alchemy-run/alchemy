@@ -16,9 +16,21 @@ One disk is reachable three ways at once: mounted as a filesystem, through serve
 
 <Tree
   nodes={[
-    { id: "disk", label: "Dataset", type: "disk", icon: "brand:archil" },
-    { id: "cache", label: "storage layer", type: "data in use", parent: "disk", wide: true, tone: "accent", icon: "zap", specs: [["Api", "mounts it"], ["exec", "a microVM per call"], ["Worker", "ReadDisk · S3 API"]] },
-    { id: "bucket", label: "bucket", type: "every file", parent: "disk", wide: true, icon: "archive", specs: [["synced from", "the storage layer"]] },
+    { id: "api", label: "Api", type: "sandbox", icon: "box" },
+    { id: "exec", label: "exec", type: "a microVM per call", icon: "terminal" },
+    { id: "worker", label: "Worker", type: "ReadDisk binding", icon: "square-function" },
+    { id: "disk", label: "Dataset", type: "disk", icon: "brand:archil", areas: ["cache", "bucket"] },
+    { id: "cache", label: "storage layer", type: "data in use", parent: "disk", tone: "accent", icon: "zap" },
+    { id: "bucket", label: "bucket", type: "every file", parent: "disk", icon: "archive" },
+  ]}
+  areas={["api disk", "exec disk", "worker disk"]}
+  colGap={3}
+  gutter
+  links={[
+    { from: "api", to: "disk", label: "mounts" },
+    { from: "exec", to: "disk", label: "mounts" },
+    { from: "worker", to: "disk", label: "S3 API" },
+    { from: "cache", to: "bucket", label: "copies writes", dashed: true },
   ]}
   caption="Mounts, exec calls and S3 requests all reach the same disk and see each other's writes. Archil keeps the data in use in front of the bucket and copies writes to the bucket in the background."
 />
