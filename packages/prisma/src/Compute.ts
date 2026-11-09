@@ -160,11 +160,11 @@ export class ComputeDeploymentRecoveryFailed extends Data.TaggedError(
 )<{
   readonly message: string;
   readonly errors: readonly unknown[];
-  readonly cause?: unknown;
-}> {}
-
-const deploymentRecoveryFailed = (errors: readonly unknown[], message: string) =>
-  new ComputeDeploymentRecoveryFailed({ message, errors, cause: errors[0] });
+}> {
+  override get cause() {
+    return this.errors[0];
+  }
+}
 
 const ComputeTypeId = "Prisma.Compute" as const;
 type ComputeTypeId = typeof ComputeTypeId;
@@ -2381,10 +2381,10 @@ const ProviderLive = () =>
               app.latestDeploymentId !== null &&
               app.latestDeploymentId !== terminalFailedDeploymentId
             ) {
-              return yield* deploymentRecoveryFailed(
-                [],
-                `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
-              );
+              return yield* new ComputeDeploymentRecoveryFailed({
+                errors: [],
+                message: `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
+              });
             }
 
             // Apply persists the previous stable Attributes before reconcile.
@@ -2419,24 +2419,28 @@ const ProviderLive = () =>
               ).pipe(Effect.result);
 
               if (Result.isFailure(observedAfterRollback)) {
-                return yield* deploymentRecoveryFailed(
-                  [
+                return yield* new ComputeDeploymentRecoveryFailed({
+                  errors: [
                     ...(Result.isFailure(rollback) ? [rollback.failure] : []),
                     ...(Result.isFailure(observedAfterRollback)
                       ? [observedAfterRollback.failure]
                       : []),
                   ],
-                  `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
-                );
+                  message: `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
+                });
               }
 
               app = observedAfterRollback.success;
               yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
-                Effect.mapError((cleanupError) =>
-                  deploymentRecoveryFailed(
-                    [...(Result.isFailure(rollback) ? [rollback.failure] : []), cleanupError],
-                    `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
-                  ),
+                Effect.mapError(
+                  (cleanupError) =>
+                    new ComputeDeploymentRecoveryFailed({
+                      errors: [
+                        ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                        cleanupError,
+                      ],
+                      message: `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
+                    }),
                 ),
               );
             }
@@ -2647,21 +2651,21 @@ const ProviderLive = () =>
                     deployment.id,
                     Result.isSuccess(rollback)
                       ? readiness.failure
-                      : deploymentRecoveryFailed(
-                          [readiness.failure, rollback.failure],
-                          `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
-                        ),
+                      : new ComputeDeploymentRecoveryFailed({
+                          errors: [readiness.failure, rollback.failure],
+                          message: `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
+                        }),
                   );
                 }
 
-                return yield* deploymentRecoveryFailed(
-                  [
+                return yield* new ComputeDeploymentRecoveryFailed({
+                  errors: [
                     readiness.failure,
                     ...(Result.isFailure(rollback) ? [rollback.failure] : []),
                     observedAfterRollback.failure,
                   ],
-                  `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
-                );
+                  message: `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
+                });
               } else {
                 // A first deployment has no safe rollback target. Never report
                 // a successful stack deployment while the production endpoint
@@ -2673,10 +2677,10 @@ const ProviderLive = () =>
                   deploymentConverged = true;
                 }
                 if (terminalFailedDeploymentId !== undefined) {
-                  return yield* deploymentRecoveryFailed(
-                    [readiness.failure],
-                    `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
-                  );
+                  return yield* new ComputeDeploymentRecoveryFailed({
+                    errors: [readiness.failure],
+                    message: `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
+                  });
                 }
                 return yield* readiness.failure;
               }
