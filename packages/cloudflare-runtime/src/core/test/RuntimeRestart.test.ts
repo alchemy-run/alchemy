@@ -31,23 +31,36 @@ const roundTrip = (events: ReadonlyArray<WorkerdEvent>) =>
   );
 
 /**
- * Records every lifecycle event of a worker, and queues each replacement
- * that serves again so a test can wait for it.
+ * Records every lifecycle event of a worker, and lets a test wait for the
+ * next one it cares about.
  */
 const recordEvents = Effect.gen(function* () {
   const events: Array<WorkerdEvent> = [];
-  const restarts = yield* Queue.unbounded<number>();
+  const pending = yield* Queue.unbounded<WorkerdEvent>();
   const onEvent = (event: WorkerdEvent) => {
     events.push(event);
-    if (event.type === "workerd.process.started" && event.generation > 0) {
-      Queue.offerUnsafe(restarts, event.generation);
-    }
+    Queue.offerUnsafe(pending, event);
   };
+  /** Waits for the next event that matches, skipping the ones before it. */
+  const next = <E extends WorkerdEvent>(match: (event: WorkerdEvent) => event is E) =>
+    Queue.take(pending).pipe(
+      Effect.repeat({ until: match }),
+      Effect.map((event) => event as E),
+      Effect.timeout(10_000),
+    );
   return {
     onEvent,
     events,
-    /** Waits for the next replacement to serve. */
-    restarted: Queue.take(restarts).pipe(Effect.timeout(10_000)),
+    /** Waits for the next replacement to serve, returning its generation. */
+    restarted: next(
+      (event): event is Extract<WorkerdEvent, { type: "workerd.process.started" }> =>
+        event.type === "workerd.process.started" && event.generation > 0,
+    ).pipe(Effect.map((event) => event.generation)),
+    /** Waits for the next replacement to be scheduled. */
+    scheduled: next(
+      (event): event is Extract<WorkerdEvent, { type: "workerd.restart.scheduled" }> =>
+        event.type === "workerd.restart.scheduled",
+    ),
     exits: () =>
       events.flatMap((event) => (event.type === "workerd.process.exited" ? [event.exit] : [])),
     pids: () =>
@@ -320,6 +333,8 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
         const failure = SystemError.make({
           subtag: "WorkerdStart",
           message: "replacement refused to start",
+          // Not JSON: an `undefined` field and an `Error`, as real details carry.
+          detail: { address: undefined, error: new Error("bind failed") },
         });
         let calls = 0;
         vi.spyOn(workerd, "serve").mockImplementation((...args) =>
@@ -347,58 +362,110 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           { type: "workerd.restart.scheduled", attempt: 1, delayMs: 250 },
           { type: "workerd.recovery.stopped", reason: "restart-failed", error: failure },
         ]);
-        // The failure survives JSON as the same typed error.
+        // The failure survives JSON as the same typed error. Its detail is
+        // reduced to JSON: the undefined field drops, the Error keeps its
+        // name and message.
         const decoded = roundTrip(recorder.events);
-        expect(decoded).toEqual(recorder.events);
+        expect(decoded.slice(0, -1)).toEqual(recorder.events.slice(0, -1));
         const stopped = decoded.at(-1);
         assert(stopped?.type === "workerd.recovery.stopped");
-        expect(stopped.error).toBeInstanceOf(SystemError);
+        assert(stopped.error instanceof SystemError);
+        expect(stopped.reason).toBe("restart-failed");
+        expect(stopped.error.subtag).toBe("WorkerdStart");
+        expect(stopped.error.message).toBe("replacement refused to start");
+        expect(stopped.error.detail).toEqual({ error: { name: "Error", message: "bind failed" } });
       }),
     { timeout: 30_000 },
   );
 
-  for (const crashBeforeClose of [false, true]) {
-    it.effect(
-      `does not restart after scope closure (crash: ${crashBeforeClose})`,
-      () =>
-        Effect.gen(function* () {
-          vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
-          const workerd = yield* Workerd.Workerd;
-          const serve = vi.spyOn(workerd, "serve");
-          const recorder = yield* recordEvents;
-          yield* Effect.gen(function* () {
-            const runtime = yield* Runtime.Runtime;
-            const url = yield* runtime.start({
-              name: "closing",
-              compatibilityDate: "2026-03-10",
-              compatibilityFlags: [],
-              bindings: [],
-              modules: [
-                {
-                  name: "main.js",
-                  type: "ESModule",
-                  content: CRASHING_SCRIPT,
-                },
-              ],
-              onEvent: recorder.onEvent,
-            });
-            expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
-            if (crashBeforeClose) {
-              yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
-            }
-          }).pipe(Effect.scoped);
-          // Give a wrongly reported exit time to arrive.
-          yield* Effect.sleep(1_000);
-          expect(serve).toHaveBeenCalledTimes(1);
-          // Closing on purpose reports neither an exit nor a replacement.
-          const [pid] = recorder.pids();
-          expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
-            { type: "workerd.process.started", pid, generation: 0 },
-          ]);
-        }),
-      { timeout: 30_000 },
-    );
-  }
+  const startClosing = (recorder: Effect.Success<typeof recordEvents>) =>
+    Effect.gen(function* () {
+      const runtime = yield* Runtime.Runtime;
+      const url = yield* runtime.start({
+        name: "closing",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        bindings: [],
+        modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+        onEvent: recorder.onEvent,
+      });
+      expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
+      return url;
+    });
+
+  it.effect(
+    "reports no exit when the runtime closes",
+    () =>
+      Effect.gen(function* () {
+        const recorder = yield* recordEvents;
+        yield* startClosing(recorder).pipe(Effect.scoped);
+        // Give a wrongly reported exit time to arrive.
+        yield* Effect.sleep(1_000);
+        const [pid] = recorder.pids();
+        expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+          { type: "workerd.process.started", pid, generation: 0 },
+        ]);
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "closing the runtime during the restart backoff cancels the replacement",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const workerd = yield* Workerd.Workerd;
+        const serve = vi.spyOn(workerd, "serve");
+        const recorder = yield* recordEvents;
+        yield* Effect.gen(function* () {
+          const url = yield* startClosing(recorder);
+          yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+          // The replacement is pending: close inside its 250ms backoff.
+          yield* recorder.scheduled;
+        }).pipe(Effect.scoped);
+        // Give a wrongly started replacement time to report.
+        yield* Effect.sleep(1_000);
+        expect(serve).toHaveBeenCalledTimes(1);
+        const [pid] = recorder.pids();
+        expect(recorder.observed()).toEqual<Array<ObservedEvent>>([
+          { type: "workerd.process.started", pid, generation: 0 },
+          { type: "workerd.process.exited", pid },
+          { type: "workerd.restart.scheduled", attempt: 1, delayMs: 250 },
+        ]);
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "keeps recovering when the onEvent callback throws",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const runtime = yield* Runtime.Runtime;
+        const recorder = yield* recordEvents;
+        const url = yield* runtime.start({
+          name: "throwing-callback",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+          onEvent: (event) => {
+            recorder.onEvent(event);
+            throw new Error(`host failed on ${event.type}`);
+          },
+        });
+        yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+        expect(yield* recorder.restarted).toBe(1);
+        expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
+        expect(recorder.events.map((event) => event.type)).toEqual<Array<WorkerdEvent["type"]>>([
+          "workerd.process.started",
+          "workerd.process.exited",
+          "workerd.restart.scheduled",
+          "workerd.process.started",
+        ]);
+      }),
+    { timeout: 30_000 },
+  );
 });
 
 // Replacement processes reach Durable Object proxies through registry updates,

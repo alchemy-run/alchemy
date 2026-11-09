@@ -311,14 +311,23 @@ const externalEnv = (extra: Record<string, string> | undefined) => {
 
 const makeBun = () =>
   make((command, args, config, configuredAddresses, env) =>
-    Effect.sync(() =>
-      Bun.spawn({
-        cmd: [command, ...args],
-        env: externalEnv(env),
-        stdio: [config, "pipe", "pipe", "pipe"],
-        killSignal: "SIGKILL",
-      }),
-    ).pipe(
+    // `Bun.spawn` throws when the binary is missing or not executable; type
+    // it like the Node path so a failed start (or restart) is reported.
+    Effect.try({
+      try: () =>
+        Bun.spawn({
+          cmd: [command, ...args],
+          env: externalEnv(env),
+          stdio: [config, "pipe", "pipe", "pipe"],
+          killSignal: "SIGKILL",
+        }),
+      catch: (error) =>
+        SystemError.make({
+          subtag: "WorkerdSpawn",
+          message: "Failed to spawn the Workers runtime (workerd) process.",
+          cause: error,
+        }),
+    }).pipe(
       Effect.map((child) => {
         const stdout = makeStreamPump(child.stdout, (chunk) => {
           process.stdout.write(chunk);

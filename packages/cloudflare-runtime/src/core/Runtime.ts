@@ -20,7 +20,7 @@ import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
-import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
+import type { BindingHooks, RuntimeWorker, WorkerdEvent } from "./RuntimeWorker.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
@@ -219,7 +219,19 @@ export const RuntimeLive = Layer.effect(
           ...config.sockets,
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
-        const emit = worker.onEvent ?? (() => {});
+        /**
+         * Reports an event to the host. A callback that throws is logged, never
+         * allowed to end crash recovery.
+         */
+        const emit = (event: WorkerdEvent) =>
+          Effect.try(() => worker.onEvent?.(event)).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning(
+                `The onEvent callback for "${worker.name}" threw on ${event.type}.`,
+                error.cause,
+              ),
+            ),
+          );
         // The PID of the process being started, reported with `Started` once
         // its plugins are up too.
         let pid = 0;
@@ -282,7 +294,12 @@ export const RuntimeLive = Layer.effect(
             },
           );
         const parentScope = yield* Effect.scope;
-        let processScope = yield* Scope.fork(parentScope);
+        // Every process generation lives in this scope, forked before the
+        // recovery fiber below. Closing the runtime then interrupts recovery
+        // before it kills a replacement that is still starting, which would
+        // otherwise report as a failed restart.
+        const generations = yield* Scope.fork(parentScope);
+        let processScope = yield* Scope.fork(generations);
         const startProcess = (pinned?: Workerd.WorkerdPorts) =>
           serveWorker(pinned).pipe(
             Effect.tap((ports) => context.start(ports)),
@@ -293,7 +310,7 @@ export const RuntimeLive = Layer.effect(
           );
         const ports = yield* startProcess();
         let generation = 0;
-        emit({ type: "workerd.process.started", pid, generation });
+        yield* emit({ type: "workerd.process.started", pid, generation });
         // A process that dies after startup (V8 aborting on heap exhaustion
         // is the common case) is replaced on the same ports. Without this
         // every request fails until the whole dev session is restarted.
@@ -301,7 +318,7 @@ export const RuntimeLive = Layer.effect(
           let restartTimes: Array<number> = [];
           while (true) {
             const exit = yield* Queue.take(exits);
-            emit({ type: "workerd.process.exited", exit });
+            yield* emit({ type: "workerd.process.exited", exit });
             // Release the old process, output listeners and plugin tasks before
             // starting another generation. Closing also detaches this child
             // scope from the parent, so repeated crashes do not retain it.
@@ -312,30 +329,34 @@ export const RuntimeLive = Layer.effect(
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
               );
-              emit({ type: "workerd.recovery.stopped", reason: "restart-limit" });
+              yield* emit({ type: "workerd.recovery.stopped", reason: "restart-limit" });
               return;
             }
             restartTimes.push(now);
             const delayMs = 250 * 2 ** (restartTimes.length - 1);
-            emit({ type: "workerd.restart.scheduled", attempt: restartTimes.length, delayMs });
+            yield* emit({
+              type: "workerd.restart.scheduled",
+              attempt: restartTimes.length,
+              delayMs,
+            });
             yield* Effect.sleep(delayMs);
             yield* Effect.logWarning(
               `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
             );
-            processScope = yield* Scope.fork(parentScope);
+            processScope = yield* Scope.fork(generations);
             const restarted = yield* startProcess(ports).pipe(Effect.result);
             if (Result.isFailure(restarted)) {
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
               );
-              emit({
+              yield* emit({
                 type: "workerd.recovery.stopped",
                 reason: "restart-failed",
                 error: restarted.failure,
               });
               return;
             }
-            emit({ type: "workerd.process.started", pid, generation: ++generation });
+            yield* emit({ type: "workerd.process.started", pid, generation: ++generation });
           }
         }).pipe(Effect.forkScoped);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);
