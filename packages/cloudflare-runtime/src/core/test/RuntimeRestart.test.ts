@@ -2,6 +2,7 @@ import { assert, expect, layer } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Logger from "effect/Logger";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -487,16 +488,23 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
   );
 
   // Events are side effects: recovery neither stops for a failing callback
-  // nor waits for a pending one. Vitest fails the run on an unhandled
-  // rejection, so the rejecting case also proves it is caught.
+  // nor waits for a pending one, and a failure is logged as a warning per
+  // event. Vitest fails the run on an unhandled rejection, so the rejecting
+  // case also proves it is caught.
   const callbacks = {
-    throws: (event: WorkerdEvent) => {
-      throw new Error(`host failed on ${event.type}`);
+    throws: {
+      callback: (event: WorkerdEvent) => {
+        throw new Error(`host failed on ${event.type}`);
+      },
+      warns: true,
     },
-    rejects: (event: WorkerdEvent) => Promise.reject(new Error(`host failed on ${event.type}`)),
-    "never settles": () => new Promise<void>(() => {}),
+    rejects: {
+      callback: (event: WorkerdEvent) => Promise.reject(new Error(`host failed on ${event.type}`)),
+      warns: true,
+    },
+    "never settles": { callback: () => new Promise<void>(() => {}), warns: false },
   };
-  for (const [behavior, callback] of Object.entries(callbacks)) {
+  for (const [behavior, { callback, warns }] of Object.entries(callbacks)) {
     it.effect(
       `keeps recovering when the onEvent callback ${behavior}`,
       () =>
@@ -504,17 +512,26 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
           const runtime = yield* Runtime.Runtime;
           const recorder = yield* recordEvents;
-          const url = yield* runtime.start({
-            name: "failing-callback",
-            compatibilityDate: "2026-03-10",
-            compatibilityFlags: [],
-            bindings: [],
-            modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
-            onEvent: (event) => {
-              recorder.onEvent(event);
-              return callback(event);
-            },
+          const warnings: Array<string> = [];
+          const captureWarnings = Logger.make<unknown, void>(({ logLevel, message }) => {
+            const [text] = Array.isArray(message) ? message : [message];
+            if (logLevel === "Warn" && typeof text === "string" && text.includes("onEvent")) {
+              warnings.push(text);
+            }
           });
+          const url = yield* runtime
+            .start({
+              name: "failing-callback",
+              compatibilityDate: "2026-03-10",
+              compatibilityFlags: [],
+              bindings: [],
+              modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+              onEvent: (event) => {
+                recorder.onEvent(event);
+                return callback(event);
+              },
+            })
+            .pipe(Effect.provide(Logger.layer([captureWarnings], { mergeWithExisting: true })));
           yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
           expect(yield* recorder.restarted).toBe(1);
           expect(yield* fetchText(new URL("/hello", url))).toBe("hello");
@@ -524,6 +541,21 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
             "workerd.restart.scheduled",
             "workerd.process.started",
           ]);
+          // A rejection is logged once it settles, after the event itself.
+          yield* Effect.sync(() => warnings.length).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("50 millis"),
+              until: (count) => !warns || count === 4,
+              times: 20,
+            }),
+          );
+          expect(warnings).toEqual(
+            warns
+              ? recorder.events.map(
+                  (event) => `The onEvent callback for "failing-callback" failed on ${event.type}.`,
+                )
+              : [],
+          );
         }),
       { timeout: 30_000 },
     );
