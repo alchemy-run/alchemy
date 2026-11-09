@@ -116,6 +116,11 @@ export const createVolume = Effect.fn(function* (input: {
   disk: DiskSpec;
 }) {
   const sizeGb = Math.max(input.disk.sizeGb, MIN_SIZE_GB);
+  // The volumes this group held before the create: a storage host that fails
+  // with an unknown outcome may still have made one.
+  const before = new Set(
+    (yield* listVolumeGroup(input.appName, input.name, input.region)).map((volume) => volume.id),
+  );
   const created = yield* machines
     .createVolume({
       app_name: input.appName,
@@ -130,7 +135,25 @@ export const createVolume = Effect.fn(function* (input: {
       source_volume_id: input.disk.sourceVolumeId,
       require_unique_zone: input.disk.requireUniqueZone,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+    .pipe(
+      Effect.catchTag("Conflict", () => Effect.undefined),
+      Effect.catchTag("StorageHostCapacity", (error) =>
+        Effect.gen(function* () {
+          // Its outcome is unknown: a single new volume in the group is the
+          // one this call made. Otherwise create again after a pause.
+          yield* Effect.sleep(Duration.seconds(5));
+          const fresh = (yield* listVolumeGroup(input.appName, input.name, input.region)).filter(
+            (volume) => volume.id !== undefined && !before.has(volume.id),
+          );
+          return fresh.length === 1 ? fresh[0] : yield* Effect.fail(error);
+        }),
+      ),
+      Effect.retry({
+        while: (error) => error._tag === "StorageHostCapacity",
+        schedule: Schedule.spaced(Duration.seconds(5)),
+        times: 6,
+      }),
+    );
   if (created?.id !== undefined && created.id.length > 0) {
     return (yield* waitUntilVolumeReady(input.appName, created.id)) ?? created;
   }
