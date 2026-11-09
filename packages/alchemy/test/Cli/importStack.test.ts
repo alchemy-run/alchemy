@@ -172,7 +172,11 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
         );
         const missing = path.join(dir, "missing.run.ts");
         yield* fs.writeFileString(missing, 'import "alchemy-test-missing-package";\n');
-        return yield* Effect.forEach([throwing, aggregate, missing], (main) =>
+        const syntax = path.join(dir, "syntax.run.ts");
+        yield* fs.writeFileString(syntax, "export default {\n");
+        const thrownString = path.join(dir, "string.run.ts");
+        yield* fs.writeFileString(thrownString, 'throw "boom";\n');
+        return yield* Effect.forEach([throwing, aggregate, missing, syntax, thrownString], (main) =>
           collectAuthProviders({ main, envFile: Option.none<string>(), profile: "default" }).pipe(
             Effect.flip,
             Effect.map((error) => `${error._tag}: ${error.message}`),
@@ -190,6 +194,12 @@ describe("importStack", { tags: ["unit", "local"] }, () => {
     );
     expect(failures[2]).toMatch(
       /^AuthProviderImportError: Could not load auth providers from '.+missing\.run\.ts': ResolveMessage \[ERR_MODULE_NOT_FOUND\]: Cannot find package 'alchemy-test-missing-package'/,
+    );
+    expect(failures[3]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+syntax\.run\.ts': BuildMessage: /,
+    );
+    expect(failures[4]).toMatch(
+      /^AuthProviderImportError: Could not load auth providers from '.+string\.run\.ts': boom$/,
     );
   });
 
