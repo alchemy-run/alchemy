@@ -83,6 +83,11 @@ export interface EnvironmentAttributes {
   /** Each change mints a version; new sandboxes start on the latest. */
   latestVersionNumber: number;
   isDefault: boolean;
+  /**
+   * The organization whose shared environment this is, as the stack's
+   * `org` named it; `undefined` for a personal environment.
+   */
+  org: string | undefined;
 }
 
 export interface Environment extends Resource<
@@ -101,6 +106,12 @@ export interface Environment extends Resource<
  * version; running ones keep the version they started with until they are
  * upgraded on the dashboard.
  *
+ * An environment is personal, or shared by an organization. With an `org`
+ * on the stack (`Boat.providers({ org })`, or the profile's), it is that
+ * organization's: every member can use it, and owners and admins change
+ * it. Without one it is yours alone, even when your active wallet is an
+ * organization's. Changing the stack's `org` replaces it.
+ *
  * ### Creating an environment
  * **Example:** Variables and a secret file
  * ```typescript
@@ -115,6 +126,23 @@ export interface Environment extends Resource<
  * **Example:** An environment for sandboxes you hand to users
  * ```typescript
  * export const Tenants = Boat.Environment("Tenants", { safeForThirdParties: true });
+ * ```
+ *
+ * ### Sharing with an organization
+ * **Example:** An environment the whole team uses
+ * ```typescript
+ * // alchemy.run.ts
+ * export default Alchemy.Stack(
+ *   "Team",
+ *   { providers: Boat.providers({ org: "acme" }) },
+ *   Effect.gen(function* () {
+ *     const agents = yield* Boat.Environment("Agents", {
+ *       env: { MODE: "agent" },
+ *       passSandboxCredentials: false,
+ *     });
+ *     return { environment: agents.name };
+ *   }),
+ * );
  * ```
  *
  * @resource
@@ -158,33 +186,45 @@ const secretFilesOf = (files: EnvironmentProps["secretFiles"]) =>
   }));
 
 /**
- * The credentials' org, as the `org` query `/environments` routes read.
- * They ignore `X-Boat-Org`, so the default org the protocol sends on every
- * other call has to be passed here explicitly.
+ * The stack's org. `/environments` routes ignore `X-Boat-Org`, so the org
+ * the protocol sends on every other call is passed as the `org` query.
  */
-const org = Effect.gen(function* () {
+const stackOrg = Effect.gen(function* () {
   const { org } = yield* yield* Credentials;
-  return org ? { org } : {};
+  return org?.trim() || undefined;
 });
 
-const listEnvironments = Effect.gen(function* () {
-  const { environments } = yield* boat.listEnvironments(yield* org);
+/** The same organization, however it was spelled (Boat ignores case). */
+const sameOrg = (a: string | undefined, b: string | undefined) =>
+  (a?.toLowerCase() ?? "personal") === (b?.toLowerCase() ?? "personal");
+
+const inOrg = (org: string | undefined) => (org ? { org } : {});
+
+const listEnvironments = Effect.fn(function* (org: string | undefined) {
+  const { environments } = yield* boat.listEnvironments(inOrg(org));
   return environments;
 });
 
-const findEnvironment = Effect.fn(function* (match: { environmentId?: string; name: string }) {
-  const environments = yield* listEnvironments;
+const findEnvironment = Effect.fn(function* (
+  org: string | undefined,
+  match: { environmentId?: string; name: string },
+) {
+  const environments = yield* listEnvironments(org);
   return (
     environments.find((environment) => environment.id === match.environmentId) ??
     environments.find((environment) => environment.name === match.name)
   );
 });
 
-const toAttributes = (environment: boat.SandboxEnvironment): EnvironmentAttributes => ({
+const toAttributes = (
+  environment: boat.SandboxEnvironment,
+  org: string | undefined,
+): EnvironmentAttributes => ({
   environmentId: environment.id,
   name: environment.name,
   latestVersionNumber: environment.latestVersionNumber ?? 0,
   isDefault: environment.isDefault,
+  org,
 });
 
 /** What the props set, as the fields `updateEnvironment` takes. */
@@ -209,32 +249,44 @@ export const EnvironmentProvider = () =>
     Environment,
     Effect.gen(function* () {
       return {
-        stables: ["environmentId"],
+        stables: ["environmentId", "org"],
+        // An environment belongs to one organization (or to you) for life.
+        diff: Effect.fn(function* ({ output }) {
+          if (output !== undefined && !sameOrg(output.org, yield* stackOrg)) {
+            return { action: "replace" } as const;
+          }
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* boatName(id, olds?.name, 64));
-          const environment = yield* findEnvironment({
+          const org = output ? output.org : yield* stackOrg;
+          const environment = yield* findEnvironment(org, {
             environmentId: output?.environmentId,
             name,
           });
           if (environment === undefined) return undefined;
-          const attrs = toAttributes(environment);
+          const attrs = toAttributes(environment, org);
           return output !== undefined || isGeneratedName(environment.name) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* boatName(id, news.name ?? output?.name, 64);
+          // A different org replaces (see diff), so this is the org it lives in.
+          const org = yield* stackOrg;
 
           // Observe — by id once we have one (it survives renames), else by name.
-          let environment = yield* findEnvironment({ environmentId: output?.environmentId, name });
+          let environment = yield* findEnvironment(org, {
+            environmentId: output?.environmentId,
+            name,
+          });
 
           // Ensure — a concurrent create of the same name is a race, not a failure.
           if (environment === undefined) {
             yield* session.note(`Creating environment ${name}...`);
             const created = yield* boat
-              .createEnvironment({ name, ...(yield* org) })
+              .createEnvironment({ name, ...inOrg(org) })
               .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
             environment =
               created?.environments.find((candidate) => candidate.name === name) ??
-              (yield* findEnvironment({ name }));
+              (yield* findEnvironment(org, { name }));
             if (environment === undefined) {
               return yield* new BoatUnexpectedResponse({
                 message: `Boat environment ${name} vanished after create`,
@@ -272,24 +324,25 @@ export const EnvironmentProvider = () =>
             yield* session.note(`Updating environment ${name}...`);
             const updated = yield* boat.updateEnvironment({
               environmentId: environment.id,
-              ...(yield* org),
+              ...inOrg(org),
               ...delta,
               ...(makeDefault ? { isDefault: true } : {}),
             });
             environment = updated.environment ?? environment;
           }
 
-          return toAttributes(environment);
+          return toAttributes(environment, org);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* boat
-            .deleteEnvironment({ environmentId: output.environmentId, ...(yield* org) })
+            .deleteEnvironment({ environmentId: output.environmentId, ...inOrg(output.org) })
             .pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
         list: Effect.fn(function* () {
-          return (yield* listEnvironments)
+          const org = yield* stackOrg;
+          return (yield* listEnvironments(org))
             .filter((environment) => isGeneratedName(environment.name))
-            .map(toAttributes);
+            .map((environment) => toAttributes(environment, org));
         }),
       };
     }),

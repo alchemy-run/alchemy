@@ -38,11 +38,15 @@ Pick **Browser sign-in** for most setups. It works with every way you can sign i
 
 Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying creates keys for your hosts, which takes `account.admin`, so give it the `admin` preset.
 
-## Bill an organization
+## Work in an organization
 
-If you belong to an organization, your account has more than one wallet, and Boat bills the active one. Set the profile's **organization** to choose: an org id (`team_…`), its name, or `personal`. Alchemy sends it on every call, and the hosts it deploys send it too.
+An organization has its own plan, its own wallet and its own shared environments. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments you manage are its shared ones.
 
-A Stack can pick its own:
+When you sign in, Alchemy lists the organizations your account belongs to and asks which one to work in. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
+
+You can also follow your **active wallet**, the one `boat org switch` picks. Sandboxes then bill whatever it is when they are created, and environments stay personal, so most teams pin the organization.
+
+A Stack can pick its own organization, which overrides the profile's:
 
 ```typescript title="alchemy.run.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -50,15 +54,20 @@ import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "App",
-  { providers: Boat.providers({ org: "team_abc" }) },
+  "Team",
+  { providers: Boat.providers({ org: "acme" }) },
   Effect.gen(function* () {
-    yield* Boat.Sandbox("DevBox", { type: "small" });
+    yield* Boat.Environment("Agents", { passSandboxCredentials: false });
+    yield* Boat.Sandbox("TeamBox", { noEnv: true, visibility: "shared" });
   }),
 );
 ```
 
-Environments work differently. Without an organization, a `Boat.Environment` is one of your personal environments, even when your active wallet is an organization's. With one, it is that organization's shared environment: every member can read it, and only owners and admins can change it.
+A sandbox's wallet is fixed when it is created, so changing the organization later leaves existing sandboxes where they are; their `org` attribute says which. An environment belongs to one organization for life, so changing the organization replaces it.
+
+`visibility: "shared"` lets every member use a sandbox. Sharing one that holds your logins wipes them at its next start, so share sandboxes with `noEnv`, or with an environment that passes nothing.
+
+Creating organizations, inviting members and buying seats stay on the dashboard and `boat org`. Boat doesn't offer them in its public API.
 
 ## Give production its own profile
 

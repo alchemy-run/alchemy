@@ -2,21 +2,24 @@ import * as Boat from "@alchemy.run/boat";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as boat from "@distilled.cloud/boat-dev/boat";
+import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { TEST_ORG } from "./fixtures/org.ts";
 
-const { test } = Test.make({ providers: Boat.providers() });
+const { test, deploy, destroy } = Test.make({ providers: Boat.providers() });
 const team = Test.make({ providers: Boat.providers({ org: TEST_ORG }) });
 
 const tags = ["provider:boat", "provider:boat:environment", "live"];
 
+// Out-of-band reads resolve credentials as the stack does, with no org.
 const observe = (environmentId: string, org?: string) =>
-  boat
-    .listEnvironments(org ? { org } : {})
-    .pipe(
-      Effect.map((r) => r.environments.find((environment) => environment.id === environmentId)),
-    );
+  boat.listEnvironments(org ? { org } : {}).pipe(
+    Effect.map((r) => r.environments.find((environment) => environment.id === environmentId)),
+    Effect.provide(Layer.mergeAll(Boat.BoatAuth, Boat.fromAuthProvider(), FetchHttpClient.layer)),
+  );
 
 test.provider(
   "create an environment, update its variables and flags in place, and start a sandbox on it",
@@ -111,5 +114,47 @@ team.test.provider(
       yield* stack.destroy();
       expect(yield* observe(environment.environmentId, TEST_ORG)).toBeUndefined();
     }),
+  { tags, timeout: 180_000 },
+);
+
+/** One stack, deployed first without an org and then with one. */
+const moving = Effect.gen(function* () {
+  const environment = yield* Boat.Environment("Moving", { env: { MODE: "moving" } });
+  return {
+    environmentId: environment.environmentId,
+    name: environment.name,
+    org: environment.org,
+  };
+});
+const PersonalStack = Alchemy.Stack(
+  "BoatEnvironmentOrgMove",
+  { providers: Boat.providers(), state: Alchemy.localState() },
+  moving,
+);
+const TeamStack = Alchemy.Stack(
+  "BoatEnvironmentOrgMove",
+  { providers: Boat.providers({ org: TEST_ORG }), state: Alchemy.localState() },
+  moving,
+);
+
+test(
+  "changing the stack's org replaces its environment: created in the org, the personal one deleted",
+  Effect.gen(function* () {
+    yield* destroy(TeamStack);
+
+    const personal = yield* deploy(PersonalStack);
+    expect(personal.org).toBeUndefined();
+    expect((yield* observe(personal.environmentId))?.name).toBe(personal.name);
+
+    const team = yield* deploy(TeamStack);
+    expect(team.org).toBe(TEST_ORG);
+    expect(team.environmentId).not.toBe(personal.environmentId);
+    expect((yield* observe(team.environmentId, TEST_ORG))?.name).toBe(team.name);
+    // The old one is deleted where it lives, not looked for in the org.
+    expect(yield* observe(personal.environmentId)).toBeUndefined();
+
+    yield* destroy(TeamStack);
+    expect(yield* observe(team.environmentId, TEST_ORG)).toBeUndefined();
+  }),
   { tags, timeout: 180_000 },
 );
